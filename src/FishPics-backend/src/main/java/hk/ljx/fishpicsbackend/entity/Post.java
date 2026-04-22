@@ -1,9 +1,7 @@
 package hk.ljx.fishpicsbackend.entity;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
-import com.baomidou.mybatisplus.annotation.TableLogic;
-import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.*;
+
 import java.util.Date;
 import lombok.Data;
 
@@ -49,6 +47,7 @@ public class Post {
      * 0-逻辑未删除, 1-逻辑删除
      */
     @TableLogic
+    @TableField("`delete`")
     private Integer delete;
 
     /**

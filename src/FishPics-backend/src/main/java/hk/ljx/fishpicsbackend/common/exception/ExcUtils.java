@@ -25,6 +25,12 @@ public class ExcUtils {
         }
     }
 
+    public static void throwIfTrue(Boolean flag, ExceptionCode exceptionCode, String message) {
+        if (flag) {
+            throw error(exceptionCode.getCode(), message);
+        }
+    }
+
     public static void throwIfFalse(Boolean flag, ExceptionCode exceptionCode) {
         if (!flag) {
             throw error(exceptionCode);

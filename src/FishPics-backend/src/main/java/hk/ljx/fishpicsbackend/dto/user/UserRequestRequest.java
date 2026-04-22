@@ -11,11 +11,13 @@ import java.io.Serializable;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-public class UserLogin implements Serializable {
+public class UserRequestRequest implements Serializable {
 
     private String username;
 
     private String password;
+
+    private String checkPassword;
 
     /**
      * 验证码
