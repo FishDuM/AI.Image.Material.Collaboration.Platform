@@ -8,7 +8,14 @@ public interface UserConstants {
     String LOGIN_SUCCESS = "登录成功";
     String LOGIN_FAIL = "登录失败";
     String LOGOUT_SUCCESS = "登出成功";
+    String LOGIN_TOKEN = "LOGIN-";
 
     // 个人信息类
     String DEFAULT_NICK_NAME = "小鱼籽_";
+
+
+    // 登录token
+    static String getLoginTokenKey(Long userId) {
+        return LOGIN_TOKEN + userId;
+    }
 }

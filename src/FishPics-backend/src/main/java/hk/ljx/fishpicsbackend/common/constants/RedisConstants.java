@@ -6,18 +6,17 @@ package hk.ljx.fishpicsbackend.common.constants;
 public interface RedisConstants {
 // --------------------------------------------- 用户类----------------------------------------------
 
-    // 注册验证码前缀
-    String REGISTER_USER_PREFIX = "REGISTER_CHECK_CODE:";
-    // 登录验证码前缀
-    String LOGIN_USER_PREFIX = "LOGIN_CHECK_CODE:";
+    // token类
+    String LOGIN_CODE_KEY = "LOGIN_CODE";
+    String REGISTER_CODE_KEY = "REGISTER_CODE";
 
-    // 注册整体验证码 key
-    static String getCheckCodeKeyByRegister(String str) {
-        return REGISTER_USER_PREFIX + str;
+    // 获取注册验证码 key
+    static String getRegisterCodeKey(String str) {
+        return REGISTER_CODE_KEY + str;
     }
 
-    // 登录整体验证码 key
-    static String getCheckCodeKeyByLogin(String str) {
-        return LOGIN_USER_PREFIX + str;
+    // 获取登录验证码 key
+    static String getLoginCodeKey(String str) {
+        return LOGIN_CODE_KEY + str;
     }
 }

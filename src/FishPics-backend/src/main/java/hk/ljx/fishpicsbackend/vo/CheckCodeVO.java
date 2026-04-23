@@ -1,4 +1,4 @@
-package hk.ljx.fishpicsbackend.dto.user;
+package hk.ljx.fishpicsbackend.vo;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -8,16 +8,10 @@ import lombok.NoArgsConstructor;
 import java.io.Serializable;
 
 @Data
-@AllArgsConstructor
 @NoArgsConstructor
+@AllArgsConstructor
 @Builder
-public class UserLoginRequest implements Serializable {
-
-    private String username;
-
-    private String password;
-
-    private String checkCode;
-
+public class CheckCodeVO implements Serializable {
     private String captchaKey;
+    private String base64Image;
 }

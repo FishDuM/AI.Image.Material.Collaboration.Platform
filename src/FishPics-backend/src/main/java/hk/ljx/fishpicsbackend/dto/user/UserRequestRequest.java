@@ -23,4 +23,6 @@ public class UserRequestRequest implements Serializable {
      * 验证码
      */
     private String checkCode;
+
+    private String captchaKey;
 }
