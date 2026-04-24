@@ -1,16 +1,18 @@
 import { useState, useContext } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { App as AntApp, Button, Modal, Form, Input, Avatar, Dropdown, message as antdMessage, Tooltip, Card, Checkbox } from 'antd'
-import { UserOutlined, LockOutlined, LoginOutlined, LogoutOutlined, SunOutlined, MoonOutlined, QrcodeOutlined, ScanOutlined } from '@ant-design/icons'
-import { getLoginCheckCode, login, getRegisterCheckCode, register } from './api'
-import { saveUserInfo, getUserInfo, removeUserInfo } from './utils/storage'
-import { ThemeContext } from './main.jsx'
-import './App.css'
+import { UserOutlined, LockOutlined, LoginOutlined, LogoutOutlined, SunOutlined, MoonOutlined, QrcodeOutlined, ScanOutlined, SettingOutlined, TeamOutlined } from '@ant-design/icons'
+import { getLoginCheckCode, login, getRegisterCheckCode, register } from '../api'
+import { saveUserInfo, getUserInfo, removeUserInfo } from '../utils/storage'
+import { ThemeContext } from '../main.jsx'
+import '../App.css'
 
 const LOGIN_USER_PREFIX = 'LOGIN_CHECK_CODE-'
 
-function App() {
+function HomePage() {
   const { message } = AntApp.useApp()
   const { isDarkMode, toggleTheme } = useContext(ThemeContext)
+  const navigate = useNavigate()
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
   const [isRegisterMode, setIsRegisterMode] = useState(false)
   const [loginForm] = Form.useForm()
@@ -23,6 +25,34 @@ function App() {
   const [registerKey, setRegisterKey] = useState('')
   const [userInfo, setUserInfo] = useState(() => getUserInfo())
   const [agreed, setAgreed] = useState(false)
+
+  const handleLogout = () => {
+    removeUserInfo()
+    setUserInfo(null)
+    antdMessage.success('已退出登录')
+  }
+
+  const isAdmin = userInfo?.role === 'admin'
+
+  const systemManagementMenuItems = [
+    {
+      key: 'user-management',
+      icon: <TeamOutlined />,
+      label: '用户管理',
+      onClick: () => {
+        navigate('/admin/users')
+      },
+    },
+  ]
+
+  const userMenuItems = [
+    {
+      key: 'logout',
+      icon: <LogoutOutlined />,
+      label: '退出登录',
+      onClick: handleLogout,
+    },
+  ]
 
   const showLoginModal = () => {
     setIsLoginModalOpen(true)
@@ -188,59 +218,56 @@ function App() {
     }
   }
 
-  const handleLogout = () => {
-    removeUserInfo()
-    setUserInfo(null)
-    antdMessage.success('已退出登录')
-  }
-
-  const userMenuItems = [
-    {
-      key: 'logout',
-      icon: <LogoutOutlined />,
-      label: '退出登录',
-      onClick: handleLogout,
-    },
-  ]
-
   return (
-    <div className="app-container">
+    <>
       <header className="app-header">
         <div className="header-content">
-          <div className="logo-section">
-            <h1 className="logo-text">FishPics</h1>
+            <div className="logo-section">
+              <h1 className="logo-text">FishPics</h1>
+              {isAdmin && (
+                <Dropdown menu={{ items: systemManagementMenuItems }} placement="bottomLeft">
+                  <Button
+                    type="text"
+                    className="system-management-btn"
+                    icon={<SettingOutlined />}
+                    size="large"
+                  >
+                    系统管理
+                  </Button>
+                </Dropdown>
+              )}
+            </div>
+            <div className="header-actions">
+              {userInfo ? (
+                <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
+                  <div className="user-info">
+                    <Avatar size={32} style={{ backgroundColor: 'var(--accent)' }}>
+                      {(userInfo.nickname || userInfo.username)?.charAt(0)?.toUpperCase()}
+                    </Avatar>
+                    <span className="user-name">{userInfo.nickname || userInfo.username}</span>
+                  </div>
+                </Dropdown>
+              ) : (
+                <Button
+                  type="primary"
+                  className="login-btn"
+                  onClick={showLoginModal}
+                  icon={<LoginOutlined />}
+                >
+                  登录
+                </Button>
+              )}
+              <Tooltip title={isDarkMode ? '切换到亮色模式' : '切换到暗色模式'}>
+                <Button
+                  type="text"
+                  className="theme-toggle-btn"
+                  onClick={toggleTheme}
+                  icon={isDarkMode ? <SunOutlined /> : <MoonOutlined />}
+                  size="large"
+                />
+              </Tooltip>
+            </div>
           </div>
-          <div className="header-actions">
-            <Tooltip title={isDarkMode ? '切换到亮色模式' : '切换到暗色模式'}>
-              <Button
-                type="text"
-                className="theme-toggle-btn"
-                onClick={toggleTheme}
-                icon={isDarkMode ? <SunOutlined /> : <MoonOutlined />}
-                size="large"
-              />
-            </Tooltip>
-            {userInfo ? (
-              <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
-                <div className="user-info">
-                  <Avatar size={32} style={{ backgroundColor: 'var(--accent)' }}>
-                    {(userInfo.nickname || userInfo.username)?.charAt(0)?.toUpperCase()}
-                  </Avatar>
-                  <span className="user-name">{userInfo.nickname || userInfo.username}</span>
-                </div>
-              </Dropdown>
-            ) : (
-              <Button
-                type="primary"
-                className="login-btn"
-                onClick={showLoginModal}
-                icon={<LoginOutlined />}
-              >
-                登录
-              </Button>
-            )}
-          </div>
-        </div>
       </header>
 
       <main className="app-main">
@@ -285,7 +312,7 @@ function App() {
                 </div>
                 <div className="scan-status">
                   <ScanOutlined className="scan-icon" />
-                  <span>暂为实现该功能，敬请期待</span>
+                  <span>暂是实现该功能，敬请期待</span>
                 </div>
               </Card>
             </div>
@@ -460,9 +487,9 @@ function App() {
                         onClick={handleRefreshRegisterCode}
                         type="link"
                       >
-                        {registerCheckCodeUrl && (
+                        {registerCheckCodeUrl ? (
                           <img src={registerCheckCodeUrl} alt="验证码" className="check-code-img-btn" />
-                        )}
+                        ) : null}
                       </Button>
                     </div>
                   </Form.Item>
@@ -501,8 +528,8 @@ function App() {
           </div>
         </div>
       </Modal>
-    </div>
+    </>
   )
 }
 
-export default App
+export default HomePage

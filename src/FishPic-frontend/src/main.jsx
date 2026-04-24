@@ -1,9 +1,14 @@
 import { StrictMode, useState, useEffect, createContext } from 'react'
 import { createRoot } from 'react-dom/client'
+import {BrowserRouter} from 'react-router-dom'
 import { ConfigProvider, App as AntdApp, theme as antdTheme } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
+import dayjs from 'dayjs'
+import 'dayjs/locale/zh-cn'
 import './index.css'
 import App from './App.jsx'
+
+dayjs.locale('zh-cn')
 
 export const ThemeContext = createContext({ isDarkMode: false, toggleTheme: () => {} })
 
@@ -60,9 +65,11 @@ function ThemeWrapper({ children }) {
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ThemeWrapper>
-      <AntdApp>
-        <App />
-      </AntdApp>
+        <BrowserRouter>
+            <AntdApp>
+                <App/>
+            </AntdApp>
+        </BrowserRouter>
     </ThemeWrapper>
   </StrictMode>,
 )
