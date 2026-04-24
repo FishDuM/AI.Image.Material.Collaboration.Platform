@@ -1,7 +1,11 @@
 package hk.ljx.fishpicsbackend.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.common.response.Response;
+import hk.ljx.fishpicsbackend.dto.user.UserEditRequest;
 import hk.ljx.fishpicsbackend.dto.user.UserLoginRequest;
+import hk.ljx.fishpicsbackend.dto.user.UserQueryWrapper;
 import hk.ljx.fishpicsbackend.dto.user.UserRequestRequest;
 import hk.ljx.fishpicsbackend.entity.User;
 import com.baomidou.mybatisplus.extension.service.IService;
@@ -9,6 +13,7 @@ import hk.ljx.fishpicsbackend.vo.UserLoginVO;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import java.util.List;
 
 /**
 * @author 30574
@@ -48,4 +53,35 @@ public interface UserService extends IService<User> {
      * @return 用户 VO
      */
     Response<UserLoginVO> userLogin(UserLoginRequest userLoginRequest, HttpServletResponse response, HttpServletRequest request);
+
+    /**
+     * 构造查询用户条件
+     *
+     * @param userQueryWrapper 用户查询条件
+     * @return 查询条件
+     */
+    QueryWrapper<User> newQueryWrapper(UserQueryWrapper userQueryWrapper);
+
+    /**
+     * 管理员获取用户列表
+     *
+     * @return 用户列表
+     */
+    IPage<User> getUserList(UserQueryWrapper userQueryWrapper, long current, long pageSize);
+
+    /**
+     * 管理员设置用户状态（1正常，0封禁）
+     *
+     * @param userId 用户id
+     * @return 设置结果
+     */
+    Boolean setStatus(Long userId);
+
+    /**
+     * 管理员编辑用户信息
+     *
+     * @param userEditRequest 用户信息
+     * @return 编辑结果
+     */
+    Boolean editUser(UserEditRequest userEditRequest);
 }

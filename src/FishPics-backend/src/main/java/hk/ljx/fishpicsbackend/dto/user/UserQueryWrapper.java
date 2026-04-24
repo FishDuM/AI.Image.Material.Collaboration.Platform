@@ -1,27 +1,23 @@
-package hk.ljx.fishpicsbackend.vo;
+package hk.ljx.fishpicsbackend.dto.user;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableLogic;
+import hk.ljx.fishpicsbackend.dto.base.PageRequest;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
+import java.util.Date;
 
-/**
- * 用户登录 VO
- */
 @Data
-@NoArgsConstructor
 @AllArgsConstructor
+@NoArgsConstructor
 @Builder
-public class UserLoginVO implements Serializable {
-
-    /**
-     * 登录Token
-     */
-    private String loginToken;
+public class UserQueryWrapper extends PageRequest implements Serializable {
 
     /**
      * 用户ID
@@ -34,11 +30,6 @@ public class UserLoginVO implements Serializable {
     private String username;
 
     /**
-     * 头像URL
-     */
-    private String avatar;
-
-    /**
      * 邮箱
      */
     private String email;
@@ -49,12 +40,23 @@ public class UserLoginVO implements Serializable {
     private String phone;
 
     /**
+     * 昵称（展示用）
+     */
+    private String nickname;
+
+    /**
+     * 状态 1-正常 0-禁用 2-待审核
+     */
+    private Integer status;
+
+    /**
      * 用户的权限
      */
     private String role;
 
     /**
-     * 昵称（展示用）
+     * 创建时间
      */
-    private String nickname;
+    private Date createTime;
+
 }

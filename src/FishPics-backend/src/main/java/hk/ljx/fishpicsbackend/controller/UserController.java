@@ -1,14 +1,16 @@
 package hk.ljx.fishpicsbackend.controller;
 
+import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.RandomUtil;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
 import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
-import hk.ljx.fishpicsbackend.dto.user.UserLoginRequest;
-import hk.ljx.fishpicsbackend.dto.user.UserRequestRequest;
+import hk.ljx.fishpicsbackend.dto.user.*;
+import hk.ljx.fishpicsbackend.entity.User;
 import hk.ljx.fishpicsbackend.service.UserService;
 import hk.ljx.fishpicsbackend.vo.CheckCodeVO;
 import hk.ljx.fishpicsbackend.vo.UserLoginVO;
@@ -19,7 +21,7 @@ import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.LOGIN_CODE_KEY;
+import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
 @RestController
 @RequestMapping("/user")
@@ -63,5 +65,28 @@ public class UserController {
                 .captchaKey(login)
                 .base64Image(base64Image)
                 .build());
+    }
+
+    //    @AuthCheck(role = ADMIN)
+    @PostMapping("/admin/userList")
+    public Response<IPage<User>> getUserList(@RequestBody UserQueryWrapper userQueryWrapper) {
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(userQueryWrapper), ExceptionCode.PARAMETER_ERROR);
+        long current = userQueryWrapper.getCurrent();
+        long pageSize = userQueryWrapper.getPageSize();
+        IPage<User> userList = userService.getUserList(userQueryWrapper, current, pageSize);
+        return ResUtils.success(userList);
+    }
+
+    @PostMapping("/admin/setStatus")
+    public Response<Boolean> setStatus(@RequestBody UserIdRequest userIdRequest) {
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(userIdRequest), ExceptionCode.PARAMETER_ERROR);
+        Long userId = userIdRequest.getUserId();
+        return ResUtils.success(userService.setStatus(userId));
+    }
+
+    @PostMapping("/admin/editUser")
+    public Response<Boolean> editUser(@RequestBody UserEditRequest userEditRequest) {
+        ExcUtils.throwIfTrue(ObjectUtil.isNull(userEditRequest), ExceptionCode.PARAMETER_ERROR);
+        return ResUtils.success(userService.editUser(userEditRequest));
     }
 }

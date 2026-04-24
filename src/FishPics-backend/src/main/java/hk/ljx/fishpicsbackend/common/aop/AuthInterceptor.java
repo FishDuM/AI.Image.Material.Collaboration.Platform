@@ -1,7 +1,5 @@
 package hk.ljx.fishpicsbackend.common.aop;
 
-import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.util.ObjUtil;
 import cn.hutool.json.JSONUtil;
 import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
