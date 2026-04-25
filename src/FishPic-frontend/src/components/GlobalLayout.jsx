@@ -1,4 +1,4 @@
-import { useContext, useState, useMemo } from 'react'
+import { useContext, useState, useMemo, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { App as AntApp, Button, Avatar, Dropdown, Modal, Form, Input, Card, Checkbox, message as antdMessage, Drawer, Menu } from 'antd'
 import { 
@@ -23,7 +23,8 @@ import {
   GithubOutlined,
   QqOutlined,
   GlobalOutlined,
-  PlaySquareOutlined
+  PlaySquareOutlined,
+  BellOutlined
 } from '@ant-design/icons'
 import { getUserInfo, removeUserInfo, saveUserInfo } from '../utils/storage'
 import { getLoginCheckCode, login } from '../api'
@@ -34,7 +35,7 @@ function GlobalLayout({ children }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { isDarkMode, toggleTheme } = useContext(ThemeContext)
-  const currentUser = getUserInfo()
+  const [currentUser, setCurrentUser] = useState(getUserInfo())
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
   const [loginForm] = Form.useForm()
   const [loginLoading, setLoginLoading] = useState(false)
@@ -44,8 +45,20 @@ function GlobalLayout({ children }) {
   const [sidebarVisible, setSidebarVisible] = useState(false)
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
 
+  useEffect(() => {
+    const handleUserInfoUpdated = () => {
+      setCurrentUser(getUserInfo())
+    }
+
+    window.addEventListener('userInfoUpdated', handleUserInfoUpdated)
+    return () => {
+      window.removeEventListener('userInfoUpdated', handleUserInfoUpdated)
+    }
+  }, [])
+
   const handleLogout = () => {
     removeUserInfo()
+    setCurrentUser(null)
     message.success('已退出登录')
     navigate('/')
   }
@@ -356,8 +369,14 @@ function GlobalLayout({ children }) {
             {currentUser ? (
               <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" className="desktop-only">
                 <div className="user-info">
-                  <Avatar size={32} style={{ backgroundColor: 'var(--accent)' }}>
-                    {(currentUser.nickname || currentUser.username)?.charAt(0)?.toUpperCase()}
+                  <Avatar 
+                    size={32} 
+                    src={currentUser.avatar}
+                    style={{ 
+                      backgroundColor: currentUser.avatar ? 'transparent' : 'var(--accent)',
+                    }}
+                  >
+                    {!currentUser.avatar && (currentUser.nickname || currentUser.username)?.charAt(0)?.toUpperCase()}
                   </Avatar>
                   <span className="user-name">{currentUser.nickname || currentUser.username}</span>
                 </div>
@@ -371,6 +390,15 @@ function GlobalLayout({ children }) {
               >
                 登录
               </Button>
+            )}
+            {currentUser && (
+              <Button
+                type="text"
+                size="large"
+                className={`notification-btn${location.pathname === '/notifications' ? ' notification-btn-active' : ''}`}
+                icon={<BellOutlined />}
+                onClick={() => navigate('/notifications')}
+              />
             )}
             <Button
               type="text"
@@ -466,13 +494,13 @@ function GlobalLayout({ children }) {
                 <Form.Item
                   name="username"
                   rules={[
-                    { required: true, message: '请输入用户名' },
-                    { min: 6, message: '用户名至少 6 个字符' },
+                    { required: true, message: '请输入账号' },
+                    { min: 6, message: '账号至少 6 个字符' },
                   ]}
                 >
                   <Input
                     prefix={<UserOutlined className="input-icon" />}
-                    placeholder="请输入用户名"
+                    placeholder="请输入账号"
                     className="xhs-input"
                   />
                 </Form.Item>

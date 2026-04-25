@@ -19,7 +19,7 @@ public class UserQueryWrapper extends PageRequest implements Serializable {
     private Long id;
 
     /**
-     * 用户名（登录用）
+     * 账号（登录用）
      */
     private String username;
 

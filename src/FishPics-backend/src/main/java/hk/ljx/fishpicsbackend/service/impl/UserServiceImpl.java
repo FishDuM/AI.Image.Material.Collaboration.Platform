@@ -138,7 +138,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         String captchaKey = userRequestRequest.getCaptchaKey();
 
         ExcUtils.throwIfTrue(checkCode == null || captchaKey == null, ExceptionCode.PARAMETER_ERROR, "验证码不能为空");
-        ExcUtils.throwIfTrue(username == null || username.length() < 6 || username.length() > 11, ExceptionCode.PARAMETER_ERROR, "用户名长度不能小于 6 位或大于 11 位");
+        ExcUtils.throwIfTrue(username == null || username.length() < 6 || username.length() > 11, ExceptionCode.PARAMETER_ERROR, "账号长度不能小于 6 位或大于 11 位");
         ExcUtils.throwIfTrue(password == null || password.length() < 8 || password.length() > 20, ExceptionCode.PARAMETER_ERROR, "密码长度不能小于 8 位或大于 20 位");
         if (password != null) {
             ExcUtils.throwIfTrue(!password.equals(checkPassword), ExceptionCode.PARAMETER_ERROR, "两次密码不一致");
@@ -149,9 +149,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         String code = stringRedisTemplate.opsForValue().get(checkCodeKeyByRegister);
         ExcUtils.throwIfTrue(checkCode == null || !checkCode.equalsIgnoreCase(code), ExceptionCode.PARAMETER_ERROR, "验证码错误");
 
-        // 校验用户名是否已存在
+        // 校验账号是否已存在
         Long num = userMapper.selectCount(new QueryWrapper<User>().eq("username", username));
-        ExcUtils.throwIfTrue(num != 0, ExceptionCode.PARAMETER_ERROR, "用户名已存在");
+        ExcUtils.throwIfTrue(num != 0, ExceptionCode.PARAMETER_ERROR, "账号已存在");
 
         // 密码加盐
         password = DigestUtil.md5Hex(password + SALT);
@@ -186,7 +186,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
         // 查询 mysql 获取用户
         User user = userMapper.selectOne(new QueryWrapper<User>().eq("username", username).eq("password", password));
-        ExcUtils.throwIfTrue(user == null, ExceptionCode.PARAMETER_ERROR, "用户名或密码错误");
+        ExcUtils.throwIfTrue(user == null, ExceptionCode.PARAMETER_ERROR, "账号或密码错误");
         String userByJson = JSONUtil.toJsonStr(user);
 
         // 查询到则存入 Redis
@@ -194,7 +194,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         if (user != null) {
             loginTokenKey = JwtUtil.generateToken(String.valueOf(user.getId()));
         } else {
-            throw new BaseException(ExceptionCode.PARAMETER_ERROR, "用户名或密码错误");
+            throw new BaseException(ExceptionCode.PARAMETER_ERROR, "账号或密码错误");
         }
         stringRedisTemplate.opsForValue().set(loginTokenKey, userByJson, 1, TimeUnit.DAYS);
 
@@ -310,13 +310,24 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         // 参数校验
         Long id = userEditRequest.getId();
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), ExceptionCode.PARAMETER_ERROR);
+        String nickname = userEditRequest.getNickname();
+        if (nickname != null) {
+            ExcUtils.throwIfTrue( !(nickname.length() > 4 && nickname.length() < 12), ExceptionCode.PARAMETER_ERROR, "昵称长度为5-11位");
+        }
+        String username = userEditRequest.getUsername();
+        if (username != null) {
+            ExcUtils.throwIfTrue( !(username.length() > 5 && username.length() < 12), ExceptionCode.PARAMETER_ERROR, "账号长度为6-11位");
+        }
+        String password = userEditRequest.getPassword();
+        if (password != null){
+            ExcUtils.throwIfTrue( !(password.length() > 7 && password.length() < 21), ExceptionCode.PARAMETER_ERROR, "密码长度为8-20位");
+        }
 
         // 校验是否是自己的信息
         ExcUtils.throwIfTrue(!this.isMe(id, request), ExceptionCode.UNAUTHORIZED, "只可修改自己的信息");
         // 查询用户信息
         User user = this.getById(id);
         ExcUtils.throwIfTrue(ObjectUtil.isNull(user), ExceptionCode.DATABASE_ERROR, "用户不存在");
-        String password = userEditRequest.getPassword();
 
         // 更新用户信息
         BeanUtil.copyProperties(userEditRequest, user, CopyOptions.create().ignoreNullValue());

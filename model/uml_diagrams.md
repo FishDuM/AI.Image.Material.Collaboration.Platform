@@ -416,7 +416,7 @@ UserService --> 后端: Response<Boolean>
 - **localStorage**: 用户信息持久化
 - **Vite**: 构建工具
 
-### 5.2 后端组件 (FishPics-backend)
+### 5.2 后端组件 (AI.Image.Material.Collaboration.Platform)
 - **Spring Boot 2.7.6**: Web框架
 - **MyBatis-Plus 3.5.15**: ORM框架 + 分页插件
 - **MySQL 8+**: 关系型数据库

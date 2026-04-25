@@ -23,7 +23,7 @@
 - 响应式布局 / 美观 UI
 - 暗色模式支持
 
-### 后端 (FishPics-backend)
+### 后端 (AI.Image.Material.Collaboration.Platform)
 - **Spring Boot 2.7.6**
 - **JWT**
 - **MyBatis-Plus 3.5.15** ORM框架
@@ -98,7 +98,7 @@ AI.Image.Material.Collaboration.Platform/
     │   │   └── App.jsx             # 主应用组件
     │   ├── public/                 # 静态资源
     │   └── package.json
-    └── FishPics-backend/           # 后端项目 (Spring Boot)
+    └── AI.Image.Material.Collaboration.Platform/           # 后端项目 (Spring Boot)
         ├── src/
         │   ├── main/
         │   │   ├── java/hk/ljx/fishpicsbackend/
@@ -131,7 +131,7 @@ AI.Image.Material.Collaboration.Platform/
 
 ### 后端启动
 1. 创建 MySQL 数据库，执行 `src/sql/create.sql` 脚本
-2. 配置 `src/FishPics-backend/src/main/resources/application.yml` 中的数据库和 Redis 连接信息
+2. 配置 `src/AI.Image.Material.Collaboration.Platform/src/main/resources/application.yml` 中的数据库和 Redis 连接信息
 3. 启动 SpringBoot 应用，访问 `http://localhost:8080/api` 查看API文档
 
 ### 前端启动

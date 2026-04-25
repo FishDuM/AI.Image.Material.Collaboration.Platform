@@ -68,7 +68,7 @@ create table user
 (
     id          bigint unsigned auto_increment comment '用户ID'
         primary key,
-    username    varchar(32)                           null comment '用户名（登录用）',
+    username    varchar(32)                           null comment '账号（登录用）',
     password    varchar(128)                          null comment '密码',
     avatar      varchar(256)                          null comment '头像URL',
     email       varchar(64)                           null comment '邮箱',

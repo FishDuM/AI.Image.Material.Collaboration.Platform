@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App as AntApp, Card, Typography, Empty } from 'antd'
 import { getUserInfo } from '../utils/storage'
+import FunnyBackground from '../components/FunnyBackground'
 import './TeamManagement.css'
 
 const { Title } = Typography
@@ -31,16 +32,19 @@ function TeamManagement() {
 
   if (!currentUser || currentUser.role !== 'admin') {
     return (
-      <main className="team-management-container">
-        <div style={{ textAlign: 'center', padding: '100px 0' }}>
-          <Title level={3}>无权访问</Title>
-        </div>
-      </main>
+      <FunnyBackground>
+        <main className="team-management-container">
+          <div style={{ textAlign: 'center', padding: '100px 0' }}>
+            <Title level={3}>无权访问</Title>
+          </div>
+        </main>
+      </FunnyBackground>
     )
   }
 
   return (
-    <main className="team-management-container">
+    <FunnyBackground>
+      <main className="team-management-container">
       <div className="team-management-header">
         <Title level={2}>团队管理</Title>
         <p className="header-subtitle">管理团队成员和团队配置</p>
@@ -52,6 +56,7 @@ function TeamManagement() {
         </div>
       </Card>
     </main>
+  </FunnyBackground>
   )
 }
 

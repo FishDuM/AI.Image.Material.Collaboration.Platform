@@ -16,7 +16,7 @@ public class UserMessageVO {
     private Long id;
 
     /**
-     * 用户名（登录用）
+     * 账号（登录用）
      */
     private String username;
 
@@ -39,6 +39,11 @@ public class UserMessageVO {
      * 昵称（展示用）
      */
     private String nickname;
+
+    /**
+     * 用户的权限
+     */
+    private String role;
 
     /**
      * 创建时间

@@ -1,0 +1,124 @@
+.notifications-page {
+  min-height: 100vh;
+  background: var(--bg-secondary);
+  padding: 20px;
+}
+
+.notifications-header {
+  max-width: 1200px;
+  margin: 0 auto 24px;
+  padding: 24px 20px;
+  background: var(--bg-primary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.notifications-header h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.notifications-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  background: var(--bg-primary);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 24px;
+  min-height: 400px;
+}
+
+.notifications-tabs {
+  width: 100%;
+}
+
+.tabs-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.notifications-tabs .ant-tabs-nav {
+  margin-bottom: 0;
+  flex: 1;
+}
+
+.mark-all-read-btn {
+  flex-shrink: 0;
+  margin-top: 8px;
+  height: 32px;
+  padding: 4px 16px;
+  font-size: 14px;
+}
+
+.notifications-tabs .ant-tabs-tab {
+  font-size: 16px;
+  padding: 12px 24px;
+  color: var(--text-secondary);
+  transition: all 0.3s ease;
+}
+
+.notifications-tabs .ant-tabs-tab-active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.notifications-tabs .ant-tabs-ink-bar {
+  background: var(--accent);
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+}
+
+.tab-content {
+  min-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+
+.empty-state p {
+  margin: 0;
+  opacity: 0.6;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .notifications-page {
+    padding: 12px;
+  }
+
+  .notifications-content {
+    padding: 16px;
+  }
+
+  .tabs-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .notifications-tabs .ant-tabs-tab {
+    font-size: 14px;
+    padding: 10px 16px;
+  }
+
+  .mark-all-read-btn {
+    width: 100%;
+    margin-top: 0;
+  }
+}
+
+/* 暗色主题适配 */
+[data-theme='dark'] .notifications-content {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}

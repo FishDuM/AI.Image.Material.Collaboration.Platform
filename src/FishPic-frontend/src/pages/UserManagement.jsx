@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { App as AntApp, Table, Tag, Space, Button, Card, Typography, Avatar, Popconfirm, Input, Row, Col, Form, Select, Modal } from 'antd'
 import { UserOutlined, EditOutlined, DeleteOutlined, SearchOutlined, ReloadOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons'
 import { getUserInfo, request } from '../utils/storage'
+import FunnyBackground from '../components/FunnyBackground'
 import './UserManagement.css'
 
 const { Title } = Typography
@@ -219,8 +220,13 @@ function UserManagement() {
       key: 'avatar',
       width: 80,
       render: (_, record) => (
-        <Avatar style={{ backgroundColor: 'var(--accent)' }}>
-          {(record.nickname || record.username)?.charAt(0)?.toUpperCase()}
+        <Avatar 
+          src={record.avatar}
+          style={{ 
+            backgroundColor: record.avatar ? 'transparent' : 'var(--accent)'
+          }}
+        >
+          {!record.avatar && (record.nickname || record.username)?.charAt(0)?.toUpperCase()}
         </Avatar>
       ),
     },
@@ -325,7 +331,8 @@ function UserManagement() {
   }
 
   return (
-    <main className="user-management-container">
+    <FunnyBackground>
+      <main className="user-management-container">
         <div className="user-management-header">
           <Title level={2}>用户管理</Title>
           <p className="header-subtitle">管理系统所有用户信息和权限</p>
@@ -548,6 +555,7 @@ function UserManagement() {
           </Form>
         </Modal>
       </main>
+    </FunnyBackground>
   )
 }
 

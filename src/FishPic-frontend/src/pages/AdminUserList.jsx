@@ -76,8 +76,13 @@ function AdminUserList() {
       key: 'username',
       render: (username, record) => (
         <Space>
-          <Avatar style={{ backgroundColor: 'var(--accent)' }}>
-            {(record.nickname || username)?.charAt(0)?.toUpperCase()}
+          <Avatar 
+            src={record.avatar}
+            style={{ 
+              backgroundColor: record.avatar ? 'transparent' : 'var(--accent)'
+            }}
+          >
+            {!record.avatar && (record.nickname || username)?.charAt(0)?.toUpperCase()}
           </Avatar>
           <div className="user-info">
             <div className="user-name">{username}</div>

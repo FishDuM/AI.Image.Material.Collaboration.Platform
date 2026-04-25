@@ -3,10 +3,10 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <groupId>hk.ljx</groupId>
-    <artifactId>FishPics-backend</artifactId>
+    <artifactId>AI.Image.Material.Collaboration.Platform</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>FishPics-backend</name>
-    <description>FishPics-backend</description>
+    <name>AI.Image.Material.Collaboration.Platform</name>
+    <description>AI.Image.Material.Collaboration.Platform</description>
     <properties>
         <java.version>11</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

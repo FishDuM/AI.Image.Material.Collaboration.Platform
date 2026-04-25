@@ -263,13 +263,13 @@ function HomePage() {
                   <Form.Item
                     name="username"
                     rules={[
-                      { required: true, message: '请输入用户名' },
-                      { min: 6, message: '用户名至少 6 个字符' },
+                      { required: true, message: '请输入账号' },
+                      { min: 6, message: '账号至少 6 个字符' },
                     ]}
                   >
                     <Input
                       prefix={<UserOutlined className="input-icon" />}
-                      placeholder="请输入用户名"
+                      placeholder="请输入账号"
                       className="xhs-input"
                     />
                   </Form.Item>
@@ -346,13 +346,13 @@ function HomePage() {
                   <Form.Item
                     name="username"
                     rules={[
-                      { required: true, message: '请输入用户名' },
-                      { min: 6, message: '用户名至少 6 个字符' },
+                      { required: true, message: '请输入账号' },
+                      { min: 6, message: '账号至少 6 个字符' },
                     ]}
                   >
                     <Input
                       prefix={<UserOutlined className="input-icon" />}
-                      placeholder="请输入用户名"
+                      placeholder="请输入账号"
                       className="xhs-input"
                     />
                   </Form.Item>

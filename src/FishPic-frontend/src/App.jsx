@@ -11,6 +11,7 @@ import AIManagement from './pages/AIManagement'
 import CommunitySquare from './pages/CommunitySquare'
 import PrivateSpace from './pages/PrivateSpace'
 import TeamSpace from './pages/TeamSpace'
+import Notifications from './pages/Notifications'
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
         <Route path="/community" element={<CommunitySquare/>}/>
         <Route path="/private-space" element={<PrivateSpace/>}/>
         <Route path="/team-space" element={<TeamSpace/>}/>
+        <Route path="/notifications" element={<Notifications/>}/>
         <Route path="/admin/users" element={<UserManagement/>}/>
           <Route path="/admin/spaces" element={<SpaceManagement/>}/>
           <Route path="/admin/teams" element={<TeamManagement/>}/>

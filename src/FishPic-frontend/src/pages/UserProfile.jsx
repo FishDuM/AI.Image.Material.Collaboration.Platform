@@ -14,7 +14,7 @@ import {
   LockOutlined
 } from '@ant-design/icons'
 import { getUserMyself, editUser } from '../api'
-import { getToken } from '../utils/storage'
+import { getToken, getUserInfo, saveUserInfo } from '../utils/storage'
 import { ThemeContext } from '../main.jsx'
 import './UserProfile.css'
 
@@ -28,25 +28,26 @@ function UserProfile() {
   const [avatarVisible, setAvatarVisible] = useState(false)
   const [editModalVisible, setEditModalVisible] = useState(false)
   const [editForm] = Form.useForm()
-  const hasFetchedRef = useRef(false)
 
   useEffect(() => {
-    if (hasFetchedRef.current) return
-    
     const fetchUserInfo = async () => {
-      if (hasFetchedRef.current) return
-      
       if (!getToken()) {
         message.warning('请先登录')
         navigate('/')
         return
       }
       
-      hasFetchedRef.current = true
       setLoading(true)
       try {
         const data = await getUserMyself()
         setUserData(data)
+        
+        // 同步更新 localStorage 中的用户信息
+        const currentUser = getUserInfo()
+        if (currentUser) {
+          const updatedUserInfo = { ...currentUser, ...data }
+          saveUserInfo(updatedUserInfo)
+        }
       } catch (error) {
         message.error(error.message || '获取个人信息失败')
         console.error('获取个人信息失败:', error)
@@ -56,12 +57,31 @@ function UserProfile() {
     }
 
     fetchUserInfo()
-  }, [])
+  }, [navigate, message])
 
   const formatDate = (date) => {
     if (!date) return '未知'
     const d = new Date(date)
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+
+  const calculateDaysSinceJoin = (date) => {
+    if (!date) return 0
+    const joinDate = new Date(date)
+    const today = new Date()
+    const diffTime = Math.abs(today - joinDate)
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+    return diffDays
+  }
+
+  const handleCopyUsername = () => {
+    if (userData?.username) {
+      navigator.clipboard.writeText(userData.username).then(() => {
+        message.success('已复制账号')
+      }).catch(() => {
+        message.error('复制失败')
+      })
+    }
   }
 
   const handleAvatarClick = () => {
@@ -99,10 +119,23 @@ function UserProfile() {
       if (values.password && values.password.trim() !== '') {
         submitData.password = values.password
       }
-      await editUser(submitData)
+      const result = await editUser(submitData)
       message.success('修改成功')
       setEditModalVisible(false)
-      setUserData(prev => ({ ...prev, ...values }))
+      
+      const updatedUserData = { ...userData, ...values }
+      setUserData(updatedUserData)
+      
+      const currentUser = getUserInfo()
+      if (currentUser) {
+        const updatedUserInfo = { ...currentUser, ...values }
+        saveUserInfo(updatedUserInfo)
+        
+        // 触发自定义事件，通知 GlobalLayout 更新用户信息
+        window.dispatchEvent(new Event('userInfoUpdated'))
+      }
+      
+      editForm.resetFields()
     } catch (error) {
       if (error !== 'cancelled') {
         message.error(error.message || '修改失败')
@@ -161,8 +194,18 @@ function UserProfile() {
             
             <div className="profile-info-section">
               <div className="profile-nickname-row">
-                <h1 className="profile-nickname">{userData.nickname || userData.username}</h1>
-                <span className="profile-username">@{userData.username}</span>
+                <h1 className="profile-nickname">
+                  {userData.nickname || userData.username}
+                  {userData.role === 'admin' && (
+                    <span className="admin-badge" title="这个网站伟大的管理员">管理员</span>
+                  )}
+                </h1>
+                <span 
+                  className="profile-username"
+                  onClick={handleCopyUsername}
+                >
+                  @{userData.username}
+                </span>
               </div>
               
               <p className="profile-bio">
@@ -185,7 +228,7 @@ function UserProfile() {
               </div>
               
               <div className="profile-meta-row">
-                <span>
+                <span title={`你已经加入 ${calculateDaysSinceJoin(userData.createTime)} 天`}>
                   <CalendarOutlined /> 加入于 {formatDate(userData.createTime)}
                 </span>
               </div>
@@ -256,13 +299,17 @@ function UserProfile() {
             </Form.Item>
 
             <Form.Item
-              label="用户名"
+              label="账号"
               name="username"
-              rules={[{ required: true, message: '请输入用户名' }]}
+              rules={[
+                { required: true, message: '请输入账号' },
+                { min: 6, message: '账号长度不能小于 6 个字符' },
+                { max: 11, message: '账号长度不能大于 11 个字符' }
+              ]}
             >
               <Input 
                 prefix={<UserOutlined />} 
-                placeholder="请输入用户名"
+                placeholder="请输入账号"
               />
             </Form.Item>
 
@@ -270,6 +317,10 @@ function UserProfile() {
               label="密码"
               name="password"
               tooltip="留空表示不修改密码"
+              rules={[
+                { min: 8, message: '密码长度不能小于 8 个字符' },
+                { max: 20, message: '密码长度不能大于 20 个字符' }
+              ]}
             >
               <Input.Password 
                 prefix={<LockOutlined />} 
