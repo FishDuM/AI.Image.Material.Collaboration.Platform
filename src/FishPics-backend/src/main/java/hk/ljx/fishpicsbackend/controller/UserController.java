@@ -12,8 +12,9 @@ import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.dto.user.*;
 import hk.ljx.fishpicsbackend.entity.User;
 import hk.ljx.fishpicsbackend.service.UserService;
-import hk.ljx.fishpicsbackend.vo.CheckCodeVO;
-import hk.ljx.fishpicsbackend.vo.UserLoginVO;
+import hk.ljx.fishpicsbackend.vo.user.CheckCodeVO;
+import hk.ljx.fishpicsbackend.vo.user.UserLoginVO;
+import hk.ljx.fishpicsbackend.vo.user.UserMessageVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
@@ -40,7 +41,7 @@ public class UserController {
 
     @PostMapping("/register")
     public Response<Boolean> userRegister(@RequestBody UserRequestRequest userRequestRequest,
-            HttpServletRequest request, HttpServletResponse response) {
+            HttpServletRequest request) {
         ExcUtils.throwIfTrue(userRequestRequest == null, "参数不能为空");
         return userService.userRegister(userRequestRequest, request);
     }
@@ -67,13 +68,17 @@ public class UserController {
                 .build());
     }
 
-//    @PostMapping("/user/myself")
-//    public Response<User> getMyself(@RequestBody UserIdRequest userIdRequest) {
-//        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(userIdRequest), ExceptionCode.PARAMETER_ERROR);
-//        UserLoginVO userLoginVO = userService.getUserMessage(userIdRequest);
-//
-//    }
+    @GetMapping("/myself")
+    public Response<UserMessageVO> getMyself(HttpServletRequest request) {
+        UserMessageVO userMessageVO = userService.getMyselfMessage(request);
+        return ResUtils.success(userMessageVO);
+    }
 
+    @PostMapping("/editUser")
+    public Response<Boolean> editMyself(@RequestBody UserEditRequest userEditRequest, HttpServletRequest request) {
+        ExcUtils.throwIfTrue(ObjectUtil.isNull(userEditRequest), ExceptionCode.PARAMETER_ERROR);
+        return ResUtils.success(userService.editMyself(userEditRequest, request));
+    }
 
     @AuthCheck(role = ADMIN)
     @PostMapping("/admin/userList")
@@ -95,8 +100,8 @@ public class UserController {
 
     @AuthCheck(role = ADMIN)
     @PostMapping("/admin/editUser")
-    public Response<Boolean> editUser(@RequestBody UserEditRequest userEditRequest) {
-        ExcUtils.throwIfTrue(ObjectUtil.isNull(userEditRequest), ExceptionCode.PARAMETER_ERROR);
-        return ResUtils.success(userService.editUser(userEditRequest));
+    public Response<Boolean> editUser(@RequestBody UserEditByAdminRequest userEditByAdminRequest) {
+        ExcUtils.throwIfTrue(ObjectUtil.isNull(userEditByAdminRequest), ExceptionCode.PARAMETER_ERROR);
+        return ResUtils.success(userService.editUser(userEditByAdminRequest));
     }
 }

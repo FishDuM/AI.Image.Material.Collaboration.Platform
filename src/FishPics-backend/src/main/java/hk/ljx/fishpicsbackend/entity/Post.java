@@ -7,7 +7,6 @@ import lombok.Data;
 
 /**
  * 帖子表
- * @TableName post
  */
 @TableName(value ="post")
 @Data
@@ -21,6 +20,7 @@ public class Post {
     /**
      * 关联用户表
      */
+    @TableField("user_id")
     private Long userId;
 
     /**

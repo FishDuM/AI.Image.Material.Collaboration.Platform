@@ -1,4 +1,4 @@
-package hk.ljx.fishpicsbackend.vo;
+package hk.ljx.fishpicsbackend.vo.user;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

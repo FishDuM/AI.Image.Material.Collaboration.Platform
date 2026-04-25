@@ -15,22 +15,23 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
-import hk.ljx.fishpicsbackend.common.constants.UserConstants;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.common.utils.JwtUtil;
-import hk.ljx.fishpicsbackend.dto.user.UserEditRequest;
-import hk.ljx.fishpicsbackend.dto.user.UserLoginRequest;
-import hk.ljx.fishpicsbackend.dto.user.UserQueryWrapper;
-import hk.ljx.fishpicsbackend.dto.user.UserRequestRequest;
+import hk.ljx.fishpicsbackend.dto.user.*;
+import hk.ljx.fishpicsbackend.entity.Post;
 import hk.ljx.fishpicsbackend.entity.User;
+import hk.ljx.fishpicsbackend.mapper.PostMapper;
 import hk.ljx.fishpicsbackend.service.UserService;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
-import hk.ljx.fishpicsbackend.vo.UserLoginVO;
+import hk.ljx.fishpicsbackend.vo.post.PostListVO;
+import hk.ljx.fishpicsbackend.vo.user.UserLoginVO;
+import hk.ljx.fishpicsbackend.vo.user.UserMessageVO;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -39,17 +40,19 @@ import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.ByteArrayOutputStream;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.DEFAULT_NICK_NAME;
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.SALT;
 
 /**
 * @author 30574
-* @description 针对表【user(用户表)】的数据库操作Service实现
-* @createDate 2026-04-13 21:24:26
+*  针对表【user(用户表)】的数据库操作Service实现
+*  2026-04-13 21:24:26
 */
 @Service
 @Slf4j
@@ -61,6 +64,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
     @Resource
     private UserMapper userMapper;
+    @Autowired
+    private PostMapper postMapper;
 
     @Override
     public String getCheckCode(String str, Integer len, Integer minute) {
@@ -98,12 +103,29 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     /**
      * 系统内获取当前登录用户
      *
-     * @param id request
+     * @param request 请求信息
      * @return 用户实体
      */
     @Override
-    public User getLoginUser(Long id) {
-        return userMapper.selectById(id);
+    public User getLoginUser(HttpServletRequest request) {
+        // 解析 JWT 获得用户 id
+        String token = request.getHeader("Authorization");
+        // redis 查询用户信息
+        String userByJson = stringRedisTemplate.opsForValue().get(token);
+        User user = JSONUtil.toBean(userByJson, User.class);
+        // redis 查询不到则查 mysql
+        if (user == null) {
+            String id = JwtUtil.parseToken(token);
+            user = userMapper.selectById(id);
+            // mysql 查到反存 redis 有效期 2 天
+            if (user != null) {
+                stringRedisTemplate.opsForValue().set(token, JSONUtil.toJsonStr(user), 2, TimeUnit.DAYS);
+            } else {
+                // mysql 查不到反存 redis 空对象 有效期 1 秒
+                stringRedisTemplate.opsForValue().set(token, "", 1, TimeUnit.SECONDS);
+            }
+        }
+        return user;
     }
 
     @Override
@@ -168,7 +190,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         String userByJson = JSONUtil.toJsonStr(user);
 
         // 查询到则存入 Redis
-        String loginTokenKey = null;
+        String loginTokenKey;
         if (user != null) {
             loginTokenKey = JwtUtil.generateToken(String.valueOf(user.getId()));
         } else {
@@ -228,9 +250,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     }
 
     @Override
-    public Boolean editUser(@RequestBody UserEditRequest userEditRequest) {
+    public Boolean editUser(@RequestBody UserEditByAdminRequest userEditByAdminRequest) {
         // 1. 必传校验
-        Long id = userEditRequest.getId();
+        Long id = userEditByAdminRequest.getId();
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), ExceptionCode.PARAMETER_ERROR, "用户ID不能为空");
 
         // 2. 查询用户是否存在
@@ -238,19 +260,79 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         ExcUtils.throwIfTrue(ObjectUtil.isNull(user), ExceptionCode.NOT_FOUND, "未找到该用户");
 
         // 3. 密码加密（只在密码不为空时加密）
-        if (ObjectUtil.isNotEmpty(userEditRequest.getPassword())) {
-            String encryptPwd = DigestUtil.md5Hex(userEditRequest.getPassword() + SALT);
-            userEditRequest.setPassword(encryptPwd);
+        if (ObjectUtil.isNotEmpty(userEditByAdminRequest.getPassword())) {
+            String encryptPwd = DigestUtil.md5Hex(userEditByAdminRequest.getPassword() + SALT);
+            userEditByAdminRequest.setPassword(encryptPwd);
         }
 
         // 4. 自动拷贝 非空字段 到实体类（自动忽略null/空值）
-        BeanUtil.copyProperties(userEditRequest, user, CopyOptions.create().setIgnoreNullValue(true).setIgnoreError(true));
+        BeanUtil.copyProperties(userEditByAdminRequest, user, CopyOptions.create().setIgnoreNullValue(true).setIgnoreError(true));
 
         // 5. 更新
         int rows = userMapper.updateById(user);
         ExcUtils.throwIfTrue(rows != 1, ExceptionCode.DATABASE_ERROR, "更新用户失败");
 
         return true;
+    }
+
+    @Override
+    public UserMessageVO getMyselfMessage(HttpServletRequest request) {
+        // 查询用户信息
+        User loginUser = this.getLoginUser(request);
+        ExcUtils.throwIfTrue(loginUser == null || loginUser.getId() == null, ExceptionCode.NOT_FOUND, "未登录");
+        Long userId = loginUser.getId();
+        // 根据用户 id 查帖子表
+        QueryWrapper<Post> postQueryWrapper = new QueryWrapper<Post>().eq("user_id", userId);
+        List<Post> posts = postMapper.selectList(postQueryWrapper);
+        List<PostListVO> postListVOS;
+        if (posts != null && !posts.isEmpty()) {
+            // 转换为PostListVO
+            postListVOS = posts.stream().map(post -> {
+                PostListVO postListVO = new PostListVO();
+                BeanUtil.copyProperties(post, postListVO);
+                return postListVO;
+            }).collect(Collectors.toList());
+        }else {
+            postListVOS = new ArrayList<>();
+        }
+        // 拼装返回结果
+        UserMessageVO userMessageVO = new UserMessageVO();
+        BeanUtil.copyProperties(loginUser, userMessageVO);
+        userMessageVO.setPostList(postListVOS);
+        return userMessageVO;
+    }
+
+    @Override
+    public Boolean editMyself(UserEditRequest userEditRequest, HttpServletRequest request) {
+        // 获得当前登录用户信息
+        User loginUser = this.getLoginUser(request);
+        ExcUtils.throwIfTrue(ObjectUtil.isAllEmpty(loginUser, loginUser.getId()), ExceptionCode.NOT_LOGIN);
+        // 参数校验
+        Long id = userEditRequest.getId();
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), ExceptionCode.PARAMETER_ERROR);
+
+        // 校验是否是自己的信息
+        ExcUtils.throwIfTrue(!this.isMe(id, request), ExceptionCode.UNAUTHORIZED, "只可修改自己的信息");
+        // 查询用户信息
+        User user = this.getById(id);
+        ExcUtils.throwIfTrue(ObjectUtil.isNull(user), ExceptionCode.DATABASE_ERROR, "用户不存在");
+        String password = userEditRequest.getPassword();
+
+        // 更新用户信息
+        BeanUtil.copyProperties(userEditRequest, user, CopyOptions.create().ignoreNullValue());
+        if (StrUtil.isNotBlank(password)) {
+            // 密码加盐
+            password = DigestUtil.md5Hex(password + SALT);
+            user.setPassword(password);
+        }
+        return this.updateById(user);
+    }
+
+    @Override
+    public Boolean isMe(Long id, HttpServletRequest request) {
+        // 解析 JWT 获得用户 id
+        String token = request.getHeader("Authorization");
+        return JwtUtil.parseToken(token).equals(id.toString());
     }
 }
 

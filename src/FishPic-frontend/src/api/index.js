@@ -53,4 +53,8 @@ export const login = (data) => api.post('/login', data)
 
 export const register = (data) => api.post('/register', data)
 
+export const getUserMyself = () => api.get('/myself')
+
+export const editUser = (data) => api.post('/editUser', data)
+
 export default api

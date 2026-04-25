@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class UserEditRequest {
+public class UserEditByAdminRequest {
     /**
      * 用户ID
      */
@@ -44,4 +44,14 @@ public class UserEditRequest {
      * 昵称（展示用）
      */
     private String nickname;
+
+    /**
+     * 状态 1-正常 0-禁用 2-待审核
+     */
+    private Integer status;
+
+    /**
+     * 用户的权限
+     */
+    private String role;
 }

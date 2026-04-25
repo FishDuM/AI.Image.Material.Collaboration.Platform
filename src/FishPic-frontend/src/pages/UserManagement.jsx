@@ -1,17 +1,14 @@
-import { useState, useEffect, useCallback, useRef, useContext } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { App as AntApp, Table, Tag, Space, Button, Card, Typography, Avatar, Popconfirm, Dropdown, Input, Row, Col, Form, Select, Modal } from 'antd'
-import { UserOutlined, EditOutlined, DeleteOutlined, SettingOutlined, TeamOutlined, LogoutOutlined, SunOutlined, MoonOutlined, SearchOutlined, ReloadOutlined, LockOutlined, UnlockOutlined, HomeOutlined } from '@ant-design/icons'
-import { getUserInfo, removeUserInfo, request } from '../utils/storage'
-import { ThemeContext } from '../main.jsx'
-import '../App.css'
+import { App as AntApp, Table, Tag, Space, Button, Card, Typography, Avatar, Popconfirm, Input, Row, Col, Form, Select, Modal } from 'antd'
+import { UserOutlined, EditOutlined, DeleteOutlined, SearchOutlined, ReloadOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons'
+import { getUserInfo, request } from '../utils/storage'
 import './UserManagement.css'
 
 const { Title } = Typography
 
 function UserManagement() {
   const { message } = AntApp.useApp()
-  const { isDarkMode, toggleTheme } = useContext(ThemeContext)
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [users, setUsers] = useState([])
@@ -34,32 +31,7 @@ function UserManagement() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
 
-  const handleLogout = () => {
-    removeUserInfo()
-    setCurrentUser(null)
-    message.success('已退出登录')
-    navigate('/')
-  }
 
-  const systemManagementMenuItems = [
-    {
-      key: 'user-management',
-      icon: <TeamOutlined />,
-      label: '用户管理',
-      onClick: () => {
-        navigate('/admin/users')
-      },
-    },
-  ]
-
-  const userMenuItems = [
-    {
-      key: 'logout',
-      icon: <LogoutOutlined />,
-      label: '退出登录',
-      onClick: handleLogout,
-    },
-  ]
 
   const fetchUserList = useCallback(async (current, pageSize, params = {}) => {
     setLoading(true)
@@ -344,80 +316,16 @@ function UserManagement() {
 
   if (!currentUser || currentUser.role !== 'admin') {
     return (
-      <div className="user-management-page">
-        <header className="app-header">
-          <div className="header-content">
-            <div className="logo-section">
-              <h1 className="logo-text" onClick={() => navigate('/')}>FishPics</h1>
-            </div>
-            <div className="header-actions">
-              <Button
-                type="text"
-                size="large"
-                className="theme-toggle-btn"
-                onClick={toggleTheme}
-                icon={isDarkMode ? <SunOutlined /> : <MoonOutlined />}
-              />
-            </div>
-          </div>
-        </header>
-        <main className="user-management-container">
-          <div style={{ textAlign: 'center', padding: '100px 0' }}>
-            <Title level={3}>无权访问</Title>
-          </div>
-        </main>
-      </div>
+      <main className="user-management-container">
+        <div style={{ textAlign: 'center', padding: '100px 0' }}>
+          <Title level={3}>无权访问</Title>
+        </div>
+      </main>
     )
   }
 
   return (
-    <div className="user-management-page">
-      <header className="app-header">
-        <div className="header-content">
-          <div className="logo-section">
-            <h1 className="logo-text" onClick={() => navigate('/')}>FishPics</h1>
-            <Button
-              type="text"
-              size="large"
-              icon={<HomeOutlined />}
-              onClick={() => navigate('/')}
-            >
-              首页
-            </Button>
-            <Dropdown menu={{ items: systemManagementMenuItems }} placement="bottomLeft">
-              <Button
-                type="text"
-                size="large"
-                className="system-management-btn"
-              >
-                <SettingOutlined />
-                <span>系统管理</span>
-              </Button>
-            </Dropdown>
-          </div>
-          <div className="header-actions">
-            {currentUser && (
-              <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
-                <div className="user-info">
-                  <Avatar size={32} style={{ backgroundColor: 'var(--accent)' }}>
-                    {(currentUser.nickname || currentUser.username)?.charAt(0)?.toUpperCase()}
-                  </Avatar>
-                  <span className="user-name">{currentUser.nickname || currentUser.username}</span>
-                </div>
-              </Dropdown>
-            )}
-            <Button
-              type="text"
-              size="large"
-              className="theme-toggle-btn"
-              onClick={toggleTheme}
-              icon={isDarkMode ? <SunOutlined /> : <MoonOutlined />}
-            />
-          </div>
-        </div>
-      </header>
-
-      <main className="user-management-container">
+    <main className="user-management-container">
         <div className="user-management-header">
           <Title level={2}>用户管理</Title>
           <p className="header-subtitle">管理系统所有用户信息和权限</p>
@@ -526,7 +434,7 @@ function UserManagement() {
           footer={null}
           centered
           className="edit-user-modal"
-          destroyOnClose
+          destroyOnHidden
         >
           <Form
             form={editForm}
@@ -640,7 +548,6 @@ function UserManagement() {
           </Form>
         </Modal>
       </main>
-    </div>
   )
 }
 

@@ -10,7 +10,7 @@
             <result property="title" column="title" />
             <result property="content" column="content" />
             <result property="pictureIds" column="picture_ids" />
-            <result property="delete" column="delete" />
+            <result property="delete" column="`delete`" />
             <result property="status" column="status" />
             <result property="createTime" column="create_time" />
             <result property="updateTime" column="update_time" />

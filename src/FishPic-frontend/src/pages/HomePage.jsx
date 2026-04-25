@@ -1,9 +1,9 @@
 import { useState, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { App as AntApp, Button, Modal, Form, Input, Avatar, Dropdown, message as antdMessage, Tooltip, Card, Checkbox } from 'antd'
-import { UserOutlined, LockOutlined, LoginOutlined, LogoutOutlined, SunOutlined, MoonOutlined, QrcodeOutlined, ScanOutlined, SettingOutlined, TeamOutlined } from '@ant-design/icons'
+import { App as AntApp, Button, Modal, Form, Input, message as antdMessage, Card, Checkbox } from 'antd'
+import { UserOutlined, LockOutlined, LoginOutlined, LogoutOutlined, QrcodeOutlined, ScanOutlined } from '@ant-design/icons'
 import { getLoginCheckCode, login, getRegisterCheckCode, register } from '../api'
-import { saveUserInfo, getUserInfo, removeUserInfo } from '../utils/storage'
+import { saveUserInfo, getUserInfo } from '../utils/storage'
 import { ThemeContext } from '../main.jsx'
 import '../App.css'
 
@@ -26,33 +26,7 @@ function HomePage() {
   const [userInfo, setUserInfo] = useState(() => getUserInfo())
   const [agreed, setAgreed] = useState(false)
 
-  const handleLogout = () => {
-    removeUserInfo()
-    setUserInfo(null)
-    antdMessage.success('已退出登录')
-  }
 
-  const isAdmin = userInfo?.role === 'admin'
-
-  const systemManagementMenuItems = [
-    {
-      key: 'user-management',
-      icon: <TeamOutlined />,
-      label: '用户管理',
-      onClick: () => {
-        navigate('/admin/users')
-      },
-    },
-  ]
-
-  const userMenuItems = [
-    {
-      key: 'logout',
-      icon: <LogoutOutlined />,
-      label: '退出登录',
-      onClick: handleLogout,
-    },
-  ]
 
   const showLoginModal = () => {
     setIsLoginModalOpen(true)
@@ -220,69 +194,17 @@ function HomePage() {
 
   return (
     <>
-      <header className="app-header">
-        <div className="header-content">
-            <div className="logo-section">
-              <h1 className="logo-text">FishPics</h1>
-              {isAdmin && (
-                <Dropdown menu={{ items: systemManagementMenuItems }} placement="bottomLeft">
-                  <Button
-                    type="text"
-                    className="system-management-btn"
-                    icon={<SettingOutlined />}
-                    size="large"
-                  >
-                    系统管理
-                  </Button>
-                </Dropdown>
-              )}
-            </div>
-            <div className="header-actions">
-              {userInfo ? (
-                <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
-                  <div className="user-info">
-                    <Avatar size={32} style={{ backgroundColor: 'var(--accent)' }}>
-                      {(userInfo.nickname || userInfo.username)?.charAt(0)?.toUpperCase()}
-                    </Avatar>
-                    <span className="user-name">{userInfo.nickname || userInfo.username}</span>
-                  </div>
-                </Dropdown>
-              ) : (
-                <Button
-                  type="primary"
-                  className="login-btn"
-                  onClick={showLoginModal}
-                  icon={<LoginOutlined />}
-                >
-                  登录
-                </Button>
-              )}
-              <Tooltip title={isDarkMode ? '切换到亮色模式' : '切换到暗色模式'}>
-                <Button
-                  type="text"
-                  className="theme-toggle-btn"
-                  onClick={toggleTheme}
-                  icon={isDarkMode ? <SunOutlined /> : <MoonOutlined />}
-                  size="large"
-                />
-              </Tooltip>
-            </div>
-          </div>
-      </header>
-
-      <main className="app-main">
-        <div className="hero-section">
-          <div className="hero-content">
-            <h2 className="hero-title">
-              发现与分享
-            </h2>
-            <p className="hero-subtitle">
-              简洁高效的图片管理平台
-            </p>
-            <div className="hero-divider" />
-          </div>
+      <div className="hero-section">
+        <div className="hero-content">
+          <h2 className="hero-title">
+            发现与分享
+          </h2>
+          <p className="hero-subtitle">
+            简洁高效的图片管理平台
+          </p>
+          <div className="hero-divider" />
         </div>
-      </main>
+      </div>
 
       <Modal
         open={isLoginModalOpen}

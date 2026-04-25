@@ -1,29 +1,24 @@
-package hk.ljx.fishpicsbackend.dto.user;
+package hk.ljx.fishpicsbackend.vo.user;
 
+import hk.ljx.fishpicsbackend.vo.post.PostListVO;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Date;
+import java.util.List;
+
 @Data
-@NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class UserEditRequest {
-    /**
-     * 用户ID
-     */
+@NoArgsConstructor
+public class UserMessageVO {
+
     private Long id;
 
     /**
      * 用户名（登录用）
      */
     private String username;
-
-    /**
-     * 密码
-     */
-    private String password;
 
     /**
      * 头像URL
@@ -44,4 +39,14 @@ public class UserEditRequest {
      * 昵称（展示用）
      */
     private String nickname;
+
+    /**
+     * 创建时间
+     */
+    private Date createTime;
+
+    /**
+     * 帖子列表
+     */
+    private List<PostListVO> postList;
 }
