@@ -5,6 +5,7 @@ import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
+import hk.ljx.fishpicsbackend.common.utils.JwtUtil;
 import hk.ljx.fishpicsbackend.entity.User;
 import hk.ljx.fishpicsbackend.enums.UserRoleEnum;
 import hk.ljx.fishpicsbackend.service.UserService;
@@ -21,7 +22,6 @@ import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import java.util.concurrent.TimeUnit;
 
-import static hk.ljx.fishpicsbackend.common.constants.UserConstants.LOGIN_TOKEN;
 
 @Aspect
 @Component
@@ -46,25 +46,15 @@ public class AuthInterceptor {
         HttpServletRequest request = ((ServletRequestAttributes) requestAttributes).getRequest();
         // 前端请求头带登录态
         String authorization = request.getHeader("Authorization");
-        ExcUtils.throwIfTrue(authorization == null || !authorization.startsWith(LOGIN_TOKEN), ExceptionCode.NOT_LOGIN);
+        ExcUtils.throwIfTrue(authorization == null || JwtUtil.parseToken(authorization) == null, ExceptionCode.NOT_LOGIN);
 
         // 根据登录态查 redis 获取登录用户
         String loginByJson = stringRedisTemplate.opsForValue().get(authorization);
         ExcUtils.throwIfTrue(loginByJson == null || loginByJson.isEmpty(), ExceptionCode.NOT_LOGIN);
         User user = JSONUtil.toBean(loginByJson, User.class);
-        if (user == null) {
-            // redis 查不到则查 mysql
-            String[] head = authorization.split("-");
-            ExcUtils.throwIfTrue(head.length < 2, ExceptionCode.NOT_LOGIN);
-            String  userIdByString = head[1];
-            long userId = Long.parseLong(userIdByString);
-            user = userService.getLoginUser(userId);
-            if (user == null) {
-                // mysql 查不到则 redis 缓存空对象5s，防止缓存穿透
-                stringRedisTemplate.opsForValue().set(authorization, "", 5, TimeUnit.SECONDS);
-                throw new BaseException(ExceptionCode.NOT_LOGIN);
-            }
-        }
+
+        // 如果用户为空则为未登录或登陆过期
+        ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_LOGIN, "未登录或登录过期");
 
         // 刷新 redis 有效期
         stringRedisTemplate.expire(authorization, 1, TimeUnit.DAYS);

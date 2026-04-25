@@ -67,7 +67,15 @@ public class UserController {
                 .build());
     }
 
-    //    @AuthCheck(role = ADMIN)
+//    @PostMapping("/user/myself")
+//    public Response<User> getMyself(@RequestBody UserIdRequest userIdRequest) {
+//        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(userIdRequest), ExceptionCode.PARAMETER_ERROR);
+//        UserLoginVO userLoginVO = userService.getUserMessage(userIdRequest);
+//
+//    }
+
+
+    @AuthCheck(role = ADMIN)
     @PostMapping("/admin/userList")
     public Response<IPage<User>> getUserList(@RequestBody UserQueryWrapper userQueryWrapper) {
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(userQueryWrapper), ExceptionCode.PARAMETER_ERROR);
@@ -77,6 +85,7 @@ public class UserController {
         return ResUtils.success(userList);
     }
 
+    @AuthCheck(role = ADMIN)
     @PostMapping("/admin/setStatus")
     public Response<Boolean> setStatus(@RequestBody UserIdRequest userIdRequest) {
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(userIdRequest), ExceptionCode.PARAMETER_ERROR);
@@ -84,6 +93,7 @@ public class UserController {
         return ResUtils.success(userService.setStatus(userId));
     }
 
+    @AuthCheck(role = ADMIN)
     @PostMapping("/admin/editUser")
     public Response<Boolean> editUser(@RequestBody UserEditRequest userEditRequest) {
         ExcUtils.throwIfTrue(ObjectUtil.isNull(userEditRequest), ExceptionCode.PARAMETER_ERROR);

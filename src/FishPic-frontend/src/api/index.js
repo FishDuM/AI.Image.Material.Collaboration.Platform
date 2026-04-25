@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { getToken } from '../utils/storage'
 
 const api = axios.create({
   baseURL: '/api/user',
@@ -8,12 +9,24 @@ const api = axios.create({
   },
 })
 
+api.interceptors.request.use(
+  (config) => {
+    const token = getToken()
+    if (token) {
+      config.headers.Authorization = token
+    }
+    return config
+  },
+  (error) => {
+    return Promise.reject(error)
+  }
+)
+
 api.interceptors.response.use(
   (response) => {
     if (response.config.responseType === 'blob') {
       return response
     }
-    // 对于验证码接口，直接返回完整响应
     if (response.config.url && response.config.url.includes('/checkCode/')) {
       return response
     }

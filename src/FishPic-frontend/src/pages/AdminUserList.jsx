@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App as AntApp, Table, Tag, Space, Card, Typography, Avatar } from 'antd'
 import { UserOutlined } from '@ant-design/icons'
-import { getUserInfo } from '../utils/storage'
+import { getUserInfo, request } from '../utils/storage'
 import './AdminUserList.css'
 
 const { Title } = Typography
@@ -37,27 +37,13 @@ function AdminUserList() {
   const fetchUserList = async (current, pageSize) => {
     setLoading(true)
     try {
-      const response = await fetch('/api/user/admin/userList', {
+      const result = await request('/api/user/admin/userList', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           current,
           pageSize,
         }),
       })
-
-      const result = await response.json()
-      console.log('API 响应:', result)
-
-      if (result.code !== 1) {
-        message.error('获取用户列表失败：' + result.message)
-        setTimeout(() => {
-          navigate('/404', { replace: true })
-        }, 500)
-        return
-      }
 
       const { records, total } = result.data
       console.log('用户数据:', records, '总数:', total)

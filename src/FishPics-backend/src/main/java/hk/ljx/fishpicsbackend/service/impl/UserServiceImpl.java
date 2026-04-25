@@ -21,6 +21,7 @@ import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
+import hk.ljx.fishpicsbackend.common.utils.JwtUtil;
 import hk.ljx.fishpicsbackend.dto.user.UserEditRequest;
 import hk.ljx.fishpicsbackend.dto.user.UserLoginRequest;
 import hk.ljx.fishpicsbackend.dto.user.UserQueryWrapper;
@@ -169,7 +170,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         // 查询到则存入 Redis
         String loginTokenKey = null;
         if (user != null) {
-            loginTokenKey = UserConstants.getLoginTokenKey(user.getId());
+            loginTokenKey = JwtUtil.generateToken(String.valueOf(user.getId()));
         } else {
             throw new BaseException(ExceptionCode.PARAMETER_ERROR, "用户名或密码错误");
         }
@@ -179,7 +180,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         response.setHeader("Access-Control-Expose-Headers", "Authorization");
         // 查到用户数据返回封装类
         UserLoginVO userLoginVO = BeanUtil.copyProperties(user, UserLoginVO.class);
-
+        userLoginVO.setLoginToken(loginTokenKey);
         return ResUtils.success(userLoginVO);
     }
 

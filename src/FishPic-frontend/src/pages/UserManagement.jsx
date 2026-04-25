@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App as AntApp, Table, Tag, Space, Button, Card, Typography, Avatar, Popconfirm, Dropdown, Input, Row, Col, Form, Select, Modal } from 'antd'
 import { UserOutlined, EditOutlined, DeleteOutlined, SettingOutlined, TeamOutlined, LogoutOutlined, SunOutlined, MoonOutlined, SearchOutlined, ReloadOutlined, LockOutlined, UnlockOutlined, HomeOutlined } from '@ant-design/icons'
-import { getUserInfo, removeUserInfo } from '../utils/storage'
+import { getUserInfo, removeUserInfo, request } from '../utils/storage'
 import { ThemeContext } from '../main.jsx'
 import '../App.css'
 import './UserManagement.css'
@@ -61,31 +61,17 @@ function UserManagement() {
     },
   ]
 
-  const fetchUserList = useCallback(async (current, pageSize, params = null) => {
+  const fetchUserList = useCallback(async (current, pageSize, params = {}) => {
     setLoading(true)
     try {
-      const queryParams = params || searchParams
-      const response = await fetch('/api/user/admin/userList', {
+      const result = await request('/api/user/admin/userList', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           current,
           pageSize,
-          ...queryParams,
+          ...params,
         }),
       })
-
-      const result = await response.json()
-
-      if (result.code !== 1) {
-        message.error('获取用户列表失败：' + result.message)
-        setTimeout(() => {
-          navigate('/404', { replace: true })
-        }, 500)
-        return
-      }
 
       const { records, total } = result.data
       setUsers(records || [])
@@ -126,18 +112,9 @@ function UserManagement() {
 
   const handleDeleteUser = async (userId) => {
     try {
-      const response = await fetch(`/api/user/delete/${userId}`, {
+      const result = await request(`/api/user/delete/${userId}`, {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
       })
-
-      const result = await response.json()
-
-      if (result.code !== 1) {
-        throw new Error(result.message || '删除用户失败')
-      }
 
       message.success('删除用户成功')
       fetchUserList(pagination.current, pagination.pageSize)
@@ -154,19 +131,10 @@ function UserManagement() {
     }
 
     try {
-      const response = await fetch('/api/user/admin/setStatus', {
+      const result = await request('/api/user/admin/setStatus', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({ userId }),
       })
-
-      const result = await response.json()
-
-      if (result.code !== 1) {
-        throw new Error(result.message || '操作失败')
-      }
 
       message.success('操作成功')
       fetchUserList(pagination.current, pagination.pageSize)

@@ -25,6 +25,7 @@
 
 ### 后端 (FishPics-backend)
 - **Spring Boot 2.7.6**
+- **JWT**
 - **MyBatis-Plus 3.5.15** ORM框架
 - **MySQL 8+** 关系型数据库
 - **Redis** 缓存服务

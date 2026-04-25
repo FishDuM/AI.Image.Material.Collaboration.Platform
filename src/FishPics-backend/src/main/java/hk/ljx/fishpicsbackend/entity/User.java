@@ -70,7 +70,7 @@ public class User {
     /**
      * 用户的权限
      */
-    private String role;
+    private String role = "user";
 
     /**
      * 创建时间
