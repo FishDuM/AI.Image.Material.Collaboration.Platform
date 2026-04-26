@@ -1,5 +1,7 @@
 import {Routes, Route} from 'react-router-dom'
+import { AuthProvider } from './context/AuthContext.jsx'
 import GlobalLayout from './components/GlobalLayout'
+import ProtectedRoute from './components/ProtectedRoute'
 import HomePage from './pages/HomePage'
 import NotFound from './pages/NotFound'
 import UserManagement from './pages/UserManagement'
@@ -15,23 +17,25 @@ import Notifications from './pages/Notifications'
 
 function App() {
   return (
-    <GlobalLayout>
-      <Routes>
-        <Route path="/" element={<HomePage/>}/>
-        <Route path="/profile" element={<UserProfile/>}/>
-        <Route path="/community" element={<CommunitySquare/>}/>
-        <Route path="/private-space" element={<PrivateSpace/>}/>
-        <Route path="/team-space" element={<TeamSpace/>}/>
-        <Route path="/notifications" element={<Notifications/>}/>
-        <Route path="/admin/users" element={<UserManagement/>}/>
-          <Route path="/admin/spaces" element={<SpaceManagement/>}/>
-          <Route path="/admin/teams" element={<TeamManagement/>}/>
-          <Route path="/admin/ai" element={<AIManagement/>}/>
-        <Route path="/api/user/admin/userList" element={<AdminUserList/>}/>
-        <Route path="/404" element={<NotFound/>}/>
-        <Route path="*" element={<NotFound/>}/>
-      </Routes>
-    </GlobalLayout>
+    <AuthProvider>
+      <GlobalLayout>
+        <Routes>
+          <Route path="/" element={<HomePage/>}/>
+          <Route path="/profile" element={<ProtectedRoute><UserProfile/></ProtectedRoute>}/>
+          <Route path="/community" element={<ProtectedRoute><CommunitySquare/></ProtectedRoute>}/>
+          <Route path="/private-space" element={<ProtectedRoute><PrivateSpace/></ProtectedRoute>}/>
+          <Route path="/team-space" element={<ProtectedRoute><TeamSpace/></ProtectedRoute>}/>
+          <Route path="/notifications" element={<ProtectedRoute><Notifications/></ProtectedRoute>}/>
+          <Route path="/admin/users" element={<ProtectedRoute requireAdmin><UserManagement/></ProtectedRoute>}/>
+          <Route path="/admin/spaces" element={<ProtectedRoute requireAdmin><SpaceManagement/></ProtectedRoute>}/>
+          <Route path="/admin/teams" element={<ProtectedRoute requireAdmin><TeamManagement/></ProtectedRoute>}/>
+          <Route path="/admin/ai" element={<ProtectedRoute requireAdmin><AIManagement/></ProtectedRoute>}/>
+          <Route path="/admin/user-list" element={<ProtectedRoute requireAdmin><AdminUserList/></ProtectedRoute>}/>
+          <Route path="/404" element={<NotFound/>}/>
+          <Route path="*" element={<NotFound/>}/>
+        </Routes>
+      </GlobalLayout>
+    </AuthProvider>
   )
 }
 

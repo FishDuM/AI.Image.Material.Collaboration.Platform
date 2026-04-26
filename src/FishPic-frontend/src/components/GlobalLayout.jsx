@@ -1,6 +1,6 @@
-import { useContext, useState, useMemo, useEffect } from 'react'
+import { useContext, useState, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { App as AntApp, Button, Avatar, Dropdown, Modal, Form, Input, Card, Checkbox, message as antdMessage, Drawer, Menu } from 'antd'
+import { App as AntApp, Button, Avatar, Dropdown, Modal, Form, Input, Card, message as antdMessage, Drawer, Menu } from 'antd'
 import { 
   SettingOutlined, 
   HomeOutlined, 
@@ -26,7 +26,7 @@ import {
   PlaySquareOutlined,
   BellOutlined
 } from '@ant-design/icons'
-import { getUserInfo, removeUserInfo, saveUserInfo } from '../utils/storage'
+import { AuthContext } from '../context/AuthContext.jsx'
 import { getLoginCheckCode, login } from '../api'
 import { ThemeContext } from '../main.jsx'
 
@@ -35,7 +35,7 @@ function GlobalLayout({ children }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { isDarkMode, toggleTheme } = useContext(ThemeContext)
-  const [currentUser, setCurrentUser] = useState(getUserInfo())
+  const { userInfo, isAuthenticated, login: authLogin, logout: authLogout } = useContext(AuthContext)
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
   const [loginForm] = Form.useForm()
   const [loginLoading, setLoginLoading] = useState(false)
@@ -45,20 +45,8 @@ function GlobalLayout({ children }) {
   const [sidebarVisible, setSidebarVisible] = useState(false)
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
 
-  useEffect(() => {
-    const handleUserInfoUpdated = () => {
-      setCurrentUser(getUserInfo())
-    }
-
-    window.addEventListener('userInfoUpdated', handleUserInfoUpdated)
-    return () => {
-      window.removeEventListener('userInfoUpdated', handleUserInfoUpdated)
-    }
-  }, [])
-
   const handleLogout = () => {
-    removeUserInfo()
-    setCurrentUser(null)
+    authLogout()
     message.success('已退出登录')
     navigate('/')
   }
@@ -130,7 +118,7 @@ function GlobalLayout({ children }) {
         captchaKey: loginKey
       }
       const result = await login(loginData)
-      saveUserInfo(result)
+      authLogin(result)
       message.success('登录成功')
       handleLoginCancel()
     } catch (error) {
@@ -194,7 +182,7 @@ function GlobalLayout({ children }) {
       },
     ]
 
-    if (currentUser) {
+    if (userInfo) {
       items.push(
         {
           key: '/profile',
@@ -224,7 +212,7 @@ function GlobalLayout({ children }) {
       })
     }
 
-    if (currentUser?.role === 'admin') {
+    if (userInfo?.role === 'admin') {
       items.push({
         type: 'divider',
       })
@@ -262,7 +250,7 @@ function GlobalLayout({ children }) {
     }
 
     return items
-  }, [currentUser, location.pathname])
+  }, [userInfo, location.pathname])
 
   const userMenuItems = [
     {
@@ -352,7 +340,7 @@ function GlobalLayout({ children }) {
             >
               团队空间
             </Button>
-            {currentUser?.role === 'admin' && (
+            {userInfo?.role === 'admin' && (
               <Dropdown menu={{ items: systemManagementMenuItems }} placement="bottomLeft" className="desktop-only">
                 <Button
                   type="text"
@@ -366,19 +354,19 @@ function GlobalLayout({ children }) {
             )}
           </div>
           <div className="header-actions">
-            {currentUser ? (
+            {userInfo ? (
               <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" className="desktop-only">
                 <div className="user-info">
                   <Avatar 
                     size={32} 
-                    src={currentUser.avatar}
+                    src={userInfo.avatar}
                     style={{ 
-                      backgroundColor: currentUser.avatar ? 'transparent' : 'var(--accent)',
+                      backgroundColor: userInfo.avatar ? 'transparent' : 'var(--accent)',
                     }}
                   >
-                    {!currentUser.avatar && (currentUser.nickname || currentUser.username)?.charAt(0)?.toUpperCase()}
+                    {!userInfo.avatar && (userInfo.nickname || userInfo.username)?.charAt(0)?.toUpperCase()}
                   </Avatar>
-                  <span className="user-name">{currentUser.nickname || currentUser.username}</span>
+                  <span className="user-name">{userInfo.nickname || userInfo.username}</span>
                 </div>
               </Dropdown>
             ) : (
@@ -391,7 +379,7 @@ function GlobalLayout({ children }) {
                 登录
               </Button>
             )}
-            {currentUser && (
+            {userInfo && (
               <Button
                 type="text"
                 size="large"

@@ -1,6 +1,6 @@
 import { useContext, useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { App as AntApp, Avatar, Tabs, Empty, Skeleton, Modal, Image, Button, Form, Input } from 'antd'
+import { App as AntApp, Avatar, Tabs, Empty, Skeleton, Modal, Button, Form, Input } from 'antd'
 import { 
   UserOutlined, 
   MailOutlined, 
@@ -9,18 +9,19 @@ import {
   FileTextOutlined,
   StarOutlined,
   HeartOutlined,
-  HomeOutlined,
   EditOutlined,
   LockOutlined
 } from '@ant-design/icons'
 import { getUserMyself, editUser } from '../api'
-import { getToken, getUserInfo, saveUserInfo } from '../utils/storage'
+import { getToken } from '../utils/storage'
+import { AuthContext } from '../context/AuthContext.jsx'
 import { ThemeContext } from '../main.jsx'
 import './UserProfile.css'
 
 function UserProfile() {
   const { message } = AntApp.useApp()
   const { isDarkMode } = useContext(ThemeContext)
+  const { userInfo, login: authLogin } = useContext(AuthContext)
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [userData, setUserData] = useState(null)
@@ -28,8 +29,12 @@ function UserProfile() {
   const [avatarVisible, setAvatarVisible] = useState(false)
   const [editModalVisible, setEditModalVisible] = useState(false)
   const [editForm] = Form.useForm()
+  const hasFetchedRef = useRef(false)
 
   useEffect(() => {
+    if (hasFetchedRef.current) return
+    hasFetchedRef.current = true
+    
     const fetchUserInfo = async () => {
       if (!getToken()) {
         message.warning('请先登录')
@@ -42,11 +47,9 @@ function UserProfile() {
         const data = await getUserMyself()
         setUserData(data)
         
-        // 同步更新 localStorage 中的用户信息
-        const currentUser = getUserInfo()
-        if (currentUser) {
-          const updatedUserInfo = { ...currentUser, ...data }
-          saveUserInfo(updatedUserInfo)
+        if (userInfo) {
+          const updatedUserInfo = { ...userInfo, ...data }
+          authLogin(updatedUserInfo)
         }
       } catch (error) {
         message.error(error.message || '获取个人信息失败')
@@ -111,28 +114,24 @@ function UserProfile() {
       const submitData = {
         id: values.id,
         username: values.username,
-        avatar: values.avatar,
-        email: values.email,
-        phone: values.phone,
+        avatar: values.avatar && values.avatar.trim() !== '' ? values.avatar : null,
+        email: values.email || null,
+        phone: values.phone || null,
         nickname: values.nickname
       }
       if (values.password && values.password.trim() !== '') {
         submitData.password = values.password
       }
-      const result = await editUser(submitData)
+      await editUser(submitData)
       message.success('修改成功')
       setEditModalVisible(false)
       
-      const updatedUserData = { ...userData, ...values }
+      const updatedUserData = { ...userData, ...submitData }
       setUserData(updatedUserData)
       
-      const currentUser = getUserInfo()
-      if (currentUser) {
-        const updatedUserInfo = { ...currentUser, ...values }
-        saveUserInfo(updatedUserInfo)
-        
-        // 触发自定义事件，通知 GlobalLayout 更新用户信息
-        window.dispatchEvent(new Event('userInfoUpdated'))
+      if (userInfo) {
+        const updatedUserInfo = { ...userInfo, ...submitData }
+        authLogin(updatedUserInfo)
       }
       
       editForm.resetFields()
@@ -169,9 +168,9 @@ function UserProfile() {
       )
     }
 
-    const followingCount = userData.followingCount || 0
-    const followersCount = userData.followersCount || 0
-    const likedCount = userData.likedCount || 0
+    const postCount = userData.postList?.length || 0
+    const collectCount = userData.postCollectList?.length || 0
+    const likeCount = userData.postLikeList?.length || 0
 
     return (
       <>
@@ -208,22 +207,18 @@ function UserProfile() {
                 </span>
               </div>
               
-              <p className="profile-bio">
-                {userData.bio || '这个人很懒，什么都没写~'}
-              </p>
-              
               <div className="profile-stats-row">
                 <div className="stat-item">
-                  <span className="stat-value">{followingCount}</span>
-                  <span className="stat-label">关注</span>
+                  <span className="stat-value">{postCount}</span>
+                  <span className="stat-label">笔记</span>
                 </div>
                 <div className="stat-item">
-                  <span className="stat-value">{followersCount}</span>
-                  <span className="stat-label">粉丝</span>
+                  <span className="stat-value">{collectCount}</span>
+                  <span className="stat-label">收藏</span>
                 </div>
                 <div className="stat-item">
-                  <span className="stat-value">{likedCount}</span>
-                  <span className="stat-label">获赞与收藏</span>
+                  <span className="stat-value">{likeCount}</span>
+                  <span className="stat-label">点赞</span>
                 </div>
               </div>
               
@@ -291,10 +286,7 @@ function UserProfile() {
             layout="vertical"
             className="edit-profile-form"
           >
-            <Form.Item
-              name="id"
-              hidden
-            >
+            <Form.Item name="id" hidden>
               <Input />
             </Form.Item>
 
@@ -378,16 +370,16 @@ function UserProfile() {
     )
   }
 
-  const renderNotes = () => {
+  const renderPostList = (posts, emptyText) => {
     if (loading) {
       return <Skeleton active paragraph={{ rows: 6 }} />
     }
 
-    if (!userData?.postList || userData.postList.length === 0) {
+    if (!posts || posts.length === 0) {
       return (
         <div className="empty-state">
           <Empty 
-            description="你还没有发布任何内容哦" 
+            description={emptyText} 
             image={Empty.PRESENTED_IMAGE_SIMPLE}
           />
         </div>
@@ -396,21 +388,17 @@ function UserProfile() {
 
     return (
       <div className="posts-grid">
-        {userData.postList.map((post, index) => (
+        {posts.map((post) => (
           <div 
-            key={post.id || index} 
+            key={post.id} 
             className="post-card-grid"
             onClick={() => navigate(`/post/${post.id}`)}
           >
             <div className="post-cover">
-              {post.cover ? (
-                <img src={post.cover} alt={post.title} />
-              ) : (
-                <FileTextOutlined />
-              )}
+              <FileTextOutlined />
             </div>
             <div className="post-info">
-              <h3 className="post-title-grid">{post.title}</h3>
+              <h3 className="post-title-grid">{post.title || '无标题'}</h3>
               <div className="post-meta-grid">
                 <span>{formatDate(post.createTime)}</span>
               </div>
@@ -421,38 +409,16 @@ function UserProfile() {
     )
   }
 
-  const renderFavorites = () => {
-    return (
-      <div className="empty-state">
-        <Empty 
-          description="暂无收藏内容" 
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-        />
-      </div>
-    )
-  }
-
-  const renderLikes = () => {
-    return (
-      <div className="empty-state">
-        <Empty 
-          description="暂无点赞内容" 
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-        />
-      </div>
-    )
-  }
-
   const tabItems = [
     {
       key: 'notes',
       label: (
         <span>
           <FileTextOutlined />
-          笔记
+          图文
         </span>
       ),
-      children: renderNotes(),
+      children: renderPostList(userData?.postList, '你还没有发布任何内容哦'),
     },
     {
       key: 'favorites',
@@ -462,7 +428,7 @@ function UserProfile() {
           收藏
         </span>
       ),
-      children: renderFavorites(),
+      children: renderPostList(userData?.postCollectList, '暂无收藏内容'),
     },
     {
       key: 'likes',
@@ -472,7 +438,7 @@ function UserProfile() {
           点赞
         </span>
       ),
-      children: renderLikes(),
+      children: renderPostList(userData?.postLikeList, '暂无点赞内容'),
     },
   ]
 

@@ -54,4 +54,14 @@ public class UserMessageVO {
      * 帖子列表
      */
     private List<PostListVO> postList;
+
+    /**
+     * 帖子收藏表
+     */
+    private List<PostListVO> postCollectList;
+
+    /**
+     * 帖子点赞表
+     */
+    private List<PostListVO> postLikeList;
 }

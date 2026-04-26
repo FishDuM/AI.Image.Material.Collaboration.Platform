@@ -7,6 +7,7 @@ import dayjs from 'dayjs'
 import 'dayjs/locale/zh-cn'
 import './index.css'
 import App from './App.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 
 dayjs.locale('zh-cn')
 
@@ -64,12 +65,14 @@ function ThemeWrapper({ children }) {
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <ThemeWrapper>
+    <ErrorBoundary>
+      <ThemeWrapper>
         <BrowserRouter>
-            <AntdApp>
-                <App/>
-            </AntdApp>
+          <AntdApp>
+            <App/>
+          </AntdApp>
         </BrowserRouter>
-    </ThemeWrapper>
+      </ThemeWrapper>
+    </ErrorBoundary>
   </StrictMode>,
 )

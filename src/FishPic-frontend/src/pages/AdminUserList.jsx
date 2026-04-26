@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App as AntApp, Table, Tag, Space, Card, Typography, Avatar } from 'antd'
 import { UserOutlined } from '@ant-design/icons'
-import { getUserInfo, request } from '../utils/storage'
+import { AuthContext } from '../context/AuthContext.jsx'
+import api from '../api'
 import './AdminUserList.css'
 
 const { Title } = Typography
@@ -10,6 +11,7 @@ const { Title } = Typography
 function AdminUserList() {
   const { message } = AntApp.useApp()
   const navigate = useNavigate()
+  const { userInfo } = useContext(AuthContext)
   const [loading, setLoading] = useState(false)
   const [users, setUsers] = useState([])
   const [pagination, setPagination] = useState({
@@ -17,13 +19,9 @@ function AdminUserList() {
     pageSize: 20,
     total: 0,
   })
-  const [currentUser, setCurrentUser] = useState(null)
 
   useEffect(() => {
-    const user = getUserInfo()
-    setCurrentUser(user)
-
-    if (!user || user.role !== 'admin') {
+    if (!userInfo || userInfo.role !== 'admin') {
       message.error('无权访问，正在跳转到 404 页面...')
       setTimeout(() => {
         navigate('/404', { replace: true })
@@ -32,20 +30,17 @@ function AdminUserList() {
     }
 
     fetchUserList(1, 20)
-  }, [navigate])
+  }, [navigate, userInfo])
 
   const fetchUserList = async (current, pageSize) => {
     setLoading(true)
     try {
-      const result = await request('/api/user/admin/userList', {
-        method: 'POST',
-        body: JSON.stringify({
-          current,
-          pageSize,
-        }),
+      const result = await api.post('/user/admin/userList', {
+        current,
+        pageSize,
       })
 
-      const { records, total } = result.data
+      const { records, total } = result
       console.log('用户数据:', records, '总数:', total)
       setUsers(records || [])
       setPagination({
@@ -115,7 +110,7 @@ function AdminUserList() {
     },
   ]
 
-  if (!currentUser || currentUser.role !== 'admin') {
+  if (!userInfo || userInfo.role !== 'admin') {
     return null
   }
 

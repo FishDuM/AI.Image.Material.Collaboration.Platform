@@ -1,8 +1,10 @@
 package hk.ljx.fishpicsbackend.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import java.io.Serializable;
 import java.util.Date;
 import lombok.Data;
 
@@ -12,11 +14,11 @@ import lombok.Data;
  */
 @TableName(value ="comment")
 @Data
-public class Comment {
+public class Comment implements Serializable {
     /**
      * 主键
      */
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     /**
@@ -35,6 +37,16 @@ public class Comment {
     private String content;
 
     /**
+     * 父评论（支持二级评论 / 回复）
+     */
+    private Long parentId;
+
+    /**
+     * 回复给谁
+     */
+    private Integer toUserId;
+
+    /**
      * 状态 1-正常 0-禁用 2-待审核
      */
     private Integer status;
@@ -44,8 +56,6 @@ public class Comment {
      */
     private Date createTime;
 
-    /**
-     * 更新时间
-     */
-    private Date updateTime;
+    @TableField(exist = false)
+    private static final long serialVersionUID = 1L;
 }

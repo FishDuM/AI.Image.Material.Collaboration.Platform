@@ -2,12 +2,9 @@ package hk.ljx.fishpicsbackend.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 
+import java.io.Serializable;
 import java.util.Date;
-
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
 /**
  * 用户表
@@ -15,18 +12,15 @@ import lombok.NoArgsConstructor;
  */
 @TableName(value ="user")
 @Data
-@Builder
-@AllArgsConstructor
-@NoArgsConstructor
-public class User {
+public class User implements Serializable {
     /**
      * 用户ID
      */
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     /**
-     * 账号（登录用）
+     * 用户名（登录用）
      */
     private String username;
 
@@ -64,13 +58,12 @@ public class User {
      * 0-逻辑未删除, 1-逻辑删除
      */
     @TableLogic
-    @TableField("`delete`")
-    private Integer delete;
+    private Integer isDelete;
 
     /**
      * 用户的权限
      */
-    private String role = "user";
+    private String role;
 
     /**
      * 创建时间
@@ -81,4 +74,37 @@ public class User {
      * 更新时间
      */
     private Date updateTime;
+
+    /**
+     * 
+     */
+    private Long likeNum;
+
+    /**
+     * 
+     */
+    private Long collectNum;
+
+    /**
+     * 0-公开关注列表，1-不公开关注列表
+     */
+    private Integer isPrivateFollows;
+
+    /**
+     * 0-公开帖子列表，1-不公开帖子列表
+     */
+    private Integer isPrivatePostCollect;
+
+    /**
+     * 0-公开点赞帖子列表，1-不公开点赞帖子列表
+     */
+    private Integer isPrivateLikes;
+
+    /**
+     * 0-公开粉丝列表，1-不公开粉丝列表
+     */
+    private Integer isPrivateFans;
+
+    @TableField(exist = false)
+    private static final long serialVersionUID = 1L;
 }

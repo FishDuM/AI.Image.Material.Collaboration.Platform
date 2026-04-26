@@ -2,13 +2,11 @@ package hk.ljx.fishpicsbackend.common.aop;
 
 import cn.hutool.json.JSONUtil;
 import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
-import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.utils.JwtUtil;
 import hk.ljx.fishpicsbackend.entity.User;
 import hk.ljx.fishpicsbackend.enums.UserRoleEnum;
-import hk.ljx.fishpicsbackend.service.UserService;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -26,9 +24,6 @@ import java.util.concurrent.TimeUnit;
 @Aspect
 @Component
 public class AuthInterceptor {
-
-    @Resource
-    private UserService userService;
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;

@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App as AntApp, Card, Typography, Empty } from 'antd'
-import { getUserInfo } from '../utils/storage'
+import { AuthContext } from '../context/AuthContext.jsx'
 import FunnyBackground from '../components/FunnyBackground'
 import './TeamManagement.css'
 
@@ -10,27 +10,19 @@ const { Title } = Typography
 function TeamManagement() {
   const { message } = AntApp.useApp()
   const navigate = useNavigate()
-  const [loading, setLoading] = useState(false)
-  const [currentUser, setCurrentUser] = useState(null)
-  const hasFetchedRef = useRef(false)
+  const { userInfo } = useContext(AuthContext)
 
   useEffect(() => {
-    const user = getUserInfo()
-    setCurrentUser(user)
-
-    if (!user || user.role !== 'admin') {
+    if (!userInfo || userInfo.role !== 'admin') {
       message.error('无权访问，正在跳转到 404 页面...')
       setTimeout(() => {
         navigate('/404', { replace: true })
       }, 500)
       return
     }
+  }, [navigate, userInfo])
 
-    if (hasFetchedRef.current) return
-    hasFetchedRef.current = true
-  }, [navigate])
-
-  if (!currentUser || currentUser.role !== 'admin') {
+  if (!userInfo || userInfo.role !== 'admin') {
     return (
       <FunnyBackground>
         <main className="team-management-container">
@@ -49,14 +41,11 @@ function TeamManagement() {
         <Title level={2}>团队管理</Title>
         <p className="header-subtitle">管理团队成员和团队配置</p>
       </div>
-
-      <Card className="team-content-card" variant="borderless">
-        <div className="empty-state-wrapper">
-          <Empty description="功能开发中，敬请期待" />
-        </div>
+      <Card variant="borderless">
+        <Empty description="功能开发中，敬请期待" />
       </Card>
-    </main>
-  </FunnyBackground>
+      </main>
+    </FunnyBackground>
   )
 }
 

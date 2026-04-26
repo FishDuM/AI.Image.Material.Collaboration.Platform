@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App as AntApp, Table, Tag, Space, Button, Card, Typography, Avatar, Popconfirm, Input, Row, Col, Form, Select, Modal } from 'antd'
-import { UserOutlined, EditOutlined, DeleteOutlined, SearchOutlined, ReloadOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons'
-import { getUserInfo, request } from '../utils/storage'
+import { UserOutlined, EditOutlined, SearchOutlined, ReloadOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons'
+import { AuthContext } from '../context/AuthContext.jsx'
+import api from '../api'
 import FunnyBackground from '../components/FunnyBackground'
 import './UserManagement.css'
 
@@ -11,6 +12,7 @@ const { Title } = Typography
 function UserManagement() {
   const { message } = AntApp.useApp()
   const navigate = useNavigate()
+  const { userInfo } = useContext(AuthContext)
   const [loading, setLoading] = useState(false)
   const [users, setUsers] = useState([])
   const [pagination, setPagination] = useState({
@@ -18,7 +20,6 @@ function UserManagement() {
     pageSize: 20,
     total: 0,
   })
-  const [currentUser, setCurrentUser] = useState(null)
   const [searchParams, setSearchParams] = useState({
     id: null,
     username: null,
@@ -37,16 +38,13 @@ function UserManagement() {
   const fetchUserList = useCallback(async (current, pageSize, params = {}) => {
     setLoading(true)
     try {
-      const result = await request('/api/user/admin/userList', {
-        method: 'POST',
-        body: JSON.stringify({
-          current,
-          pageSize,
-          ...params,
-        }),
+      const result = await api.post('/user/admin/userList', {
+        current,
+        pageSize,
+        ...params,
       })
 
-      const { records, total } = result.data
+      const { records, total } = result
       setUsers(records || [])
       setPagination(prev => ({
         ...prev,
@@ -67,10 +65,7 @@ function UserManagement() {
   }, [navigate, message, searchParams])
 
   useEffect(() => {
-    const user = getUserInfo()
-    setCurrentUser(user)
-
-    if (!user || user.role !== 'admin') {
+    if (!userInfo || userInfo.role !== 'admin') {
       message.error('无权访问，正在跳转到 404 页面...')
       setTimeout(() => {
         navigate('/404', { replace: true })
@@ -81,34 +76,16 @@ function UserManagement() {
     if (hasFetchedRef.current) return
     hasFetchedRef.current = true
     fetchUserList(1, 20)
-  }, [fetchUserList])
-
-  const handleDeleteUser = async (userId) => {
-    try {
-      const result = await request(`/api/user/delete/${userId}`, {
-        method: 'DELETE',
-      })
-
-      message.success('删除用户成功')
-      fetchUserList(pagination.current, pagination.pageSize)
-    } catch (error) {
-      console.error('删除用户失败:', error)
-      message.error('删除用户失败：' + error.message)
-    }
-  }
+  }, [fetchUserList, userInfo])
 
   const handleSetStatus = async (userId) => {
-    if (currentUser && currentUser.id === userId) {
+    if (userInfo && userInfo.id === userId) {
       message.warning('不能封禁自己')
       return
     }
 
     try {
-      const result = await request('/api/user/admin/setStatus', {
-        method: 'POST',
-        body: JSON.stringify({ userId }),
-      })
-
+      await api.post('/user/admin/setStatus', { userId })
       message.success('操作成功')
       fetchUserList(pagination.current, pagination.pageSize)
     } catch (error) {
@@ -177,19 +154,7 @@ function UserManagement() {
         role: values.role,
       }
 
-      const response = await fetch('/api/user/admin/editUser', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(submitData),
-      })
-
-      const result = await response.json()
-
-      if (result.code !== 1) {
-        throw new Error(result.message || '编辑用户失败')
-      }
+      await api.post('/user/admin/editUser', submitData)
 
       message.success('编辑用户成功')
       setIsModalOpen(false)
@@ -320,7 +285,7 @@ function UserManagement() {
     },
   ]
 
-  if (!currentUser || currentUser.role !== 'admin') {
+  if (!userInfo || userInfo.role !== 'admin') {
     return (
       <main className="user-management-container">
         <div style={{ textAlign: 'center', padding: '100px 0' }}>

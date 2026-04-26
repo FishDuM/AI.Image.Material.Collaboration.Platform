@@ -24,7 +24,11 @@ import hk.ljx.fishpicsbackend.common.utils.JwtUtil;
 import hk.ljx.fishpicsbackend.dto.user.*;
 import hk.ljx.fishpicsbackend.entity.Post;
 import hk.ljx.fishpicsbackend.entity.User;
+import hk.ljx.fishpicsbackend.entity.UserPostCollect;
+import hk.ljx.fishpicsbackend.entity.UserPostLikes;
 import hk.ljx.fishpicsbackend.mapper.PostMapper;
+import hk.ljx.fishpicsbackend.mapper.UserPostCollectMapper;
+import hk.ljx.fishpicsbackend.mapper.UserPostLikesMapper;
 import hk.ljx.fishpicsbackend.service.UserService;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
 import hk.ljx.fishpicsbackend.vo.post.PostListVO;
@@ -50,14 +54,14 @@ import static hk.ljx.fishpicsbackend.common.constants.UserConstants.DEFAULT_NICK
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.SALT;
 
 /**
-* @author 30574
-*  针对表【user(用户表)】的数据库操作Service实现
-*  2026-04-13 21:24:26
-*/
+ * @author 30574
+ *         针对表【user(用户表)】的数据库操作Service实现
+ *         2026-04-13 21:24:26
+ */
 @Service
 @Slf4j
 public class UserServiceImpl extends ServiceImpl<UserMapper, User>
-    implements UserService{
+        implements UserService {
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
@@ -66,6 +70,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     private UserMapper userMapper;
     @Autowired
     private PostMapper postMapper;
+    @Autowired
+    private UserPostCollectMapper userPostCollectMapper;
+    @Autowired
+    private UserPostLikesMapper userPostLikesMapper;
 
     @Override
     public String getCheckCode(String str, Integer len, Integer minute) {
@@ -138,8 +146,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         String captchaKey = userRequestRequest.getCaptchaKey();
 
         ExcUtils.throwIfTrue(checkCode == null || captchaKey == null, ExceptionCode.PARAMETER_ERROR, "验证码不能为空");
-        ExcUtils.throwIfTrue(username == null || username.length() < 6 || username.length() > 11, ExceptionCode.PARAMETER_ERROR, "账号长度不能小于 6 位或大于 11 位");
-        ExcUtils.throwIfTrue(password == null || password.length() < 8 || password.length() > 20, ExceptionCode.PARAMETER_ERROR, "密码长度不能小于 8 位或大于 20 位");
+        ExcUtils.throwIfTrue(username == null || username.length() < 6 || username.length() > 11,
+                ExceptionCode.PARAMETER_ERROR, "账号长度不能小于 6 位或大于 11 位");
+        ExcUtils.throwIfTrue(password == null || password.length() < 8 || password.length() > 20,
+                ExceptionCode.PARAMETER_ERROR, "密码长度不能小于 8 位或大于 20 位");
         if (password != null) {
             ExcUtils.throwIfTrue(!password.equals(checkPassword), ExceptionCode.PARAMETER_ERROR, "两次密码不一致");
         }
@@ -147,7 +157,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         // 校验验证码
         String checkCodeKeyByRegister = RedisConstants.getRegisterCodeKey(captchaKey);
         String code = stringRedisTemplate.opsForValue().get(checkCodeKeyByRegister);
-        ExcUtils.throwIfTrue(checkCode == null || !checkCode.equalsIgnoreCase(code), ExceptionCode.PARAMETER_ERROR, "验证码错误");
+        ExcUtils.throwIfTrue(checkCode == null || !checkCode.equalsIgnoreCase(code), ExceptionCode.PARAMETER_ERROR,
+                "验证码错误");
 
         // 校验账号是否已存在
         Long num = userMapper.selectCount(new QueryWrapper<User>().eq("username", username));
@@ -161,7 +172,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         user.setUsername(username);
         user.setPassword(password);
         user.setNickname(DEFAULT_NICK_NAME + RandomUtil.randomString(6));
-
+        // 默认头像
+        user.setAvatar("https://avatars.githubusercontent.com/u/179127403?v=4");
         int insert = userMapper.insert(user);
         ExcUtils.throwIfTrue(insert != 1, ExceptionCode.DATABASE_ERROR, "注册失败");
         stringRedisTemplate.delete(checkCodeKeyByRegister);
@@ -169,12 +181,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     }
 
     @Override
-    public Response<UserLoginVO> userLogin(UserLoginRequest userLoginRequest, HttpServletResponse response, HttpServletRequest request) {
+    public Response<UserLoginVO> userLogin(UserLoginRequest userLoginRequest, HttpServletResponse response,
+            HttpServletRequest request) {
         String username = userLoginRequest.getUsername();
         String password = userLoginRequest.getPassword();
         String checkCode = userLoginRequest.getCheckCode();
         String captchaKey = userLoginRequest.getCaptchaKey();
-        ExcUtils.throwIfTrue(StrUtil.isAllBlank(username, password, checkCode, captchaKey), ExceptionCode.PARAMETER_ERROR, "参数不能为空");
+        ExcUtils.throwIfTrue(StrUtil.isAllBlank(username, password, checkCode, captchaKey),
+                ExceptionCode.PARAMETER_ERROR, "参数不能为空");
 
         // 密码加盐
         password = DigestUtil.md5Hex(password + SALT);
@@ -182,7 +196,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         // 校验验证码
         String checkCodeKeyByLogin = RedisConstants.getLoginCodeKey(captchaKey);
         String cacheCode = stringRedisTemplate.opsForValue().get(checkCodeKeyByLogin);
-        ExcUtils.throwIfTrue(cacheCode == null || !cacheCode.equalsIgnoreCase(checkCode), ExceptionCode.PARAMETER_ERROR, "验证码错误");
+        ExcUtils.throwIfTrue(cacheCode == null || !cacheCode.equalsIgnoreCase(checkCode), ExceptionCode.PARAMETER_ERROR,
+                "验证码错误");
 
         // 查询 mysql 获取用户
         User user = userMapper.selectOne(new QueryWrapper<User>().eq("username", username).eq("password", password));
@@ -190,12 +205,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         String userByJson = JSONUtil.toJsonStr(user);
 
         // 查询到则存入 Redis
-        String loginTokenKey;
-        if (user != null) {
-            loginTokenKey = JwtUtil.generateToken(String.valueOf(user.getId()));
-        } else {
-            throw new BaseException(ExceptionCode.PARAMETER_ERROR, "账号或密码错误");
-        }
+        String loginTokenKey = JwtUtil.generateToken(String.valueOf(user.getId()));
+
         stringRedisTemplate.opsForValue().set(loginTokenKey, userByJson, 1, TimeUnit.DAYS);
 
         response.setHeader("Authorization", loginTokenKey);
@@ -266,7 +277,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         }
 
         // 4. 自动拷贝 非空字段 到实体类（自动忽略null/空值）
-        BeanUtil.copyProperties(userEditByAdminRequest, user, CopyOptions.create().setIgnoreNullValue(true).setIgnoreError(true));
+        BeanUtil.copyProperties(userEditByAdminRequest, user,
+                CopyOptions.create().setIgnoreNullValue(true).setIgnoreError(true));
+
+        // 优化头像 url 为 null
+        if (user.getAvatar() == null || user.getAvatar().trim().isEmpty()) {
+            user.setAvatar("https://avatars.githubusercontent.com/u/179127403?v=4");
+        }
 
         // 5. 更新
         int rows = userMapper.updateById(user);
@@ -277,29 +294,52 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
     @Override
     public UserMessageVO getMyselfMessage(HttpServletRequest request) {
-        // 查询用户信息
-        User loginUser = this.getLoginUser(request);
-        ExcUtils.throwIfTrue(loginUser == null || loginUser.getId() == null, ExceptionCode.NOT_FOUND, "未登录");
+        // 1. 获取登录用户
+        User loginUser = getLoginUser(request);
+        ExcUtils.throwIfTrue(loginUser == null || loginUser.getId() == null,
+                ExceptionCode.NOT_FOUND, "未登录");
+
         Long userId = loginUser.getId();
-        // 根据用户 id 查帖子表
-        QueryWrapper<Post> postQueryWrapper = new QueryWrapper<Post>().eq("user_id", userId);
-        List<Post> posts = postMapper.selectList(postQueryWrapper);
-        List<PostListVO> postListVOS;
-        if (posts != null && !posts.isEmpty()) {
-            // 转换为PostListVO
-            postListVOS = posts.stream().map(post -> {
-                PostListVO postListVO = new PostListVO();
-                BeanUtil.copyProperties(post, postListVO);
-                return postListVO;
-            }).collect(Collectors.toList());
-        }else {
-            postListVOS = new ArrayList<>();
+        UserMessageVO vo = new UserMessageVO();
+        BeanUtil.copyProperties(loginUser, vo);
+
+        // 2. 我的发布
+        List<Post> myPosts = postMapper.selectList(new QueryWrapper<Post>().eq("user_id", userId));
+        vo.setPostList(convertToVO(myPosts));
+
+        // 3. 我的收藏
+        List<Long> collectIds = userPostCollectMapper.selectList(new QueryWrapper<UserPostCollect>()
+                .eq("user_id", userId)).stream()
+                .map(UserPostCollect::getPostId)
+                .collect(Collectors.toList());
+
+        List<Post> collectPosts = collectIds.isEmpty() ? new ArrayList<>()
+                : postMapper.selectList(new QueryWrapper<Post>().in("post_id", collectIds));
+        vo.setPostCollectList(convertToVO(collectPosts));
+
+        // 4. 我的点赞
+        List<Long> likeIds = userPostLikesMapper.selectList(new QueryWrapper<UserPostLikes>()
+                .eq("user_id", userId)).stream()
+                .map(UserPostLikes::getPostId)
+                .collect(Collectors.toList());
+
+        List<Post> likePosts = likeIds.isEmpty() ? new ArrayList<>()
+                : postMapper.selectList(new QueryWrapper<Post>().in("post_id", likeIds));
+        vo.setPostLikeList(convertToVO(likePosts));
+
+        return vo;
+    }
+
+    // 抽取成工具方法：消除重复代码
+    private List<PostListVO> convertToVO(List<Post> posts) {
+        if (posts == null || posts.isEmpty()) {
+            return new ArrayList<>();
         }
-        // 拼装返回结果
-        UserMessageVO userMessageVO = new UserMessageVO();
-        BeanUtil.copyProperties(loginUser, userMessageVO);
-        userMessageVO.setPostList(postListVOS);
-        return userMessageVO;
+        return posts.stream().map(post -> {
+            PostListVO vo = new PostListVO();
+            BeanUtil.copyProperties(post, vo);
+            return vo;
+        }).collect(Collectors.toList());
     }
 
     @Override
@@ -312,15 +352,18 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), ExceptionCode.PARAMETER_ERROR);
         String nickname = userEditRequest.getNickname();
         if (nickname != null) {
-            ExcUtils.throwIfTrue( !(nickname.length() > 4 && nickname.length() < 12), ExceptionCode.PARAMETER_ERROR, "昵称长度为5-11位");
+            ExcUtils.throwIfTrue(!(nickname.length() > 4 && nickname.length() < 12), ExceptionCode.PARAMETER_ERROR,
+                    "昵称长度为5-11位");
         }
         String username = userEditRequest.getUsername();
         if (username != null) {
-            ExcUtils.throwIfTrue( !(username.length() > 5 && username.length() < 12), ExceptionCode.PARAMETER_ERROR, "账号长度为6-11位");
+            ExcUtils.throwIfTrue(!(username.length() > 5 && username.length() < 12), ExceptionCode.PARAMETER_ERROR,
+                    "账号长度为6-11位");
         }
         String password = userEditRequest.getPassword();
-        if (password != null){
-            ExcUtils.throwIfTrue( !(password.length() > 7 && password.length() < 21), ExceptionCode.PARAMETER_ERROR, "密码长度为8-20位");
+        if (password != null) {
+            ExcUtils.throwIfTrue(!(password.length() > 7 && password.length() < 21), ExceptionCode.PARAMETER_ERROR,
+                    "密码长度为8-20位");
         }
 
         // 校验是否是自己的信息
@@ -328,6 +371,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         // 查询用户信息
         User user = this.getById(id);
         ExcUtils.throwIfTrue(ObjectUtil.isNull(user), ExceptionCode.DATABASE_ERROR, "用户不存在");
+
+        // 优化前端出来头像 url 为 null
+        if (user.getAvatar() == null || user.getAvatar().trim().isEmpty()) {
+            user.setAvatar("https://avatars.githubusercontent.com/u/179127403?v=4");
+        }
 
         // 更新用户信息
         BeanUtil.copyProperties(userEditRequest, user, CopyOptions.create().ignoreNullValue());
@@ -346,7 +394,3 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         return JwtUtil.parseToken(token).equals(id.toString());
     }
 }
-
-
-
-

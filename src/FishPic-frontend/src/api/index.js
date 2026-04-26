@@ -2,7 +2,7 @@ import axios from 'axios'
 import { getToken } from '../utils/storage'
 
 const api = axios.create({
-  baseURL: '/api/user',
+  baseURL: '/api',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -30,10 +30,14 @@ api.interceptors.response.use(
     if (response.config.url && response.config.url.includes('/checkCode/')) {
       return response
     }
-    if (response.data.code !== 1) {
-      return Promise.reject(new Error(response.data.message || '请求失败'))
+    const responseData = response.data
+    if (!responseData || typeof responseData.code === 'undefined') {
+      return Promise.reject(new Error('响应格式异常'))
     }
-    return response.data.data
+    if (responseData.code !== 1) {
+      return Promise.reject(new Error(responseData.message || '请求失败'))
+    }
+    return responseData.data
   },
   (error) => {
     const message = error.response?.data?.message || error.message || '请求失败，请重试'
@@ -41,20 +45,20 @@ api.interceptors.response.use(
   }
 )
 
-export const getLoginCheckCode = () => api.get('/checkCode/login', {
+export const getLoginCheckCode = () => api.get('/user/checkCode/login', {
   validateStatus: () => true,
 })
 
-export const getRegisterCheckCode = () => api.get('/checkCode/register', {
+export const getRegisterCheckCode = () => api.get('/user/checkCode/register', {
   validateStatus: () => true,
 })
 
-export const login = (data) => api.post('/login', data)
+export const login = (data) => api.post('/user/login', data)
 
-export const register = (data) => api.post('/register', data)
+export const register = (data) => api.post('/user/register', data)
 
-export const getUserMyself = () => api.get('/myself')
+export const getUserMyself = () => api.get('/user/myself')
 
-export const editUser = (data) => api.post('/editUser', data)
+export const editUser = (data) => api.post('/user/editUser', data)
 
 export default api

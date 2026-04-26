@@ -1,9 +1,9 @@
 import { useState, useContext } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { App as AntApp, Button, Modal, Form, Input, message as antdMessage, Card, Checkbox } from 'antd'
 import { UserOutlined, LockOutlined, LoginOutlined, LogoutOutlined, QrcodeOutlined, ScanOutlined } from '@ant-design/icons'
 import { getLoginCheckCode, login, getRegisterCheckCode, register } from '../api'
-import { saveUserInfo, getUserInfo } from '../utils/storage'
+import { AuthContext } from '../context/AuthContext.jsx'
 import { ThemeContext } from '../main.jsx'
 import '../App.css'
 
@@ -12,7 +12,9 @@ const LOGIN_USER_PREFIX = 'LOGIN_CHECK_CODE-'
 function HomePage() {
   const { message } = AntApp.useApp()
   const { isDarkMode, toggleTheme } = useContext(ThemeContext)
+  const { userInfo, isAuthenticated, login: authLogin, logout: authLogout } = useContext(AuthContext)
   const navigate = useNavigate()
+  const location = useLocation()
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
   const [isRegisterMode, setIsRegisterMode] = useState(false)
   const [loginForm] = Form.useForm()
@@ -23,7 +25,6 @@ function HomePage() {
   const [loginKey, setLoginKey] = useState('')
   const [registerCheckCodeUrl, setRegisterCheckCodeUrl] = useState('')
   const [registerKey, setRegisterKey] = useState('')
-  const [userInfo, setUserInfo] = useState(() => getUserInfo())
   const [agreed, setAgreed] = useState(false)
 
 
@@ -139,13 +140,15 @@ function HomePage() {
         captchaKey: loginKey
       }
       const result = await login(loginData)
-      saveUserInfo(result)
-      setUserInfo(result)
+      authLogin(result)
       message.success('登录成功')
       setIsLoginModalOpen(false)
       loginForm.resetFields()
       setLoginCheckCodeUrl('')
       setLoginKey('')
+      
+      const from = location.state?.from?.pathname || '/community'
+      navigate(from, { replace: true })
     } catch (error) {
       message.error(error.message || '登录失败，请重试')
       fetchLoginCheckCode()
@@ -234,7 +237,7 @@ function HomePage() {
                 </div>
                 <div className="scan-status">
                   <ScanOutlined className="scan-icon" />
-                  <span>暂是实现该功能，敬请期待</span>
+                  <span>暂未实现该功能，敬请期待</span>
                 </div>
               </Card>
             </div>

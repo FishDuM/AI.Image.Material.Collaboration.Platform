@@ -1,8 +1,10 @@
 package hk.ljx.fishpicsbackend.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import java.io.Serializable;
 import java.util.Date;
 import lombok.Data;
 
@@ -12,11 +14,11 @@ import lombok.Data;
  */
 @TableName(value ="picture")
 @Data
-public class Picture {
+public class Picture implements Serializable {
     /**
      * 主键
      */
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     /**
@@ -63,4 +65,12 @@ public class Picture {
      * 更新时间
      */
     private Date updateTime;
+
+    /**
+     * 0-不公开到首页，1-公开到首页
+     */
+    private Integer isPrivate;
+
+    @TableField(exist = false)
+    private static final long serialVersionUID = 1L;
 }
