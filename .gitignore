@@ -3,3 +3,4 @@
 /src/AI.Image.Material.Collaboration.Platform/.idea/
 /src/FishPics-backend/.idea/
 /src/FishPics-backend/target/
+/src/FishPics-backend/src/main/resources/application-local.yml
