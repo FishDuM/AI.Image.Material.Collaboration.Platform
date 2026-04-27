@@ -74,4 +74,13 @@ export const uploadAvatar = (formData, onProgress) => api.post('/picture/avatar'
   }
 })
 
+export const uploadPostPicture = (formData, onProgress) => api.post('/picture/post', formData, {
+  headers: { 'Content-Type': 'multipart/form-data' },
+  onUploadProgress: (progressEvent) => {
+    if (onProgress && progressEvent.total) {
+      onProgress({ percent: Math.round((progressEvent.loaded * 100) / progressEvent.total) })
+    }
+  }
+})
+
 export default api

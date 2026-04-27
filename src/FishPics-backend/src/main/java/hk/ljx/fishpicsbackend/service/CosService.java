@@ -189,8 +189,10 @@ public class CosService {
             throw new RuntimeException("获取图片信息失败", e);
         }
 
+        String[] name = key.split("/")[1].split("\\.");
         String url = this.getImageUrl(key);
         pictureMessage.setUrl(url);
+        pictureMessage.setPictureName(name[0]);
         return pictureMessage;
     }
 }

@@ -2,6 +2,7 @@ package hk.ljx.fishpicsbackend.service;
 
 import hk.ljx.fishpicsbackend.entity.Picture;
 import com.baomidou.mybatisplus.extension.service.IService;
+import hk.ljx.fishpicsbackend.vo.picture.PicturePostVO;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletRequest;
@@ -31,7 +32,7 @@ public interface PictureService extends IService<Picture> {
      * @param request token
      * @return 图片地址
      */
-    String uploadPicture4Post(MultipartFile file, HttpServletRequest request);
+    PicturePostVO uploadPicture4Post(MultipartFile file, HttpServletRequest request);
 
     /**
      * 设置图片和帖子的关联

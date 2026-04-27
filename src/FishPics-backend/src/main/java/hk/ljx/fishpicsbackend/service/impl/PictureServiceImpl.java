@@ -13,6 +13,7 @@ import hk.ljx.fishpicsbackend.service.CosService;
 import hk.ljx.fishpicsbackend.service.PictureService;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.service.UserService;
+import hk.ljx.fishpicsbackend.vo.picture.PicturePostVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -62,7 +63,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     }
 
     @Override
-    public String uploadPicture4Post(MultipartFile file, HttpServletRequest request) {
+    public PicturePostVO uploadPicture4Post(MultipartFile file, HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
         Long userId = loginUser.getId();
         ExcUtils.throwIfTrue(ObjUtil.isEmpty(loginUser) || userId == null, "请先登录");
@@ -75,7 +76,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         picture.setUserId(userId);
 
         ExcUtils.throwIfTrue(pictureMapper.insert(picture) != 1, "上传失败，数据库错误");
-        return picture.getUrl();
+        return PicturePostVO.builder().url(picture.getUrl()).pictureId(picture.getId()).build();
     }
 
     @Override
