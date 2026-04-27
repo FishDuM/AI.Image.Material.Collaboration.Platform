@@ -1,18 +1,11 @@
 # AI.Image.Material.Collaboration.Platform
 
-![React](https://img.shields.io/badge/React-19-61DAFB)
-![Vite](https://img.shields.io/badge/Vite-8-646CFF)
-![Ant Design](https://img.shields.io/badge/Ant_Design-6-1677FF)
-![Spring Boot](https://img.shields.io/badge/Spring_Boot-2.7.6-6DB33F)
-![Java](https://img.shields.io/badge/Java-11-007396)
-![MySQL](https://img.shields.io/badge/MySQL-8-4479A1)
-![Redis](https://img.shields.io/badge/Redis-5.0-DC382D)
-![MyBatis Plus](https://img.shields.io/badge/MyBatis_Plus-3.5.15-C6534B)
-![Hutool](https://img.shields.io/badge/Hutool-5.8.38-E44D26)
-![腾讯云 COS](https://img.shields.io/badge/腾讯云_COS-5.6.227-0052D9)
-
 <div align="center">
+
+![React](https://img.shields.io/badge/React-19-61DAFB) ![Vite](https://img.shields.io/badge/Vite-8-646CFF) ![Ant Design](https://img.shields.io/badge/Ant_Design-6-1677FF) ![Spring Boot](https://img.shields.io/badge/Spring_Boot-2.7.6-6DB33F) ![Java](https://img.shields.io/badge/Java-11-007396) ![MySQL](https://img.shields.io/badge/MySQL-8-4479A1) ![Redis](https://img.shields.io/badge/Redis-5.0-DC382D) ![MyBatis Plus](https://img.shields.io/badge/MyBatis_Plus-3.5.15-C6534B) ![Hutool](https://img.shields.io/badge/Hutool-5.8.38-E44D26) ![腾讯云 COS](https://img.shields.io/badge/腾讯云_COS-5.6.227-0052D9)
+
 [GitHub](https://github.com/FishDuM/AI.Image.Material.Collaboration.Platform) | [Gitee](https://gitee.com/dumhfdy/AI.Image.Material.Collaboration.Platform) | [头歌](https://code.educoder.net/pfqxsyecz/AI.Image.Material.Collaboration.Platform)
+
 </div>
 
 **FishPics** 是一个基于 React 19 + Spring Boot 的图片分享与互动社区平台，采用前后端分离架构，提供图片管理、社区互动、团队协作、AI 素材管理等核心功能。平台支持用户注册登录、图片浏览管理、帖子发布评论、团队空间协作、后台审核管理等能力，致力于打造简洁高效、安全可靠的图片内容生态。
