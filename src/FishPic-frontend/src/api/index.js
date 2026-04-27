@@ -59,6 +59,19 @@ export const register = (data) => api.post('/user/register', data)
 
 export const getUserMyself = () => api.get('/user/myself')
 
+export const getUser = () => api.get('/user/getUser')
+
+export const getAdminUser = (userId) => api.post('/user/admin/getUser', { userId })
+
 export const editUser = (data) => api.post('/user/editUser', data)
+
+export const uploadAvatar = (formData, onProgress) => api.post('/picture/avatar', formData, {
+  headers: { 'Content-Type': 'multipart/form-data' },
+  onUploadProgress: (progressEvent) => {
+    if (onProgress && progressEvent.total) {
+      onProgress({ percent: Math.round((progressEvent.loaded * 100) / progressEvent.total) })
+    }
+  }
+})
 
 export default api

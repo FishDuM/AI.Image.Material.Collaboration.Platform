@@ -15,8 +15,8 @@ spring:
     host: 192.168.163.101
     database: 0
     port: 6379
-#  profiles:
-#    active: local
+  profiles:
+    active: local
 knife4j:
   enable: true
   openapi:
@@ -38,3 +38,4 @@ knife4j:
 #  secretKey:
 #  region:
 #  bucketName:
+#  public: true  # 开发true 生产false

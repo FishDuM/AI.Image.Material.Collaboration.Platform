@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { App as AntApp, Table, Tag, Space, Button, Card, Typography, Avatar, Popconfirm, Input, Row, Col, Form, Select, Modal } from 'antd'
-import { UserOutlined, EditOutlined, SearchOutlined, ReloadOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons'
+import { App as AntApp, Table, Tag, Space, Button, Card, Typography, Avatar, Popconfirm, Input, Row, Col, Form, Select, Modal, Upload } from 'antd'
+import { UserOutlined, EditOutlined, SearchOutlined, ReloadOutlined, LockOutlined, UnlockOutlined, PlusOutlined, LoadingOutlined } from '@ant-design/icons'
 import { AuthContext } from '../context/AuthContext.jsx'
-import api from '../api'
+import api, { getAdminUser } from '../api'
 import FunnyBackground from '../components/FunnyBackground'
 import './UserManagement.css'
 
@@ -32,6 +32,10 @@ function UserManagement() {
   const [editForm] = Form.useForm()
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
+  const [avatarVisible, setAvatarVisible] = useState(false)
+  const [previewAvatar, setPreviewAvatar] = useState(null)
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(null)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
 
 
 
@@ -124,20 +128,31 @@ function UserManagement() {
     fetchUserList(1, pagination.pageSize)
   }
 
-  const handleEdit = (record) => {
-    setEditingUser(record)
-    editForm.setFieldsValue({
-      id: record.id,
-      username: record.username,
-      password: '',
-      nickname: record.nickname,
-      avatar: record.avatar,
-      email: record.email,
-      phone: record.phone,
-      role: record.role,
-      status: record.status,
-    })
-    setIsModalOpen(true)
+  useEffect(() => {
+    if (isModalOpen && editingUser) {
+      requestAnimationFrame(() => {
+        editForm.setFieldsValue({
+          id: editingUser.id,
+          username: editingUser.username,
+          password: '',
+          nickname: editingUser.nickname,
+          email: editingUser.email,
+          phone: editingUser.phone,
+          role: editingUser.role,
+        })
+      })
+    }
+  }, [isModalOpen, editingUser])
+
+  const handleEdit = async (record) => {
+    try {
+      const data = await getAdminUser(record.id)
+      setEditingUser(data)
+      setIsModalOpen(true)
+    } catch (error) {
+      console.error('获取用户信息失败:', error)
+      message.error('获取用户信息失败：' + error.message)
+    }
   }
 
   const handleEditSubmit = async (values) => {
@@ -146,19 +161,17 @@ function UserManagement() {
         id: editingUser.id,
         username: values.username,
         password: values.password || null,
-        avatar: values.avatar || null,
         email: values.email || null,
         phone: values.phone || null,
         nickname: values.nickname || null,
-        status: values.status,
         role: values.role,
       }
 
       await api.post('/user/admin/editUser', submitData)
 
+      editForm.resetFields()
       message.success('编辑用户成功')
       setIsModalOpen(false)
-      editForm.resetFields()
       fetchUserList(pagination.current, pagination.pageSize)
     } catch (error) {
       console.error('编辑用户失败:', error)
@@ -167,9 +180,89 @@ function UserManagement() {
   }
 
   const handleModalClose = () => {
-    setIsModalOpen(false)
     editForm.resetFields()
+    setIsModalOpen(false)
     setEditingUser(null)
+    setAvatarPreviewUrl(null)
+    setUploadingAvatar(false)
+  }
+
+  const getBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.addEventListener('load', () => resolve(reader.result))
+      reader.addEventListener('error', reject)
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const beforeUpload = (file) => {
+    const isImage = file.type.startsWith('image/')
+    if (!isImage) {
+      message.error('只能上传图片文件！')
+    }
+    const isLt5M = file.size / 1024 / 1024 < 5
+    if (!isLt5M) {
+      message.error('图片大小不能超过5MB！')
+    }
+    return isImage && isLt5M
+  }
+
+  const handleAvatarChange = async (info) => {
+    if (info.file.status === 'uploading') {
+      setUploadingAvatar(true)
+      return
+    }
+    if (info.file.status === 'done') {
+      await getBase64(info.file.originFileObj).then((url) => {
+        setUploadingAvatar(false)
+        setAvatarPreviewUrl(url)
+      })
+      const avatarUrl = info.file.response
+      setAvatarPreviewUrl(avatarUrl)
+      message.success('头像上传成功')
+    }
+    if (info.file.status === 'error') {
+      setUploadingAvatar(false)
+      message.error('头像上传失败')
+    }
+  }
+
+  const uploadButton = (
+    <button style={{ border: 0, background: 'none' }} type="button">
+      {uploadingAvatar ? <LoadingOutlined /> : <PlusOutlined />}
+      <div style={{ marginTop: 8 }}>上传</div>
+    </button>
+  )
+
+  const handleAvatarUpload = async (options) => {
+    const { file, onSuccess, onError } = options
+    
+    setUploadingAvatar(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('id', editingUser.id)
+      
+      const result = await api.post('/picture/avatar', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      
+      if (onSuccess) {
+        onSuccess(result)
+      }
+    } catch (error) {
+      if (onError) {
+        onError(error)
+      }
+    }
+  }
+
+  const handleAvatarClick = (avatar) => {
+    if (avatar) {
+      setPreviewAvatar(avatar)
+      setAvatarVisible(true)
+    }
   }
 
   const columns = [
@@ -188,8 +281,10 @@ function UserManagement() {
         <Avatar 
           src={record.avatar}
           style={{ 
-            backgroundColor: record.avatar ? 'transparent' : 'var(--accent)'
+            backgroundColor: record.avatar ? 'transparent' : 'var(--accent)',
+            cursor: record.avatar ? 'pointer' : 'default'
           }}
+          onClick={() => handleAvatarClick(record.avatar)}
         >
           {!record.avatar && (record.nickname || record.username)?.charAt(0)?.toUpperCase()}
         </Avatar>
@@ -400,6 +495,16 @@ function UserManagement() {
         </Card>
 
         <Modal
+          className="avatar-modal"
+          open={avatarVisible}
+          onCancel={() => setAvatarVisible(false)}
+          footer={null}
+          width={600}
+        >
+          {previewAvatar && <img src={previewAvatar} alt="avatar" />}
+        </Modal>
+
+        <Modal
           title="编辑用户"
           open={isModalOpen}
           onCancel={handleModalClose}
@@ -417,6 +522,25 @@ function UserManagement() {
             requiredMark={false}
           >
             <Row gutter={[16, 16]}>
+              <Col xs={24}>
+                <Form.Item label="修改头像">
+                  <Upload
+                    name="avatar"
+                    listType="picture-circle"
+                    className="avatar-uploader"
+                    showUploadList={false}
+                    customRequest={handleAvatarUpload}
+                    beforeUpload={beforeUpload}
+                    onChange={handleAvatarChange}
+                  >
+                    {avatarPreviewUrl || editingUser?.avatar ? (
+                      <img src={avatarPreviewUrl || editingUser.avatar} alt="avatar" style={{ width: '100%' }} />
+                    ) : (
+                      uploadButton
+                    )}
+                  </Upload>
+                </Form.Item>
+              </Col>
               <Col xs={24} sm={12}>
                 <Form.Item
                   name="username"
@@ -453,17 +577,6 @@ function UserManagement() {
               </Col>
               <Col xs={24} sm={12}>
                 <Form.Item
-                  name="avatar"
-                  label="头像 URL"
-                  rules={[
-                    { type: 'url', message: '请输入有效的 URL' },
-                  ]}
-                >
-                  <Input placeholder="请输入头像 URL" />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12}>
-                <Form.Item
                   name="email"
                   label="邮箱"
                   rules={[
@@ -493,18 +606,6 @@ function UserManagement() {
                   <Select placeholder="请选择角色">
                     <Select.Option value="user">普通用户</Select.Option>
                     <Select.Option value="admin">管理员</Select.Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="status"
-                  label="状态"
-                  rules={[{ required: true, message: '请选择状态' }]}
-                >
-                  <Select placeholder="请选择状态">
-                    <Select.Option value={1}>正常</Select.Option>
-                    <Select.Option value={0}>禁用</Select.Option>
                   </Select>
                 </Form.Item>
               </Col>

@@ -121,18 +121,18 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         // redis 查询用户信息
         String userByJson = stringRedisTemplate.opsForValue().get(token);
         User user = JSONUtil.toBean(userByJson, User.class);
-        // redis 查询不到则查 mysql
-        if (user == null) {
-            String id = JwtUtil.parseToken(token);
-            user = userMapper.selectById(id);
-            // mysql 查到反存 redis 有效期 2 天
-            if (user != null) {
-                stringRedisTemplate.opsForValue().set(token, JSONUtil.toJsonStr(user), 2, TimeUnit.DAYS);
-            } else {
-                // mysql 查不到反存 redis 空对象 有效期 1 秒
-                stringRedisTemplate.opsForValue().set(token, "", 1, TimeUnit.SECONDS);
-            }
-        }
+        // 查不到则为登录态过期
+//        if (user.getId() == null) {
+//            String id = JwtUtil.parseToken(token);
+//            user = userMapper.selectById(id);
+//            // mysql 查到反存 redis 有效期 1 天
+//            if (user != null) {
+//                stringRedisTemplate.opsForValue().set(token, JSONUtil.toJsonStr(user), 1, TimeUnit.DAYS);
+//            } else {
+//                // mysql 查不到反存 redis 空对象 有效期 1 秒
+//                stringRedisTemplate.opsForValue().set(token, "", 1, TimeUnit.SECONDS);
+//            }
+//        }
         return user;
     }
 
@@ -280,11 +280,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         BeanUtil.copyProperties(userEditByAdminRequest, user,
                 CopyOptions.create().setIgnoreNullValue(true).setIgnoreError(true));
 
-        // 优化头像 url 为 null
-        if (user.getAvatar() == null || user.getAvatar().trim().isEmpty()) {
-            user.setAvatar("https://avatars.githubusercontent.com/u/179127403?v=4");
-        }
-
         // 5. 更新
         int rows = userMapper.updateById(user);
         ExcUtils.throwIfTrue(rows != 1, ExceptionCode.DATABASE_ERROR, "更新用户失败");
@@ -372,11 +367,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         User user = this.getById(id);
         ExcUtils.throwIfTrue(ObjectUtil.isNull(user), ExceptionCode.DATABASE_ERROR, "用户不存在");
 
-        // 优化前端出来头像 url 为 null
-        if (user.getAvatar() == null || user.getAvatar().trim().isEmpty()) {
-            user.setAvatar("https://avatars.githubusercontent.com/u/179127403?v=4");
-        }
-
         // 更新用户信息
         BeanUtil.copyProperties(userEditRequest, user, CopyOptions.create().ignoreNullValue());
         if (StrUtil.isNotBlank(password)) {
@@ -384,7 +374,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
             password = DigestUtil.md5Hex(password + SALT);
             user.setPassword(password);
         }
-        return this.updateById(user);
+        boolean result = this.updateById(user);
+        ExcUtils.throwIfTrue(!result, ExceptionCode.DATABASE_ERROR, "更新失败");
+        // 更新 redis 缓存
+        String token = request.getHeader("Authorization");
+        stringRedisTemplate.opsForValue().set(token, JSONUtil.toJsonStr(user));
+        return true;
     }
 
     @Override

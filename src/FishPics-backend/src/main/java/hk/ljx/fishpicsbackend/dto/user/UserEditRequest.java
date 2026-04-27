@@ -26,11 +26,6 @@ public class UserEditRequest {
     private String password;
 
     /**
-     * 头像URL
-     */
-    private String avatar;
-
-    /**
      * 邮箱
      */
     private String email;

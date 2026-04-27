@@ -1,5 +1,6 @@
 package hk.ljx.fishpicsbackend.controller;
 
+import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.RandomUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -11,11 +12,13 @@ import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.dto.user.*;
 import hk.ljx.fishpicsbackend.entity.User;
+import hk.ljx.fishpicsbackend.mapper.UserMapper;
 import hk.ljx.fishpicsbackend.service.UserService;
 import hk.ljx.fishpicsbackend.vo.user.CheckCodeVO;
 import hk.ljx.fishpicsbackend.vo.user.UserLoginVO;
 import hk.ljx.fishpicsbackend.vo.user.UserMessageVO;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
@@ -31,6 +34,8 @@ public class UserController {
 
     @Resource
     private UserService userService;
+    @Autowired
+    private UserMapper userMapper;
 
     @PostMapping("/login")
     public Response<UserLoginVO> userLogin(@RequestBody UserLoginRequest userLoginRequest, HttpServletResponse response,
@@ -74,10 +79,28 @@ public class UserController {
         return ResUtils.success(userMessageVO);
     }
 
+    @GetMapping("/getUser")
+    public Response<UserLoginVO> getUser(HttpServletRequest request) {
+        User user = userService.getLoginUser(request);
+        UserLoginVO userLoginVO = new UserLoginVO();
+        BeanUtil.copyProperties(user, userLoginVO);
+        return ResUtils.success(userLoginVO);
+    }
+
     @PostMapping("/editUser")
     public Response<Boolean> editMyself(@RequestBody UserEditRequest userEditRequest, HttpServletRequest request) {
         ExcUtils.throwIfTrue(ObjectUtil.isNull(userEditRequest), ExceptionCode.PARAMETER_ERROR);
         return ResUtils.success(userService.editMyself(userEditRequest, request));
+    }
+
+    @AuthCheck(role = ADMIN)
+    @PostMapping("/admin/getUser")
+    public Response<User> editMyself(@RequestBody UserIdRequest userIdRequest) {
+        Long userId = userIdRequest.getUserId();
+        ExcUtils.throwIfTrue(ObjectUtil.isNull(userId), ExceptionCode.PARAMETER_ERROR);
+        User user = userMapper.selectById(userId);
+        ExcUtils.throwIfTrue(user.getId() == null, ExceptionCode.DATABASE_ERROR);
+        return ResUtils.success(user);
     }
 
     @AuthCheck(role = ADMIN)

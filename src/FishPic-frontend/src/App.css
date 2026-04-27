@@ -514,6 +514,26 @@
               0 0 45px rgba(255, 36, 66, 0.2);
 }
 
+.form-footer {
+  text-align: center;
+  margin-top: 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  transition: color 0.2s;
+}
+
+.switch-form-btn {
+  color: #ff2442;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0;
+  margin-left: 4px;
+}
+
+.switch-form-btn:hover {
+  color: #ff4d6a;
+}
+
 .switch-form {
   text-align: center;
   margin-top: 8px;

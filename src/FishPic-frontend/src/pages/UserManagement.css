@@ -354,3 +354,22 @@
     margin-bottom: 16px;
   }
 }
+
+.avatar-modal .ant-modal-content {
+  background-color: var(--bg-primary);
+  border-radius: var(--radius-lg);
+  padding: 0;
+}
+
+.avatar-modal .ant-modal-body {
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-modal img {
+  max-width: 100%;
+  max-height: 80vh;
+  border-radius: var(--radius-md);
+}

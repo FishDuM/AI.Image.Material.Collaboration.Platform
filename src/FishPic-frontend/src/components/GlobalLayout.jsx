@@ -1,6 +1,6 @@
 import { useContext, useState, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { App as AntApp, Button, Avatar, Dropdown, Modal, Form, Input, Card, message as antdMessage, Drawer, Menu } from 'antd'
+import { App as AntApp, Button, Avatar, Dropdown, Modal, Form, Input, Card, Drawer, Menu } from 'antd'
 import { 
   SettingOutlined, 
   HomeOutlined, 
@@ -10,7 +10,6 @@ import {
   LogoutOutlined,
   LoginOutlined,
   LockOutlined,
-  QrcodeOutlined,
   ScanOutlined,
   MenuOutlined,
   CloseOutlined,
@@ -27,7 +26,7 @@ import {
   BellOutlined
 } from '@ant-design/icons'
 import { AuthContext } from '../context/AuthContext.jsx'
-import { getLoginCheckCode, login } from '../api'
+import { getLoginCheckCode, login, getRegisterCheckCode, register } from '../api'
 import { ThemeContext } from '../main.jsx'
 
 function GlobalLayout({ children }) {
@@ -44,6 +43,11 @@ function GlobalLayout({ children }) {
   const [agreed, setAgreed] = useState(false)
   const [sidebarVisible, setSidebarVisible] = useState(false)
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
+  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false)
+  const [registerForm] = Form.useForm()
+  const [registerLoading, setRegisterLoading] = useState(false)
+  const [registerCheckCodeUrl, setRegisterCheckCodeUrl] = useState('')
+  const [registerKey, setRegisterKey] = useState('')
 
   const handleLogout = () => {
     authLogout()
@@ -100,6 +104,86 @@ function GlobalLayout({ children }) {
   const handleRefreshLoginCode = () => {
     fetchLoginCheckCode()
     loginForm.setFieldValue('checkCode', '')
+  }
+
+  const fetchRegisterCheckCode = async () => {
+    try {
+      const response = await getRegisterCheckCode()
+      const data = response?.data || response
+      
+      if (data && data.code === 1 && data.data) {
+        const { captchaKey, base64Image } = data.data
+        
+        if (captchaKey && base64Image && base64Image.length > 0) {
+          setRegisterKey(captchaKey)
+          const imageSrc = base64Image.startsWith('data:') 
+            ? base64Image 
+            : `data:image/png;base64,${base64Image}`
+          setRegisterCheckCodeUrl(imageSrc)
+        } else {
+          message.error('获取验证码失败')
+        }
+      } else {
+        message.error('获取验证码失败')
+      }
+    } catch (error) {
+      message.error('获取验证码失败')
+    }
+  }
+
+  const showRegisterModal = () => {
+    setIsLoginModalOpen(false)
+    setIsRegisterModalOpen(true)
+    fetchRegisterCheckCode()
+  }
+
+  const showLoginFromRegister = () => {
+    setIsRegisterModalOpen(false)
+    setIsLoginModalOpen(true)
+    fetchLoginCheckCode()
+  }
+
+  const handleRegisterCancel = () => {
+    setIsRegisterModalOpen(false)
+    registerForm.resetFields()
+    setRegisterCheckCodeUrl('')
+    setRegisterKey('')
+  }
+
+  const handleRefreshRegisterCode = () => {
+    fetchRegisterCheckCode()
+    registerForm.setFieldValue('checkCode', '')
+  }
+
+  const handleRegisterFinish = async (values) => {
+    setRegisterLoading(true)
+    try {
+      if (!registerKey) {
+        message.error('验证码已过期，请刷新验证码')
+        fetchRegisterCheckCode()
+        registerForm.setFieldValue('checkCode', '')
+        setRegisterLoading(false)
+        return
+      }
+      
+      const registerData = {
+        username: values.username,
+        password: values.password,
+        checkPassword: values.checkPassword,
+        checkCode: values.checkCode,
+        captchaKey: registerKey
+      }
+      await register(registerData)
+      message.success('注册成功，请登录')
+      handleRegisterCancel()
+      showLoginModal()
+    } catch (error) {
+      message.error(error.message || '注册失败，请重试')
+      fetchRegisterCheckCode()
+      registerForm.setFieldValue('checkCode', '')
+    } finally {
+      setRegisterLoading(false)
+    }
   }
 
   const handleLoginFinish = async (values) => {
@@ -541,6 +625,161 @@ function GlobalLayout({ children }) {
                     登录
                   </Button>
                 </Form.Item>
+                <div className="form-footer">
+                  <span>还没有账号？</span>
+                  <Button type="link" onClick={showRegisterModal} className="switch-form-btn">
+                    立即注册
+                  </Button>
+                </div>
+              </Form>
+            </div>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={isRegisterModalOpen}
+        onCancel={handleRegisterCancel}
+        footer={null}
+        centered
+        className="xhs-modal"
+        destroyOnHidden
+        width={800}
+      >
+        <div className="xhs-modal-content">
+          <div className="xhs-left-panel">
+            <div className="scan-hint">加入我们，开始创作</div>
+            <div className="qr-card">
+              <Card className="qr-code-card" variant="borderless">
+                <div className="qr-code-wrapper">
+                  <div className="qr-code-bg">
+                    <img 
+                      src="/qrcode.jpg" 
+                      alt="二维码" 
+                      className="qr-placeholder"
+                      onError={(e) => {
+                        e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQwIiBoZWlnaHQ9IjI0MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjQwIiBoZWlnaHQ9IjI0MCIgZmlsbD0iI2ZmZiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iYXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj7mlrnlnLbfkYZcL3RleHQ+PC9zdmc+';
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="scan-status">
+                  <ScanOutlined className="scan-icon" />
+                  <span>暂是实现该功能，敬请期待</span>
+                </div>
+              </Card>
+            </div>
+            <div className="scan-tips">
+              <span>可用</span>
+              <span className="app-name">FishPics</span>
+              <span>或</span>
+              <span className="app-name-wechat">微信</span>
+              <span>扫码</span>
+            </div>
+          </div>
+          
+          <div className="xhs-right-panel">
+            <div className="form-container">
+              <h2 className="form-title">账号注册</h2>
+              <Form
+                form={registerForm}
+                name="register"
+                onFinish={handleRegisterFinish}
+                autoComplete="off"
+                size="large"
+                requiredMark={false}
+                layout="vertical"
+              >
+                <Form.Item
+                  name="username"
+                  rules={[
+                    { required: true, message: '请输入账号' },
+                    { min: 6, message: '账号至少 6 个字符' },
+                  ]}
+                >
+                  <Input
+                    prefix={<UserOutlined className="input-icon" />}
+                    placeholder="请输入账号"
+                    className="xhs-input"
+                  />
+                </Form.Item>
+
+                <Form.Item
+                  name="password"
+                  rules={[
+                    { required: true, message: '请输入密码' },
+                    { min: 8, message: '密码至少 8 个字符' },
+                  ]}
+                >
+                  <Input.Password
+                    prefix={<LockOutlined className="input-icon" />}
+                    placeholder="请输入密码"
+                    className="xhs-input"
+                  />
+                </Form.Item>
+
+                <Form.Item
+                  name="checkPassword"
+                  dependencies={['password']}
+                  rules={[
+                    { required: true, message: '请再次输入密码' },
+                    ({ getFieldValue }) => ({
+                      validator(_, value) {
+                        if (!value || getFieldValue('password') === value) {
+                          return Promise.resolve()
+                        }
+                        return Promise.reject(new Error('两次输入的密码不一致'))
+                      },
+                    }),
+                  ]}
+                >
+                  <Input.Password
+                    prefix={<LockOutlined className="input-icon" />}
+                    placeholder="请再次输入密码"
+                    className="xhs-input"
+                  />
+                </Form.Item>
+
+                <Form.Item
+                  name="checkCode"
+                  rules={[{ required: true, message: '请输入验证码' }]}
+                >
+                  <div className="check-code-row xhs">
+                    <Input
+                      prefix={<LockOutlined className="input-icon" />}
+                      placeholder="请输入验证码"
+                      className="xhs-input check-code-input"
+                      maxLength={5}
+                    />
+                    <Button 
+                      className="get-code-btn" 
+                      onClick={handleRefreshRegisterCode}
+                      type="link"
+                    >
+                      {registerCheckCodeUrl && (
+                        <img src={registerCheckCodeUrl} alt="验证码" className="check-code-img-btn" />
+                      )}
+                    </Button>
+                  </div>
+                </Form.Item>
+
+                <Form.Item>
+                  <Button
+                    type="primary"
+                    htmlType="submit"
+                    loading={registerLoading}
+                    block
+                    className="xhs-submit-btn"
+                  >
+                    注册
+                  </Button>
+                </Form.Item>
+                <div className="form-footer">
+                  <span>已有账号？</span>
+                  <Button type="link" onClick={showLoginFromRegister} className="switch-form-btn">
+                    立即登录
+                  </Button>
+                </div>
               </Form>
             </div>
           </div>

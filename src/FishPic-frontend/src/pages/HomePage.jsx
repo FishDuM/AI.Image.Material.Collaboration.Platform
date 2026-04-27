@@ -11,8 +11,7 @@ const LOGIN_USER_PREFIX = 'LOGIN_CHECK_CODE-'
 
 function HomePage() {
   const { message } = AntApp.useApp()
-  const { isDarkMode, toggleTheme } = useContext(ThemeContext)
-  const { userInfo, isAuthenticated, login: authLogin, logout: authLogout } = useContext(AuthContext)
+  const { login: authLogin, logout: authLogout} = useContext(AuthContext);
   const navigate = useNavigate()
   const location = useLocation()
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
@@ -36,9 +35,12 @@ function HomePage() {
   }
 
   const handleCancel = () => {
+    if (isRegisterMode) {
+      registerForm.resetFields()
+    } else {
+      loginForm.resetFields()
+    }
     setIsLoginModalOpen(false)
-    loginForm.resetFields()
-    registerForm.resetFields()
     setLoginCheckCodeUrl('')
     setLoginKey('')
     setRegisterCheckCodeUrl('')

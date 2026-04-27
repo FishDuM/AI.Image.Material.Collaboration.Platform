@@ -31,7 +31,7 @@ public class CosService {
     private String bucket;
 
     @Value("${cos.public:false}")
-    private boolean isPublic;
+    private boolean isPublic = true;
 
     // ====================== 配置常量 ======================
     /**
@@ -117,9 +117,31 @@ public class CosService {
 
             GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(bucket, key)
                     .withExpiration(expirationDate);
-
             URL url = cosClient.generatePresignedUrl(request);
             return url.toString();
+        }
+    }
+
+    /**
+     * 上传图片并返回 url
+     * @param file 图片文件
+     * @return 图片 url
+     */
+    public String uploadAndGetImageUrl(MultipartFile file) {
+        String key = uploadPicture(file);
+        return getImageUrl(key);
+    }
+
+    /**
+     * 根据 COS 的文件 key 删除文件
+     * @param key 文件唯一标识
+     */
+    public void deletePicture(String key) {
+        ExcUtils.throwIfTrue(key == null || key.isEmpty(), "文件key不能为空");
+        try {
+            cosClient.deleteObject(bucket, key);
+        } catch (Exception e) {
+            throw new RuntimeException("图片删除失败：" + e.getMessage());
         }
     }
 }

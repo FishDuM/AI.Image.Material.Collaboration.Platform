@@ -26,11 +26,6 @@ public class UserEditByAdminRequest {
     private String password;
 
     /**
-     * 头像URL
-     */
-    private String avatar;
-
-    /**
      * 邮箱
      */
     private String email;
@@ -44,11 +39,6 @@ public class UserEditByAdminRequest {
      * 昵称（展示用）
      */
     private String nickname;
-
-    /**
-     * 状态 1-正常 0-禁用 2-待审核
-     */
-    private Integer status;
 
     /**
      * 用户的权限

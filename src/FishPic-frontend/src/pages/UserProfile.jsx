@@ -1,6 +1,6 @@
 import { useContext, useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { App as AntApp, Avatar, Tabs, Empty, Skeleton, Modal, Button, Form, Input } from 'antd'
+import { App as AntApp, Avatar, Tabs, Empty, Skeleton, Modal, Button, Form, Input, Upload, Flex } from 'antd'
 import { 
   UserOutlined, 
   MailOutlined, 
@@ -10,9 +10,11 @@ import {
   StarOutlined,
   HeartOutlined,
   EditOutlined,
-  LockOutlined
+  LockOutlined,
+  LoadingOutlined,
+  PlusOutlined
 } from '@ant-design/icons'
-import { getUserMyself, editUser } from '../api'
+import { getUserMyself, getUser, editUser, uploadAvatar } from '../api'
 import { getToken } from '../utils/storage'
 import { AuthContext } from '../context/AuthContext.jsx'
 import { ThemeContext } from '../main.jsx'
@@ -29,37 +31,53 @@ function UserProfile() {
   const [avatarVisible, setAvatarVisible] = useState(false)
   const [editModalVisible, setEditModalVisible] = useState(false)
   const [editForm] = Form.useForm()
+  const [uploadedAvatarUrl, setUploadedAvatarUrl] = useState(null)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(null)
   const hasFetchedRef = useRef(false)
+
+  const fetchUserInfo = async () => {
+    try {
+      const data = await getUserMyself()
+      setUserData(data)
+      
+      if (userInfo) {
+        const updatedUserInfo = { ...userInfo, ...data }
+        authLogin(updatedUserInfo)
+      }
+    } catch (error) {
+      message.error(error.message || '获取个人信息失败')
+      console.error('获取个人信息失败:', error)
+    }
+  }
+
+  const refreshUserInfo = async () => {
+    try {
+      const data = await getUser()
+      setUserData((prev) => ({ ...prev, ...data }))
+      
+      if (userInfo) {
+        const updatedUserInfo = { ...userInfo, ...data }
+        authLogin(updatedUserInfo)
+      }
+    } catch (error) {
+      message.error(error.message || '刷新用户信息失败')
+      console.error('刷新用户信息失败:', error)
+    }
+  }
 
   useEffect(() => {
     if (hasFetchedRef.current) return
     hasFetchedRef.current = true
     
-    const fetchUserInfo = async () => {
-      if (!getToken()) {
-        message.warning('请先登录')
-        navigate('/')
-        return
-      }
-      
-      setLoading(true)
-      try {
-        const data = await getUserMyself()
-        setUserData(data)
-        
-        if (userInfo) {
-          const updatedUserInfo = { ...userInfo, ...data }
-          authLogin(updatedUserInfo)
-        }
-      } catch (error) {
-        message.error(error.message || '获取个人信息失败')
-        console.error('获取个人信息失败:', error)
-      } finally {
-        setLoading(false)
-      }
+    if (!getToken()) {
+      message.warning('请先登录')
+      navigate('/')
+      return
     }
-
-    fetchUserInfo()
+    
+    setLoading(true)
+    fetchUserInfo().finally(() => setLoading(false))
   }, [navigate, message])
 
   const formatDate = (date) => {
@@ -95,16 +113,17 @@ function UserProfile() {
 
   const handleEditProfileClick = () => {
     if (userData) {
-      editForm.setFieldsValue({
-        id: userData.id,
-        username: userData.username,
-        password: '',
-        avatar: userData.avatar,
-        email: userData.email,
-        phone: userData.phone,
-        nickname: userData.nickname
-      })
       setEditModalVisible(true)
+      requestAnimationFrame(() => {
+        editForm.setFieldsValue({
+          id: userData.id,
+          username: userData.username,
+          password: '',
+          email: userData.email,
+          phone: userData.phone,
+          nickname: userData.nickname
+        })
+      })
     }
   }
 
@@ -114,7 +133,7 @@ function UserProfile() {
       const submitData = {
         id: values.id,
         username: values.username,
-        avatar: values.avatar && values.avatar.trim() !== '' ? values.avatar : null,
+        avatar: uploadedAvatarUrl || userData?.avatar || null,
         email: values.email || null,
         phone: values.phone || null,
         nickname: values.nickname
@@ -123,18 +142,11 @@ function UserProfile() {
         submitData.password = values.password
       }
       await editUser(submitData)
+      editForm.resetFields()
       message.success('修改成功')
       setEditModalVisible(false)
       
-      const updatedUserData = { ...userData, ...submitData }
-      setUserData(updatedUserData)
-      
-      if (userInfo) {
-        const updatedUserInfo = { ...userInfo, ...submitData }
-        authLogin(updatedUserInfo)
-      }
-      
-      editForm.resetFields()
+      await refreshUserInfo()
     } catch (error) {
       if (error !== 'cancelled') {
         message.error(error.message || '修改失败')
@@ -143,8 +155,82 @@ function UserProfile() {
   }
 
   const handleEditModalCancel = () => {
-    setEditModalVisible(false)
     editForm.resetFields()
+    setEditModalVisible(false)
+    setUploadedAvatarUrl(null)
+    setAvatarPreviewUrl(null)
+  }
+
+  const getBase64 = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.addEventListener('load', () => resolve(reader.result))
+      reader.addEventListener('error', reject)
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const beforeUpload = (file) => {
+    const isImage = file.type.startsWith('image/')
+    if (!isImage) {
+      message.error('只能上传图片文件！')
+    }
+    const isLt5M = file.size / 1024 / 1024 < 5
+    if (!isLt5M) {
+      message.error('图片大小不能超过5MB！')
+    }
+    return isImage && isLt5M
+  }
+
+  const handleAvatarChange = async (info) => {
+    if (info.file.status === 'uploading') {
+      setUploadingAvatar(true)
+      return
+    }
+    if (info.file.status === 'done') {
+      await getBase64(info.file.originFileObj).then((url) => {
+        setUploadingAvatar(false)
+        setAvatarPreviewUrl(url)
+      })
+      const avatarUrl = info.file.response
+      setUploadedAvatarUrl(avatarUrl)
+      
+      await refreshUserInfo()
+      
+      message.success('头像上传成功')
+    }
+    if (info.file.status === 'error') {
+      setUploadingAvatar(false)
+      message.error('头像上传失败')
+    }
+  }
+
+  const uploadButton = (
+    <button style={{ border: 0, background: 'none' }} type="button">
+      {uploadingAvatar ? <LoadingOutlined /> : <PlusOutlined />}
+      <div style={{ marginTop: 8 }}>上传</div>
+    </button>
+  )
+
+  const handleAvatarUpload = async (options) => {
+    const { file, onSuccess, onError } = options
+    
+    setUploadingAvatar(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('id', userData.id)
+      
+      const result = await uploadAvatar(formData)
+      
+      if (onSuccess) {
+        onSuccess(result)
+      }
+    } catch (error) {
+      if (onError) {
+        onError(error)
+      }
+    }
   }
 
   const renderProfileHeader = () => {
@@ -290,6 +376,24 @@ function UserProfile() {
               <Input />
             </Form.Item>
 
+            <Form.Item label="修改头像">
+              <Upload
+                name="avatar"
+                listType="picture-circle"
+                className="avatar-uploader"
+                showUploadList={false}
+                customRequest={handleAvatarUpload}
+                beforeUpload={beforeUpload}
+                onChange={handleAvatarChange}
+              >
+                {(avatarPreviewUrl || userData?.avatar) ? (
+                  <img src={avatarPreviewUrl || userData.avatar} alt="avatar" style={{ width: '100%' }} />
+                ) : (
+                  uploadButton
+                )}
+              </Upload>
+            </Form.Item>
+
             <Form.Item
               label="账号"
               name="username"
@@ -317,15 +421,6 @@ function UserProfile() {
               <Input.Password 
                 prefix={<LockOutlined />} 
                 placeholder="请输入新密码，留空表示不修改"
-              />
-            </Form.Item>
-
-            <Form.Item
-              label="头像 URL"
-              name="avatar"
-            >
-              <Input 
-                placeholder="请输入头像 URL"
               />
             </Form.Item>
 
