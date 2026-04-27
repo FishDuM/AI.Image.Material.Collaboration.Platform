@@ -71,6 +71,11 @@ public class Picture implements Serializable {
      */
     private Integer isPrivate;
 
+    /**
+     * 帖子id
+     */
+    private Long postId;
+
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }

@@ -17,11 +17,12 @@
             <result property="collectsNum" column="collects_num" />
             <result property="commentNum" column="comment_num" />
             <result property="isPrivate" column="is_private" />
+            <result property="cover" column="cover" />
     </resultMap>
 
     <sql id="Base_Column_List">
         id,user_id,title,content,status,create_time,
         update_time,is_delete,likes_num,collects_num,comment_num,
-        is_private
+        is_private,cover
     </sql>
 </mapper>

@@ -1,7 +1,11 @@
 package hk.ljx.fishpicsbackend.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.util.ObjUtil;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
+import hk.ljx.fishpicsbackend.dto.picture.PictureMessage;
 import hk.ljx.fishpicsbackend.entity.Picture;
 import hk.ljx.fishpicsbackend.entity.User;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
@@ -9,11 +13,14 @@ import hk.ljx.fishpicsbackend.service.CosService;
 import hk.ljx.fishpicsbackend.service.PictureService;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.service.UserService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+
+import java.util.List;
 
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
@@ -34,6 +41,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
     @Resource
     private CosService cosService;
+    @Autowired
+    private PictureMapper pictureMapper;
 
     @Override
     public String uploadAvatar(MultipartFile file, Long id, HttpServletRequest request) {
@@ -50,6 +59,38 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         user.setAvatar(url);
         ExcUtils.throwIfTrue(userMapper.updateById(user) != 1, "上传失败，数据库错误");
         return url;
+    }
+
+    @Override
+    public String uploadPicture4Post(MultipartFile file, HttpServletRequest request) {
+        User loginUser = userService.getLoginUser(request);
+        Long userId = loginUser.getId();
+        ExcUtils.throwIfTrue(ObjUtil.isEmpty(loginUser) || userId == null, "请先登录");
+        // 上传图片
+        String key = cosService.uploadPicture(file);
+        // 获取图片信息
+        PictureMessage pictureMessage = cosService.getPictureMessage(key);
+        Picture picture = new Picture();
+        BeanUtil.copyProperties(pictureMessage, picture);
+        picture.setUserId(userId);
+
+        ExcUtils.throwIfTrue(pictureMapper.insert(picture) != 1, "上传失败，数据库错误");
+        return picture.getUrl();
+    }
+
+    @Override
+    public void setPicturePostId(List<Long> imageId, Long postId) {
+        // 构建条件：id in (?)
+        QueryWrapper<Picture> wrapper = new QueryWrapper<>();
+        wrapper.in("id", imageId);
+
+        // 构建要更新的字段
+        Picture picture = new Picture();
+        picture.setPostId(postId);
+
+        // 一次性批量更新
+        int update = pictureMapper.update(picture, wrapper);
+        ExcUtils.throwIfTrue(update != imageId.size(), "更新失败，数据库错误");
     }
 }
 

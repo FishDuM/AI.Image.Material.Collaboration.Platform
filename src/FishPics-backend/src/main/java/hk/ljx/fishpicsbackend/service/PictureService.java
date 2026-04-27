@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.servlet.http.HttpServletRequest;
+import java.util.List;
 
 /**
 * @author 30574
@@ -13,5 +14,29 @@ import javax.servlet.http.HttpServletRequest;
 */
 public interface PictureService extends IService<Picture> {
 
+    /**
+     * 用户上传头像或管理员修改用户头像
+     *
+     * @param file    图片
+     * @param id      用户id
+     * @param request token
+     * @return 头像地址
+     */
     String uploadAvatar(MultipartFile file, Long id, HttpServletRequest request);
+
+    /**
+     * 用户上传帖子图片
+     *
+     * @param file    图片
+     * @param request token
+     * @return 图片地址
+     */
+    String uploadPicture4Post(MultipartFile file, HttpServletRequest request);
+
+    /**
+     * 设置图片和帖子的关联
+     * @param imageId 图片id
+     * @param id 帖子id
+     */
+    void setPicturePostId(List<Long> imageId, Long id);
 }

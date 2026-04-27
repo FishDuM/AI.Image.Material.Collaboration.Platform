@@ -26,4 +26,11 @@ public class PictureController {
         ExcUtils.throwIfTrue(id == null, "用户id不能为空");
         return ResUtils.success(pictureService.uploadAvatar(file,id,request));
     }
+
+    @PostMapping("/post")
+    public Response<String> uploadPicture4Post(@RequestParam("file") MultipartFile file, HttpServletRequest request) {
+        ExcUtils.throwIfTrue(file.isEmpty(), "文件不能为空");
+        ExcUtils.throwIfTrue(file.getSize() > 1024 * 1024 * 5, "文件大小不能超过5MB");
+        return ResUtils.success(pictureService.uploadPicture4Post(file, request));
+    }
 }

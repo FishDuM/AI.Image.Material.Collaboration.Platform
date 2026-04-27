@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.Date;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -31,9 +32,14 @@ public class PostListVO {
     private String content;
 
     /**
+     * 封面图片的 id
+     */
+    private Long cover;
+
+    /**
      * 图片id数组
      */
-    private String pictureIds;
+    private List<Long> pictureIds;
 
     /**
      * 创建时间

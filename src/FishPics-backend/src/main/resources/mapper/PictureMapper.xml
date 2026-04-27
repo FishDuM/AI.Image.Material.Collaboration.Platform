@@ -16,10 +16,12 @@
             <result property="createTime" column="create_time" />
             <result property="updateTime" column="update_time" />
             <result property="isPrivate" column="is_private" />
+            <result property="postId" column="post_id" />
     </resultMap>
 
     <sql id="Base_Column_List">
         id,user_id,picture_name,url,width,height,
-        size,status,create_time,update_time,is_private
+        size,status,create_time,update_time,is_private,
+        post_id
     </sql>
 </mapper>

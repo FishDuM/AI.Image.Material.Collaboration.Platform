@@ -1,11 +1,14 @@
 package hk.ljx.fishpicsbackend.service;
 
+import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.lang.UUID;
+import cn.hutool.json.JSONUtil;
 import com.qcloud.cos.COSClient;
-import com.qcloud.cos.model.GeneratePresignedUrlRequest;
-import com.qcloud.cos.model.PutObjectRequest;
+import com.qcloud.cos.model.*;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.utils.LimitedInputStream;
+import hk.ljx.fishpicsbackend.dto.picture.PictureMessage;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -17,7 +20,9 @@ import java.net.URL;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 
+@Slf4j
 @Service
 public class CosService {
 
@@ -143,5 +148,49 @@ public class CosService {
         } catch (Exception e) {
             throw new RuntimeException("图片删除失败：" + e.getMessage());
         }
+    }
+
+    /**
+     * 根据 key 获取图片信息
+     * @param key 文件唯一标识
+     * @return 图片信息
+     * @throws IOException IO异常
+     */
+    public PictureMessage getPictureMessage(String key) {
+        // 1. 构建获取图片信息的请求
+        GetObjectRequest getObj = new GetObjectRequest(bucket, key);
+        // 固定参数：获取图片基础信息
+        getObj.putCustomQueryParameter("imageInfo", null);
+
+        // 2. 获取 COS 返回的流
+        COSObject cosObject = cosClient.getObject(getObj);
+
+        PictureMessage pictureMessage = new PictureMessage();
+
+        try (COSObjectInputStream inputStream = cosObject.getObjectContent()) {
+            // 3. 把流转成字符串（腾讯云返回 JSON 格式的图片信息）
+            String imageInfoJson = IoUtil.readUtf8(inputStream);
+            log.info("图片信息 JSON：{}", imageInfoJson);
+
+            // 4. 转成 Map/对象，方便拿宽、高、格式
+            Map<String, Object> imageInfo = JSONUtil.parseObj(imageInfoJson);
+
+            String width = (String) imageInfo.get("width");      // 宽
+            String height = (String) imageInfo.get("height");    // 高
+            String size = (String) imageInfo.get("size");        // 文件大小 byte
+//            String format = (String) imageInfo.get("format");    // 格式 jpg/png
+//            String md5 = (String) imageInfo.get("md5");          // md5
+
+            pictureMessage.setWidth(width);
+            pictureMessage.setHeight(height);
+            pictureMessage.setSize(size);
+
+        } catch (Exception e) {
+            throw new RuntimeException("获取图片信息失败", e);
+        }
+
+        String url = this.getImageUrl(key);
+        pictureMessage.setUrl(url);
+        return pictureMessage;
     }
 }
