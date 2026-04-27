@@ -1,7 +1,5 @@
 # AI.Image.Material.Collaboration.Platform
 
-<div align="center">
-
 ![React](https://img.shields.io/badge/React-19-61DAFB)
 ![Vite](https://img.shields.io/badge/Vite-8-646CFF)
 ![Ant Design](https://img.shields.io/badge/Ant_Design-6-1677FF)
@@ -13,6 +11,7 @@
 ![Hutool](https://img.shields.io/badge/Hutool-5.8.38-E44D26)
 ![腾讯云 COS](https://img.shields.io/badge/腾讯云_COS-5.6.227-0052D9)
 
+<div align="center">
 [GitHub](https://github.com/FishDuM/AI.Image.Material.Collaboration.Platform) | [Gitee](https://gitee.com/dumhfdy/AI.Image.Material.Collaboration.Platform) | [头歌](https://code.educoder.net/pfqxsyecz/AI.Image.Material.Collaboration.Platform)
 </div>
 
@@ -61,59 +60,70 @@
 
 ---
 
+
+## 效果预览
+
+- **首页**：登录/注册界面，带图形验证码，瀑布流展示图片 (待完善)
+![首页](doc/picture/p1.gif)
+- **社区广场**：公共内容浏览与互动 (开发中)
+- **个人空间**：我的发布、收藏、管理 (待完善)
+- **团队空间**：团队协作、共享素材 (待开发)
+- **消息通知**：系统消息与互动通知 (待开发)
+- **AI 编辑图片**：用户上传图片后，AI 可以根据图片内容进行编辑 (待开发)
+- **用户管理**：管理员后台，支持查询、编辑、封禁/解封 (已实现)
+![用户管理](doc/picture/p2.gif)
+- **空间管理**：后台空间管理功能 (待开发)
+- **团队管理**：后台团队管理功能 (待开发)
+- **AI 管理**：后台 AI 接口配置等管理 (待开发)
+- **API 文档**：Knife4j 自动生成的接口文档 (已实现)
+![API 文档](doc/picture/p3.gif)
+
+---
+
 ## 核心功能
 
 ### 用户模块
-
-- 用户注册、登录（带图形验证码）
-- 用户信息管理（头像、昵称、邮箱、手机号）
-- 权限控制（普通用户、管理员）
-- 退出登录、状态管理
+- 用户注册登录，支持图形验证码防护
+- 用户信息管理，支持修改头像、昵称、邮箱、手机号
+- 权限控制，区分普通用户和管理员角色
+- 退出登录，安全清除会话状态
 
 ### 图片管理模块
-
-- 图片上传与存储（腾讯云 COS）
-- 图片信息管理（名称、URL、尺寸、大小）
-- 图片状态管理（正常、禁用、待审核）
+- 图片上传至腾讯云 COS 对象存储
+- 图片信息记录，包含名称、URL、尺寸、大小
+- 图片状态管控，支持正常、禁用、待审核状态切换
 
 ### 帖子管理模块
-
-- 帖子创建（标题、内容、关联图片）
-- 帖子展示与浏览
-- 帖子状态管理（正常、禁用、待审核、逻辑删除）
+- 帖子发布，支持标题、内容、关联图片
+- 帖子浏览展示，支持分页查询
+- 帖子状态管控，支持正常、禁用、待审核、逻辑删除
 
 ### 评论互动模块
-
-- 评论功能（对帖子进行评论）
-- 评论状态管理（正常、禁用、待审核）
+- 帖子评论，支持用户发表评论内容
+- 评论状态管控，支持正常、禁用、待审核状态
 
 ### 收藏与点赞模块
-
-- 帖子收藏功能
-- 帖子点赞功能
-- 收藏与点赞状态管理
+- 帖子收藏，支持用户收藏感兴趣的帖子
+- 帖子点赞，支持用户为帖子点赞
+- 状态管理，支持取消收藏和取消点赞
 
 ### 社交互动模块
-
-- 用户关注/取消关注
-- 粉丝管理
-- 关注列表查看
+- 用户关注，支持关注/取消关注操作
+- 粉丝管理，查看粉丝列表和关注列表
 
 ### 空间管理模块
-
-- **个人空间**：用户个人图片与帖子管理
-- **团队空间**：团队协作、共享素材
-- **社区广场**：公共内容浏览与互动
-- **消息通知**：系统消息与互动通知
+- 个人空间，管理个人图片与帖子内容
+- 团队空间，支持团队协作与共享素材
+- 社区广场，公共内容浏览与互动
+- 消息通知，接收系统消息与互动通知
 
 ### 后台管理模块
-
-- 用户管理（查询、编辑、封禁/解封）
-- 分页查询用户列表
-- 多维度搜索（ID、用户名、手机号、昵称、角色、状态）
-- 空间管理、团队管理
-- AI 素材管理
-- 管理员权限控制（基于注解的 AOP 拦截）
+- 用户管理，支持查询、编辑、封禁/解封用户
+- 多维度搜索，支持按 ID、用户名、手机号、昵称、角色、状态筛选
+- 空间管理，后台统一管理所有空间
+- 团队管理，后台统一管理所有团队
+- AI 素材管理，后台管理 AI 相关素材
+- 权限控制，基于 AOP 注解实现管理员权限拦截
 
 ---
 
@@ -143,149 +153,34 @@
 
 ```
 AI.Image.Material.Collaboration.Platform/
-├── doc/                                    # 文档目录
-│   └── software_requirements_model.md      # 软件需求模型
-├── model/                                  # 模型目录
-│   └── uml_diagrams.md                     # UML图说明
-└── src/
-    ├── FishPic-frontend/                   # 前端项目 (React 19 + Vite)
-    │   ├── public/                         # 静态资源
-    │   │   ├── favicon.svg
-    │   │   ├── icons.svg
-    │   │   ├── logo_white.png
-    │   │   └── qrcode.jpg
-    │   └── src/
-    │       ├── api/                        # API请求封装
-    │       │   └── index.js                # Axios实例、拦截器、API接口
-    │       ├── assets/                     # 静态资源
-    │       ├── components/                 # 公共组件
-    │       │   ├── ErrorBoundary.jsx       # 错误边界组件
-    │       │   ├── FunnyBackground.jsx     # 趣味背景组件
-    │       │   ├── GlobalLayout.jsx        # 全局布局组件
-    │       │   └── ProtectedRoute.jsx      # 路由保护组件
-    │       ├── context/                    # 状态管理
-    │       │   └── AuthContext.jsx         # 用户认证上下文
-    │       ├── pages/                      # 页面组件
-    │       │   ├── HomePage.jsx            # 首页（登录/注册）
-    │       │   ├── UserProfile.jsx         # 用户资料页
-    │       │   ├── CommunitySquare.jsx     # 社区广场
-    │       │   ├── PrivateSpace.jsx        # 个人空间
-    │       │   ├── TeamSpace.jsx           # 团队空间
-    │       │   ├── Notifications.jsx       # 消息通知
-    │       │   ├── UserManagement.jsx      # 用户管理
-    │       │   ├── AdminUserList.jsx       # 管理员用户列表
-    │       │   ├── SpaceManagement.jsx     # 空间管理
-    │       │   ├── TeamManagement.jsx      # 团队管理
-    │       │   ├── AIManagement.jsx        # AI素材管理
-    │       │   └── NotFound.jsx            # 404页面
-    │       ├── utils/                      # 工具函数
-    │       │   └── storage.js              # 本地存储工具
-    │       ├── App.jsx                     # 主应用组件（路由配置）
-    │       ├── main.jsx                    # 应用入口
-    │       └── index.css                   # 全局样式
-    │
-    └── FishPics-backend/                   # 后端项目 (Spring Boot)
-        └── src/
-            ├── main/
-            │   ├── java/hk/ljx/fishpicsbackend/
-            │   │   ├── FishPicsBackendApplication.java  # 启动类
-            │   │   ├── common/             # 公共组件
-            │   │   │   ├── annotation/     # 自定义注解
-            │   │   │   │   └── AuthCheck.java          # 权限检查注解
-            │   │   │   ├── aop/            # AOP切面
-            │   │   │   │   └── AuthInterceptor.java    # 权限拦截器
-            │   │   │   ├── config/         # 配置类
-            │   │   │   │   ├── CorsConfig.java         # 跨域配置
-            │   │   │   │   ├── JsonConfig.java         # JSON配置
-            │   │   │   │   └── MybatisPlusConfig.java  # MyBatis配置
-            │   │   │   ├── constants/      # 常量定义
-            │   │   │   │   ├── RedisConstants.java     # Redis键常量
-            │   │   │   │   └── UserConstants.java      # 用户常量
-            │   │   │   ├── exception/      # 异常处理
-            │   │   │   │   ├── BaseException.java      # 基础异常
-            │   │   │   │   ├── ExcUtils.java           # 异常工具
-            │   │   │   │   ├── ExceptionCode.java      # 异常码
-            │   │   │   │   └── GlobalExceptionHandler.java  # 全局异常处理
-            │   │   │   ├── response/       # 响应封装
-            │   │   │   │   ├── ResUtils.java           # 响应工具
-            │   │   │   │   └── Response.java           # 响应对象
-            │   │   │   └── utils/          # 工具类
-            │   │   │       └── JwtUtil.java            # JWT工具
-            │   │   ├── controller/         # 控制器
-            │   │   │   └── UserController.java         # 用户控制器
-            │   │   ├── dto/                # 数据传输对象
-            │   │   │   ├── base/           # 基础DTO
-            │   │   │   │   ├── DeleteById.java         # 删除请求
-            │   │   │   │   └── PageRequest.java        # 分页请求
-            │   │   │   └── user/           # 用户DTO
-            │   │   │       ├── UserEditByAdminRequest.java   # 管理员编辑请求
-            │   │   │       ├── UserEditRequest.java          # 用户编辑请求
-            │   │   │       ├── UserIdRequest.java            # 用户ID请求
-            │   │   │       ├── UserLoginRequest.java         # 登录请求
-            │   │   │       ├── UserQueryWrapper.java         # 用户查询条件
-            │   │   │       └── UserRequestRequest.java       # 注册请求
-            │   │   ├── entity/             # 实体类
-            │   │   │   ├── Comment.java                    # 评论实体
-            │   │   │   ├── Picture.java                    # 图片实体
-            │   │   │   ├── Post.java                       # 帖子实体
-            │   │   │   ├── User.java                       # 用户实体
-            │   │   │   ├── UserFans.java                   # 粉丝实体
-            │   │   │   ├── UserPostCollect.java            # 收藏实体
-            │   │   │   ├── UserPostLikes.java              # 点赞实体
-            │   │   │   └── userFollows.java                # 关注实体
-            │   │   ├── enums/              # 枚举类
-            │   │   │   └── UserRoleEnum.java               # 用户角色枚举
-            │   │   ├── mapper/             # 数据访问层
-            │   │   │   ├── CommentMapper.java              # 评论Mapper
-            │   │   │   ├── PictureMapper.java              # 图片Mapper
-            │   │   │   ├── PostMapper.java                 # 帖子Mapper
-            │   │   │   ├── UserFansMapper.java             # 粉丝Mapper
-            │   │   │   ├── UserFollowsMapper.java          # 关注Mapper
-            │   │   │   ├── UserMapper.java                 # 用户Mapper
-            │   │   │   ├── UserPostCollectMapper.java      # 收藏Mapper
-            │   │   │   └── UserPostLikesMapper.java        # 点赞Mapper
-            │   │   ├── service/            # 业务逻辑层
-            │   │   │   ├── impl/           # 服务实现
-            │   │   │   │   ├── CommentServiceImpl.java
-            │   │   │   │   ├── LikesUserByIdServiceImpl.java
-            │   │   │   │   ├── PictureServiceImpl.java
-            │   │   │   │   ├── PostServiceImpl.java
-            │   │   │   │   ├── UserFansServiceImpl.java
-            │   │   │   │   ├── UserPostCollectServiceImpl.java
-            │   │   │   │   ├── UserPostLikesServiceImpl.java
-            │   │   │   │   └── UserServiceImpl.java
-            │   │   │   ├── CommentService.java
-            │   │   │   ├── LikesUserByIdService.java
-            │   │   │   ├── PictureService.java
-            │   │   │   ├── PostService.java
-            │   │   │   ├── UserFansService.java
-            │   │   │   ├── UserPostCollectService.java
-            │   │   │   ├── UserPostLikesService.java
-            │   │   │   └── UserService.java
-            │   │   └── vo/                 # 视图对象
-            │   │       ├── post/           # 帖子VO
-            │   │       │   └── PostListVO.java           # 帖子列表VO
-            │   │       └── user/           # 用户VO
-            │   │           ├── CheckCodeVO.java          # 验证码VO
-            │   │           ├── UserLoginVO.java          # 登录返回VO
-            │   │           └── UserMessageVO.java        # 用户信息VO
-            │   └── resources/
-            │       ├── mapper/             # MyBatis XML映射文件
-            │       │   ├── CommentMapper.xml
-            │       │   ├── PictureMapper.xml
-            │       │   ├── PostMapper.xml
-            │       │   ├── UserFansMapper.xml
-            │       │   ├── UserFollowsMapper.xml
-            │       │   ├── UserMapper.xml
-            │       │   ├── UserPostCollectMapper.xml
-            │       │   └── UserPostLikesMapper.xml
-            │       └── application.yml     # 应用配置文件
-            ├── sql/
-            │   └── create.sql              # 数据库创建脚本
-            └── test/
-                └── java/
-                    └── FishPicsBackendApplicationTests.java  # 测试类
-        └── pom.xml                         # Maven依赖管理
+├── src/
+│   ├── FishPic-frontend/          # 前端项目 (React 19 + Vite)
+│   │   ├── public/                # 静态资源
+│   │   └── src/
+│   │       ├── api/               # API 请求封装
+│   │       ├── components/        # 公共组件
+│   │       ├── context/           # 状态管理
+│   │       ├── pages/             # 页面组件
+│   │       ├── utils/             # 工具函数
+│   │       ├── App.jsx            # 路由配置
+│   │       └── main.jsx           # 应用入口
+│   │
+│   └── FishPics-backend/          # 后端项目 (Spring Boot)
+│       └── src/
+│           ├── main/
+│           │   ├── java/          # Java 源码
+│           │   │   ├── common/    # 公共组件 (配置、异常、工具类)
+│           │   │   ├── controller/# 控制器
+│           │   │   ├── dto/       # 数据传输对象
+│           │   │   ├── entity/    # 实体类
+│           │   │   ├── mapper/    # 数据访问层
+│           │   │   ├── service/   # 业务逻辑层
+│           │   │   └── vo/        # 视图对象
+│           │   └── resources/     # 配置文件
+│           │       ├── mapper/    # MyBatis XML 映射
+│           │       └── application.yml
+│           └── sql/               # 数据库脚本
+└── doc/                           # 项目文档
 ```
 
 ---
@@ -303,10 +198,11 @@ AI.Image.Material.Collaboration.Platform/
 
 ### 后端启动
 
-1. 创建 MySQL 数据库，执行 `src/sql/create.sql` 脚本
-2. 配置 `src/main/resources/application.yml` 中的数据库和 Redis 连接信息
-3. 启动 SpringBoot 应用
-4. 访问 `http://localhost:8080/api` 查看 API 文档
+1. 创建 MySQL 数据库 `FishPics`，执行 `src/sql/create.sql` 脚本初始化表结构
+2. 修改 `src/main/resources/application.yml` 中的数据库和 Redis 连接信息
+3. 配置腾讯云 COS 信息（默认注释状态）
+4. 启动 Spring Boot 应用（运行 `FishPicsBackendApplication.java`）
+5. 访问 API 文档：`http://localhost:8080/api/doc.html`
 
 ### 前端启动
 
@@ -324,20 +220,6 @@ npm run dev
 
 ---
 
-## 效果预览
-
-- **首页**：登录/注册界面，带图形验证码
-- **社区广场**：公共内容浏览与互动
-- **个人空间**：我的发布、收藏、管理
-- **团队空间**：团队协作、共享素材
-- **消息通知**：系统消息与互动通知
-- **用户管理**：管理员后台，支持查询、编辑、封禁/解封
-- **空间管理**：后台空间管理功能
-- **团队管理**：后台团队管理功能
-- **AI 管理**：后台 AI 素材管理功能
-- **API 文档**：Knife4j 自动生成的接口文档
-
----
 
 ## 技术亮点
 
