@@ -1,0 +1,47 @@
+package hk.ljx.fishpicsbackend.dto.post;
+
+import com.baomidou.mybatisplus.annotation.TableField;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.io.Serializable;
+import java.util.List;
+
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+public class EditPostRequest implements Serializable {
+    /**
+     * 帖子 id
+     */
+    private Long id;
+
+    /**
+     * 关联的图片列表
+     */
+    private List<Long> imageId;
+
+    /**
+     * 标题
+     */
+    private String title;
+
+    /**
+     * 内容
+     */
+    private String content;
+
+    /**
+     * 封面图片的 id
+     */
+    private Long cover;
+
+    /**
+     * 0-公开，1-仅自己可见，
+     */
+    private Integer isPrivate;
+
+    @TableField(exist = false)
+    private static final long serialVersionUID = 1L;
+}

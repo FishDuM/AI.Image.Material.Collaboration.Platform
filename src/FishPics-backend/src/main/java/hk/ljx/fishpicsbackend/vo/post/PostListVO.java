@@ -4,9 +4,6 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.Date;
-import java.util.List;
-
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -17,9 +14,24 @@ public class PostListVO {
     private Long id;
 
     /**
-     * 关联用户表
+     * 关联用户
      */
     private Long userId;
+
+    /**
+     * 用户名
+     */
+    private String username;
+
+    /**
+     * 用户头像
+     */
+    private String avatar;
+
+    /**
+     * 点赞数
+     */
+    private Long likesNum;
 
     /**
      * 标题
@@ -27,22 +39,7 @@ public class PostListVO {
     private String title;
 
     /**
-     * 内容
+     * 封面图片的 url
      */
-    private String content;
-
-    /**
-     * 封面图片的 id
-     */
-    private Long cover;
-
-    /**
-     * 图片id数组
-     */
-    private List<Long> pictureIds;
-
-    /**
-     * 创建时间
-     */
-    private Date createTime;
+    private String url;
 }

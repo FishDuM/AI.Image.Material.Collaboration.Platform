@@ -36,4 +36,10 @@ public class ExcUtils {
             throw error(exceptionCode);
         }
     }
+
+    public static void throwIfFalse(Boolean flag, ExceptionCode exceptionCode, String message) {
+        if (!flag) {
+            throw error(exceptionCode, message);
+        }
+    }
 }

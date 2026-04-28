@@ -12,7 +12,7 @@ public class PageRequest {
     /**
      * 页面大小
      */
-    private int pageSize = 10;
+    private int pageSize = 20;
 
     /**
      * 排序字段
@@ -22,5 +22,5 @@ public class PageRequest {
     /**
      * 排序顺序（默认降序）
      */
-    private String sortOrder = "descend";
+    private String sortOrder = "desc";
 }

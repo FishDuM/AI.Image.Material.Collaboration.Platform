@@ -1,6 +1,8 @@
 .app-container {
   min-height: 100vh;
   background: var(--bg-primary);
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 .app-header {
@@ -13,6 +15,8 @@
 
 .app-main {
   min-height: calc(100vh - 73px);
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 .header-content {

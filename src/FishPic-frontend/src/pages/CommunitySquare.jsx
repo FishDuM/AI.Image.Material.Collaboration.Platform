@@ -1,12 +1,47 @@
-import { useState, useEffect, useRef } from 'react'
-import { App, Card, Typography, Empty, Button, Modal, Form, Input, Upload } from 'antd'
-import { PlusOutlined, SendOutlined, InboxOutlined } from '@ant-design/icons'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { App, Typography, Button, Modal, Form, Input, Upload, Switch, Select, Image as AntImage, Masonry, Empty, Spin } from 'antd'
+import { PlusOutlined, SendOutlined, InboxOutlined, LikeOutlined, SearchOutlined } from '@ant-design/icons'
 import api from '../api'
 import './CommunitySquare.css'
 
 const { Title } = Typography
 const { TextArea } = Input
 const { Dragger } = Upload
+
+function PostCard({ post }) {
+  return (
+    <div className="post-card">
+      {post.url ? (
+        <AntImage 
+          src={post.url} 
+          alt={post.title} 
+          className="post-card-image" 
+          preview={false}
+          style={{ objectFit: 'cover', borderRadius: '12px 12px 0 0', overflow: 'hidden' }}
+        />
+      ) : (
+        <div className="post-card-image-placeholder" />
+      )}
+      <div className="post-card-content">
+        <div className="post-card-title">{post.title}</div>
+        <div className="post-card-footer">
+          <div className="post-card-author">
+            {post.avatar ? (
+              <img src={post.avatar} alt={post.username} className="post-card-avatar" />
+            ) : (
+              <div className="post-card-avatar post-card-avatar-default">{post.username?.charAt(0)?.toUpperCase()}</div>
+            )}
+            <span className="post-card-username">{post.username}</span>
+          </div>
+          <div className="post-card-likes">
+            <LikeOutlined />
+            <span>{post.likesNum || 0}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function CommunitySquare() {
   const { message } = App.useApp()
@@ -18,17 +53,49 @@ function CommunitySquare() {
   const [uploadedImages, setUploadedImages] = useState([])
   const [pictureIds, setPictureIds] = useState([])
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
-  const carouselRef = useRef(null)
+  const [showUploadSlide, setShowUploadSlide] = useState(false)
+  const [postList, setPostList] = useState([])
+  const [masonryItems, setMasonryItems] = useState([])
+
+  const fetchPostList = useCallback(async () => {
+    setLoading(true)
+    try {
+      const result = await api.post('/post/postList', {
+        current: 1,
+        size: 20,
+      })
+      if (result && result.records) {
+        setPostList(result.records)
+        // 不设置固定高度，让Masonry根据实际内容自动计算
+        const items = result.records.map((post, index) => ({
+          key: post.id || index,
+          data: post,
+        }))
+        setMasonryItems(items)
+      }
+    } catch {
+      message.error('获取帖子列表失败')
+    } finally {
+      setLoading(false)
+    }
+  }, [message])
 
   useEffect(() => {
-    // 页面加载逻辑
-  }, [])
+    fetchPostList()
+  }, [fetchPostList])
+
+  useEffect(() => {
+    if (isModalOpen && pictureIds.length > 0 && !form.getFieldValue('cover')) {
+      form.setFieldValue('cover', pictureIds[0])
+    }
+  }, [form, pictureIds, isModalOpen])
 
   const handleCreatePost = () => {
     setModalStep(1)
     setUploadedImages([])
     setPictureIds([])
     setCurrentImageIndex(0)
+    setShowUploadSlide(false)
     setIsModalOpen(true)
   }
 
@@ -37,10 +104,8 @@ function CommunitySquare() {
     setUploadedImages([])
     setPictureIds([])
     setCurrentImageIndex(0)
+    setShowUploadSlide(false)
     setModalStep(1)
-    if (modalStep === 2) {
-      form.resetFields()
-    }
   }
 
   const handleImageUpload = async ({ file, onSuccess, onError }) => {
@@ -65,6 +130,10 @@ function CommunitySquare() {
       setUploadedImages(prev => [...prev, { uid: file.uid, name: file.name, status: 'done', url, pictureId }])
       setPictureIds(prev => [...prev, pictureId])
       setModalStep(2)
+      if (showUploadSlide) {
+        setCurrentImageIndex(prev => prev + 1)
+        setShowUploadSlide(false)
+      }
     } catch (error) {
       onError(error)
       message.error('上传失败')
@@ -84,6 +153,21 @@ function CommunitySquare() {
     if (currentImageIndex >= uploadedImages.length - 1) {
       setCurrentImageIndex(Math.max(0, uploadedImages.length - 2))
     }
+    setShowUploadSlide(false)
+  }
+
+  const handleNextImage = () => {
+    if (currentImageIndex === uploadedImages.length - 1 && uploadedImages.length < 15) {
+      setShowUploadSlide(true)
+    } else {
+      setCurrentImageIndex(prev => Math.min(uploadedImages.length - 1, prev + 1))
+      setShowUploadSlide(false)
+    }
+  }
+
+  const handlePrevImage = () => {
+    setShowUploadSlide(false)
+    setCurrentImageIndex(prev => Math.max(0, prev - 1))
   }
 
   const touchStartX = useRef(0)
@@ -101,10 +185,19 @@ function CommunitySquare() {
     const diff = touchStartX.current - touchEndX.current
     const threshold = 50
     if (Math.abs(diff) > threshold) {
-      if (diff > 0 && currentImageIndex < uploadedImages.length - 1) {
-        setCurrentImageIndex(prev => prev + 1)
-      } else if (diff < 0 && currentImageIndex > 0) {
-        setCurrentImageIndex(prev => prev - 1)
+      if (diff > 0) {
+        if (currentImageIndex === uploadedImages.length - 1 && uploadedImages.length < 15) {
+          setShowUploadSlide(true)
+        } else {
+          setCurrentImageIndex(prev => Math.min(uploadedImages.length - 1, prev + 1))
+          setShowUploadSlide(false)
+        }
+      } else if (diff < 0) {
+        if (showUploadSlide) {
+          setShowUploadSlide(false)
+        } else {
+          setCurrentImageIndex(prev => Math.max(0, prev - 1))
+        }
       }
     }
   }
@@ -112,14 +205,22 @@ function CommunitySquare() {
   const handleSubmit = async (values) => {
     setSubmitLoading(true)
     try {
-      console.log('提交发帖数据:', { ...values, pictureIds })
+      const submitData = {
+        imageId: pictureIds,
+        title: values.title,
+        content: values.content,
+        cover: values.cover || pictureIds[0] || null,
+        isPrivate: values.isPrivate ? 1 : 0
+      }
+      await api.post('/post/post', submitData)
       message.success('发布成功！')
-      setIsModalOpen(false)
       form.resetFields()
+      setIsModalOpen(false)
       setUploadedImages([])
       setPictureIds([])
       setModalStep(1)
-    } catch (error) {
+      fetchPostList()
+    } catch {
       message.error('发布失败，请重试')
     } finally {
       setSubmitLoading(false)
@@ -139,13 +240,23 @@ function CommunitySquare() {
   return (
     <main className="community-square-container">
       <div className="community-square-header">
-        <div className="header-left">
-          <Title level={2}>社区广场</Title>
-          <p className="header-subtitle">探索社区精彩内容和分享</p>
+        <div className="search-area">
+          <Input
+            placeholder="搜索帖子..."
+            prefix={<SearchOutlined />}
+            className="search-input"
+          />
+          <Button
+            type="primary"
+            icon={<SearchOutlined />}
+            className="search-button"
+          >
+            搜索
+          </Button>
         </div>
-        <Button 
-          type="primary" 
-          icon={<PlusOutlined />} 
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
           size="large"
           className="post-button"
           onClick={handleCreatePost}
@@ -154,11 +265,24 @@ function CommunitySquare() {
         </Button>
       </div>
 
-      <Card className="community-content-card" variant="borderless">
-        <div className="empty-state-wrapper">
-          <Empty description="功能开发中，敬请期待" />
+      {loading ? (
+        <div className="loading-wrapper">
+          <Spin size="large" />
         </div>
-      </Card>
+      ) : postList.length === 0 ? (
+        <div className="empty-state-wrapper">
+          <Empty description="暂无帖子，快来发布第一条吧" />
+        </div>
+      ) : (
+        <div className="masonry-wrapper">
+          <Masonry
+            columns={{ xs: 2, sm: 3, md: 4, lg: 5 }}
+            gutter={[12, 12]}
+            items={masonryItems}
+            itemRender={(item) => <PostCard post={item.data} />}
+          />
+        </div>
+      )}
 
       <Modal
         open={isModalOpen}
@@ -190,26 +314,7 @@ function CommunitySquare() {
                   onTouchMove={handleTouchMove}
                   onTouchEnd={handleTouchEnd}
                 >
-                  {currentImageIndex < uploadedImages.length ? (
-                    <>
-                      <img
-                        src={uploadedImages[currentImageIndex]?.url}
-                        alt={uploadedImages[currentImageIndex]?.name}
-                        className="carousel-main-image"
-                      />
-                      <button
-                        type="button"
-                        className="carousel-remove-btn"
-                        onClick={() => handleImageRemove(uploadedImages[currentImageIndex])}
-                      >
-                        <span role="img" aria-label="delete" className="anticon anticon-delete">
-                          <svg viewBox="64 64 896 896" focusable="false" data-icon="delete" width="1em" height="1em" fill="currentColor" aria-hidden="true">
-                            <path d="M360 184h-8c4.4 0 8-3.6 8-8v8h304v-8c0 4.4 3.6 8 8 8h-8v72h72v-80c0-35.3-28.7-64-64-64H352c-35.3 0-64 28.7-64 64v80h72v-72zm504 72H160c-17.7 0-32 14.3-32 32v32c0 4.4 3.6 8 8 8h60.4l24.7 523c1.6 34.1 29.8 61 63.9 61h454c34.2 0 62.3-26.8 63.9-61l24.7-523H888c4.4 0 8-3.6 8-8v-32c0-17.7-14.3-32-32-32zM731.3 840H292.7l-24.2-512h487l-24.2 512z"></path>
-                          </svg>
-                        </span>
-                      </button>
-                    </>
-                  ) : (
+                  {showUploadSlide && uploadedImages.length < 15 ? (
                     <Upload
                       listType="picture-card"
                       className="carousel-upload"
@@ -224,36 +329,68 @@ function CommunitySquare() {
                         <div className="upload-text">继续上传</div>
                       </button>
                     </Upload>
+                  ) : currentImageIndex < uploadedImages.length ? (
+                    <AntImage
+                      src={uploadedImages[currentImageIndex]?.url}
+                      alt={uploadedImages[currentImageIndex]?.name}
+                      className="carousel-main-image"
+                      preview={true}
+                      style={{ cursor: 'pointer', pointerEvents: 'none' }}
+                    />
+                  ) : null}
+                  {(currentImageIndex < uploadedImages.length || showUploadSlide) && (
+                    <>
+                      <button
+                        type="button"
+                        className="carousel-remove-btn"
+                        onClick={() => !showUploadSlide && handleImageRemove(uploadedImages[currentImageIndex])}
+                        style={{ display: showUploadSlide ? 'none' : 'flex' }}
+                      >
+                        <span role="img" aria-label="delete" className="anticon anticon-delete">
+                          <svg viewBox="64 64 896 896" focusable="false" data-icon="delete" width="1em"
+                            height="1em"
+                            fill="currentColor" aria-hidden="true">
+                            <path
+                              d="M360 184h-8c4.4 0 8-3.6 8-8v8h304v-8c0 4.4 3.6 8 8 8h-8v72h72v-80c0-35.3-28.7-64-64-64H352c-35.3 0-64 28.7-64 64v80h72v-72zm504 72H160c-17.7 0-32 14.3-32 32v32c0 4.4 3.6 8 8 8h60.4l24.7 523c1.6 34.1 29.8 61 63.9 61h454c34.2 0 62.3-26.8 63.9-61l24.7-523H888c4.4 0 8-3.6 8-8v-32c0-17.7-14.3-32-32-32zM731.3 840H292.7l-24.2-512h487l-24.2 512z"></path>
+                          </svg>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="carousel-arrow carousel-arrow-left"
+                        onClick={handlePrevImage}
+                        disabled={currentImageIndex === 0 && !showUploadSlide}
+                      >
+                        <span role="img" aria-label="left" className="anticon anticon-left">
+                          <svg viewBox="64 64 896 896" focusable="false" data-icon="left" width="1em"
+                            height="1em"
+                            fill="currentColor" aria-hidden="true">
+                            <path
+                              d="M724 218.3V141c0-6.7-7.7-10.4-12.9-6.3L260.3 486.8a31.86 31.86 0 000 50.3l450.8 352.1c5.3 4.1 12.9.4 12.9-6.3v-77.3c0-4.9-2.3-9.6-6.1-12.6l-360-281 360-281.1c3.8-3 6.1-7.7 6.1-12.6z"></path>
+                          </svg>
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className="carousel-arrow carousel-arrow-right"
+                        onClick={handleNextImage}
+                        disabled={uploadedImages.length >= 15 && !showUploadSlide}
+                        style={{ display: showUploadSlide ? 'none' : 'flex' }}
+                      >
+                        <span role="img" aria-label="right" className="anticon anticon-right">
+                          <svg viewBox="64 64 896 896" focusable="false" data-icon="right" width="1em"
+                            height="1em"
+                            fill="currentColor" aria-hidden="true">
+                            <path
+                              d="M765.7 486.8L314.9 134.7A7.97 7.97 0 00302 141v77.3c0 4.9 2.3 9.6 6.1 12.6l360 281.1-360 281.1c-3.9 3-6.1 7.7-6.1 12.6V883c0 6.7 7.7 10.4 12.9 6.3l450.8-352.1a31.96 31.96 0 000-50.4z"></path>
+                          </svg>
+                        </span>
+                      </button>
+                      <div className="carousel-counter" style={{ display: showUploadSlide ? 'none' : 'block' }}>
+                        {currentImageIndex + 1} / {uploadedImages.length}
+                      </div>
+                    </>
                   )}
-                  {currentImageIndex > 0 && (
-                    <button
-                      type="button"
-                      className="carousel-arrow carousel-arrow-left"
-                      onClick={() => setCurrentImageIndex(prev => prev - 1)}
-                    >
-                      <span role="img" aria-label="left" className="anticon anticon-left">
-                        <svg viewBox="64 64 896 896" focusable="false" data-icon="left" width="1em" height="1em" fill="currentColor" aria-hidden="true">
-                          <path d="M724 218.3V141c0-6.7-7.7-10.4-12.9-6.3L260.3 486.8a31.86 31.86 0 000 50.3l450.8 352.1c5.3 4.1 12.9.4 12.9-6.3v-77.3c0-4.9-2.3-9.6-6.1-12.6l-360-281 360-281.1c3.8-3 6.1-7.7 6.1-12.6z"></path>
-                        </svg>
-                      </span>
-                    </button>
-                  )}
-                  {currentImageIndex < uploadedImages.length && (
-                    <button
-                      type="button"
-                      className="carousel-arrow carousel-arrow-right"
-                      onClick={() => setCurrentImageIndex(prev => prev + 1)}
-                    >
-                      <span role="img" aria-label="right" className="anticon anticon-right">
-                        <svg viewBox="64 64 896 896" focusable="false" data-icon="right" width="1em" height="1em" fill="currentColor" aria-hidden="true">
-                          <path d="M765.7 486.8L314.9 134.7A7.97 7.97 0 00302 141v77.3c0 4.9 2.3 9.6 6.1 12.6l360 281.1-360 281.1c-3.9 3-6.1 7.7-6.1 12.6V883c0 6.7 7.7 10.4 12.9 6.3l450.8-352.1a31.96 31.96 0 000-50.4z"></path>
-                        </svg>
-                      </span>
-                    </button>
-                  )}
-                  <div className="carousel-counter">
-                    {currentImageIndex + 1} / {uploadedImages.length + 1}
-                  </div>
                 </div>
               ) : (
                 <Upload
@@ -281,18 +418,16 @@ function CommunitySquare() {
                 className="post-form"
               >
                 <Form.Item
-                  label="标题"
                   name="title"
                   rules={[
                     { required: true, message: '请输入标题' },
                     { max: 50, message: '标题最多50个字' }
                   ]}
                 >
-                  <Input placeholder="填写标题会有更多赞哦~" size="large" />
+                  <Input placeholder="给帖子起个吸引人的标题吧~" size="large" />
                 </Form.Item>
 
                 <Form.Item
-                  label="正文"
                   name="content"
                   rules={[
                     { required: true, message: '请输入正文' },
@@ -300,12 +435,37 @@ function CommunitySquare() {
                   ]}
                 >
                   <TextArea
-                    placeholder="分享你的生活瞬间..."
+                    placeholder="写下你的精彩故事，分享生活的每个瞬间..."
                     autoSize={{ minRows: 10, maxRows: 12 }}
                     maxLength={5000}
                     showCount
                   />
                 </Form.Item>
+
+                <div className="form-row">
+                  <Form.Item label="帖子封面" name="cover" initialValue={pictureIds[0] || null} layout="horizontal"
+                    style={{ marginBottom: 0 }}>
+                    <Select
+                      placeholder="选择帖子封面"
+                      disabled={pictureIds.length === 0}
+                      onChange={(value) => {
+                        form.setFieldValue('cover', value)
+                      }}
+                    >
+                      {uploadedImages.map((img, index) => (
+                        <Select.Option key={img.pictureId} value={img.pictureId}>
+                          图片 {index + 1}
+                        </Select.Option>
+                      ))}
+                    </Select>
+                  </Form.Item>
+
+                  <Form.Item name="isPrivate" valuePropName="checked" initialValue={true}>
+                    <div className="privacy-toggle">
+                      <Switch checkedChildren="私密" unCheckedChildren="公开" defaultChecked />
+                    </div>
+                  </Form.Item>
+                </div>
 
                 <div className="modal-submit-buttons">
                   <Button size="large" onClick={handleCancel}>
@@ -327,8 +487,8 @@ function CommunitySquare() {
           </div>
         )}
       </Modal>
-      </main>
-    )
-  }
+    </main>
+  )
+}
 
-  export default CommunitySquare
+export default CommunitySquare
