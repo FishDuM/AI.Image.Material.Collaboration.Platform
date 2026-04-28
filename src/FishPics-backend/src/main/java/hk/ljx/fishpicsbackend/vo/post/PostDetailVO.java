@@ -4,7 +4,6 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
@@ -21,6 +20,16 @@ public class PostDetailVO {
      * 关联用户表
      */
     private Long userId;
+
+    /**
+     * 用户名称
+     */
+    private String username;
+
+    /**
+     * 用户头像
+     */
+    private String avatar;
 
     /**
      * 标题
@@ -53,7 +62,7 @@ public class PostDetailVO {
     private Integer commentNum;
 
     /**
-     * 图片 id 列表
+     * 图片 url 列表
      */
-    private List<Long> pictureId;
+    private List<String> pictureUrl;
 }

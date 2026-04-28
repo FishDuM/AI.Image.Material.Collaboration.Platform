@@ -55,7 +55,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
     @Resource
     private PictureService pictureService;
-    @Autowired
+
+    @Resource
     private UserMapper userMapper;
 
     @Override
@@ -101,11 +102,17 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         BeanUtil.copyProperties(post, postDetailVO);
         // 获取图片列表
         List<Picture> pictures = pictureMapper.selectList(new QueryWrapper<Picture>().eq("post_id", id));
-        ArrayList<Long> pictureIds = new ArrayList<>();
+        ArrayList<String> pictureUrls = new ArrayList<>();
         for (Picture picture : pictures) {
-            pictureIds.add(picture.getId());
+            pictureUrls.add(picture.getUrl());
         }
-        postDetailVO.setPictureId(pictureIds);
+        // 获取发帖者信息
+        User user = userMapper.selectById(post.getUserId());
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user) || user.getId() == null, ExceptionCode.NOT_FOUND, "用户不存在");
+        postDetailVO.setAvatar(user.getAvatar());
+        postDetailVO.setUsername(user.getUsername());
+
+        postDetailVO.setPictureUrl(pictureUrls);
         return postDetailVO;
     }
 

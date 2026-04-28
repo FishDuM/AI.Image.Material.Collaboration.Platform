@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { App, Typography, Button, Modal, Form, Input, Upload, Switch, Select, Image as AntImage, Masonry, Empty, Spin } from 'antd'
-import { PlusOutlined, SendOutlined, InboxOutlined, LikeOutlined, SearchOutlined } from '@ant-design/icons'
+import { PlusOutlined, SendOutlined, InboxOutlined, LikeOutlined, SearchOutlined, HeartOutlined, StarOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons'
 import api from '../api'
 import './CommunitySquare.css'
 
@@ -8,9 +8,9 @@ const { Title } = Typography
 const { TextArea } = Input
 const { Dragger } = Upload
 
-function PostCard({ post }) {
+function PostCard({ post, onClick }) {
   return (
-    <div className="post-card">
+    <div className="post-card" onClick={() => onClick(post)}>
       {post.url ? (
         <AntImage 
           src={post.url} 
@@ -56,6 +56,33 @@ function CommunitySquare() {
   const [showUploadSlide, setShowUploadSlide] = useState(false)
   const [postList, setPostList] = useState([])
   const [masonryItems, setMasonryItems] = useState([])
+  const [postDetailModalOpen, setPostDetailModalOpen] = useState(false)
+  const [postDetail, setPostDetail] = useState(null)
+  const [postDetailLoading, setPostDetailLoading] = useState(false)
+  const [detailImageIndex, setDetailImageIndex] = useState(0)
+
+  const formatRelativeTime = (timeString) => {
+    if (!timeString) return ''
+    const now = new Date()
+    const updateTime = new Date(timeString)
+    const diffMs = now - updateTime
+    const diffSeconds = Math.floor(diffMs / 1000)
+    const diffMinutes = Math.floor(diffSeconds / 60)
+    const diffHours = Math.floor(diffMinutes / 60)
+    const diffDays = Math.floor(diffHours / 24)
+
+    if (diffDays >= 7) {
+      return updateTime.toLocaleString('zh-CN')
+    } else if (diffDays >= 1) {
+      return `${diffDays}天前`
+    } else if (diffHours >= 1) {
+      return `${diffHours}小时前`
+    } else if (diffMinutes >= 1) {
+      return `${diffMinutes}分钟前`
+    } else {
+      return '刚刚'
+    }
+  }
 
   const fetchPostList = useCallback(async () => {
     setLoading(true)
@@ -79,6 +106,46 @@ function CommunitySquare() {
       setLoading(false)
     }
   }, [message])
+
+  const fetchPostDetail = useCallback(async (postId) => {
+    setPostDetailLoading(true)
+    setDetailImageIndex(0)
+    try {
+      const result = await api.get('/post/getPost', { params: { id: postId } })
+      if (result) {
+        setPostDetail(result)
+        setPostDetailModalOpen(true)
+      }
+    } catch {
+      message.error('获取帖子详情失败')
+    } finally {
+      setPostDetailLoading(false)
+    }
+  }, [message])
+
+  const handlePostClick = useCallback((post) => {
+    fetchPostDetail(post.id)
+  }, [fetchPostDetail])
+
+  const handlePostDetailClose = () => {
+    setPostDetailModalOpen(false)
+    setPostDetail(null)
+    setDetailImageIndex(0)
+  }
+
+  const handlePostDetailPrevImage = () => {
+    if (postDetail && postDetail.pictureUrl && postDetail.pictureUrl.length > 0) {
+      const validPics = (postDetail.pictureUrl || []).filter(url => url && url.trim())
+      setDetailImageIndex(prev => Math.max(0, prev - 1))
+    }
+  }
+
+  const handlePostDetailNextImage = () => {
+    if (postDetail && postDetail.pictureUrl && postDetail.pictureUrl.length > 0) {
+      const validPics = (postDetail.pictureUrl || []).filter(url => url && url.trim())
+      setDetailImageIndex(prev => Math.min(validPics.length - 1, prev + 1))
+    }
+  }
 
   useEffect(() => {
     fetchPostList()
@@ -279,10 +346,103 @@ function CommunitySquare() {
             columns={{ xs: 2, sm: 3, md: 4, lg: 5 }}
             gutter={[12, 12]}
             items={masonryItems}
-            itemRender={(item) => <PostCard post={item.data} />}
+            itemRender={(item) => <PostCard post={item.data} onClick={handlePostClick} />}
           />
         </div>
       )}
+
+      <Modal
+        open={postDetailModalOpen}
+        onCancel={handlePostDetailClose}
+        footer={null}
+        className="post-detail-modal"
+        width={1000}
+        centered
+      >
+        {postDetailLoading ? (
+          <div className="loading-wrapper">
+            <Spin size="large" />
+          </div>
+        ) : postDetail ? (
+          <div className="xiaohongshu-layout post-detail-layout">
+            <div className="left-image-area post-detail-image-area">
+              {(() => {
+                const validPics = (postDetail.pictureUrl || []).filter(url => url && url.trim())
+                return validPics.length > 0 ? (
+                  <div className="carousel-main post-detail-carousel">
+                    <AntImage
+                      src={validPics[detailImageIndex]}
+                      alt={postDetail.title}
+                      className="carousel-main-image post-detail-main-image"
+                      preview={false}
+                    />
+                    {validPics.length > 1 && (
+                      <>
+                        <button
+                          type="button"
+                          className="carousel-arrow carousel-arrow-left"
+                          onClick={handlePostDetailPrevImage}
+                          disabled={detailImageIndex === 0}
+                        >
+                          <LeftOutlined />
+                        </button>
+                        <button
+                          type="button"
+                          className="carousel-arrow carousel-arrow-right"
+                          onClick={handlePostDetailNextImage}
+                          disabled={detailImageIndex === validPics.length - 1}
+                        >
+                          <RightOutlined />
+                        </button>
+                        <div className="carousel-counter">
+                          {detailImageIndex + 1} / {validPics.length}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className="no-image-placeholder">
+                    <Empty description="暂无图片" />
+                  </div>
+                )
+              })()}
+            </div>
+            <div className="right-form-area post-detail-content-area">
+              <div className="post-detail-header">
+                <div className="post-detail-user-info">
+                  {postDetail.avatar ? (
+                    <img src={postDetail.avatar} alt={postDetail.username} className="post-detail-avatar" />
+                  ) : (
+                    <div className="post-detail-avatar post-detail-avatar-default">
+                      {postDetail.username?.charAt(0)?.toUpperCase()}
+                    </div>
+                  )}
+                  <span className="post-detail-username">{postDetail.username}</span>
+                </div>
+              </div>
+              <div className="post-detail-title">{postDetail.title}</div>
+              <div className="post-detail-content">{postDetail.content}</div>
+              <div className="post-detail-stats">
+                <div className="post-detail-stat-item">
+                  <LikeOutlined />
+                  <span>{postDetail.likesNum || 0}</span>
+                </div>
+                <div className="post-detail-stat-item">
+                  <HeartOutlined />
+                  <span>{postDetail.collectsNum || 0}</span>
+                </div>
+                <div className="post-detail-stat-item">
+                  <StarOutlined />
+                  <span>{postDetail.commentNum || 0}</span>
+                </div>
+              </div>
+              <div className="post-detail-time">
+                {postDetail.updateTime ? formatRelativeTime(postDetail.updateTime) : ''}
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
 
       <Modal
         open={isModalOpen}

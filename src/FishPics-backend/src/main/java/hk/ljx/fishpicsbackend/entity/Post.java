@@ -1,14 +1,14 @@
 package hk.ljx.fishpicsbackend.entity;
 
-import com.baomidou.mybatisplus.annotation.*;
-
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import java.io.Serializable;
 import java.util.Date;
 
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
 /**
  * 帖子表
@@ -16,18 +16,16 @@ import lombok.NoArgsConstructor;
  */
 @TableName(value ="post")
 @Data
-@AllArgsConstructor
-@NoArgsConstructor
 @Builder
 public class Post implements Serializable {
     /**
      * 主键
      */
-    @TableId(type = IdType.ASSIGN_ID)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
     /**
-     * 关联用户
+     * 关联发帖用户
      */
     private Long userId;
 
@@ -57,9 +55,8 @@ public class Post implements Serializable {
     private Date updateTime;
 
     /**
-     * 是否删除
+     * 
      */
-    @TableLogic
     private Integer isDelete;
 
     /**
@@ -86,6 +83,11 @@ public class Post implements Serializable {
      * 封面图片的id
      */
     private Long cover;
+
+    /**
+     * 查看数
+     */
+    private Long viewsNum;
 
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;
