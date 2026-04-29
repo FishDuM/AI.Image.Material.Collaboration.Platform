@@ -13,6 +13,7 @@ import hk.ljx.fishpicsbackend.service.CosService;
 import hk.ljx.fishpicsbackend.service.PictureService;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.service.UserService;
+import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
 import hk.ljx.fishpicsbackend.vo.picture.PicturePostVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -93,6 +94,11 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         // 一次性批量更新
         int update = pictureMapper.update(picture, wrapper);
         ExcUtils.throwIfTrue(update != imageId.size(), "更新失败，数据库错误");
+    }
+
+    @Override
+    public List<PictureListVO> getPictureList() {
+        return List.of();
     }
 }
 

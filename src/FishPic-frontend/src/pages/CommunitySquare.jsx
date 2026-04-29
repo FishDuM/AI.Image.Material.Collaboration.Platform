@@ -1,12 +1,15 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useContext } from 'react'
 import { App, Typography, Button, Modal, Form, Input, Upload, Switch, Select, Image as AntImage, Masonry, Empty, Spin } from 'antd'
 import { PlusOutlined, SendOutlined, InboxOutlined, LikeOutlined, SearchOutlined, HeartOutlined, StarOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons'
 import api from '../api'
+import { AuthContext } from '../context/AuthContext'
 import './CommunitySquare.css'
 
 const { Title } = Typography
 const { TextArea } = Input
 const { Dragger } = Upload
+
+const CHINESE_NUMS = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二', '十三', '十四', '十五']
 
 function PostCard({ post, onClick }) {
   return (
@@ -45,13 +48,14 @@ function PostCard({ post, onClick }) {
 
 function CommunitySquare() {
   const { message } = App.useApp()
+  const { userInfo } = useContext(AuthContext)
   const [loading, setLoading] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [submitLoading, setSubmitLoading] = useState(false)
   const [form] = Form.useForm()
   const [modalStep, setModalStep] = useState(1)
   const [uploadedImages, setUploadedImages] = useState([])
-  const [pictureIds, setPictureIds] = useState([])
+  const [imageId, setImageId] = useState([])
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [showUploadSlide, setShowUploadSlide] = useState(false)
   const [postList, setPostList] = useState([])
@@ -60,6 +64,10 @@ function CommunitySquare() {
   const [postDetail, setPostDetail] = useState(null)
   const [postDetailLoading, setPostDetailLoading] = useState(false)
   const [detailImageIndex, setDetailImageIndex] = useState(0)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editingPostId, setEditingPostId] = useState(null)
+  const [categoryList, setCategoryList] = useState([])
+  const [selectedCategory, setSelectedCategory] = useState(null)
 
   const formatRelativeTime = (timeString) => {
     if (!timeString) return ''
@@ -147,20 +155,77 @@ function CommunitySquare() {
     }
   }
 
+  const handleEditPost = () => {
+    if (!postDetail) return
+    setPostDetailModalOpen(false)
+    setIsEditing(true)
+    setEditingPostId(postDetail.id)
+    const existingPics = (postDetail.pictureUrl || []).filter(url => url && url.trim())
+    const existingImages = existingPics.map((url, index) => ({
+      uid: `existing-${index}`,
+      name: `image-${index}`,
+      status: 'done',
+      url,
+      pictureId: null,
+    }))
+    setUploadedImages(existingImages)
+    setImageId([])
+    setCurrentImageIndex(0)
+    setShowUploadSlide(false)
+    setModalStep(2)
+    setIsModalOpen(true)
+  }
+
   useEffect(() => {
     fetchPostList()
   }, [fetchPostList])
 
   useEffect(() => {
-    if (isModalOpen && pictureIds.length > 0 && !form.getFieldValue('cover')) {
-      form.setFieldValue('cover', pictureIds[0])
+    if (isModalOpen && isEditing && postDetail) {
+      form.setFieldsValue({
+        title: postDetail.title || '',
+        content: postDetail.content || '',
+      })
     }
-  }, [form, pictureIds, isModalOpen])
+  }, [isModalOpen, isEditing, postDetail, form])
+
+  useEffect(() => {
+    const fetchCategoryList = async () => {
+      try {
+        const result = await api.get('/system/list')
+        if (Array.isArray(result)) {
+          setCategoryList(result)
+          if (result.length > 0) {
+            setSelectedCategory(result[0])
+          }
+        }
+      } catch {
+      }
+    }
+    fetchCategoryList()
+  }, [])
+
+  useEffect(() => {
+    let lastScrollY = window.scrollY
+    const handleScroll = () => {
+      const header = document.querySelector('.app-header')
+      if (!header) return
+      const currentScrollY = window.scrollY
+      if (currentScrollY > lastScrollY && currentScrollY > 80) {
+        header.classList.add('header-hidden')
+      } else if (currentScrollY < lastScrollY) {
+        header.classList.remove('header-hidden')
+      }
+      lastScrollY = currentScrollY
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
 
   const handleCreatePost = () => {
     setModalStep(1)
     setUploadedImages([])
-    setPictureIds([])
+    setImageId([])
     setCurrentImageIndex(0)
     setShowUploadSlide(false)
     setIsModalOpen(true)
@@ -169,10 +234,12 @@ function CommunitySquare() {
   const handleCancel = () => {
     setIsModalOpen(false)
     setUploadedImages([])
-    setPictureIds([])
+    setImageId([])
     setCurrentImageIndex(0)
     setShowUploadSlide(false)
     setModalStep(1)
+    setIsEditing(false)
+    setEditingPostId(null)
   }
 
   const ALLOWED_IMAGE_TYPES = [
@@ -197,7 +264,7 @@ function CommunitySquare() {
   }
 
   const handleImageUpload = async ({ file, onSuccess, onError }) => {
-    if (pictureIds.length >= 15) {
+    if (imageId.length >= 15) {
       message.error('最多只能上传15张图片')
       onError(new Error('超过图片数量限制'))
       return
@@ -216,7 +283,7 @@ function CommunitySquare() {
       message.success('上传成功')
 
       setUploadedImages(prev => [...prev, { uid: file.uid, name: file.name, status: 'done', url, pictureId }])
-      setPictureIds(prev => [...prev, pictureId])
+      setImageId(prev => [...prev, pictureId])
       setModalStep(2)
       if (showUploadSlide) {
         setCurrentImageIndex(prev => prev + 1)
@@ -233,10 +300,11 @@ function CommunitySquare() {
   }
 
   const handleImageRemove = (file) => {
+    if (isEditing && !file.pictureId) return false
     setUploadedImages(prev => prev.filter(img => img.uid !== file.uid))
     const removedPicture = uploadedImages.find(img => img.uid === file.uid)
     if (removedPicture) {
-      setPictureIds(prev => prev.filter(id => id !== removedPicture.pictureId))
+      setImageId(prev => prev.filter(id => id !== removedPicture.pictureId))
     }
     if (currentImageIndex >= uploadedImages.length - 1) {
       setCurrentImageIndex(Math.max(0, uploadedImages.length - 2))
@@ -293,23 +361,45 @@ function CommunitySquare() {
   const handleSubmit = async (values) => {
     setSubmitLoading(true)
     try {
-      const submitData = {
-        imageId: pictureIds,
-        title: values.title,
-        content: values.content,
-        cover: values.cover || pictureIds[0] || null,
-        isPrivate: values.isPrivate ? 1 : 0
+      if (isEditing) {
+        const editData = {
+          id: editingPostId,
+          title: values.title,
+          content: values.content,
+          isPrivate: values.isPrivate ? 1 : 0,
+        }
+        const coverIndex = values.coverIndex ?? 0
+        const selectedImage = uploadedImages[coverIndex]
+        if (selectedImage?.pictureId) {
+          editData.cover = selectedImage.pictureId
+        }
+        if (imageId.length > 0) {
+          editData.imageId = imageId
+        }
+        await api.post('/post/editPost', editData)
+        message.success('编辑成功！')
+      } else {
+        const coverIndex = values.coverIndex ?? 0
+        const submitData = {
+          imageId: imageId,
+          title: values.title,
+          content: values.content,
+          cover: imageId[coverIndex] || imageId[0] || null,
+          isPrivate: values.isPrivate ? 1 : 0
+        }
+        await api.post('/post/post', submitData)
+        message.success('发布成功！')
       }
-      await api.post('/post/post', submitData)
-      message.success('发布成功！')
       form.resetFields()
       setIsModalOpen(false)
       setUploadedImages([])
-      setPictureIds([])
+      setImageId([])
       setModalStep(1)
+      setIsEditing(false)
+      setEditingPostId(null)
       fetchPostList()
     } catch {
-      message.error('发布失败，请重试')
+      message.error(isEditing ? '编辑失败，请重试' : '发布失败，请重试')
     } finally {
       setSubmitLoading(false)
     }
@@ -355,6 +445,20 @@ function CommunitySquare() {
         </Button>
       </div>
 
+      {categoryList.length > 0 && (
+        <div className="category-bar">
+          {categoryList.map((cat) => (
+            <span
+              key={cat}
+              className={`category-tag ${selectedCategory === cat ? 'category-tag-active' : ''}`}
+              onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
+            >
+              {cat}
+            </span>
+          ))}
+        </div>
+      )}
+
       {loading ? (
         <div className="loading-wrapper">
           <Spin size="large" />
@@ -379,25 +483,25 @@ function CommunitySquare() {
         onCancel={handlePostDetailClose}
         footer={null}
         className="post-detail-modal"
-        width={1000}
-        centered
+        width={900}
+        closable={false}
       >
         {postDetailLoading ? (
           <div className="loading-wrapper">
             <Spin size="large" />
           </div>
         ) : postDetail ? (
-          <div className="xiaohongshu-layout post-detail-layout">
-            <div className="left-image-area post-detail-image-area">
+          <div className="xiaohongshu-layout">
+            <div className="left-image-area">
               {(() => {
                 const validPics = (postDetail.pictureUrl || []).filter(url => url && url.trim())
                 return validPics.length > 0 ? (
-                  <div className="carousel-main post-detail-carousel">
+                  <div className="carousel-main">
                     <AntImage
                       src={validPics[detailImageIndex]}
                       alt={postDetail.title}
-                      className="carousel-main-image post-detail-main-image"
-                      preview={false}
+                      className="carousel-main-image"
+                      preview={true}
                     />
                     {validPics.length > 1 && (
                       <>
@@ -430,7 +534,7 @@ function CommunitySquare() {
                 )
               })()}
             </div>
-            <div className="right-form-area post-detail-content-area">
+            <div className="right-form-area">
               <div className="post-detail-header">
                 <div className="post-detail-user-info">
                   {postDetail.avatar ? (
@@ -442,9 +546,17 @@ function CommunitySquare() {
                   )}
                   <span className="post-detail-username">{postDetail.username}</span>
                 </div>
+                {userInfo?.username === postDetail.username ? (
+                  <button type="button" className="edit-btn" onClick={handleEditPost}>编辑</button>
+                ) : (
+                  <button type="button" className="follow-btn">关注</button>
+                )}
               </div>
               <div className="post-detail-title">{postDetail.title}</div>
               <div className="post-detail-content">{postDetail.content}</div>
+              <span className="post-detail-time">
+                {postDetail.updateTime ? `编辑于 ${formatRelativeTime(postDetail.updateTime)}` : ''}
+              </span>
               <div className="post-detail-stats">
                 <div className="post-detail-stat-item">
                   <LikeOutlined />
@@ -458,9 +570,6 @@ function CommunitySquare() {
                   <StarOutlined />
                   <span>{postDetail.commentNum || 0}</span>
                 </div>
-              </div>
-              <div className="post-detail-time">
-                {postDetail.updateTime ? formatRelativeTime(postDetail.updateTime) : ''}
               </div>
             </div>
           </div>
@@ -520,16 +629,15 @@ function CommunitySquare() {
                       alt={uploadedImages[currentImageIndex]?.name}
                       className="carousel-main-image"
                       preview={true}
-                      style={{ cursor: 'pointer', pointerEvents: 'none' }}
-                    />
-                  ) : null}
+                      />
+                    ) : null}
                   {(currentImageIndex < uploadedImages.length || showUploadSlide) && (
                     <>
                       <button
                         type="button"
                         className="carousel-remove-btn"
                         onClick={() => !showUploadSlide && handleImageRemove(uploadedImages[currentImageIndex])}
-                        style={{ display: showUploadSlide ? 'none' : 'flex' }}
+                        style={{ display: showUploadSlide ? 'none' : (isEditing && !uploadedImages[currentImageIndex]?.pictureId) ? 'none' : 'flex' }}
                       >
                         <span role="img" aria-label="delete" className="anticon anticon-delete">
                           <svg viewBox="64 64 896 896" focusable="false" data-icon="delete" width="1em"
@@ -630,18 +738,15 @@ function CommunitySquare() {
                 </Form.Item>
 
                 <div className="form-row">
-                  <Form.Item label="帖子封面" name="cover" initialValue={pictureIds[0] || null} layout="horizontal"
+                  <Form.Item label="帖子封面" name="coverIndex" initialValue={0} layout="horizontal"
                     style={{ marginBottom: 0 }}>
                     <Select
                       placeholder="选择帖子封面"
-                      disabled={pictureIds.length === 0}
-                      onChange={(value) => {
-                        form.setFieldValue('cover', value)
-                      }}
+                      disabled={uploadedImages.length === 0}
                     >
                       {uploadedImages.map((img, index) => (
-                        <Select.Option key={img.pictureId} value={img.pictureId}>
-                          图片 {index + 1}
+                        <Select.Option key={index} value={index}>
+                          图片{CHINESE_NUMS[index] || index + 1}
                         </Select.Option>
                       ))}
                     </Select>
@@ -666,7 +771,7 @@ function CommunitySquare() {
                     loading={submitLoading}
                     className="modal-submit-button"
                   >
-                    发布
+                    {isEditing ? '保存' : '发布'}
                   </Button>
                 </div>
               </Form>

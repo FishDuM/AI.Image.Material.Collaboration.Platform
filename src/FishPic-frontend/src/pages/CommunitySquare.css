@@ -13,6 +13,7 @@
   overflow: hidden;
   max-width: 100%;
   position: relative;
+  margin-top: 20px;
 }
 
 .masonry-wrapper > .ant-masonry {
@@ -56,12 +57,17 @@
 }
 
 .community-square-header {
-  margin-bottom: 24px;
+  margin-bottom: 0;
   text-align: center;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 101;
+  background: var(--bg-primary);
+  padding: 16px 0;
 }
 
 .search-area {
@@ -81,6 +87,52 @@
 
 .search-button {
   border-radius: var(--radius-md);
+}
+
+.category-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0;
+  margin-bottom: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  position: sticky;
+  top: 60px;
+  z-index: 101;
+  background: var(--bg-primary);
+}
+
+.category-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.category-tag {
+  flex-shrink: 0;
+  padding: 6px 16px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.category-tag:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.category-tag-active {
+  color: #fff;
+  background: var(--accent);
+}
+
+.category-tag-active:hover {
+  color: #fff;
+  background: var(--accent-hover);
 }
 
 .header-left {
@@ -209,7 +261,8 @@
 }
 
 .left-image-area {
-  flex: 0 0 auto !important;
+  flex: 0 0 55% !important;
+  max-width: 55% !important;
   background: #000;
   display: flex;
   align-items: stretch;
@@ -264,6 +317,15 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
+  cursor: pointer;
+}
+
+.left-image-area .ant-image .ant-image-mask {
+  opacity: 0;
+}
+
+.left-image-area .ant-image:hover .ant-image-mask {
+  opacity: 0;
 }
 
 .left-image-area .carousel-upload {
@@ -478,21 +540,18 @@
   left: 0;
   width: 100%;
   height: 100%;
-  pointer-events: none !important;
   z-index: 1;
 }
 
-.carousel-main .ant-image-cover,
 .carousel-main .ant-image-mask {
-  pointer-events: none !important;
+  z-index: 1;
 }
 
 .carousel-main-image {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
-  pointer-events: none !important;
 }
 
 .carousel-arrow {
@@ -530,8 +589,12 @@
 }
 
 .carousel-arrow:disabled {
-  opacity: 0.3 !important;
+  opacity: 0;
   cursor: not-allowed;
+}
+
+.carousel-main:hover .carousel-arrow:disabled {
+  opacity: 0.3 !important;
 }
 
 .carousel-remove-btn {
@@ -723,18 +786,85 @@
 }
 
 @media (max-width: 768px) {
+  .community-square-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .search-area {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .post-button {
+    width: 100%;
+  }
+
+  .create-post-modal {
+    max-width: 100vw !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .create-post-modal .ant-modal {
+    max-width: 100vw;
+    top: 0;
+    padding: 0;
+    margin: 0;
+  }
+
+  .create-post-modal .ant-modal-container {
+    height: auto;
+    max-height: 100vh;
+    border-radius: 0 !important;
+  }
+
+  .create-post-modal .ant-modal-content {
+    overflow-y: auto;
+    border-radius: 0 !important;
+    max-height: 100vh;
+  }
+
+  .create-post-modal .ant-modal-body {
+    padding: 0 !important;
+    max-height: 100vh;
+    overflow-y: auto;
+  }
+
+  .upload-step {
+    padding: 20px 16px;
+  }
+
+  .upload-hint-text {
+    font-size: 14px;
+    margin-bottom: 16px;
+    padding: 8px 16px;
+    width: 100%;
+  }
+
+  .image-dragger {
+    min-height: 200px !important;
+  }
+
+  .image-dragger .ant-upload-btn {
+    min-height: 200px !important;
+    width: 100% !important;
+  }
+
   .xiaohongshu-layout {
     flex-direction: column;
-    padding: 12px;
+    padding: 0;
+    height: auto;
+    max-height: none;
   }
 
   .left-image-area {
-    flex: none;
-    height: auto !important;
+    flex: none !important;
+    max-width: 100% !important;
+    height: 50vh;
+    max-height: 50vh;
     border-radius: 0 !important;
-    border-top-left-radius: var(--radius-md) !important;
-    border-top-right-radius: var(--radius-md) !important;
-    aspect-ratio: 3 / 4;
+    border-bottom: 1px solid var(--border-color);
   }
 
   .left-image-area .carousel-main {
@@ -742,7 +872,6 @@
     height: 100%;
     min-height: auto;
     max-height: none;
-    aspect-ratio: 3 / 4;
   }
 
   .left-image-area .carousel-main-image {
@@ -753,31 +882,109 @@
 
   .left-image-area .carousel-arrow {
     opacity: 1;
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
   }
 
   .left-image-area .carousel-remove-btn {
     opacity: 1;
+    width: 32px;
+    height: 32px;
+    top: 8px;
+    right: 8px;
+  }
+
+  .carousel-counter {
+    opacity: 1;
+    font-size: 11px;
+    padding: 3px 10px;
   }
 
   .right-form-area {
     padding: 16px;
+    gap: 12px;
+    border-radius: 0 !important;
   }
 
-  .create-post-modal .ant-modal-container {
-    height: auto;
-    max-height: 90vh;
+  .post-form {
+    gap: 12px;
   }
 
-  .create-post-modal .ant-modal-content {
-    overflow-y: auto;
+  .post-form .ant-form-item {
+    margin-bottom: 0;
+  }
+
+  .post-form #title {
+    margin-top: 0 !important;
+    font-size: 14px;
+  }
+
+  .post-form #content {
+    height: 180px !important;
+    min-height: 150px !important;
+    max-height: 200px !important;
+    font-size: 14px;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .form-row > .ant-form-item:first-child {
+    width: 100%;
+  }
+
+  .form-row > .ant-form-item:last-child {
+    margin-left: 0;
+    align-self: flex-start;
+  }
+
+  .privacy-toggle {
+    padding: 4px 0;
+  }
+
+  .modal-submit-buttons {
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+  }
+
+  .modal-submit-buttons .ant-btn {
+    width: 100%;
+    height: 44px;
+    font-size: 15px;
   }
 
   .carousel-upload-btn {
-    min-height: 300px;
+    min-height: 200px;
+  }
+
+  .carousel-main:hover .carousel-arrow {
+    opacity: 1 !important;
+  }
+
+  .carousel-main:hover .carousel-remove-btn {
+    opacity: 1 !important;
   }
 }
 
 @media (min-width: 769px) and (max-width: 1024px) {
+  .create-post-modal, .post-detail-modal {
+    max-width: 90vw !important;
+  }
+
+  .create-post-modal .ant-modal, .post-detail-modal .ant-modal {
+    max-width: 90vw;
+  }
+
+  .left-image-area {
+    flex: 0 0 50% !important;
+    max-width: 50% !important;
+  }
+
   .left-image-area .carousel-main {
     min-height: 400px;
     max-height: 500px;
@@ -785,6 +992,44 @@
 
   .carousel-upload-btn {
     min-height: 400px;
+  }
+
+  .right-form-area {
+    padding: 16px 20px;
+  }
+
+  .post-form #title {
+    font-size: 15px;
+  }
+
+  .post-form #content {
+    height: 280px !important;
+    min-height: 250px !important;
+    max-height: 300px !important;
+  }
+
+  .modal-submit-buttons .ant-btn {
+    height: 38px;
+    font-size: 14px;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 900px) {
+  .create-post-modal, .post-detail-modal {
+    max-width: 95vw !important;
+  }
+
+  .create-post-modal .ant-modal, .post-detail-modal .ant-modal {
+    max-width: 95vw;
+  }
+
+  .left-image-area {
+    flex: 0 0 45% !important;
+    max-width: 45% !important;
+  }
+
+  .right-form-area {
+    padding: 14px 16px;
   }
 }
 
@@ -1016,6 +1261,7 @@
 .post-card-image {
   width: 100%;
   height: auto;
+  max-height: 350px;
   display: block;
   border-radius: 12px 12px 0 0;
   object-fit: cover;
@@ -1029,7 +1275,21 @@
 .post-card-image-wrapper .ant-image-img {
   width: 100%;
   height: auto;
+  max-height: 350px;
   border-radius: 12px 12px 0 0;
+  object-fit: cover;
+}
+
+.post-card .ant-image {
+  display: block;
+  width: 100%;
+  max-height: 350px;
+  overflow: hidden;
+}
+
+.post-card .ant-image-img {
+  width: 100%;
+  max-height: 350px;
   object-fit: cover;
 }
 
@@ -1116,46 +1376,52 @@
     font-size: 14px;
   }
 
-.post-detail-modal .ant-modal-content {
+.post-detail-modal .ant-modal-container {
   padding: 0 !important;
+  border-radius: var(--radius-lg) !important;
+  overflow: hidden !important;
+}
+
+.post-detail-modal .ant-modal-content {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
   overflow: hidden;
+  padding: 0 !important;
 }
 
 .post-detail-modal .ant-modal-body {
+  background: var(--bg-secondary);
   padding: 0 !important;
-  max-height: 85vh;
-  overflow: hidden;
-}
-
-.post-detail-layout {
-  height: 85vh;
-  max-height: 85vh;
-  overflow: hidden;
-}
-
-.post-detail-image-area {
-  flex: 0 0 55% !important;
-  max-width: 55% !important;
-}
-
-.post-detail-carousel {
-  height: 100% !important;
-  min-height: 100% !important;
-}
-
-.post-detail-main-image {
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: contain !important;
-}
-
-.post-detail-content-area {
-  flex: 1 !important;
+  min-height: 700px !important;
+  max-height: 90vh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  padding: 24px;
-  overflow-y: auto;
-  gap: 16px;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+.post-detail-modal .left-image-area {
+  min-height: 700px !important;
+  align-self: stretch;
+}
+
+.post-detail-modal .right-form-area {
+  min-height: 700px !important;
+  overflow-y: visible;
+  flex-shrink: 0;
+}
+
+.post-detail-modal .xiaohongshu-layout {
+  overflow: visible;
+}
+
+.post-detail-modal .post-detail-content {
+  flex: none;
+}
+
+.post-detail-modal .post-detail-stats {
+  margin-top: auto;
 }
 
 .post-detail-header {
@@ -1196,6 +1462,50 @@
   color: var(--text-primary);
   font-size: 14px;
   font-weight: 500;
+}
+
+.follow-btn {
+  background: #ff2442;
+  color: #fff;
+  border: none;
+  height: 32px;
+  padding: 0 20px;
+  border-radius: 24px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  white-space: nowrap;
+}
+
+.follow-btn:hover {
+  opacity: 0.85;
+}
+
+.follow-btn:active {
+  transform: scale(0.96);
+}
+
+.edit-btn {
+  background: #1677ff;
+  color: #fff;
+  border: none;
+  height: 32px;
+  padding: 0 20px;
+  border-radius: 24px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  white-space: nowrap;
+}
+
+.edit-btn:hover {
+  opacity: 0.85;
+}
+
+.edit-btn:active {
+  transform: scale(0.96);
 }
 
 .post-detail-close-btn {
@@ -1242,6 +1552,11 @@
   border-top: 1px solid var(--border-color);
 }
 
+.post-detail-modal .post-detail-stats {
+  border-top: none;
+  padding-top: 0;
+}
+
 .post-detail-stat-item {
   display: flex;
   align-items: center;
@@ -1257,7 +1572,8 @@
 .post-detail-time {
   color: var(--text-muted);
   font-size: 12px;
-  padding-top: 8px;
+  display: block;
+  padding: 8px 0;
 }
 
 .no-image-placeholder {
@@ -1266,32 +1582,114 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-primary);
+  background: #000;
+}
+
+.no-image-placeholder .ant-empty-description {
+  color: rgba(255, 255, 255, 0.6);
 }
 
 @media (max-width: 768px) {
-  .post-detail-layout {
-    flex-direction: column;
-    height: 90vh;
-    max-height: 90vh;
+  .post-detail-modal {
+    max-width: 100vw !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
 
-  .post-detail-image-area {
-    flex: 0 0 auto !important;
-    max-width: 100% !important;
-    height: 40vh;
+  .post-detail-modal .ant-modal {
+    max-width: 100vw;
+    top: 0;
+    padding: 0;
+    margin: 0;
   }
 
-  .post-detail-content-area {
-    padding: 16px;
+  .post-detail-modal .ant-modal-container {
+    border-radius: 0 !important;
+  }
+
+  .post-detail-modal .ant-modal-content {
+    border-radius: 0 !important;
+    max-height: 100vh;
+  }
+
+  .post-detail-modal .ant-modal-body {
+    height: auto !important;
+    max-height: 100vh;
+    overflow: hidden;
+  }
+
+  .post-detail-modal .left-image-area {
+    height: 45vh !important;
+    max-height: 45vh !important;
+  }
+
+  .post-detail-modal .right-form-area {
+    height: auto !important;
+  }
+
+  .post-detail-header {
+    padding-bottom: 12px;
+    margin-bottom: 0;
+  }
+
+  .post-detail-avatar {
+    width: 32px;
+    height: 32px;
+  }
+
+  .post-detail-avatar-default {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+  }
+
+  .post-detail-username {
+    font-size: 13px;
   }
 
   .post-detail-title {
     font-size: 16px;
   }
 
+  .post-detail-content {
+    font-size: 13px;
+    line-height: 1.7;
+  }
+
   .post-detail-stats {
     gap: 16px;
+    padding-top: 12px;
+  }
+
+  .post-detail-stat-item {
+    font-size: 13px;
+  }
+
+  .post-detail-stat-item .anticon {
+    font-size: 16px;
+  }
+
+  .post-detail-time {
+    font-size: 11px;
+  }
+
+  .carousel-arrow {
+    width: 36px;
+    height: 36px;
+    font-size: 16px;
+  }
+
+  .carousel-arrow-left {
+    left: 8px;
+  }
+
+  .carousel-arrow-right {
+    right: 8px;
+  }
+
+  .carousel-counter {
+    font-size: 11px;
+    padding: 3px 10px;
   }
 }
 

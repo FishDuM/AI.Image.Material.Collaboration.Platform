@@ -3,7 +3,9 @@ package hk.ljx.fishpicsbackend.controller;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
+import hk.ljx.fishpicsbackend.dto.picture.PictureMessage;
 import hk.ljx.fishpicsbackend.service.PictureService;
+import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
 import hk.ljx.fishpicsbackend.vo.picture.PicturePostVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -11,6 +13,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import java.util.List;
 
 @RestController
 @RequestMapping("/picture")
@@ -33,5 +36,10 @@ public class PictureController {
         ExcUtils.throwIfTrue(file.isEmpty(), "文件不能为空");
         ExcUtils.throwIfTrue(file.getSize() > 1024 * 1024 * 5, "文件大小不能超过5MB");
         return ResUtils.success(pictureService.uploadPicture4Post(file, request));
+    }
+
+    @GetMapping("/list")
+    public Response<List<PictureListVO>> getPictureList() {
+        return ResUtils.success(pictureService.getPictureList());
     }
 }

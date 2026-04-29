@@ -194,9 +194,14 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         return postPage.convert(post -> {
             PostListVO vo = new PostListVO();
             BeanUtil.copyProperties(post, vo);
-            vo.setUsername(finalUserMap.get(post.getUserId()).getUsername());
-            vo.setAvatar(finalUserMap.get(post.getUserId()).getAvatar());
-            vo.setUrl(finalCoverUrlMap.get(post.getCover()));
+            // 帖子关联的用户可能已被删除，需要做空指针保护
+            User postUser = finalUserMap.get(post.getUserId());
+            if (postUser != null) {
+                vo.setUsername(postUser.getUsername());
+                vo.setAvatar(postUser.getAvatar());
+            }
+            // 帖子关联的封面图片可能已被删除，使用 getOrDefault 避免空指针
+            vo.setUrl(finalCoverUrlMap.getOrDefault(post.getCover(), null));
             return vo;
         });
     }

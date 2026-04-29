@@ -2,6 +2,7 @@ package hk.ljx.fishpicsbackend.service;
 
 import hk.ljx.fishpicsbackend.entity.Picture;
 import com.baomidou.mybatisplus.extension.service.IService;
+import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
 import hk.ljx.fishpicsbackend.vo.picture.PicturePostVO;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -40,4 +41,10 @@ public interface PictureService extends IService<Picture> {
      * @param id 帖子id
      */
     void setPicturePostId(List<Long> imageId, Long id);
+
+    /**
+     * 首页获取图片列表
+     * @return 图片列表
+     */
+    List<PictureListVO> getPictureList();
 }
