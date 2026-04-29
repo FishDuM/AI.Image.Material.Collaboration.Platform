@@ -54,6 +54,8 @@ export const register = (data) => api.post('/user/register', data)
 
 export const getUserMyself = () => api.get('/user/myself')
 
+export const logout = () => api.get('/user/logout')
+
 export const getUser = () => api.get('/user/getUser')
 
 export const getAdminUser = (userId) => api.post('/user/admin/getUser', { userId })

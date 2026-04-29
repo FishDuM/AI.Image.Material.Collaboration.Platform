@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.*;
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
 
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
@@ -34,7 +35,8 @@ public class UserController {
 
     @Resource
     private UserService userService;
-    @Autowired
+
+    @Resource
     private UserMapper userMapper;
 
     @PostMapping("/login")
@@ -91,6 +93,15 @@ public class UserController {
     public Response<Boolean> editMyself(@RequestBody UserEditRequest userEditRequest, HttpServletRequest request) {
         ExcUtils.throwIfTrue(ObjectUtil.isNull(userEditRequest), ExceptionCode.PARAMETER_ERROR);
         return ResUtils.success(userService.editMyself(userEditRequest, request));
+    }
+
+    @GetMapping("/logout")
+    public Response<?> logout(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+        if (session != null) {
+            session.invalidate();
+        }
+        return ResUtils.success();
     }
 
     @AuthCheck(role = ADMIN)

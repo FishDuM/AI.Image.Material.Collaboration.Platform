@@ -26,7 +26,7 @@ import {
   BellOutlined
 } from '@ant-design/icons'
 import { AuthContext } from '../context/AuthContext.jsx'
-import { getLoginCheckCode, login, getRegisterCheckCode, register } from '../api'
+import { getLoginCheckCode, login, getRegisterCheckCode, register, logout } from '../api'
 import { ThemeContext } from '../main.jsx'
 
 function GlobalLayout({ children }) {
@@ -49,10 +49,16 @@ function GlobalLayout({ children }) {
   const [registerCheckCodeUrl, setRegisterCheckCodeUrl] = useState('')
   const [registerKey, setRegisterKey] = useState('')
 
-  const handleLogout = () => {
-    authLogout()
-    message.success('已退出登录')
-    navigate('/')
+  const handleLogout = async () => {
+    try {
+      await logout()
+    } catch (error) {
+      console.error('退出登录请求失败:', error)
+    } finally {
+      authLogout()
+      message.success('退出成功')
+      navigate('/')
+    }
   }
 
   const fetchLoginCheckCode = async () => {
