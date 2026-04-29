@@ -59,4 +59,12 @@ public interface PostService extends IService<Post> {
      * @return 查询对象
      */
     QueryWrapper<Post> newQueryWrapper(PostQueryWrapper postQueryWrapper);
+
+    /**
+     * 点赞帖子
+     *
+     * @param id      帖子id
+     * @param request request
+     */
+    void likePost(Long id, HttpServletRequest request);
 }

@@ -1,32 +1,26 @@
 package hk.ljx.fishpicsbackend.common.aop;
 
-import cn.hutool.json.JSONUtil;
 import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
-import hk.ljx.fishpicsbackend.common.utils.JwtUtil;
 import hk.ljx.fishpicsbackend.entity.User;
 import hk.ljx.fishpicsbackend.enums.UserRoleEnum;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
-import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
-import java.util.concurrent.TimeUnit;
+
+import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.TOKEN_KEY;
 
 
 @Aspect
 @Component
 public class AuthInterceptor {
-
-    @Resource
-    private StringRedisTemplate stringRedisTemplate;
 
     /**
      * 执行拦截
@@ -39,20 +33,11 @@ public class AuthInterceptor {
         String mustRole = authCheck.role();
         RequestAttributes requestAttributes = RequestContextHolder.currentRequestAttributes();
         HttpServletRequest request = ((ServletRequestAttributes) requestAttributes).getRequest();
-        // 前端请求头带登录态
-        String authorization = request.getHeader("Authorization");
-        ExcUtils.throwIfTrue(authorization == null || JwtUtil.parseToken(authorization) == null, ExceptionCode.NOT_LOGIN);
 
-        // 根据登录态查 redis 获取登录用户
-        String loginByJson = stringRedisTemplate.opsForValue().get(authorization);
-        ExcUtils.throwIfTrue(loginByJson == null || loginByJson.isEmpty(), ExceptionCode.NOT_LOGIN);
-        User user = JSONUtil.toBean(loginByJson, User.class);
+        User user = (User) request.getSession().getAttribute(TOKEN_KEY);
 
         // 如果用户为空则为未登录或登陆过期
-        ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_LOGIN, "未登录或登录过期");
-
-        // 刷新 redis 有效期
-        stringRedisTemplate.expire(authorization, 1, TimeUnit.DAYS);
+        ExcUtils.throwIfTrue(user == null || user.getId() == null || user.getRole() == null, ExceptionCode.NOT_LOGIN, "未登录或登录过期");
 
         UserRoleEnum mustRoleEnum = UserRoleEnum.getEnumByRole(mustRole);
         // 不需要权限，放行

@@ -196,16 +196,25 @@ function UserManagement() {
     })
   }
 
+  const ALLOWED_IMAGE_TYPES = [
+    'image/jpeg',
+    'image/png',
+    'image/jpg',
+    'image/gif',
+    'image/webp',
+    'image/heic',
+  ]
+
   const beforeUpload = (file) => {
-    const isImage = file.type.startsWith('image/')
-    if (!isImage) {
-      message.error('只能上传图片文件！')
+    const isAllowedImage = ALLOWED_IMAGE_TYPES.includes(file.type)
+    if (!isAllowedImage) {
+      message.error('只能上传图片文件（JPEG、PNG、JPG、GIF、WebP、HEIC）！')
     }
     const isLt5M = file.size / 1024 / 1024 < 5
     if (!isLt5M) {
       message.error('图片大小不能超过5MB！')
     }
-    return isImage && isLt5M
+    return isAllowedImage && isLt5M
   }
 
   const handleAvatarChange = async (info) => {

@@ -49,7 +49,7 @@ public interface UserService extends IService<User> {
      * @param userLoginRequest 用户登录请求
      * @return 用户 VO
      */
-    Response<UserLoginVO> userLogin(UserLoginRequest userLoginRequest, HttpServletResponse response, HttpServletRequest request);
+    Response<UserLoginVO> userLogin(UserLoginRequest userLoginRequest, HttpServletRequest request);
 
     /**
      * 构造查询用户条件

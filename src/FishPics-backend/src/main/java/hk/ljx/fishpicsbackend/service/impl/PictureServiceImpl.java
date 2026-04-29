@@ -42,7 +42,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
     @Resource
     private CosService cosService;
-    @Autowired
+
+    @Resource
     private PictureMapper pictureMapper;
 
     @Override

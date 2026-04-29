@@ -52,7 +52,8 @@ public class CosService {
             "image/png",
             "image/jpg",
             "image/gif",
-            "image/webp"
+            "image/webp",
+            "image/heic"
     );
 
     // 临时URL有效期：10分钟（生产环境私有读写用）

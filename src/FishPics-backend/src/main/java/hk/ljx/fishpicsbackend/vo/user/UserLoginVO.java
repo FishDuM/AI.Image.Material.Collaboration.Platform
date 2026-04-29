@@ -17,11 +17,6 @@ import java.io.Serializable;
 public class UserLoginVO implements Serializable {
 
     /**
-     * 登录Token
-     */
-    private String loginToken;
-
-    /**
      * 用户ID
      */
     private Long id;

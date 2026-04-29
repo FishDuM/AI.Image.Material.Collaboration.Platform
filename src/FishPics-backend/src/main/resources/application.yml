@@ -5,6 +5,10 @@ server:
 spring:
   application:
     name: FishPic-backend
+  session:
+    store-type: redis
+    # 86400 秒 = 1天
+    timeout: 86400
   # 数据库配置
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver

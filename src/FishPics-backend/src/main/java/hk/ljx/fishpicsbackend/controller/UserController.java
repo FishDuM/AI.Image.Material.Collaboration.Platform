@@ -38,10 +38,10 @@ public class UserController {
     private UserMapper userMapper;
 
     @PostMapping("/login")
-    public Response<UserLoginVO> userLogin(@RequestBody UserLoginRequest userLoginRequest, HttpServletResponse response,
+    public Response<UserLoginVO> userLogin(@RequestBody UserLoginRequest userLoginRequest,
             HttpServletRequest request) {
         ExcUtils.throwIfTrue(userLoginRequest == null, ExceptionCode.PARAMETER_ERROR, "参数错误");
-        return userService.userLogin(userLoginRequest, response, request);
+        return userService.userLogin(userLoginRequest, request);
     }
 
     @PostMapping("/register")

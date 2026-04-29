@@ -175,6 +175,27 @@ function CommunitySquare() {
     setModalStep(1)
   }
 
+  const ALLOWED_IMAGE_TYPES = [
+    'image/jpeg',
+    'image/png',
+    'image/jpg',
+    'image/gif',
+    'image/webp',
+    'image/heic',
+  ]
+
+  const beforeUpload = (file) => {
+    const isAllowedImage = ALLOWED_IMAGE_TYPES.includes(file.type)
+    if (!isAllowedImage) {
+      message.error('只能上传图片文件（JPEG、PNG、JPG、GIF、WebP、HEIC）！')
+    }
+    const isLt5M = file.size / 1024 / 1024 < 5
+    if (!isLt5M) {
+      message.error('图片大小不能超过5MB！')
+    }
+    return isAllowedImage && isLt5M
+  }
+
   const handleImageUpload = async ({ file, onSuccess, onError }) => {
     if (pictureIds.length >= 15) {
       message.error('最多只能上传15张图片')
@@ -302,6 +323,8 @@ function CommunitySquare() {
     onRemove: handleImageRemove,
     fileList: uploadedImages,
     maxCount: 15,
+    beforeUpload: beforeUpload,
+    accept: '.jpeg,.png,.jpg,.gif,.webp,.heic',
   }
 
   return (
@@ -483,6 +506,8 @@ function CommunitySquare() {
                       fileList={uploadedImages}
                       maxCount={15}
                       showUploadList={false}
+                      beforeUpload={beforeUpload}
+                      accept=".jpeg,.png,.jpg,.gif,.webp,.heic"
                     >
                       <button type="button" className="carousel-upload-btn">
                         <PlusOutlined />
@@ -561,6 +586,8 @@ function CommunitySquare() {
                   fileList={uploadedImages}
                   maxCount={15}
                   showUploadList={false}
+                  beforeUpload={beforeUpload}
+                  accept=".jpeg,.png,.jpg,.gif,.webp,.heic"
                 >
                   <button type="button" className="upload-trigger-inline">
                     <PlusOutlined />

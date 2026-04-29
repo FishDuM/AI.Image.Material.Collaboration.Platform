@@ -49,4 +49,11 @@ public class PostController {
     public Response<IPage<PostListVO>> getPostList(@RequestBody PostQueryRequest postQueryRequest) {
         return ResUtils.success(postService.getPostList(postQueryRequest));
     }
+
+    @PostMapping("/like")
+    public Response<Boolean> like(@RequestParam("id") Long id, HttpServletRequest request) {
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), "帖子不存在");
+        postService.likePost(id, request);
+        return ResUtils.success(true);
+    }
 }

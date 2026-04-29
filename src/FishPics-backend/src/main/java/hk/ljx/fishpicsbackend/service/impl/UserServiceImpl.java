@@ -20,7 +20,6 @@ import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
-import hk.ljx.fishpicsbackend.common.utils.JwtUtil;
 import hk.ljx.fishpicsbackend.dto.user.*;
 import hk.ljx.fishpicsbackend.entity.Post;
 import hk.ljx.fishpicsbackend.entity.User;
@@ -35,14 +34,12 @@ import hk.ljx.fishpicsbackend.vo.post.PostListVO;
 import hk.ljx.fishpicsbackend.vo.user.UserLoginVO;
 import hk.ljx.fishpicsbackend.vo.user.UserMessageVO;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.RequestBody;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.Date;
@@ -50,6 +47,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.TOKEN_KEY;
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.DEFAULT_NICK_NAME;
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.SALT;
 
@@ -68,11 +66,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
     @Resource
     private UserMapper userMapper;
-    @Autowired
+
+    @Resource
     private PostMapper postMapper;
-    @Autowired
+
+    @Resource
     private UserPostCollectMapper userPostCollectMapper;
-    @Autowired
+
+    @Resource
     private UserPostLikesMapper userPostLikesMapper;
 
     @Override
@@ -116,23 +117,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
      */
     @Override
     public User getLoginUser(HttpServletRequest request) {
-        // 解析 JWT 获得用户 id
-        String token = request.getHeader("Authorization");
-        // redis 查询用户信息
-        String userByJson = stringRedisTemplate.opsForValue().get(token);
-        User user = JSONUtil.toBean(userByJson, User.class);
-        // 查不到则为登录态过期
-//        if (user.getId() == null) {
-//            String id = JwtUtil.parseToken(token);
-//            user = userMapper.selectById(id);
-//            // mysql 查到反存 redis 有效期 1 天
-//            if (user != null) {
-//                stringRedisTemplate.opsForValue().set(token, JSONUtil.toJsonStr(user), 1, TimeUnit.DAYS);
-//            } else {
-//                // mysql 查不到反存 redis 空对象 有效期 1 秒
-//                stringRedisTemplate.opsForValue().set(token, "", 1, TimeUnit.SECONDS);
-//            }
-//        }
+        // session 查询用户信息
+        User user = (User) request.getSession().getAttribute(TOKEN_KEY);
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.UNAUTHORIZED, "用户未登录");
         return user;
     }
 
@@ -181,7 +168,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     }
 
     @Override
-    public Response<UserLoginVO> userLogin(UserLoginRequest userLoginRequest, HttpServletResponse response,
+    public Response<UserLoginVO> userLogin(UserLoginRequest userLoginRequest,
             HttpServletRequest request) {
         String username = userLoginRequest.getUsername();
         String password = userLoginRequest.getPassword();
@@ -202,18 +189,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         // 查询 mysql 获取用户
         User user = userMapper.selectOne(new QueryWrapper<User>().eq("username", username).eq("password", password));
         ExcUtils.throwIfTrue(user == null, ExceptionCode.PARAMETER_ERROR, "账号或密码错误");
-        String userByJson = JSONUtil.toJsonStr(user);
 
-        // 查询到则存入 Redis
-        String loginTokenKey = JwtUtil.generateToken(String.valueOf(user.getId()));
-
-        stringRedisTemplate.opsForValue().set(loginTokenKey, userByJson, 1, TimeUnit.DAYS);
-
-        response.setHeader("Authorization", loginTokenKey);
-        response.setHeader("Access-Control-Expose-Headers", "Authorization");
+        // 查询到则存入 session
+        request.getSession().setAttribute(TOKEN_KEY, user);
         // 查到用户数据返回封装类
         UserLoginVO userLoginVO = BeanUtil.copyProperties(user, UserLoginVO.class);
-        userLoginVO.setLoginToken(loginTokenKey);
         return ResUtils.success(userLoginVO);
     }
 
@@ -377,15 +357,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         boolean result = this.updateById(user);
         ExcUtils.throwIfTrue(!result, ExceptionCode.DATABASE_ERROR, "更新失败");
         // 更新 redis 缓存
-        String token = request.getHeader("Authorization");
-        stringRedisTemplate.opsForValue().set(token, JSONUtil.toJsonStr(user));
+        request.setAttribute(TOKEN_KEY, user);
         return true;
     }
 
     @Override
     public Boolean isMe(Long id, HttpServletRequest request) {
-        // 解析 JWT 获得用户 id
-        String token = request.getHeader("Authorization");
-        return JwtUtil.parseToken(token).equals(id.toString());
+        User loginUser = this.getLoginUser(request);
+        return loginUser.getId().equals(id);
     }
 }

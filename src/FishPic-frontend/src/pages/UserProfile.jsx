@@ -15,7 +15,6 @@ import {
   PlusOutlined
 } from '@ant-design/icons'
 import { getUserMyself, getUser, editUser, uploadAvatar } from '../api'
-import { getToken } from '../utils/storage'
 import { AuthContext } from '../context/AuthContext.jsx'
 import { ThemeContext } from '../main.jsx'
 import './UserProfile.css'
@@ -23,7 +22,7 @@ import './UserProfile.css'
 function UserProfile() {
   const { message } = AntApp.useApp()
   const { isDarkMode } = useContext(ThemeContext)
-  const { userInfo, login: authLogin } = useContext(AuthContext)
+  const { userInfo, login: authLogin, isAuthenticated } = useContext(AuthContext)
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [userData, setUserData] = useState(null)
@@ -70,7 +69,7 @@ function UserProfile() {
     if (hasFetchedRef.current) return
     hasFetchedRef.current = true
     
-    if (!getToken()) {
+    if (!isAuthenticated) {
       message.warning('请先登录')
       navigate('/')
       return
@@ -170,16 +169,25 @@ function UserProfile() {
     })
   }
 
+  const ALLOWED_IMAGE_TYPES = [
+    'image/jpeg',
+    'image/png',
+    'image/jpg',
+    'image/gif',
+    'image/webp',
+    'image/heic',
+  ]
+
   const beforeUpload = (file) => {
-    const isImage = file.type.startsWith('image/')
-    if (!isImage) {
-      message.error('只能上传图片文件！')
+    const isAllowedImage = ALLOWED_IMAGE_TYPES.includes(file.type)
+    if (!isAllowedImage) {
+      message.error('只能上传图片文件（JPEG、PNG、JPG、GIF、WebP、HEIC）！')
     }
     const isLt5M = file.size / 1024 / 1024 < 5
     if (!isLt5M) {
       message.error('图片大小不能超过5MB！')
     }
-    return isImage && isLt5M
+    return isAllowedImage && isLt5M
   }
 
   const handleAvatarChange = async (info) => {

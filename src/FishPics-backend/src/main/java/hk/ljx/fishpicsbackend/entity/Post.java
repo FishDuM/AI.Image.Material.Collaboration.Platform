@@ -7,8 +7,10 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import java.io.Serializable;
 import java.util.Date;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * 帖子表
@@ -16,6 +18,8 @@ import lombok.Data;
  */
 @TableName(value ="post")
 @Data
+@AllArgsConstructor
+@NoArgsConstructor
 @Builder
 public class Post implements Serializable {
     /**

@@ -17,8 +17,10 @@ import hk.ljx.fishpicsbackend.dto.post.UploadPostRequest;
 import hk.ljx.fishpicsbackend.entity.Picture;
 import hk.ljx.fishpicsbackend.entity.Post;
 import hk.ljx.fishpicsbackend.entity.User;
+import hk.ljx.fishpicsbackend.entity.UserPostLikes;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
+import hk.ljx.fishpicsbackend.mapper.UserPostLikesMapper;
 import hk.ljx.fishpicsbackend.service.PictureService;
 import hk.ljx.fishpicsbackend.service.PostService;
 import hk.ljx.fishpicsbackend.mapper.PostMapper;
@@ -26,13 +28,16 @@ import hk.ljx.fishpicsbackend.service.UserService;
 import hk.ljx.fishpicsbackend.vo.post.PostDetailVO;
 import hk.ljx.fishpicsbackend.vo.post.PostListVO;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.LIKE_POST_KEY;
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
 /**
@@ -58,6 +63,12 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
     @Resource
     private UserMapper userMapper;
+
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
+
+    @Resource
+    private UserPostLikesMapper userPostLikesMapper;
 
     @Override
     public void uploadPost(UploadPostRequest uploadPostRequest, HttpServletRequest request) {
@@ -222,8 +233,60 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         queryWrapper.orderBy(ObjectUtil.isNotNull(sortField), "asc".equalsIgnoreCase(sortOrder), sortField);
         return queryWrapper;
     }
+
+    @Override
+    public void likePost(Long id, HttpServletRequest request) {
+        // 获取帖子 id
+        Post post = postMapper.selectById(id);
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(post) || id == null ,ExceptionCode.DATABASE_ERROR, "帖子不存在");
+
+        // 获取用户
+        User user = userService.getLoginUser(request);
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user) || user.getId() == null, "用户不存在");
+        Long userId = user.getId();
+        Long postId = post.getId();
+
+        // 获取 Redis 锁
+        Boolean lock = stringRedisTemplate.opsForValue().setIfAbsent(LIKE_POST_KEY + userId, "1", 10, TimeUnit.SECONDS);
+        // 获取锁失败
+        ExcUtils.throwIfTrue(Boolean.FALSE.equals(lock), "操作频繁，请稍后再试");
+        // 成功则继续执行
+        Long likesNum = post.getLikesNum();
+
+        // 获取用户是否点赞过
+        QueryWrapper<UserPostLikes> queryWrapper = new QueryWrapper<UserPostLikes>().eq("user_id", userId).eq("post_id", postId);
+        UserPostLikes userPostLikes = userPostLikesMapper.selectOne(queryWrapper);
+        if (ObjectUtil.isEmpty(userPostLikes) || userPostLikes.getId() == null) {
+            // 没点赞过，添加点赞
+            UserPostLikes userPostLike = new UserPostLikes();
+            userPostLike.setUserId(userId);
+            userPostLike.setPostId(postId);
+            // 查入数据
+            int insert = userPostLikesMapper.insert(userPostLike);
+            ExcUtils.throwIfTrue(insert != 1, "点赞失败");
+
+            try {
+                QueryWrapper<Post> postQueryWrapper = new QueryWrapper<>();
+                postQueryWrapper.eq("id", postId);
+                postQueryWrapper.eq("likes_num", likesNum);
+                post.setLikesNum(likesNum + 1);
+                int i = postMapper.update(post, postQueryWrapper);
+
+                ExcUtils.throwIfTrue(i != 1, "点赞失败，数据库错误");
+            } finally {
+                // 释放锁
+                stringRedisTemplate.delete(LIKE_POST_KEY + userId);
+            }
+
+        } else {
+            // 点赞过，删除点赞
+            try {
+                int delete = userPostLikesMapper.deleteById(userPostLikes.getId());
+                ExcUtils.throwIfTrue(delete != 1, "取消点赞失败");
+            } finally {
+                // 释放锁
+                stringRedisTemplate.delete(LIKE_POST_KEY + userId);
+            }
+        }
+    }
 }
-
-
-
-
