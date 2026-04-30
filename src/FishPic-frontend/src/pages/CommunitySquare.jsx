@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback, useContext } from 'react'
 import { App, Typography, Button, Modal, Form, Input, Upload, Switch, Select, Image as AntImage, Masonry, Empty, Spin } from 'antd'
-import { PlusOutlined, SendOutlined, InboxOutlined, LikeOutlined, SearchOutlined, HeartOutlined, StarOutlined, LeftOutlined, RightOutlined, ReloadOutlined, UpOutlined } from '@ant-design/icons'
+import { PlusOutlined, SendOutlined, InboxOutlined, LikeOutlined, SearchOutlined, ReloadOutlined, UpOutlined } from '@ant-design/icons'
 import api from '../api'
 import { AuthContext } from '../context/AuthContext'
+import PostDetailModal from '../components/PostDetailModal'
 import './CommunitySquare.css'
 
 const { Title } = Typography
@@ -78,29 +79,6 @@ function CommunitySquare() {
   const currentPageRef = useRef(1)
   const loadingMoreRef = useRef(false)
   const keyCounter = useRef(0)
-
-  const formatRelativeTime = (timeString) => {
-    if (!timeString) return ''
-    const now = new Date()
-    const updateTime = new Date(timeString)
-    const diffMs = now - updateTime
-    const diffSeconds = Math.floor(diffMs / 1000)
-    const diffMinutes = Math.floor(diffSeconds / 60)
-    const diffHours = Math.floor(diffMinutes / 60)
-    const diffDays = Math.floor(diffHours / 24)
-
-    if (diffDays >= 7) {
-      return updateTime.toLocaleString('zh-CN')
-    } else if (diffDays >= 1) {
-      return `${diffDays}天前`
-    } else if (diffHours >= 1) {
-      return `${diffHours}小时前`
-    } else if (diffMinutes >= 1) {
-      return `${diffMinutes}分钟前`
-    } else {
-      return '刚刚'
-    }
-  }
 
   const fetchPostList = useCallback(async ({ text, hotPost, page = 1, append = false } = {}) => {
     if (append) {
@@ -183,19 +161,6 @@ function CommunitySquare() {
     setPostDetail(null)
     setDetailImageIndex(0)
     setPostDetailLoading(false)
-  }
-
-  const handlePostDetailPrevImage = () => {
-    if (postDetail && postDetail.pictureUrl && postDetail.pictureUrl.length > 0) {
-      setDetailImageIndex(prev => Math.max(0, prev - 1))
-    }
-  }
-
-  const handlePostDetailNextImage = () => {
-    if (postDetail && postDetail.pictureUrl && postDetail.pictureUrl.length > 0) {
-      const validPics = (postDetail.pictureUrl || []).filter(url => url && url.trim())
-      setDetailImageIndex(prev => Math.min(validPics.length - 1, prev + 1))
-    }
   }
 
   const handleEditPost = () => {
@@ -622,104 +587,16 @@ function CommunitySquare() {
         </div>
       )}
 
-      <Modal
+      <PostDetailModal
         open={postDetailModalOpen}
-        onCancel={handlePostDetailClose}
-        footer={null}
-        className="post-detail-modal"
-        width="80vw"
-        style={{ maxHeight: '75vh' }}
-        closable={false}
-      >
-        {postDetailLoading ? (
-          <div className="loading-wrapper">
-            <Spin size="large" />
-          </div>
-        ) : postDetail ? (
-          <div className="xiaohongshu-layout">
-            <div className="left-image-area">
-              {(() => {
-                const validPics = (postDetail.pictureUrl || []).filter(url => url && url.trim())
-                return validPics.length > 0 ? (
-                  <div className="carousel-main">
-                    <AntImage
-                      src={validPics[detailImageIndex]}
-                      alt={postDetail.title}
-                      className="carousel-main-image"
-                      preview={true}
-                    />
-                    {validPics.length > 1 && (
-                      <>
-                        <button
-                          type="button"
-                          className="carousel-arrow carousel-arrow-left"
-                          onClick={handlePostDetailPrevImage}
-                          disabled={detailImageIndex === 0}
-                        >
-                          <LeftOutlined />
-                        </button>
-                        <button
-                          type="button"
-                          className="carousel-arrow carousel-arrow-right"
-                          onClick={handlePostDetailNextImage}
-                          disabled={detailImageIndex === validPics.length - 1}
-                        >
-                          <RightOutlined />
-                        </button>
-                        <div className="carousel-counter">
-                          {detailImageIndex + 1} / {validPics.length}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  <div className="no-image-placeholder">
-                    <Empty description="暂无图片" />
-                  </div>
-                )
-              })()}
-            </div>
-            <div className="right-form-area">
-              <div className="post-detail-header">
-                <div className="post-detail-user-info">
-                  {postDetail.avatar ? (
-                    <img src={postDetail.avatar} alt={postDetail.username} className="post-detail-avatar" />
-                  ) : (
-                    <div className="post-detail-avatar post-detail-avatar-default">
-                      {postDetail.username?.charAt(0)?.toUpperCase()}
-                    </div>
-                  )}
-                  <span className="post-detail-username">{postDetail.username}</span>
-                </div>
-                {userInfo?.username === postDetail.username ? (
-                  <button type="button" className="edit-btn" onClick={handleEditPost}>编辑</button>
-                ) : (
-                  <button type="button" className="follow-btn">关注</button>
-                )}
-              </div>
-              <div className="post-detail-title">{postDetail.title}</div>
-              <div className="post-detail-content">{postDetail.content}</div>
-              <span className="post-detail-time">
-                {postDetail.updateTime ? `编辑于 ${formatRelativeTime(postDetail.updateTime)}` : ''}
-              </span>
-              <div className="post-detail-stats">
-                <div className="post-detail-stat-item">
-                  <LikeOutlined />
-                  <span>{postDetail.likesNum || 0}</span>
-                </div>
-                <div className="post-detail-stat-item">
-                  <HeartOutlined />
-                  <span>{postDetail.collectsNum || 0}</span>
-                </div>
-                <div className="post-detail-stat-item">
-                  <StarOutlined />
-                  <span>{postDetail.commentNum || 0}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : null}
-      </Modal>
+        onClose={handlePostDetailClose}
+        loading={postDetailLoading}
+        postDetail={postDetail}
+        detailImageIndex={detailImageIndex}
+        onImageIndexChange={setDetailImageIndex}
+        currentUsername={userInfo?.username}
+        onEdit={handleEditPost}
+      />
 
       <Modal
         open={isModalOpen}

@@ -311,7 +311,7 @@ function GlobalLayout({ children }) {
       items.push({
         key: 'admin',
         icon: <SettingOutlined />,
-        label: '系统管理',
+        label: '管理页面',
         children: [
           {
             key: '/admin/users',
@@ -336,6 +336,12 @@ function GlobalLayout({ children }) {
             icon: <RobotOutlined />,
             label: 'AI 管理',
             onClick: () => handleSidebarMenuClick('/admin/ai'),
+          },
+          {
+            key: '/admin/system',
+            icon: <ToolOutlined />,
+            label: '系统管理',
+            onClick: () => handleSidebarMenuClick('/admin/system'),
           },
         ],
       })
@@ -383,6 +389,12 @@ function GlobalLayout({ children }) {
           icon: <RobotOutlined />,
           label: 'AI 管理',
           onClick: () => navigate('/admin/ai'),
+      },
+      {
+          key: 'system-management',
+          icon: <ToolOutlined />,
+          label: '系统管理',
+          onClick: () => navigate('/admin/system'),
       },
   ]
 
@@ -440,7 +452,7 @@ function GlobalLayout({ children }) {
                   className="system-management-btn desktop-only"
                 >
                   <SettingOutlined />
-                  <span>系统管理</span>
+                  <span>管理页面</span>
                 </Button>
               </Dropdown>
             )}

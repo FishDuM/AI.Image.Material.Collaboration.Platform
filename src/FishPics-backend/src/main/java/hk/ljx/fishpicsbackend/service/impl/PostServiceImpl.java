@@ -10,6 +10,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
+import hk.ljx.fishpicsbackend.dto.base.PageRequest;
 import hk.ljx.fishpicsbackend.dto.post.EditPostRequest;
 import hk.ljx.fishpicsbackend.dto.post.PostQueryRequest;
 import hk.ljx.fishpicsbackend.dto.post.PostQueryWrapper;
@@ -20,6 +21,7 @@ import hk.ljx.fishpicsbackend.entity.User;
 import hk.ljx.fishpicsbackend.entity.UserPostLikes;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
+import hk.ljx.fishpicsbackend.mapper.UserPostCollectMapper;
 import hk.ljx.fishpicsbackend.mapper.UserPostLikesMapper;
 import hk.ljx.fishpicsbackend.service.PictureService;
 import hk.ljx.fishpicsbackend.service.PostService;
@@ -69,6 +71,9 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
     @Resource
     private UserPostLikesMapper userPostLikesMapper;
+
+    @Resource
+    private UserPostCollectMapper userPostCollectMapper;
 
     @Override
     public void uploadPost(UploadPostRequest uploadPostRequest, HttpServletRequest request) {
@@ -296,5 +301,112 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
                 stringRedisTemplate.delete(LIKE_POST_KEY + userId);
             }
         }
+    }
+
+    /**
+     * 获取本人发布的帖子列表（分页）
+     * 用户可以查看自己发布的所有帖子，与社区广场查询逻辑保持一致
+     */
+    @Override
+    public IPage<PostListVO> getMyPosts(PageRequest pageRequest, HttpServletRequest request) {
+        User loginUser = userService.getLoginUser(request);
+        Long userId = loginUser.getId();
+
+        Page<Post> page = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
+        QueryWrapper<Post> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("user_id", userId);
+        queryWrapper.orderByDesc("create_time");
+
+        IPage<Post> postPage = postMapper.selectPage(page, queryWrapper);
+        return convertToPostListVO(postPage);
+    }
+
+    /**
+     * 获取本人收藏的帖子列表（分页）
+     * 通过子查询关联 user_post_collect 表获取收藏的帖子
+     * 用户可以查看自己收藏过的所有帖子，与社区广场查询逻辑保持一致
+     */
+    @Override
+    public IPage<PostListVO> getMyCollects(PageRequest pageRequest, HttpServletRequest request) {
+        User loginUser = userService.getLoginUser(request);
+        Long userId = loginUser.getId();
+
+        Page<Post> page = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
+        QueryWrapper<Post> queryWrapper = new QueryWrapper<>();
+        queryWrapper.inSql("id", "SELECT post_id FROM user_post_collect WHERE user_id = " + userId);
+        queryWrapper.orderByDesc("create_time");
+
+        IPage<Post> postPage = postMapper.selectPage(page, queryWrapper);
+        return convertToPostListVO(postPage);
+    }
+
+    /**
+     * 获取本人点赞的帖子列表（分页）
+     * 通过子查询关联 user_post_likes 表获取点赞的帖子
+     * 用户可以查看自己点赞过的所有帖子，与社区广场查询逻辑保持一致
+     */
+    @Override
+    public IPage<PostListVO> getMyLikes(PageRequest pageRequest, HttpServletRequest request) {
+        User loginUser = userService.getLoginUser(request);
+        Long userId = loginUser.getId();
+
+        Page<Post> page = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
+        QueryWrapper<Post> queryWrapper = new QueryWrapper<>();
+        queryWrapper.inSql("id", "SELECT post_id FROM user_post_likes WHERE user_id = " + userId);
+        queryWrapper.orderByDesc("create_time");
+
+        IPage<Post> postPage = postMapper.selectPage(page, queryWrapper);
+        return convertToPostListVO(postPage);
+    }
+
+    /**
+     * 将帖子分页结果转换为 PostListVO 分页结果
+     * 批量查询封面图片和用户信息，减少数据库查询次数
+     *
+     * @param postPage 帖子分页数据
+     * @return PostListVO 分页数据
+     */
+    private IPage<PostListVO> convertToPostListVO(IPage<Post> postPage) {
+        // 批量查询封面
+        List<Long> coverIds = postPage.getRecords().stream()
+                .map(Post::getCover)
+                .filter(ObjectUtil::isNotNull)
+                .collect(Collectors.toList());
+
+        Map<Long, String> coverUrlMap = new HashMap<>();
+        if (CollUtil.isNotEmpty(coverIds)) {
+            coverUrlMap = pictureMapper.selectByIds(coverIds).stream()
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toMap(Picture::getId, Picture::getUrl));
+        }
+
+        // 批量查询用户
+        List<Long> userIds = postPage.getRecords().stream()
+                .map(Post::getUserId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        Map<Long, User> userMap = new HashMap<>();
+        if (CollUtil.isNotEmpty(userIds)) {
+            userMap = userMapper.selectByIds(userIds).stream()
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toMap(User::getId, user -> user));
+        }
+
+        // 封装VO
+        Map<Long, String> finalCoverUrlMap = coverUrlMap;
+        Map<Long, User> finalUserMap = userMap;
+        return postPage.convert(post -> {
+            PostListVO vo = new PostListVO();
+            BeanUtil.copyProperties(post, vo);
+            // 帖子关联的用户可能已被删除，需要做空指针保护
+            User postUser = finalUserMap.get(post.getUserId());
+            if (postUser != null) {
+                vo.setUsername(postUser.getUsername());
+                vo.setAvatar(postUser.getAvatar());
+            }
+            // 帖子关联的封面图片可能已被删除，使用 getOrDefault 避免空指针
+            vo.setUrl(finalCoverUrlMap.getOrDefault(post.getCover(), null));
+            return vo;
+        });
     }
 }

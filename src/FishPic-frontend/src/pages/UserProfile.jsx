@@ -1,6 +1,6 @@
-import { useContext, useState, useEffect, useRef } from 'react'
+import { useContext, useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { App as AntApp, Avatar, Tabs, Empty, Skeleton, Modal, Button, Form, Input, Upload, Flex } from 'antd'
+import { App as AntApp, Avatar, Tabs, Empty, Skeleton, Modal, Button, Form, Input, Upload, Flex, Spin, Image as AntImage, Masonry } from 'antd'
 import { 
   UserOutlined, 
   MailOutlined, 
@@ -12,11 +12,35 @@ import {
   EditOutlined,
   LockOutlined,
   LoadingOutlined,
-  PlusOutlined
+  PlusOutlined,
+  HeartFilled
 } from '@ant-design/icons'
-import { getUserMyself, getUser, editUser, uploadAvatar } from '../api'
-import { AuthContext } from '../context/AuthContext.jsx'
+import { getUserMyself, getUser, editUser, uploadAvatar, getMyPosts, getMyCollects, getMyLikes } from '../api'
+import api from '../api'
+import { AuthContext } from '../context/AuthContext'
+import PostDetailModal from '../components/PostDetailModal'
 import './UserProfile.css'
+
+const PostCard = ({ post, onClick }) => (
+  <div className="post-card" onClick={() => onClick(post)}>
+    <div className="post-cover-wrapper">
+      <AntImage src={post.url} alt={post.title} preview={false} />
+    </div>
+    <div className="post-card-body">
+      <h3 className="post-card-title">{post.title}</h3>
+      <div className="post-card-footer">
+        <span className="post-likes">
+          {post.likesNum > 0 ? (
+            <HeartFilled style={{ color: '#ff2442', marginRight: 4 }} />
+          ) : (
+            <HeartOutlined style={{ marginRight: 4 }} />
+          )}
+          {post.likesNum || 0}
+        </span>
+      </div>
+    </div>
+  </div>
+)
 
 function UserProfile() {
   const { message } = AntApp.useApp()
@@ -32,6 +56,82 @@ function UserProfile() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(null)
   const hasFetchedRef = useRef(false)
+
+  const [tabState, setTabState] = useState({
+    notes: { items: [], hasMore: true, loaded: false, loading: false },
+    favorites: { items: [], hasMore: true, loaded: false, loading: false },
+    likes: { items: [], hasMore: true, loaded: false, loading: false },
+  })
+  const [counts, setCounts] = useState({ notes: 0, favorites: 0, likes: 0 })
+  const pageRefs = useRef({ notes: 1, favorites: 1, likes: 1 })
+  const loadingMoreRef = useRef(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [postDetailModalOpen, setPostDetailModalOpen] = useState(false)
+  const [postDetail, setPostDetail] = useState(null)
+  const [postDetailLoading, setPostDetailLoading] = useState(false)
+  const [detailImageIndex, setDetailImageIndex] = useState(0)
+
+  const apiMap = { notes: getMyPosts, favorites: getMyCollects, likes: getMyLikes }
+
+  const fetchTabData = useCallback(async (tabKey, page = 1, append = false) => {
+    const fetchFn = apiMap[tabKey]
+    if (!fetchFn) return
+
+    if (append) {
+      loadingMoreRef.current = true
+      setLoadingMore(true)
+    } else {
+      setTabState(prev => ({
+        ...prev,
+        [tabKey]: { ...prev[tabKey], loading: true },
+      }))
+    }
+
+    try {
+      const result = await fetchFn({ current: page, pageSize: 20 })
+      const records = result.records || []
+      const totalPages = result.pages || 0
+      const hasMore = page < totalPages
+
+      if (append) {
+        setTabState(prev => {
+          const existing = prev[tabKey]
+          const existingIds = new Set(existing.items.map(p => p.id))
+          const newRecords = records.filter(p => !existingIds.has(p.id))
+          return {
+            ...prev,
+            [tabKey]: {
+              ...existing,
+              items: [...existing.items, ...newRecords],
+              hasMore,
+              loading: false,
+            },
+          }
+        })
+      } else {
+        setTabState(prev => ({
+          ...prev,
+          [tabKey]: { items: records, hasMore, loaded: true, loading: false },
+        }))
+      }
+
+      setCounts(prev => ({ ...prev, [tabKey]: result.total || 0 }))
+      pageRefs.current[tabKey] = page
+    } catch (error) {
+      message.error(error.message || '获取数据失败')
+      if (!append) {
+        setTabState(prev => ({
+          ...prev,
+          [tabKey]: { ...prev[tabKey], loading: false },
+        }))
+      }
+    } finally {
+      if (append) {
+        loadingMoreRef.current = false
+        setLoadingMore(false)
+      }
+    }
+  }, [message])
 
   const fetchUserInfo = async () => {
     try {
@@ -73,9 +173,80 @@ function UserProfile() {
       return
     }
     
-    setLoading(true) // eslint-disable-line react-hooks/set-state-in-effect
+    setLoading(true)
     fetchUserInfo().finally(() => setLoading(false))
+    fetchTabData('notes', 1, false)
   }, [navigate, message])
+
+  useEffect(() => {
+    if (!tabState[activeTab].loaded && !tabState[activeTab].loading) {
+      fetchTabData(activeTab, 1, false)
+    }
+  }, [activeTab])
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentTab = activeTab
+      if (loadingMoreRef.current || !tabState[currentTab]?.hasMore) return
+
+      const scrollTop = document.documentElement.scrollTop || document.body.scrollTop
+      const scrollHeight = document.documentElement.scrollHeight || document.body.scrollHeight
+      const clientHeight = document.documentElement.clientHeight || window.innerHeight
+
+      if (scrollTop + clientHeight >= scrollHeight - 200) {
+        fetchTabData(currentTab, pageRefs.current[currentTab] + 1, true)
+      }
+    }
+
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [activeTab, tabState, fetchTabData])
+
+  useEffect(() => {
+    if (!editModalVisible) return
+    const modifiedElements = []
+    const timer = setTimeout(() => {
+      const header = document.querySelector('.edit-profile-modal-header')
+      if (!header) return
+      let el = header
+      while (el && el !== document.body) {
+        const style = window.getComputedStyle(el)
+        if (style.display === 'flex' || style.display === 'inline-flex') {
+          el.style.alignItems = 'flex-start'
+          el.style.justifyContent = 'flex-start'
+          modifiedElements.push(el)
+        }
+        if (el.classList && el.classList.contains('ant-modal')) {
+          el.style.top = '0'
+          modifiedElements.push(el)
+        }
+        el = el.parentElement
+      }
+    }, 100)
+    return () => {
+      clearTimeout(timer)
+      modifiedElements.forEach(el => {
+        el.style.alignItems = ''
+        el.style.justifyContent = ''
+        el.style.top = ''
+      })
+    }
+  }, [editModalVisible])
+
+  const handlePostClick = async (post) => {
+    setPostDetailLoading(true)
+    setPostDetailModalOpen(true)
+    setDetailImageIndex(0)
+    try {
+      const result = await api.get('/post/getPost', { params: { id: post.id } })
+      setPostDetail(result)
+    } catch (err) {
+      message.error(err.message || '加载帖子详情失败')
+      setPostDetailModalOpen(false)
+    } finally {
+      setPostDetailLoading(false)
+    }
+  }
 
   const formatDate = (date) => {
     if (!date) return '未知'
@@ -239,6 +410,56 @@ function UserProfile() {
     }
   }
 
+  const renderTabContent = (tabKey, emptyText) => {
+    const tab = tabState[tabKey]
+
+    if (tab.loading) {
+      return <Skeleton active paragraph={{ rows: 6 }} />
+    }
+
+    if (!tab.items || tab.items.length === 0) {
+      return (
+        <div className="empty-state">
+          <Empty 
+            description={emptyText} 
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          />
+        </div>
+      )
+    }
+
+    const masonryItems = tab.items.map((post, index) => ({
+      key: `post-${post.id}-${index}`,
+      data: post,
+    }))
+
+    return (
+      <div className="profile-masonry-section">
+        <div className="profile-masonry-wrapper">
+          <div className="profile-masonry-container">
+            <div className="profile-masonry-inner">
+              <div className="profile-masonry-scroll">
+                <Masonry
+                  columns={{ xs: 2, sm: 3, md: 4 }}
+                  gutter={[12, 12]}
+                  items={masonryItems}
+                  itemRender={(item) => <PostCard post={item.data} onClick={handlePostClick} />}
+                />
+              </div>
+            </div>
+          </div>
+          {tab.hasMore ? (
+            loadingMore ? (
+              <div className="loading-more"><Spin /> 加载中...</div>
+            ) : null
+          ) : (
+            tab.items.length > 0 && <div className="no-more-posts">没有更多了</div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   const renderProfileHeader = () => {
     if (loading) {
       return (
@@ -259,10 +480,6 @@ function UserProfile() {
         </div>
       )
     }
-
-    const postCount = 0
-    const collectCount = 0
-    const likeCount = 0
 
     return (
       <>
@@ -301,15 +518,15 @@ function UserProfile() {
               
               <div className="profile-stats-row">
                 <div className="stat-item">
-                  <span className="stat-value">{postCount}</span>
+                  <span className="stat-value">{counts.notes}</span>
                   <span className="stat-label">笔记</span>
                 </div>
                 <div className="stat-item">
-                  <span className="stat-value">{collectCount}</span>
+                  <span className="stat-value">{counts.favorites}</span>
                   <span className="stat-label">收藏</span>
                 </div>
                 <div className="stat-item">
-                  <span className="stat-value">{likeCount}</span>
+                  <span className="stat-value">{counts.likes}</span>
                   <span className="stat-label">点赞</span>
                 </div>
               </div>
@@ -471,45 +688,6 @@ function UserProfile() {
     )
   }
 
-  const renderPostList = (posts, emptyText) => {
-    if (loading) {
-      return <Skeleton active paragraph={{ rows: 6 }} />
-    }
-
-    if (!posts || posts.length === 0) {
-      return (
-        <div className="empty-state">
-          <Empty 
-            description={emptyText} 
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-          />
-        </div>
-      )
-    }
-
-    return (
-      <div className="posts-grid">
-        {posts.map((post) => (
-          <div 
-            key={post.id} 
-            className="post-card-grid"
-            onClick={() => navigate(`/post/${post.id}`)}
-          >
-            <div className="post-cover">
-              <FileTextOutlined />
-            </div>
-            <div className="post-info">
-              <h3 className="post-title-grid">{post.title || '无标题'}</h3>
-              <div className="post-meta-grid">
-                <span>{formatDate(post.createTime)}</span>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    )
-  }
-
   const tabItems = [
     {
       key: 'notes',
@@ -519,7 +697,7 @@ function UserProfile() {
           图文
         </span>
       ),
-      children: renderPostList(null, '你还没有发布任何内容哦'),
+      children: renderTabContent('notes', '你还没有发布任何内容哦'),
     },
     {
       key: 'favorites',
@@ -529,7 +707,7 @@ function UserProfile() {
           收藏
         </span>
       ),
-      children: renderPostList(null, '暂无收藏内容'),
+      children: renderTabContent('favorites', '暂无收藏内容'),
     },
     {
       key: 'likes',
@@ -539,7 +717,7 @@ function UserProfile() {
           点赞
         </span>
       ),
-      children: renderPostList(null, '暂无点赞内容'),
+      children: renderTabContent('likes', '暂无点赞内容'),
     },
   ]
 
@@ -557,6 +735,16 @@ function UserProfile() {
           />
         </div>
       </div>
+
+      <PostDetailModal
+        open={postDetailModalOpen}
+        onClose={() => setPostDetailModalOpen(false)}
+        loading={postDetailLoading}
+        postDetail={postDetail}
+        detailImageIndex={detailImageIndex}
+        onImageIndexChange={setDetailImageIndex}
+        currentUsername={userData?.username}
+      />
     </div>
   )
 }

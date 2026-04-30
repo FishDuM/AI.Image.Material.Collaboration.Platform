@@ -80,4 +80,10 @@ export const uploadPostPicture = (formData, onProgress) => api.post('/picture/po
   }
 })
 
+export const getMyPosts = (data) => api.post('/post/myPosts', data)
+
+export const getMyCollects = (data) => api.post('/post/myCollects', data)
+
+export const getMyLikes = (data) => api.post('/post/myLikes', data)
+
 export default api

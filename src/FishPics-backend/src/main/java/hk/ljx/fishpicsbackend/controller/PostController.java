@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
+import hk.ljx.fishpicsbackend.dto.base.PageRequest;
 import hk.ljx.fishpicsbackend.dto.post.EditPostRequest;
 import hk.ljx.fishpicsbackend.dto.post.PostQueryRequest;
 import hk.ljx.fishpicsbackend.dto.post.UploadPostRequest;
@@ -55,5 +56,29 @@ public class PostController {
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), "帖子不存在");
         postService.likePost(id, request);
         return ResUtils.success(true);
+    }
+
+    /**
+     * 获取本人发布的帖子列表（分页）
+     */
+    @PostMapping("/myPosts")
+    public Response<IPage<PostListVO>> getMyPosts(@RequestBody PageRequest pageRequest, HttpServletRequest request) {
+        return ResUtils.success(postService.getMyPosts(pageRequest, request));
+    }
+
+    /**
+     * 获取本人收藏的帖子列表（分页）
+     */
+    @PostMapping("/myCollects")
+    public Response<IPage<PostListVO>> getMyCollects(@RequestBody PageRequest pageRequest, HttpServletRequest request) {
+        return ResUtils.success(postService.getMyCollects(pageRequest, request));
+    }
+
+    /**
+     * 获取本人点赞的帖子列表（分页）
+     */
+    @PostMapping("/myLikes")
+    public Response<IPage<PostListVO>> getMyLikes(@RequestBody PageRequest pageRequest, HttpServletRequest request) {
+        return ResUtils.success(postService.getMyLikes(pageRequest, request));
     }
 }

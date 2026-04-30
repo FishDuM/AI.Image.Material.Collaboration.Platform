@@ -2,6 +2,7 @@ package hk.ljx.fishpicsbackend.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import hk.ljx.fishpicsbackend.dto.base.PageRequest;
 import hk.ljx.fishpicsbackend.dto.post.EditPostRequest;
 import hk.ljx.fishpicsbackend.dto.post.PostQueryRequest;
 import hk.ljx.fishpicsbackend.dto.post.PostQueryWrapper;
@@ -67,4 +68,31 @@ public interface PostService extends IService<Post> {
      * @param request request
      */
     void likePost(Long id, HttpServletRequest request);
+
+    /**
+     * 获取本人发布的帖子列表（分页）
+     *
+     * @param pageRequest 分页参数
+     * @param request     request
+     * @return 帖子列表
+     */
+    IPage<PostListVO> getMyPosts(PageRequest pageRequest, HttpServletRequest request);
+
+    /**
+     * 获取本人收藏的帖子列表（分页）
+     *
+     * @param pageRequest 分页参数
+     * @param request     request
+     * @return 帖子列表
+     */
+    IPage<PostListVO> getMyCollects(PageRequest pageRequest, HttpServletRequest request);
+
+    /**
+     * 获取本人点赞的帖子列表（分页）
+     *
+     * @param pageRequest 分页参数
+     * @param request     request
+     * @return 帖子列表
+     */
+    IPage<PostListVO> getMyLikes(PageRequest pageRequest, HttpServletRequest request);
 }

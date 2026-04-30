@@ -10,6 +10,7 @@ import UserProfile from './pages/UserProfile'
 import SpaceManagement from './pages/SpaceManagement'
 import TeamManagement from './pages/TeamManagement'
 import AIManagement from './pages/AIManagement'
+import SystemManagement from './pages/SystemManagement'
 import CommunitySquare from './pages/CommunitySquare'
 import PrivateSpace from './pages/PrivateSpace'
 import TeamSpace from './pages/TeamSpace'
@@ -30,6 +31,7 @@ function App() {
           <Route path="/admin/spaces" element={<ProtectedRoute requireAdmin><SpaceManagement/></ProtectedRoute>}/>
           <Route path="/admin/teams" element={<ProtectedRoute requireAdmin><TeamManagement/></ProtectedRoute>}/>
           <Route path="/admin/ai" element={<ProtectedRoute requireAdmin><AIManagement/></ProtectedRoute>}/>
+          <Route path="/admin/system" element={<ProtectedRoute requireAdmin><SystemManagement/></ProtectedRoute>}/>
           <Route path="/admin/user-list" element={<ProtectedRoute requireAdmin><AdminUserList/></ProtectedRoute>}/>
           <Route path="/404" element={<NotFound/>}/>
           <Route path="*" element={<NotFound/>}/>
