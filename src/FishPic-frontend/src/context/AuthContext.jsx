@@ -1,12 +1,14 @@
 import { createContext, useState, useEffect } from 'react'
 import { getUserInfo, saveUserInfo, removeUserInfo } from '../utils/storage'
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [userInfo, setUserInfo] = useState(() => getUserInfo())
   const [isAuthenticated, setIsAuthenticated] = useState(!!getUserInfo())
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const user = getUserInfo()
     if (user) {
@@ -17,6 +19,7 @@ export function AuthProvider({ children }) {
       setIsAuthenticated(false)
     }
   }, [])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const login = (data) => {
     saveUserInfo(data)

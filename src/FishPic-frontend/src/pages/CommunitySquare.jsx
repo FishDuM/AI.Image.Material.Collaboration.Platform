@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useContext } from 'react'
 import { App, Typography, Button, Modal, Form, Input, Upload, Switch, Select, Image as AntImage, Masonry, Empty, Spin } from 'antd'
-import { PlusOutlined, SendOutlined, InboxOutlined, LikeOutlined, SearchOutlined, HeartOutlined, StarOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons'
+import { PlusOutlined, SendOutlined, InboxOutlined, LikeOutlined, SearchOutlined, HeartOutlined, StarOutlined, LeftOutlined, RightOutlined, ReloadOutlined, UpOutlined } from '@ant-design/icons'
 import api from '../api'
 import { AuthContext } from '../context/AuthContext'
 import './CommunitySquare.css'
@@ -68,6 +68,16 @@ function CommunitySquare() {
   const [editingPostId, setEditingPostId] = useState(null)
   const [categoryList, setCategoryList] = useState([])
   const [selectedCategory, setSelectedCategory] = useState(null)
+  const [searchText, setSearchText] = useState('')
+  const [currentHotPost, setCurrentHotPost] = useState(false)
+  const [, setCurrentPage] = useState(1)
+  const [hasMore, setHasMore] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const pageSize = 20
+  const loadMoreRef = useRef(null)
+  const currentPageRef = useRef(1)
+  const loadingMoreRef = useRef(false)
+  const keyCounter = useRef(0)
 
   const formatRelativeTime = (timeString) => {
     if (!timeString) return ''
@@ -92,28 +102,61 @@ function CommunitySquare() {
     }
   }
 
-  const fetchPostList = useCallback(async () => {
-    setLoading(true)
+  const fetchPostList = useCallback(async ({ text, hotPost, page = 1, append = false } = {}) => {
+    if (append) {
+      if (loadingMoreRef.current) return
+      loadingMoreRef.current = true
+      setLoadingMore(true)
+    } else {
+      setLoading(true)
+    }
     try {
-      const result = await api.post('/post/postList', {
-        current: 1,
-        size: 20,
-      })
+      const params = {
+        current: page,
+        size: pageSize,
+      }
+      if (text && text.trim()) {
+        params.text = text.trim()
+      }
+      if (hotPost) {
+        params.hotPost = true
+      }
+      const result = await api.post('/post/postList', params)
       if (result && result.records) {
-        setPostList(result.records)
-        // 不设置固定高度，让Masonry根据实际内容自动计算
-        const items = result.records.map((post, index) => ({
-          key: post.id || index,
+        const newRecords = result.records
+        const newItems = newRecords.map((post) => ({
+          key: `post-${post.id}-${keyCounter.current++}`,
           data: post,
         }))
-        setMasonryItems(items)
+        if (append) {
+          setPostList(prev => {
+            const existIds = new Set(prev.map(p => p.id))
+            const unique = newRecords.filter(p => !existIds.has(p.id))
+            return unique.length > 0 ? [...prev, ...unique] : prev
+          })
+          setMasonryItems(prev => {
+            const existIds = new Set(prev.map(item => item.data.id))
+            const unique = newItems.filter(item => !existIds.has(item.data.id))
+            return unique.length > 0 ? [...prev, ...unique] : prev
+          })
+        } else {
+          keyCounter.current = 0
+          setPostList(newRecords)
+          setMasonryItems(newItems)
+        }
+        const totalPages = result.pages || Math.ceil((result.total || 0) / pageSize)
+        setCurrentPage(page)
+        currentPageRef.current = page
+        setHasMore(page < totalPages)
       }
     } catch {
       message.error('获取帖子列表失败')
     } finally {
       setLoading(false)
+      setLoadingMore(false)
+      loadingMoreRef.current = false
     }
-  }, [message])
+  }, [message, pageSize])
 
   const fetchPostDetail = useCallback(async (postId) => {
     setPostDetailLoading(true)
@@ -139,11 +182,11 @@ function CommunitySquare() {
     setPostDetailModalOpen(false)
     setPostDetail(null)
     setDetailImageIndex(0)
+    setPostDetailLoading(false)
   }
 
   const handlePostDetailPrevImage = () => {
     if (postDetail && postDetail.pictureUrl && postDetail.pictureUrl.length > 0) {
-      const validPics = (postDetail.pictureUrl || []).filter(url => url && url.trim())
       setDetailImageIndex(prev => Math.max(0, prev - 1))
     }
   }
@@ -176,9 +219,33 @@ function CommunitySquare() {
     setIsModalOpen(true)
   }
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    fetchPostList()
+    setCurrentPage(1)
+    currentPageRef.current = 1
+    setHasMore(true)
+    fetchPostList({ text: searchText, hotPost: currentHotPost, page: 1, append: false })
   }, [fetchPostList])
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (loadingMoreRef.current || !hasMore) return
+      const scrollTop = document.documentElement.scrollTop || document.body.scrollTop
+      const scrollHeight = document.documentElement.scrollHeight || document.body.scrollHeight
+      const clientHeight = document.documentElement.clientHeight || window.innerHeight
+      if (scrollTop + clientHeight >= scrollHeight - 200) {
+        fetchPostList({
+          text: searchText,
+          hotPost: currentHotPost,
+          page: currentPageRef.current + 1,
+          append: true,
+        })
+      }
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [fetchPostList, hasMore, searchText, currentHotPost])
 
   useEffect(() => {
     if (isModalOpen && isEditing && postDetail) {
@@ -199,7 +266,8 @@ function CommunitySquare() {
             setSelectedCategory(result[0])
           }
         }
-      } catch {
+      } catch (e) {
+        void e
       }
     }
     fetchCategoryList()
@@ -222,6 +290,37 @@ function CommunitySquare() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
+  const handleSearch = () => {
+    setCurrentHotPost(false)
+    setCurrentPage(1)
+    currentPageRef.current = 1
+    setHasMore(true)
+    fetchPostList({ text: searchText, hotPost: false, page: 1, append: false })
+  }
+
+  const handleCategoryClick = (cat) => {
+    if (selectedCategory === cat) {
+      setSelectedCategory(null)
+      setCurrentHotPost(false)
+      setCurrentPage(1)
+      currentPageRef.current = 1
+      setHasMore(true)
+      fetchPostList({ text: searchText, hotPost: false, page: 1, append: false })
+    } else {
+      setSelectedCategory(cat)
+      setCurrentPage(1)
+      currentPageRef.current = 1
+      setHasMore(true)
+      if (cat === '推荐') {
+        setCurrentHotPost(true)
+        fetchPostList({ text: searchText, hotPost: true, page: 1, append: false })
+      } else {
+        setCurrentHotPost(false)
+        fetchPostList({ text: searchText, hotPost: false, page: 1, append: false })
+      }
+    }
+  }
+
   const handleCreatePost = () => {
     setModalStep(1)
     setUploadedImages([])
@@ -229,6 +328,17 @@ function CommunitySquare() {
     setCurrentImageIndex(0)
     setShowUploadSlide(false)
     setIsModalOpen(true)
+  }
+
+  const handleRefresh = () => {
+    setCurrentPage(1)
+    currentPageRef.current = 1
+    setHasMore(true)
+    fetchPostList({ text: searchText, hotPost: currentHotPost, page: 1, append: false })
+  }
+
+  const handleScrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const handleCancel = () => {
@@ -301,7 +411,23 @@ function CommunitySquare() {
 
   const handleImageRemove = (file) => {
     if (isEditing && !file.pictureId) return false
-    setUploadedImages(prev => prev.filter(img => img.uid !== file.uid))
+    const removedIndex = uploadedImages.findIndex(img => img.uid === file.uid)
+    setUploadedImages(prev => {
+      const next = prev.filter(img => img.uid !== file.uid)
+      const currentCover = form.getFieldValue('coverIndex') ?? 0
+      if (next.length > 0) {
+        let newCover = currentCover
+        if (removedIndex === currentCover) {
+          newCover = Math.min(currentCover, next.length - 1)
+        } else if (removedIndex < currentCover) {
+          newCover = currentCover - 1
+        }
+        form.setFieldsValue({ coverIndex: newCover })
+      } else {
+        form.setFieldsValue({ coverIndex: 0 })
+      }
+      return next
+    })
     const removedPicture = uploadedImages.find(img => img.uid === file.uid)
     if (removedPicture) {
       setImageId(prev => prev.filter(id => id !== removedPicture.pictureId))
@@ -397,7 +523,10 @@ function CommunitySquare() {
       setModalStep(1)
       setIsEditing(false)
       setEditingPostId(null)
-      fetchPostList()
+      setCurrentPage(1)
+      currentPageRef.current = 1
+      setHasMore(true)
+      fetchPostList({ text: searchText, hotPost: currentHotPost, page: 1, append: false })
     } catch {
       message.error(isEditing ? '编辑失败，请重试' : '发布失败，请重试')
     } finally {
@@ -425,11 +554,16 @@ function CommunitySquare() {
             placeholder="搜索帖子..."
             prefix={<SearchOutlined />}
             className="search-input"
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            onPressEnter={handleSearch}
+            allowClear
           />
           <Button
             type="primary"
             icon={<SearchOutlined />}
             className="search-button"
+            onClick={handleSearch}
           >
             搜索
           </Button>
@@ -451,7 +585,7 @@ function CommunitySquare() {
             <span
               key={cat}
               className={`category-tag ${selectedCategory === cat ? 'category-tag-active' : ''}`}
-              onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
+              onClick={() => handleCategoryClick(cat)}
             >
               {cat}
             </span>
@@ -475,6 +609,16 @@ function CommunitySquare() {
             items={masonryItems}
             itemRender={(item) => <PostCard post={item.data} onClick={handlePostClick} />}
           />
+          {loadingMore && (
+            <div className="load-more-indicator">
+              <Spin size="small" />
+              <span>加载中...</span>
+            </div>
+          )}
+          {!hasMore && postList.length > 0 && (
+            <div className="load-more-indicator">没有更多了</div>
+          )}
+          <div ref={loadMoreRef} />
         </div>
       )}
 
@@ -483,7 +627,8 @@ function CommunitySquare() {
         onCancel={handlePostDetailClose}
         footer={null}
         className="post-detail-modal"
-        width={900}
+        width="80vw"
+        style={{ maxHeight: '75vh' }}
         closable={false}
       >
         {postDetailLoading ? (
@@ -580,6 +725,7 @@ function CommunitySquare() {
         open={isModalOpen}
         onCancel={handleCancel}
         footer={null}
+        closable={false}
         className="create-post-modal"
         width={900}
       >
@@ -779,6 +925,18 @@ function CommunitySquare() {
           </div>
         )}
       </Modal>
+
+      <div className="floating-buttons">
+        <button type="button" className="floating-btn" onClick={handleCreatePost} title="发帖">
+          <PlusOutlined />
+        </button>
+        <button type="button" className="floating-btn" onClick={handleRefresh} title="刷新">
+          <ReloadOutlined />
+        </button>
+        <button type="button" className="floating-btn" onClick={handleScrollToTop} title="返回顶部">
+          <UpOutlined />
+        </button>
+      </div>
     </main>
   )
 }

@@ -17,6 +17,7 @@ function NotFound() {
   const [currentMessage, setCurrentMessage] = useState(null)
   const [emoji, setEmoji] = useState('😵')
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const randomIndex = Math.floor(Math.random() * funnyMessages.length)
     setCurrentMessage(funnyMessages[randomIndex])
@@ -25,6 +26,7 @@ function NotFound() {
     const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)]
     setEmoji(randomEmoji)
   }, [])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleGoHome = () => {
     navigate('/')

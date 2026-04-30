@@ -27,20 +27,20 @@ import {
 } from '@ant-design/icons'
 import { AuthContext } from '../context/AuthContext.jsx'
 import { getLoginCheckCode, login, getRegisterCheckCode, register, logout } from '../api'
-import { ThemeContext } from '../main.jsx'
+import { ThemeContext } from '../context/ThemeContext.jsx'
 
 function GlobalLayout({ children }) {
   const { message } = AntApp.useApp()
   const navigate = useNavigate()
   const location = useLocation()
   const { isDarkMode, toggleTheme } = useContext(ThemeContext)
-  const { userInfo, isAuthenticated, login: authLogin, logout: authLogout } = useContext(AuthContext)
+  const { userInfo, login: authLogin, logout: authLogout } = useContext(AuthContext)
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
   const [loginForm] = Form.useForm()
   const [loginLoading, setLoginLoading] = useState(false)
   const [loginCheckCodeUrl, setLoginCheckCodeUrl] = useState('')
   const [loginKey, setLoginKey] = useState('')
-  const [agreed, setAgreed] = useState(false)
+  const [, setAgreed] = useState(false)
   const [sidebarVisible, setSidebarVisible] = useState(false)
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false)
@@ -81,7 +81,8 @@ function GlobalLayout({ children }) {
       } else {
         message.error('获取验证码失败')
       }
-    } catch (error) {
+    } catch (e) {
+      void e
       message.error('获取验证码失败')
     }
   }
@@ -132,7 +133,8 @@ function GlobalLayout({ children }) {
       } else {
         message.error('获取验证码失败')
       }
-    } catch (error) {
+    } catch (e) {
+      void e
       message.error('获取验证码失败')
     }
   }
@@ -544,7 +546,7 @@ function GlobalLayout({ children }) {
                 </div>
                 <div className="scan-status">
                   <ScanOutlined className="scan-icon" />
-                  <span>暂是实现该功能，敬请期待</span>
+                  <span>暂未实现该功能，敬请期待</span>
                 </div>
               </Card>
             </div>
@@ -671,7 +673,7 @@ function GlobalLayout({ children }) {
                 </div>
                 <div className="scan-status">
                   <ScanOutlined className="scan-icon" />
-                  <span>暂是实现该功能，敬请期待</span>
+                  <span>暂未实现该功能，敬请期待</span>
                 </div>
               </Card>
             </div>

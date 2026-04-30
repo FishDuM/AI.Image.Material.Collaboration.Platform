@@ -225,8 +225,11 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
         // 构建查询内容
         if (ObjectUtil.isNotNull(text)) {
-            queryWrapper.like("title", text);
-            queryWrapper.like("content", text);
+            queryWrapper.and(wrapper ->
+                    wrapper.like("title", text)
+                            .or()
+                            .like("content", text)
+            );
         }
 
         // 构建热门查询

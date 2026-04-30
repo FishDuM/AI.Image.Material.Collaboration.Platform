@@ -1,12 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import { Card, Typography, Empty } from 'antd'
 import './TeamSpace.css'
 
 const { Title } = Typography
 
 function TeamSpace() {
-  const [loading, setLoading] = useState(false)
-
   useEffect(() => {
     // 页面加载逻辑
   }, [])

@@ -1,5 +1,4 @@
 .team-management-page {
-  background: var(--bg-primary);
 }
 
 .team-management-container {
@@ -19,7 +18,6 @@
 }
 
 .team-content-card {
-  background: var(--bg-secondary);
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   min-height: 400px;
@@ -30,7 +28,6 @@
 
 .team-content-card .ant-card-body {
   padding: 24px;
-  background: var(--bg-secondary);
   border-radius: 12px;
   width: 100%;
 }

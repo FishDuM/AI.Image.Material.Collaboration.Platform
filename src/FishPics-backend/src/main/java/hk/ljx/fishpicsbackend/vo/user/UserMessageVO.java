@@ -49,19 +49,4 @@ public class UserMessageVO {
      * 创建时间
      */
     private Date createTime;
-
-    /**
-     * 帖子列表
-     */
-    private List<PostListVO> postList;
-
-    /**
-     * 帖子收藏表
-     */
-    private List<PostListVO> postCollectList;
-
-    /**
-     * 帖子点赞表
-     */
-    private List<PostListVO> postLikeList;
 }

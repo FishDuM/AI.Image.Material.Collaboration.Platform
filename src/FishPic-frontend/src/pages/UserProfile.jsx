@@ -16,12 +16,10 @@ import {
 } from '@ant-design/icons'
 import { getUserMyself, getUser, editUser, uploadAvatar } from '../api'
 import { AuthContext } from '../context/AuthContext.jsx'
-import { ThemeContext } from '../main.jsx'
 import './UserProfile.css'
 
 function UserProfile() {
   const { message } = AntApp.useApp()
-  const { isDarkMode } = useContext(ThemeContext)
   const { userInfo, login: authLogin, isAuthenticated } = useContext(AuthContext)
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
@@ -75,7 +73,7 @@ function UserProfile() {
       return
     }
     
-    setLoading(true)
+    setLoading(true) // eslint-disable-line react-hooks/set-state-in-effect
     fetchUserInfo().finally(() => setLoading(false))
   }, [navigate, message])
 
@@ -262,9 +260,9 @@ function UserProfile() {
       )
     }
 
-    const postCount = userData.postList?.length || 0
-    const collectCount = userData.postCollectList?.length || 0
-    const likeCount = userData.postLikeList?.length || 0
+    const postCount = 0
+    const collectCount = 0
+    const likeCount = 0
 
     return (
       <>
@@ -521,7 +519,7 @@ function UserProfile() {
           图文
         </span>
       ),
-      children: renderPostList(userData?.postList, '你还没有发布任何内容哦'),
+      children: renderPostList(null, '你还没有发布任何内容哦'),
     },
     {
       key: 'favorites',
@@ -531,7 +529,7 @@ function UserProfile() {
           收藏
         </span>
       ),
-      children: renderPostList(userData?.postCollectList, '暂无收藏内容'),
+      children: renderPostList(null, '暂无收藏内容'),
     },
     {
       key: 'likes',
@@ -541,7 +539,7 @@ function UserProfile() {
           点赞
         </span>
       ),
-      children: renderPostList(userData?.postLikeList, '暂无点赞内容'),
+      children: renderPostList(null, '暂无点赞内容'),
     },
   ]
 

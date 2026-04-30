@@ -4,7 +4,6 @@ import { App as AntApp, Table, Tag, Space, Button, Card, Typography, Avatar, Pop
 import { UserOutlined, EditOutlined, SearchOutlined, ReloadOutlined, LockOutlined, UnlockOutlined, PlusOutlined, LoadingOutlined } from '@ant-design/icons'
 import { AuthContext } from '../context/AuthContext.jsx'
 import api, { getAdminUser } from '../api'
-import FunnyBackground from '../components/FunnyBackground'
 import './UserManagement.css'
 
 const { Title } = Typography
@@ -19,13 +18,6 @@ function UserManagement() {
     current: 1,
     pageSize: 20,
     total: 0,
-  })
-  const [searchParams, setSearchParams] = useState({
-    id: null,
-    username: null,
-    phone: null,
-    nickname: null,
-    role: null,
   })
   const hasFetchedRef = useRef(false)
   const [form] = Form.useForm()
@@ -66,7 +58,7 @@ function UserManagement() {
     } finally {
       setLoading(false)
     }
-  }, [navigate, message, searchParams])
+  }, [navigate, message])
 
   useEffect(() => {
     if (!userInfo || userInfo.role !== 'admin') {
@@ -111,20 +103,11 @@ function UserManagement() {
       role: values.role || null,
       status: values.status || null,
     }
-    setSearchParams(newParams)
     fetchUserList(1, pagination.pageSize, newParams)
   }
 
   const handleReset = () => {
     form.resetFields()
-    setSearchParams({
-      id: null,
-      username: null,
-      phone: null,
-      nickname: null,
-      role: null,
-      status: null,
-    })
     fetchUserList(1, pagination.pageSize)
   }
 
@@ -400,8 +383,7 @@ function UserManagement() {
   }
 
   return (
-    <FunnyBackground>
-      <main className="user-management-container">
+    <main className="user-management-container">
         <div className="user-management-header">
           <Title level={2}>用户管理</Title>
           <p className="header-subtitle">管理系统所有用户信息和权限</p>
@@ -412,58 +394,65 @@ function UserManagement() {
             form={form}
             name="search"
             onFinish={handleSearch}
-            layout="inline"
             className="search-form"
           >
-            <Row gutter={[24, 24]}>
-              <Col xs={24} sm={12} md={8} lg={8}>
+            <Row gutter={[24, 16]}>
+              <Col xs={24} sm={12} md={8}>
                 <Form.Item name="id" label="ID">
                   <Input placeholder="请输入用户 ID" allowClear />
                 </Form.Item>
               </Col>
-              <Col xs={24} sm={12} md={8} lg={8}>
+              <Col xs={24} sm={12} md={8}>
                 <Form.Item name="username" label="账号">
                   <Input placeholder="请输入账号" allowClear />
                 </Form.Item>
               </Col>
-              <Col xs={24} sm={12} md={8} lg={8}>
+              <Col xs={24} sm={12} md={8}>
                 <Form.Item name="phone" label="手机号">
                   <Input placeholder="请输入手机号" allowClear />
                 </Form.Item>
               </Col>
-              <Col xs={24} sm={12} md={8} lg={8}>
+              <Col xs={24} sm={12} md={8}>
                 <Form.Item name="nickname" label="昵称">
                   <Input placeholder="请输入昵称" allowClear />
                 </Form.Item>
               </Col>
-              <Form.Item name="role" label="角色">
-                <Select placeholder="请选择角色" allowClear>
-                  <Select.Option value="user">普通用户</Select.Option>
-                  <Select.Option value="admin">管理员</Select.Option>
-                </Select>
-              </Form.Item>
-              <Form.Item name="status" label="状态">
-                <Select placeholder="请选择状态" allowClear>
-                  <Select.Option value="1">正常</Select.Option>
-                  <Select.Option value="0">禁用</Select.Option>
-                </Select>
-              </Form.Item>
-              <Space>
-                <Button
-                  type="primary"
-                  htmlType="submit"
-                  icon={<SearchOutlined />}
-                >
-                  查询
-                </Button>
-                <Button
-                  htmlType="button"
-                  icon={<ReloadOutlined />}
-                  onClick={handleReset}
-                >
-                  重置
-                </Button>
-              </Space>
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item name="role" label="角色">
+                  <Select placeholder="请选择角色" allowClear>
+                    <Select.Option value="user">普通用户</Select.Option>
+                    <Select.Option value="admin">管理员</Select.Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={12} md={8}>
+                <Form.Item name="status" label="状态">
+                  <Select placeholder="请选择状态" allowClear>
+                    <Select.Option value="1">正常</Select.Option>
+                    <Select.Option value="0">禁用</Select.Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col xs={24}>
+                <div className="search-form-actions">
+                  <Space>
+                    <Button
+                      type="primary"
+                      htmlType="submit"
+                      icon={<SearchOutlined />}
+                    >
+                      查询
+                    </Button>
+                    <Button
+                      htmlType="button"
+                      icon={<ReloadOutlined />}
+                      onClick={handleReset}
+                    >
+                      重置
+                    </Button>
+                  </Space>
+                </div>
+              </Col>
             </Row>
           </Form>
         </Card>
@@ -630,7 +619,6 @@ function UserManagement() {
           </Form>
         </Modal>
       </main>
-    </FunnyBackground>
   )
 }
 

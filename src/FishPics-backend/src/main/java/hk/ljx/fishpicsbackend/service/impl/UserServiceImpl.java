@@ -269,39 +269,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
     @Override
     public UserMessageVO getMyselfMessage(HttpServletRequest request) {
-        // 1. 获取登录用户
         User loginUser = getLoginUser(request);
         ExcUtils.throwIfTrue(loginUser == null || loginUser.getId() == null,
                 ExceptionCode.NOT_FOUND, "未登录");
-
-        Long userId = loginUser.getId();
         UserMessageVO vo = new UserMessageVO();
         BeanUtil.copyProperties(loginUser, vo);
-
-        // 2. 我的发布
-        List<Post> myPosts = postMapper.selectList(new QueryWrapper<Post>().eq("user_id", userId));
-        vo.setPostList(convertToVO(myPosts));
-
-        // 3. 我的收藏
-        List<Long> collectIds = userPostCollectMapper.selectList(new QueryWrapper<UserPostCollect>()
-                .eq("user_id", userId)).stream()
-                .map(UserPostCollect::getPostId)
-                .collect(Collectors.toList());
-
-        List<Post> collectPosts = collectIds.isEmpty() ? new ArrayList<>()
-                : postMapper.selectList(new QueryWrapper<Post>().in("post_id", collectIds));
-        vo.setPostCollectList(convertToVO(collectPosts));
-
-        // 4. 我的点赞
-        List<Long> likeIds = userPostLikesMapper.selectList(new QueryWrapper<UserPostLikes>()
-                .eq("user_id", userId)).stream()
-                .map(UserPostLikes::getPostId)
-                .collect(Collectors.toList());
-
-        List<Post> likePosts = likeIds.isEmpty() ? new ArrayList<>()
-                : postMapper.selectList(new QueryWrapper<Post>().in("post_id", likeIds));
-        vo.setPostLikeList(convertToVO(likePosts));
-
         return vo;
     }
 

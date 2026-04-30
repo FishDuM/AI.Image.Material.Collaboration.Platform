@@ -1,3 +1,7 @@
+CREATE DATABASE `FishPics`;
+
+USE `FishPics`;
+
 CREATE TABLE `comment` (
                            `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
                            `user_id` bigint NOT NULL COMMENT '关联用户表',

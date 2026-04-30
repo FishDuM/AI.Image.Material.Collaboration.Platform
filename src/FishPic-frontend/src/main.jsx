@@ -1,4 +1,4 @@
-import { StrictMode, useState, useEffect, createContext } from 'react'
+import { StrictMode, useState, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import {BrowserRouter} from 'react-router-dom'
 import { ConfigProvider, App as AntdApp, theme as antdTheme } from 'antd'
@@ -9,12 +9,11 @@ import './index.css'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 
+import { ThemeContext } from './context/ThemeContext.jsx'
+
 dayjs.locale('zh-cn')
 
-export const ThemeContext = createContext({ isDarkMode: false, toggleTheme: () => {} })
-
-
-
+// eslint-disable-next-line react-refresh/only-export-components
 function ThemeWrapper({ children }) {
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem('theme')

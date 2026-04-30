@@ -1,17 +1,17 @@
 import { useState, useContext } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { App as AntApp, Button, Modal, Form, Input, message as antdMessage, Card, Checkbox } from 'antd'
+import { App as AntApp, Button, Modal, Form, Input, Card, Checkbox } from 'antd'
 import { UserOutlined, LockOutlined, LoginOutlined, LogoutOutlined, QrcodeOutlined, ScanOutlined } from '@ant-design/icons'
 import { getLoginCheckCode, login, getRegisterCheckCode, register } from '../api'
 import { AuthContext } from '../context/AuthContext.jsx'
-import { ThemeContext } from '../main.jsx'
+import { ThemeContext } from '../context/ThemeContext.jsx'
 import '../App.css'
 
 const LOGIN_USER_PREFIX = 'LOGIN_CHECK_CODE-'
 
 function HomePage() {
   const { message } = AntApp.useApp()
-  const { login: authLogin, logout: authLogout} = useContext(AuthContext);
+  const { login: authLogin } = useContext(AuthContext);
   const navigate = useNavigate()
   const location = useLocation()
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
@@ -25,14 +25,6 @@ function HomePage() {
   const [registerCheckCodeUrl, setRegisterCheckCodeUrl] = useState('')
   const [registerKey, setRegisterKey] = useState('')
   const [agreed, setAgreed] = useState(false)
-
-
-
-  const showLoginModal = () => {
-    setIsLoginModalOpen(true)
-    setIsRegisterMode(false)
-    fetchLoginCheckCode()
-  }
 
   const handleCancel = () => {
     if (isRegisterMode) {

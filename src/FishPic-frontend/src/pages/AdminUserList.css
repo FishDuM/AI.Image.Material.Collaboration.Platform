@@ -1,7 +1,6 @@
 .admin-user-list-container {
   min-height: 100vh;
   padding: 24px;
-  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
 }
 
 .admin-user-list-header {
@@ -22,7 +21,6 @@
 }
 
 .user-table-card {
-  background: #fff;
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
 }
@@ -49,13 +47,11 @@
 }
 
 .ant-table-thead > tr > th {
-  background: #fafafa;
   font-weight: 600;
   color: #333;
 }
 
 .ant-table-tbody > tr:hover > td {
-  background: #f0f7ff;
 }
 
 .ant-tag {

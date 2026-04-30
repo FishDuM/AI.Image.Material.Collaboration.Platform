@@ -46,7 +46,7 @@ knife4j:
 #  secretId:
 #  secretKey:
 #  region:
-#  bucketName:
+#  bucket:
 #  public: true  # 开发true 生产false
 
 logging:

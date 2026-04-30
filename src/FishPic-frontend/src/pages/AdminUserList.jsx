@@ -20,18 +20,6 @@ function AdminUserList() {
     total: 0,
   })
 
-  useEffect(() => {
-    if (!userInfo || userInfo.role !== 'admin') {
-      message.error('无权访问，正在跳转到 404 页面...')
-      setTimeout(() => {
-        navigate('/404', { replace: true })
-      }, 500)
-      return
-    }
-
-    fetchUserList(1, 20)
-  }, [navigate, userInfo])
-
   const fetchUserList = async (current, pageSize) => {
     setLoading(true)
     try {
@@ -59,6 +47,20 @@ function AdminUserList() {
       setLoading(false)
     }
   }
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!userInfo || userInfo.role !== 'admin') {
+      message.error('无权访问，正在跳转到 404 页面...')
+      setTimeout(() => {
+        navigate('/404', { replace: true })
+      }, 500)
+      return
+    }
+
+    fetchUserList(1, 20)
+  }, [navigate, userInfo])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleTableChange = (pag) => {
     fetchUserList(pag.current, pag.pageSize)
