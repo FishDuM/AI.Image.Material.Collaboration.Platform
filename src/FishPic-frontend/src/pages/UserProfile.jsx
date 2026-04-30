@@ -1,6 +1,6 @@
 import { useContext, useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { App as AntApp, Avatar, Tabs, Empty, Skeleton, Modal, Button, Form, Input, Upload, Flex, Spin, Image as AntImage, Masonry } from 'antd'
+import { App as AntApp, Avatar, Tabs, Empty, Skeleton, Modal, Button, Form, Input, Upload, Spin, Image as AntImage, Masonry, Tooltip } from 'antd'
 import { 
   UserOutlined, 
   MailOutlined, 
@@ -19,6 +19,7 @@ import { getUserMyself, getUser, editUser, uploadAvatar, getMyPosts, getMyCollec
 import api from '../api'
 import { AuthContext } from '../context/AuthContext'
 import PostDetailModal from '../components/PostDetailModal'
+import CreateEditPostModal from '../components/CreateEditPostModal'
 import './UserProfile.css'
 
 const PostCard = ({ post, onClick }) => (
@@ -70,6 +71,8 @@ function UserProfile() {
   const [postDetail, setPostDetail] = useState(null)
   const [postDetailLoading, setPostDetailLoading] = useState(false)
   const [detailImageIndex, setDetailImageIndex] = useState(0)
+  const [createEditModalOpen, setCreateEditModalOpen] = useState(false)
+  const [editingPostDetail, setEditingPostDetail] = useState(null)
 
   const apiMap = { notes: getMyPosts, favorites: getMyCollects, likes: getMyLikes }
 
@@ -258,18 +261,33 @@ function UserProfile() {
     if (!date) return 0
     const joinDate = new Date(date)
     const today = new Date()
+    joinDate.setHours(0, 0, 0, 0)
+    today.setHours(0, 0, 0, 0)
     const diffTime = Math.abs(today - joinDate)
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24))
     return diffDays
   }
 
-  const handleCopyUsername = () => {
+  const handleCopyUsername = async () => {
     if (userData?.username) {
-      navigator.clipboard.writeText(userData.username).then(() => {
+      try {
+        await navigator.clipboard.writeText(userData.username)
         message.success('已复制账号')
-      }).catch(() => {
-        message.error('复制失败')
-      })
+      } catch {
+        try {
+          const textarea = document.createElement('textarea')
+          textarea.value = userData.username
+          textarea.style.position = 'fixed'
+          textarea.style.opacity = '0'
+          document.body.appendChild(textarea)
+          textarea.select()
+          document.execCommand('copy')
+          document.body.removeChild(textarea)
+          message.success('已复制账号')
+        } catch {
+          message.error('复制失败')
+        }
+      }
     }
   }
 
@@ -440,7 +458,7 @@ function UserProfile() {
             <div className="profile-masonry-inner">
               <div className="profile-masonry-scroll">
                 <Masonry
-                  columns={{ xs: 2, sm: 3, md: 4 }}
+                  columns={{ xs: 2, sm: 3, md: 3 }}
                   gutter={[12, 12]}
                   items={masonryItems}
                   itemRender={(item) => <PostCard post={item.data} onClick={handlePostClick} />}
@@ -532,9 +550,11 @@ function UserProfile() {
               </div>
               
               <div className="profile-meta-row">
-                <span title={`你已经加入 ${calculateDaysSinceJoin(userData.createTime)} 天`}>
-                  <CalendarOutlined /> 加入于 {formatDate(userData.createTime)}
-                </span>
+                <Tooltip title={`你已经加入 ${calculateDaysSinceJoin(userData.createTime)} 天`}>
+                  <span>
+                    <CalendarOutlined /> 加入于 {formatDate(userData.createTime)}
+                  </span>
+                </Tooltip>
               </div>
               
               {(userData.email || userData.phone) && (
@@ -744,6 +764,23 @@ function UserProfile() {
         detailImageIndex={detailImageIndex}
         onImageIndexChange={setDetailImageIndex}
         currentUsername={userData?.username}
+        onEdit={() => {
+          setPostDetailModalOpen(false)
+          setEditingPostDetail(postDetail)
+          setCreateEditModalOpen(true)
+        }}
+      />
+
+      <CreateEditPostModal
+        open={createEditModalOpen}
+        onClose={() => {
+          setCreateEditModalOpen(false)
+          setEditingPostDetail(null)
+        }}
+        editPostDetail={editingPostDetail}
+        onSuccess={() => {
+          fetchTabData(activeTab, 1, false)
+        }}
       />
     </div>
   )

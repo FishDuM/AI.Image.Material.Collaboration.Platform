@@ -121,11 +121,7 @@ function PostDetailModal({
                 <span className="post-detail-username">{postDetail.username}</span>
               </div>
               {currentUsername === postDetail.username ? (
-                onEdit ? (
-                  <button type="button" className="edit-btn" onClick={onEdit}>编辑</button>
-                ) : (
-                  <button type="button" className="post-detail-close-btn" onClick={onClose}>✕</button>
-                )
+                <button type="button" className="edit-btn" onClick={onEdit}>编辑</button>
               ) : (
                 <button type="button" className="follow-btn">关注</button>
               )}
