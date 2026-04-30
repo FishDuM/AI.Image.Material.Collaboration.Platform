@@ -71,7 +71,6 @@
   align-self: stretch;
   border-top-left-radius: 8px !important;
   border-bottom-left-radius: 8px !important;
-  max-height: 70vh;
 }
 
 .left-image-area .carousel-main {
@@ -120,12 +119,17 @@
 
 .carousel-main > .ant-image,
 .carousel-main > .ant-image-wrapper {
-  position: absolute;
+  position: absolute !important;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
+  width: 100% !important;
+  height: 100% !important;
   z-index: 1;
+}
+
+.left-image-area .ant-image .ant-image-cover {
+  position: absolute !important;
+  inset: 0 !important;
 }
 
 .carousel-main .ant-image-mask {
