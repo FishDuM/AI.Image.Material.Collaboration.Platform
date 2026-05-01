@@ -31,6 +31,6 @@ public class GlobalExceptionHandler {
         }
         log.error("====> 业务异常,异常信息：{}", e.getMessage());
         // 其他接口正常返回JSON
-        return ResUtils.fail(e.getMessage());
+        return ResUtils.fail("业务异常");
     }
 }

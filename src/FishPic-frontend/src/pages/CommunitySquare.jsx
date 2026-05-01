@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useContext } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { App, Button, Input, Image as AntImage, Masonry, Empty, Spin } from 'antd'
 import { PlusOutlined, LikeOutlined, SearchOutlined, ReloadOutlined, UpOutlined } from '@ant-design/icons'
 import api from '../api'
@@ -45,6 +46,7 @@ function PostCard({ post, onClick }) {
 function CommunitySquare() {
   const { message } = App.useApp()
   const { userInfo } = useContext(AuthContext)
+  const [searchParams, setSearchParams] = useSearchParams()
   const [loading, setLoading] = useState(false)
   const [postList, setPostList] = useState([])
   const [masonryItems, setMasonryItems] = useState([])
@@ -66,6 +68,7 @@ function CommunitySquare() {
   const currentPageRef = useRef(1)
   const loadingMoreRef = useRef(false)
   const keyCounter = useRef(0)
+  const initialPostIdRef = useRef(searchParams.get('id'))
 
   const fetchPostList = useCallback(async ({ text, hotPost, page = 1, append = false } = {}) => {
     if (append) {
@@ -114,8 +117,8 @@ function CommunitySquare() {
         currentPageRef.current = page
         setHasMore(page < totalPages)
       }
-    } catch {
-      message.error('获取帖子列表失败')
+    } catch (err) {
+      message.error(err.message || '获取帖子列表失败')
     } finally {
       setLoading(false)
       setLoadingMore(false)
@@ -131,13 +134,14 @@ function CommunitySquare() {
       if (result) {
         setPostDetail(result)
         setPostDetailModalOpen(true)
+        setSearchParams({ id: String(postId) }, { replace: true })
       }
-    } catch {
-      message.error('获取帖子详情失败')
+    } catch (err) {
+      message.error(err.message || '获取帖子详情失败')
     } finally {
       setPostDetailLoading(false)
     }
-  }, [message])
+  }, [message, setSearchParams])
 
   const handlePostClick = useCallback((post) => {
     fetchPostDetail(post.id)
@@ -148,6 +152,9 @@ function CommunitySquare() {
     setPostDetail(null)
     setDetailImageIndex(0)
     setPostDetailLoading(false)
+    if (searchParams.get('id')) {
+      setSearchParams({}, { replace: true })
+    }
   }
 
   const handleEditPost = () => {
@@ -200,6 +207,28 @@ function CommunitySquare() {
       }
     }
     fetchCategoryList()
+  }, [])
+
+  useEffect(() => {
+    const postId = initialPostIdRef.current
+    if (!postId) return
+    initialPostIdRef.current = null
+    ;(async () => {
+      setPostDetailLoading(true)
+      setDetailImageIndex(0)
+      try {
+        const result = await api.get('/post/getPost', { params: { id: postId } })
+        if (result) {
+          setPostDetail(result)
+          setPostDetailModalOpen(true)
+          setSearchParams({ id: String(postId) }, { replace: true })
+        }
+      } catch (err) {
+        message.error(err.message || '获取帖子详情失败')
+      } finally {
+        setPostDetailLoading(false)
+      }
+    })()
   }, [])
 
   useEffect(() => {

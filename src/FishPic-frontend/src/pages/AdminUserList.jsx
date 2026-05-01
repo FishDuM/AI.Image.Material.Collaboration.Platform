@@ -39,7 +39,7 @@ function AdminUserList() {
       message.success('获取用户列表成功')
     } catch (error) {
       console.error('获取用户列表失败:', error)
-      message.error('获取用户列表失败，请检查网络连接')
+      message.error(error.message || '获取用户列表失败')
       setTimeout(() => {
         navigate('/404', { replace: true })
       }, 500)

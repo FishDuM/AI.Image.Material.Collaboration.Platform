@@ -1,0 +1,487 @@
+.create-post-modal .ant-modal-body {
+    height: 70vh;
+    padding: 0;
+}
+
+.upload-step {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.upload-hint-text {
+    font-size: 16px;
+    margin-bottom: 20px;
+    padding: 8px 16px;
+    width: 100%;
+    text-align: center;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.image-dragger.ant-upload-wrapper.ant-upload-picture-card-wrapper {
+    width: 100% !important;
+    display: block !important;
+}
+
+.image-dragger .ant-upload.ant-upload-select {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 300px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.image-dragger .ant-upload {
+    width: 100% !important;
+    height: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 !important;
+}
+
+.image-dragger .ant-upload > div {
+    width: 100% !important;
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.upload-step-content {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 32px;
+    box-sizing: border-box;
+}
+
+.upload-step-icon {
+    font-size: 48px;
+    color: var(--accent);
+    margin-bottom: 8px;
+}
+
+.upload-step-title {
+    font-size: 16px;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.upload-step-desc {
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+.xiaohongshu-layout {
+    background: var(--bg-secondary);
+    display: flex;
+    gap: 0;
+    height: auto !important;
+    max-height: none !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    align-items: stretch;
+    align-content: stretch;
+    overflow: hidden;
+}
+
+.left-image-area {
+    flex: 0 0 55% !important;
+    max-width: 55% !important;
+    background: #000;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    min-width: 0;
+    overflow: hidden;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    align-self: stretch;
+    border-top-left-radius: 8px !important;
+    border-bottom-left-radius: 8px !important;
+}
+
+.right-form-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-self: stretch;
+    min-width: 0;
+    padding: 20px 24px;
+    overflow-y: auto;
+    gap: 16px;
+    border-top-right-radius: 8px !important;
+    border-bottom-right-radius: 8px !important;
+}
+
+.modal-submit-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: auto;
+    padding-top: 16px;
+}
+
+.post-form .ant-form-item-label {
+    padding-bottom: 8px;
+}
+
+.post-form .ant-form-item-label label {
+    color: var(--text-primary);
+    font-weight: 500;
+    font-size: 15px;
+}
+
+.post-form .ant-input,
+.post-form .ant-input-textarea {
+    border-radius: var(--radius-md);
+    border-color: var(--border-color);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    transition: all 0.2s;
+}
+
+.post-form .ant-input:hover,
+.post-form .ant-input-textarea:hover {
+    border-color: var(--accent);
+    background: var(--bg-primary);
+}
+
+.post-form .ant-input:focus,
+.post-form .ant-input-textarea:focus,
+.post-form .ant-input-focused,
+.post-form .ant-input-textarea-focused {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.1);
+    background: var(--bg-primary);
+}
+
+.post-form .ant-input::placeholder,
+.post-form .ant-input-textarea::placeholder {
+    color: var(--text-muted);
+}
+
+.post-form .ant-input-show-count-suffix,
+.post-form .ant-input-textarea-show-count-suffix {
+    color: var(--text-muted);
+}
+
+.privacy-toggle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+}
+
+.privacy-label {
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.form-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.form-row > .ant-form-item:first-child {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+.form-row > .ant-form-item:last-child {
+    flex: 0 0 auto;
+    margin-bottom: 0;
+    margin-left: auto;
+}
+
+.form-row > .ant-form-item:last-child .ant-form-item-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.form-row > .ant-form-item:last-child .ant-form-item-label {
+    padding: 0;
+    flex: none;
+    white-space: nowrap;
+}
+
+.form-row > .ant-form-item:last-child .ant-form-item-label label {
+    display: flex;
+    align-items: center;
+    height: 32px;
+}
+
+.form-row > .ant-form-item:last-child .ant-form-item-control {
+    flex: 1;
+}
+
+.form-row > .ant-form-item:last-child .ant-select {
+    min-width: 140px;
+}
+
+.post-form #title {
+    margin-top: 20px !important;
+}
+
+.post-form #content {
+    height: 370px !important;
+    min-height: 300px !important;
+    max-height: 400px !important;
+}
+
+.carousel-main {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 300px;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    touch-action: pan-y;
+    display: flex;
+    align-items: stretch;
+}
+
+.carousel-main > .ant-image,
+.carousel-main > .ant-image-wrapper {
+    position: absolute !important;
+    top: 0;
+    left: 0;
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 1;
+}
+
+.left-image-area .ant-image .ant-image-cover {
+    position: absolute !important;
+    inset: 0 !important;
+}
+
+.carousel-main .ant-image-mask {
+    z-index: 1;
+}
+
+.carousel-main-image {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+}
+
+.carousel-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(128, 128, 128, 0.6);
+    border: none;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    opacity: 0;
+    z-index: 20;
+    backdrop-filter: blur(4px);
+    pointer-events: auto !important;
+}
+
+.carousel-arrow-left { left: 12px; }
+.carousel-arrow-right { right: 12px; }
+
+.carousel-main:hover .carousel-arrow {
+    opacity: 1 !important;
+}
+
+.carousel-arrow:hover:not(:disabled) {
+    background: rgba(128, 128, 128, 0.8);
+    transform: translateY(-50%) scale(1.1);
+}
+
+.carousel-arrow:disabled {
+    opacity: 0;
+    cursor: not-allowed;
+}
+
+.carousel-main:hover .carousel-arrow:disabled {
+    opacity: 0.3 !important;
+}
+
+.carousel-remove-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.6);
+    border: none;
+    color: #ffffff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    opacity: 0;
+    z-index: 20;
+    backdrop-filter: blur(4px);
+    pointer-events: auto !important;
+}
+
+.carousel-main:hover .carousel-remove-btn {
+    opacity: 1 !important;
+}
+
+.carousel-remove-btn:hover {
+    background: rgba(255, 59, 48, 0.9);
+    transform: scale(1.1);
+}
+
+.carousel-counter {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.6);
+    color: #ffffff;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    z-index: 2;
+}
+
+@media (max-width: 768px) {
+    .carousel-main .carousel-arrow {
+        opacity: 1 !important;
+    }
+
+    .carousel-main .carousel-remove-btn {
+        opacity: 1 !important;
+    }
+
+    .carousel-counter {
+        opacity: 1 !important;
+    }
+}
+
+.carousel-upload {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.carousel-upload.ant-upload-picture-card-wrapper {
+    width: 100% !important;
+    height: 100% !important;
+    display: block !important;
+}
+
+.carousel-upload .ant-upload {
+    width: 100% !important;
+    height: 100% !important;
+    display: block !important;
+}
+
+.carousel-upload .ant-upload-select {
+    width: 100% !important;
+    height: 100% !important;
+    display: block !important;
+}
+
+.carousel-upload .ant-upload-list {
+    display: none !important;
+}
+
+.carousel-upload .ant-upload-list-item-container {
+    display: none !important;
+}
+
+.carousel-upload-btn {
+    width: 100% !important;
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: var(--text-muted);
+    background: var(--bg-primary);
+    border: none !important;
+    border-radius: var(--radius-md);
+    padding: 20px !important;
+    margin: 0 !important;
+    outline: none !important;
+    box-sizing: border-box;
+}
+
+.carousel-upload-btn:hover {
+    border-color: var(--accent);
+    background: var(--bg-hover);
+}
+
+.carousel-upload-btn .anticon {
+    color: var(--text-muted);
+    font-size: 32px;
+}
+
+.carousel-upload-btn:hover .anticon {
+    color: var(--accent);
+}
+
+.carousel-upload-btn .upload-text {
+    color: var(--text-muted);
+    font-size: 16px;
+    line-height: 1.5;
+}
+
+.carousel-upload-btn:hover .upload-text {
+    color: var(--accent);
+}
+
+.upload-preview-inline {
+    width: 100% !important;
+    height: 100% !important;
+    display: block !important;
+    min-height: 100%;
+}
+
+.upload-preview-inline .ant-upload-select {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 100%;
+    display: flex;
+}
+
+.upload-preview-inline .ant-upload {
+    width: 100% !important;
+    height: 100% !important;
+    display: flex !important;
+}
+
+.form-item-compact {
+    margin-bottom: 0px;
+}
+
+.form-item-compact .ant-form-item-explain {
+    display: none;
+}
