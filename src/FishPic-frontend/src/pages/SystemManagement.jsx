@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { App as AntApp, Card, Typography, Tag, Input, Button, Space, Spin, Empty } from 'antd'
-import { PlusOutlined, ReloadOutlined, TagOutlined, PictureOutlined } from '@ant-design/icons'
+import { App as AntApp, Card, Typography, Tag, Input, Button, Space, Spin, Empty, Popconfirm } from 'antd'
+import { PlusOutlined, ReloadOutlined, TagOutlined, PictureOutlined, DeleteOutlined } from '@ant-design/icons'
 import { AuthContext } from '../context/AuthContext.jsx'
 import api from '../api'
 import './SystemManagement.css'
@@ -122,6 +122,26 @@ function SystemManagement() {
     }
   }
 
+  const handleDeleteTag = async (tag) => {
+    try {
+      await api.post('/system/deleteType', { value: tag })
+      antMessage.success(`标签「${tag}」已删除`)
+      fetchTypeList()
+    } catch (err) {
+      antMessage.error(err.message || '删除标签失败')
+    }
+  }
+
+  const handleDeleteMarquee = async (url) => {
+    try {
+      await api.post('/system/deleteMarquee', { url })
+      antMessage.success('跑马灯图片已删除')
+      fetchMarquee()
+    } catch (err) {
+      antMessage.error(err.message || '删除跑马灯图片失败')
+    }
+  }
+
   if (!userInfo || userInfo.role !== 'admin') {
     return (
       <main className="system-management-container">
@@ -187,19 +207,35 @@ function SystemManagement() {
           ) : (
             <div className="tag-grid">
               {typeList.map((tag, index) => (
-                <Tag
-                  key={`${tag}-${index}`}
-                  className="system-tag"
-                  closable={false}
-                  icon={<TagOutlined />}
-                  color={
-                    ['magenta', 'red', 'volcano', 'orange', 'gold', 'lime', 'green', 'cyan', 'blue', 'geekblue', 'purple'][
-                      index % 11
-                    ]
-                  }
-                >
-                  {tag}
-                </Tag>
+                <div key={`${tag}-${index}`} className="system-tag-wrapper">
+                  <Tag
+                    className="system-tag"
+                    icon={<TagOutlined />}
+                    color={
+                      ['magenta', 'red', 'volcano', 'orange', 'gold', 'lime', 'green', 'cyan', 'blue', 'geekblue', 'purple'][
+                        index % 11
+                      ]
+                    }
+                  >
+                    {tag}
+                  </Tag>
+                  <Popconfirm
+                    title="确认删除该标签？"
+                    description={`删除后标签「${tag}」将被移除`}
+                    onConfirm={() => handleDeleteTag(tag)}
+                    okText="确认"
+                    cancelText="取消"
+                    okButtonProps={{ danger: true }}
+                  >
+                    <Button
+                      type="text"
+                      danger
+                      size="small"
+                      icon={<DeleteOutlined />}
+                      className="system-tag-delete-btn"
+                    />
+                  </Popconfirm>
+                </div>
               ))}
             </div>
           )}
@@ -261,6 +297,22 @@ function SystemManagement() {
                     className="marquee-thumb"
                   />
                   <div className="marquee-index">{index + 1}</div>
+                  <Popconfirm
+                    title="确认删除该图片？"
+                    description="删除后该图片将从跑马灯中移除"
+                    onConfirm={() => handleDeleteMarquee(url)}
+                    okText="确认"
+                    cancelText="取消"
+                    okButtonProps={{ danger: true }}
+                  >
+                    <Button
+                      type="primary"
+                      danger
+                      size="small"
+                      icon={<DeleteOutlined />}
+                      className="marquee-delete-btn"
+                    />
+                  </Popconfirm>
                 </div>
               ))}
             </div>

@@ -1,6 +1,7 @@
 package hk.ljx.fishpicsbackend.service;
 
 import hk.ljx.fishpicsbackend.entity.Picture;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
 import hk.ljx.fishpicsbackend.vo.picture.PicturePostVO;
@@ -43,8 +44,10 @@ public interface PictureService extends IService<Picture> {
     void setPicturePostId(List<Long> imageId, Long id);
 
     /**
-     * 首页获取图片列表
-     * @return 图片列表
+     * 首页获取图片列表（分页）
+     * @param current 当前页
+     * @param pageSize 每页数量
+     * @return 图片分页列表
      */
-    List<PictureListVO> getPictureList();
+    IPage<PictureListVO> getPictureList(int current, int pageSize);
 }

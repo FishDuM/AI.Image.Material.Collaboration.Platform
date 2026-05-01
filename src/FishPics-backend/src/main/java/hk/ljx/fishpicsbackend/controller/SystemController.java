@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/system")
@@ -35,6 +36,14 @@ public class SystemController {
         return ResUtils.success(true);
     }
 
+    @PostMapping("/deleteType")
+    public Response<Boolean> deleteType(@RequestBody Map<String, String> body) {
+        String type = body.get("value");
+        ExcUtils.throwIfTrue(type == null || type.isEmpty(), ExceptionCode.PARAMETER_ERROR, "type不能为空");
+        picSystemService.deleteType(type);
+        return ResUtils.success(true);
+    }
+
     @GetMapping("/marquee")
     public Response<List<String>> marquee() {
         List<String> urls = picSystemService.getMarquess();
@@ -45,6 +54,14 @@ public class SystemController {
     public Response<Boolean> addMarquee(@RequestBody AddSysMarquee addSysMarquee) {
         ExcUtils.throwIfTrue(addSysMarquee == null, ExceptionCode.PARAMETER_ERROR, "url不能为空");
         picSystemService.addMarquee(addSysMarquee);
+        return ResUtils.success(true);
+    }
+
+    @PostMapping("/deleteMarquee")
+    public Response<Boolean> deleteMarquee(@RequestBody Map<String, String> body) {
+        String url = body.get("url");
+        ExcUtils.throwIfTrue(url == null || url.isEmpty(), ExceptionCode.PARAMETER_ERROR, "url不能为空");
+        picSystemService.deleteMarquee(url);
         return ResUtils.success(true);
     }
 }

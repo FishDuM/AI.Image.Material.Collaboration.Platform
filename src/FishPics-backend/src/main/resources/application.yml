@@ -10,6 +10,10 @@ spring:
     # 86400 秒 = 1天
     timeout: 86400
   servlet:
+    session:
+      cookie:
+        # cookie 持续时间与 session 超时一致，关闭浏览器后仍保留登录态
+        max-age: 86400
     multipart:
       # 单个文件最大大小
       max-file-size: 10MB

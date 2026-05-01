@@ -3,6 +3,8 @@ package hk.ljx.fishpicsbackend.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.ObjUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.dto.picture.PictureMessage;
@@ -97,8 +99,15 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     }
 
     @Override
-    public List<PictureListVO> getPictureList() {
-        return List.of();
+    public IPage<PictureListVO> getPictureList(int current, int pageSize) {
+        QueryWrapper<Picture> queryWrapper = new QueryWrapper<Picture>()
+                .ne("status", 0)
+                .isNotNull("url")
+                .ne("url", "")
+                .orderByDesc("create_time");
+        Page<Picture> page = new Page<>(current, pageSize);
+        IPage<Picture> picturePage = pictureMapper.selectPage(page, queryWrapper);
+        return picturePage.convert(p -> new PictureListVO(p.getId(), p.getUrl()));
     }
 }
 

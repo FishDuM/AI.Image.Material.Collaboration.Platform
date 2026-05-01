@@ -401,9 +401,9 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess }) => {
                   </Select>
                 </Form.Item>
 
-                <Form.Item name="isPrivate" valuePropName="checked" initialValue={true}>
+                <Form.Item name="isPrivate" valuePropName="checked" initialValue={false}>
                   <div className="privacy-toggle">
-                    <Switch checkedChildren="私密" unCheckedChildren="公开" defaultChecked />
+                    <Switch checkedChildren="私密" unCheckedChildren="公开" />
                   </div>
                 </Form.Item>
               </div>

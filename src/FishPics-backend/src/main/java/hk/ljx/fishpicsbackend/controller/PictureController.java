@@ -3,6 +3,7 @@ package hk.ljx.fishpicsbackend.controller;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.dto.picture.PictureMessage;
 import hk.ljx.fishpicsbackend.service.PictureService;
 import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
@@ -39,7 +40,11 @@ public class PictureController {
     }
 
     @GetMapping("/list")
-    public Response<List<PictureListVO>> getPictureList() {
-        return ResUtils.success(pictureService.getPictureList());
+    public Response<IPage<PictureListVO>> getPictureList(
+            @RequestParam(value = "current", defaultValue = "1") int current,
+            @RequestParam(value = "pageSize", defaultValue = "20") int pageSize) {
+        ExcUtils.throwIfTrue(current < 1, "页码不能小于1");
+        ExcUtils.throwIfTrue(pageSize < 1 || pageSize > 100, "每页数量应在1-100之间");
+        return ResUtils.success(pictureService.getPictureList(current, pageSize));
     }
 }

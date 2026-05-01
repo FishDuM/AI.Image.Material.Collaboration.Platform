@@ -27,6 +27,12 @@ public interface PicSystemService extends IService<PicSystem> {
     void addTypeList(AddSysPicType addSysPicType);
 
     /**
+     * 删除帖子标签
+     * @param type 标签名
+     */
+    void deleteType(String type);
+
+    /**
      * 设置首页跑马灯图片
      * @return url 列表
      */
@@ -37,4 +43,10 @@ public interface PicSystemService extends IService<PicSystem> {
      * @param addSysMarquee 图片 id
      */
     void addMarquee(AddSysMarquee addSysMarquee);
+
+    /**
+     * 删除跑马灯图片
+     * @param url 图片 url
+     */
+    void deleteMarquee(String url);
 }

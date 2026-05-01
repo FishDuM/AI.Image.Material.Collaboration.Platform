@@ -86,4 +86,9 @@ export const getMyCollects = (data) => api.post('/post/myCollects', data)
 
 export const getMyLikes = (data) => api.post('/post/myLikes', data)
 
+export const getMarquee = () => api.get('/system/marquee')
+
+export const getPictureList = (current = 1, pageSize = 20) =>
+  api.get('/picture/list', { params: { current, pageSize } })
+
 export default api

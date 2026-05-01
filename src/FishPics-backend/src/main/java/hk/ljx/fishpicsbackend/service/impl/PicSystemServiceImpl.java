@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -70,6 +71,21 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
     }
 
     @Override
+    public void deleteType(String type) {
+        ExcUtils.throwIfTrue(type == null || type.trim().isEmpty(), ExceptionCode.PARAMETER_ERROR, "标签名不能为空");
+        QueryWrapper<PicSystem> queryWrapper = new QueryWrapper<PicSystem>().eq("syskey", TYPE_LIST_KEY);
+        List<PicSystem> list = picSystemMapper.selectList(queryWrapper);
+        ExcUtils.throwIfTrue(list == null || list.isEmpty(), ExceptionCode.NOT_FOUND, "标签配置不存在");
+        PicSystem picSystem = list.get(0);
+        ExcUtils.throwIfTrue(picSystem.getSysvalue() == null, ExceptionCode.NOT_FOUND, "标签配置不存在");
+        List<String> typeList = new ArrayList<>(JSONUtil.toList(picSystem.getSysvalue(), String.class));
+        boolean removed = typeList.remove(type);
+        ExcUtils.throwIfTrue(!removed, ExceptionCode.NOT_FOUND, "标签不存在");
+        picSystem.setSysvalue(JSONUtil.toJsonStr(typeList));
+        this.saveOrUpdate(picSystem);
+    }
+
+    @Override
     public List<String> getMarquess() {
         QueryWrapper<PicSystem> queryWrapper = new QueryWrapper<PicSystem>().eq("syskey", MARQUESS_KEY);
         List<PicSystem> list = picSystemMapper.selectList(queryWrapper);
@@ -112,6 +128,21 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
                 picSystemMapper.deleteById(list.get(i).getId());
             }
         }
+        this.saveOrUpdate(picSystem);
+    }
+
+    @Override
+    public void deleteMarquee(String url) {
+        ExcUtils.throwIfTrue(url == null || url.trim().isEmpty(), ExceptionCode.PARAMETER_ERROR, "图片url不能为空");
+        QueryWrapper<PicSystem> queryWrapper = new QueryWrapper<PicSystem>().eq("syskey", MARQUESS_KEY);
+        List<PicSystem> list = picSystemMapper.selectList(queryWrapper);
+        ExcUtils.throwIfTrue(list == null || list.isEmpty(), ExceptionCode.NOT_FOUND, "跑马灯配置不存在");
+        PicSystem picSystem = list.get(0);
+        ExcUtils.throwIfTrue(picSystem.getSysvalue() == null, ExceptionCode.NOT_FOUND, "跑马灯配置不存在");
+        List<String> marquess = new ArrayList<>(JSONUtil.toList(picSystem.getSysvalue(), String.class));
+        boolean removed = marquess.remove(url);
+        ExcUtils.throwIfTrue(!removed, ExceptionCode.NOT_FOUND, "该图片不在跑马灯列表中");
+        picSystem.setSysvalue(JSONUtil.toJsonStr(marquess));
         this.saveOrUpdate(picSystem);
     }
 }

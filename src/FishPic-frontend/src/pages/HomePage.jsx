@@ -1,8 +1,9 @@
-import { useState, useContext } from 'react'
+import { useState, useEffect, useContext, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { App as AntApp, Button, Modal, Form, Input, Card, Checkbox } from 'antd'
-import { UserOutlined, LockOutlined, LoginOutlined, LogoutOutlined, QrcodeOutlined, ScanOutlined } from '@ant-design/icons'
-import { getLoginCheckCode, login, getRegisterCheckCode, register } from '../api'
+import { App as AntApp, Button, Modal, Form, Input, Card, Checkbox, Carousel, Masonry, Image as AntImage, Spin } from 'antd'
+import { UserOutlined, LockOutlined, LoginOutlined, LogoutOutlined, QrcodeOutlined, ScanOutlined, SearchOutlined } from '@ant-design/icons'
+import { getLoginCheckCode, login, getRegisterCheckCode, register, getMarquee, getPictureList } from '../api'
+import api from '../api'
 import { AuthContext } from '../context/AuthContext.jsx'
 import { ThemeContext } from '../context/ThemeContext.jsx'
 import '../App.css'
@@ -25,6 +26,123 @@ function HomePage() {
   const [registerCheckCodeUrl, setRegisterCheckCodeUrl] = useState('')
   const [registerKey, setRegisterKey] = useState('')
   const [agreed, setAgreed] = useState(false)
+  const [marqueeImages, setMarqueeImages] = useState([])
+  const [currentSlide, setCurrentSlide] = useState(0)
+  const [imgLoaded, setImgLoaded] = useState({})
+  const [searchValue, setSearchValue] = useState('')
+  const [categoryList, setCategoryList] = useState([])
+  const [pictureList, setPictureList] = useState([])
+  const [picturePage, setPicturePage] = useState(1)
+  const [pictureLoading, setPictureLoading] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const carouselRef = useRef(null)
+  const loadMoreRef = useRef(null)
+  const PAGE_SIZE = 20
+
+  const masonryItems = useMemo(() => pictureList.map((pic) => ({
+    key: `pic-${pic.id}`,
+    data: pic,
+  })), [pictureList])
+
+  const handlePrev = useCallback(() => {
+    carouselRef.current?.prev()
+  }, [])
+
+  const handleNext = useCallback(() => {
+    carouselRef.current?.next()
+  }, [])
+
+  const handleSearch = useCallback(() => {
+    const trimmed = searchValue.trim()
+    if (trimmed) {
+      navigate(`/community?search=${encodeURIComponent(trimmed)}`)
+    } else {
+      navigate('/community')
+    }
+  }, [searchValue, navigate])
+
+  useEffect(() => {
+    const fetchMarquee = async () => {
+      try {
+        const images = await getMarquee()
+        if (Array.isArray(images) && images.length > 0) {
+          setMarqueeImages(images)
+        }
+      } catch (error) {
+        console.error('获取轮播图失败', error)
+      }
+    }
+    fetchMarquee()
+  }, [])
+
+  useEffect(() => {
+    const fetchCategoryList = async () => {
+      try {
+        const result = await api.get('/system/list')
+        if (Array.isArray(result)) {
+          setCategoryList(result)
+        }
+      } catch (e) {
+        void e
+      }
+    }
+    fetchCategoryList()
+  }, [])
+
+  const handleCategoryClick = useCallback((cat) => {
+    navigate(`/community?search=${encodeURIComponent(cat)}`)
+  }, [navigate])
+
+  const loadPictures = useCallback(async (page) => {
+    setPictureLoading(true)
+    try {
+      const result = await getPictureList(page, PAGE_SIZE)
+      if (result && Array.isArray(result.records)) {
+        setPictureList(prev => {
+          if (page === 1) return result.records
+          return [...prev, ...result.records]
+        })
+        setHasMore(result.records.length === PAGE_SIZE)
+      } else {
+        setHasMore(false)
+      }
+    } catch {
+      setHasMore(false)
+    } finally {
+      setPictureLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    getPictureList(1, PAGE_SIZE).then((result) => {
+      if (cancelled) return
+      if (result && Array.isArray(result.records)) {
+        setPictureList(result.records)
+        setHasMore(result.records.length === PAGE_SIZE)
+      }
+    }).catch(() => {
+      if (!cancelled) setHasMore(false)
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    if (!hasMore || pictureLoading) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !pictureLoading) {
+          const nextPage = picturePage + 1
+          setPicturePage(nextPage)
+          loadPictures(nextPage)
+        }
+      },
+      { threshold: 0.1 }
+    )
+    const el = loadMoreRef.current
+    if (el) observer.observe(el)
+    return () => { if (el) observer.unobserve(el) }
+  }, [hasMore, pictureLoading, picturePage, loadPictures])
 
   const handleCancel = () => {
     if (isRegisterMode) {
@@ -191,16 +309,133 @@ function HomePage() {
 
   return (
     <>
-      <div className="hero-section">
-        <div className="hero-content">
-          <h2 className="hero-title">
-            发现与分享
-          </h2>
-          <p className="hero-subtitle">
-            简洁高效的图片管理平台
-          </p>
-          <div className="hero-divider" />
+      {marqueeImages.length > 0 && (
+        <div className="carousel-section">
+          <div className="carousel-wrapper">
+            <Carousel
+              ref={carouselRef}
+              autoplay
+              autoplaySpeed={4500}
+              dots
+              arrows={false}
+              speed={600}
+              effect="fade"
+              fade
+              afterChange={(current) => setCurrentSlide(current)}
+              pauseOnHover
+            >
+              {marqueeImages.map((url, index) => (
+                <div key={index} className="carousel-slide">
+                  {!imgLoaded[index] && <div className="carousel-skeleton" />}
+                  <img
+                    src={url}
+                    alt={`轮播图 ${index + 1}`}
+                    className="carousel-image"
+                    style={{ opacity: imgLoaded[index] ? 1 : 0 }}
+                    onLoad={() => setImgLoaded(prev => ({ ...prev, [index]: true }))}
+                    onError={(e) => {
+                      e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwMCIgaGVpZ2h0PSI1MDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjEyMDAiIGhlaWdodD0iNTAwIiBmaWxsPSIjMWYxZjFmIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJhcmlhbCIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzZiNmI2YiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPua2ieWPiuWfuuinpuWNoOe6qTwvdGV4dD48L3N2Zz4='
+                      setImgLoaded(prev => ({ ...prev, [index]: true }))
+                    }}
+                  />
+                </div>
+              ))}
+            </Carousel>
+
+            {marqueeImages.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  className="carousel-arrow-btn carousel-arrow-left"
+                  onClick={handlePrev}
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  className="carousel-arrow-btn carousel-arrow-right"
+                  onClick={handleNext}
+                >
+                  ›
+                </button>
+              </>
+            )}
+
+            {marqueeImages.length > 1 && (
+              <div className="carousel-counter-badge">
+                {currentSlide + 1} / {marqueeImages.length}
+              </div>
+            )}
+          </div>
         </div>
+      )}
+
+      <div className="home-search-section">
+        <div className="home-search-bar">
+          <Input
+            className="home-search-input"
+            placeholder="搜索图片、帖子..."
+            prefix={<SearchOutlined />}
+            value={searchValue}
+            onChange={(e) => setSearchValue(e.target.value)}
+            onPressEnter={handleSearch}
+            allowClear
+          />
+          <Button
+            type="primary"
+            className="home-search-button"
+            icon={<SearchOutlined />}
+            onClick={handleSearch}
+          >
+            搜索
+          </Button>
+        </div>
+      </div>
+
+      {categoryList.length > 0 && (
+        <div className="home-category-section">
+          <div className="home-category-bar">
+            {categoryList.map((cat) => (
+              <span
+                key={cat}
+                className="home-category-tag"
+                onClick={() => handleCategoryClick(cat)}
+              >
+                {cat}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="home-masonry-section">
+        {masonryItems.length > 0 && (
+          <Masonry
+            columns={{ xs: 2, sm: 3, md: 4, lg: 5 }}
+            gutter={[12, 12]}
+            fresh
+            items={masonryItems}
+            itemRender={(item) => (
+              <div className="home-masonry-item">
+                <AntImage
+                  src={item.data.url}
+                  alt=""
+                  preview={false}
+                  className="home-masonry-image"
+                />
+              </div>
+            )}
+          />
+        )}
+        {hasMore && <div ref={loadMoreRef} className="home-load-more" />}
+        {pictureLoading && (
+          <div className="home-loading-spinner">
+            <Spin />
+          </div>
+        )}
+        {!hasMore && masonryItems.length > 0 && (
+          <div className="home-no-more">已加载全部图片</div>
+        )}
       </div>
 
       <Modal
