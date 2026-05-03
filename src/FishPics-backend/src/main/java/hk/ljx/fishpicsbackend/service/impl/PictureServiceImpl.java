@@ -109,6 +109,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     public IPage<PictureListVO> getPictureList(int current, int pageSize, int flag) {
         QueryWrapper<Picture> queryWrapper = new QueryWrapper<Picture>()
                 .eq("status", flag)
+                .eq("is_private", 1)
                 .isNotNull("url")
                 .ne("url", "")
                 .orderByDesc("create_time");
@@ -118,11 +119,18 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     }
 
     @Override
-    public IPage<PictureAdminVO> getAdminPictureList(int current, int pageSize) {
+    public IPage<PictureAdminVO> getAdminPictureList(int current, int pageSize, Integer status) {
         QueryWrapper<Picture> queryWrapper = new QueryWrapper<Picture>()
                 .isNotNull("url")
                 .ne("url", "")
                 .orderByDesc("create_time");
+        if (status == 0 || status == 1 || status == 2) {
+            queryWrapper.eq("status", status);
+        }
+        if (status == 4) {
+            queryWrapper.eq("is_private", 1);
+        }
+
         Page<Picture> page = new Page<>(current, pageSize);
         IPage<Picture> picturePage = pictureMapper.selectPage(page, queryWrapper);
         return picturePage.convert(p -> new PictureAdminVO(
@@ -133,17 +141,24 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 p.getSize(),
                 p.getStatus(),
                 p.getCreateTime(),
-                p.getUserId()
+                p.getUserId(),
+                p.getIsPrivate()
         ));
     }
 
     @Override
-    public void reviewPicture(Long pictureId, Integer status) {
+    public void reviewPicture(Long pictureId, Integer status, Integer selected) {
         ExcUtils.throwIfTrue(pictureId == null, "图片id不能为空");
-        ExcUtils.throwIfTrue(status == null || (status != 0 && status != 1), "状态值无效");
         Picture picture = pictureMapper.selectById(pictureId);
         ExcUtils.throwIfTrue(picture == null, "图片不存在");
-        picture.setStatus(status);
+        if (status != null) {
+            ExcUtils.throwIfTrue((status != 0 && status != 1), "状态值无效");
+            picture.setStatus(status);
+        }
+        if (selected != null) {
+            ExcUtils.throwIfTrue((selected != 0 && selected != 1), "精选值无效");
+            picture.setIsPrivate(selected);
+        }
         ExcUtils.throwIfTrue(pictureMapper.updateById(picture) != 1, "审核更新失败");
     }
 }

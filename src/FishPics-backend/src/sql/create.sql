@@ -16,6 +16,14 @@ CREATE TABLE `comment` (
                            KEY `idx_post_id` (`post_id`) USING BTREE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='评论表';
 
+CREATE TABLE `pic_system` (
+                              `syskey` varchar(256) NOT NULL,
+                              `sysvalue` varchar(1024) DEFAULT NULL,
+                              `id` bigint NOT NULL AUTO_INCREMENT COMMENT 'id',
+                              PRIMARY KEY (`id`),
+                              UNIQUE KEY `pic_system_pk` (`syskey`)
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='系统表';
+
 CREATE TABLE `picture` (
                            `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
                            `user_id` bigint NOT NULL COMMENT '用户id',
@@ -29,10 +37,15 @@ CREATE TABLE `picture` (
                            `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
                            `is_private` tinyint NOT NULL DEFAULT '0' COMMENT '0-不公开到首页，1-公开到首页',
                            `post_id` bigint DEFAULT NULL COMMENT '帖子id',
+                           `space_id` bigint DEFAULT NULL COMMENT '空间Id',
+                           `introduction` varchar(256) DEFAULT NULL COMMENT '图片介绍',
                            PRIMARY KEY (`id`),
                            KEY `idx_user_id` (`user_id`) USING BTREE,
-                           KEY `idx_picture_name` (`picture_name`) USING BTREE
-) ENGINE=InnoDB AUTO_INCREMENT=106 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='图片表';
+                           KEY `idx_picture_name` (`picture_name`) USING BTREE,
+                           KEY `picture_introduction_index` (`introduction`),
+                           KEY `picture_update_time_index` (`update_time`),
+                           KEY `picture_space_id_index` (`space_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=157 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='图片表';
 
 CREATE TABLE `post` (
                         `id` bigint NOT NULL AUTO_INCREMENT COMMENT '主键',
@@ -49,12 +62,24 @@ CREATE TABLE `post` (
                         `is_private` tinyint NOT NULL DEFAULT '0' COMMENT '0-公开，1-仅自己可见，',
                         `cover` bigint DEFAULT NULL COMMENT '封面图片的id',
                         `views_num` bigint NOT NULL DEFAULT '0' COMMENT '查看数',
+                        `hot` decimal(10,0) DEFAULT '0',
                         PRIMARY KEY (`id`),
                         KEY `idx_user_id` (`user_id`) USING BTREE,
                         KEY `idx_title` (`title`) USING BTREE,
                         KEY `post_content_index` (`content`(100)),
                         KEY `post_status_index` (`status`)
-) ENGINE=InnoDB AUTO_INCREMENT=2049105134168674306 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='帖子表';
+) ENGINE=InnoDB AUTO_INCREMENT=2049105134168674334 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='帖子表';
+
+CREATE TABLE `space` (
+                         `id` bigint NOT NULL AUTO_INCREMENT COMMENT '空间id',
+                         `introduction` varchar(256) DEFAULT NULL COMMENT '空间介绍',
+                         `type` tinyint DEFAULT NULL COMMENT '0-私人空间，1-团队空间',
+                         `team_users_id` varchar(1024) DEFAULT NULL COMMENT '团队空间的用户id',
+                         `user_id` bigint DEFAULT NULL COMMENT '创建的用户Id',
+                         PRIMARY KEY (`id`),
+                         KEY `space_type_index` (`type`),
+                         KEY `space_user_id_index` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='空间表';
 
 CREATE TABLE `user` (
                         `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '用户ID',
@@ -78,7 +103,7 @@ CREATE TABLE `user` (
                         PRIMARY KEY (`id`),
                         UNIQUE KEY `uk_username` (`username`) USING BTREE,
                         UNIQUE KEY `uk_nickname` (`nickname`) USING BTREE
-) ENGINE=InnoDB AUTO_INCREMENT=2047500356888125443 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='用户表';
+) ENGINE=InnoDB AUTO_INCREMENT=2047500356888125444 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='用户表';
 
 CREATE TABLE `user_fans` (
                              `id` bigint NOT NULL,
@@ -87,14 +112,6 @@ CREATE TABLE `user_fans` (
                              PRIMARY KEY (`id`),
                              KEY `user_fans_user_id_fan_id_index` (`user_id`,`fan_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='用户粉丝表';
-
-CREATE TABLE `user_follows` (
-                                `id` bigint NOT NULL,
-                                `user_id` bigint DEFAULT NULL,
-                                `be_followed_user_id` bigint DEFAULT NULL,
-                                PRIMARY KEY (`id`),
-                                KEY `likes_user_by_id_user_id_be_followed_user_id_index` (`user_id`,`be_followed_user_id`) COMMENT '关注关系'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='用户关注表';
 
 CREATE TABLE `user_post_collect` (
                                      `id` bigint NOT NULL,

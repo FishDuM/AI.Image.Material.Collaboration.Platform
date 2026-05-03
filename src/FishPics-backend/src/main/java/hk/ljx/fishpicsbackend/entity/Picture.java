@@ -76,6 +76,16 @@ public class Picture implements Serializable {
      */
     private Long postId;
 
+    /**
+     * 空间Id
+     */
+    private Long spaceId;
+
+    /**
+     * 图片介绍
+     */
+    private String introduction;
+
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }

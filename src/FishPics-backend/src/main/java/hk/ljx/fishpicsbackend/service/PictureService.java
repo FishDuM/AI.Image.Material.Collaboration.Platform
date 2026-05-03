@@ -53,17 +53,17 @@ public interface PictureService extends IService<Picture> {
     IPage<PictureListVO> getPictureList(int current, int pageSize, int flag);
 
     /**
-     * 管理员获取所有图片列表（分页，不按状态过滤）
+     * 管理员获取所有图片列表（分页，按状态过滤）
      * @param current 当前页
      * @param pageSize 每页数量
      * @return 图片分页列表
      */
-    IPage<PictureAdminVO> getAdminPictureList(int current, int pageSize);
+    IPage<PictureAdminVO> getAdminPictureList(int current, int pageSize, Integer status);
 
     /**
      * 管理员审核图片
      * @param pictureId 图片id
      * @param status 目标状态 1-通过 0-拒绝
      */
-    void reviewPicture(Long pictureId, Integer status);
+    void reviewPicture(Long pictureId, Integer status, Integer selected);
 }

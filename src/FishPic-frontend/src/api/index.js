@@ -91,10 +91,9 @@ export const getMarquee = () => api.get('/system/marquee')
 export const getPictureList = (current = 1, pageSize = 20) =>
   api.get('/picture/list', { params: { current, pageSize } })
 
-export const getAdminPictureList = (current = 1, pageSize = 20) =>
-  api.get('/picture/admin/list', { params: { current, pageSize } })
+export const getAdminPictureList = (current = 1, pageSize = 20, status = 3) =>
+  api.get('/picture/admin/list', { params: { current, pageSize, status } })
 
-export const reviewPicture = (pictureId, status) =>
-  api.post('/picture/admin/review', null, { params: { pictureId, status } })
+export const reviewPicture = (pictureId, status, selected) => api.post('/picture/admin/review', null, { params: { pictureId, status, selected } })
 
 export default api

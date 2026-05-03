@@ -56,18 +56,22 @@ public class PictureController {
     @GetMapping("/admin/list")
     public Response<IPage<PictureAdminVO>> getPictureListAdmin(
             @RequestParam(value = "current", defaultValue = "1") int current,
-            @RequestParam(value = "pageSize", defaultValue = "20") int pageSize) {
+            @RequestParam(value = "pageSize", defaultValue = "20") int pageSize,
+            @RequestParam(value = "status") int status
+    ) {
         ExcUtils.throwIfTrue(current < 1, "页码不能小于1");
         ExcUtils.throwIfTrue(pageSize < 1 || pageSize > 100, "每页数量应在1-100之间");
-        return ResUtils.success(pictureService.getAdminPictureList(current, pageSize));
+        return ResUtils.success(pictureService.getAdminPictureList(current, pageSize, status));
     }
 
     @AuthCheck(role = ADMIN)
     @PostMapping("/admin/review")
     public Response<Boolean> reviewPicture(
             @RequestParam Long pictureId,
-            @RequestParam Integer status) {
-        pictureService.reviewPicture(pictureId, status);
+            @RequestParam Integer status,
+            @RequestParam Integer selected
+    ) {
+        pictureService.reviewPicture(pictureId, status, selected);
         return ResUtils.success(true);
     }
 }

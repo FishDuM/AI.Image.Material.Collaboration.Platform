@@ -26,4 +26,6 @@ public class PictureAdminVO {
     private Date createTime;
 
     private Long userId;
+
+    private Integer isPrivate;
 }

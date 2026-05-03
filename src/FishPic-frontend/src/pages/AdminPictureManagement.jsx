@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { App as AntApp, Table, Card, Typography, Button, Image, Tag, Space, Select, Modal, Popconfirm } from 'antd'
-import { PictureOutlined, EyeOutlined, EyeInvisibleOutlined, ReloadOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons'
+import { App as AntApp, Table, Card, Typography, Button, Image, Tag, Space, Select, Popconfirm } from 'antd'
+import { PictureOutlined, EyeOutlined, EyeInvisibleOutlined, ReloadOutlined, CheckOutlined, CloseOutlined, StarOutlined, StarFilled } from '@ant-design/icons'
 import { getAdminPictureList, reviewPicture } from '../api'
 import './AdminPictureManagement.css'
 
@@ -21,10 +21,11 @@ const PAGINATION_LOCALE = {
 }
 
 const STATUS_OPTIONS = [
-  { value: -1, label: '全部' },
+  { value: 3, label: '全部' },
   { value: 1, label: '正常' },
   { value: 2, label: '待审核' },
   { value: 0, label: '禁用' },
+  { value: 4, label: '精选' },
 ]
 
 const STATUS_MAP = {
@@ -34,10 +35,11 @@ const STATUS_MAP = {
 }
 
 function AdminPictureManagement() {
-  const { message } = AntApp.useApp()
+  const { message, modal } = AntApp.useApp()
   const [loading, setLoading] = useState(false)
   const [pictures, setPictures] = useState([])
-  const [statusFilter, setStatusFilter] = useState(-1)
+  const [selectedRowKeys, setSelectedRowKeys] = useState([])
+  const [statusFilter, setStatusFilter] = useState(3)
   const [pagination, setPagination] = useState({
     current: 1,
     pageSize: 20,
@@ -48,12 +50,8 @@ function AdminPictureManagement() {
   const fetchPictureList = useCallback(async (current, pageSize, status) => {
     setLoading(true)
     try {
-      const result = await getAdminPictureList(current, pageSize)
-      let { records, total } = result
-      if (records && status !== -1) {
-        records = records.filter(r => r.status === status)
-        total = records.length
-      }
+      const result = await getAdminPictureList(current, pageSize, status)
+      const { records, total } = result
       setPictures(records || [])
       setPagination(prev => ({
         ...prev,
@@ -61,6 +59,7 @@ function AdminPictureManagement() {
         pageSize,
         total: total || 0,
       }))
+      setSelectedRowKeys([])
     } catch (error) {
       console.error('获取图片列表失败:', error)
       message.error(error.message || '获取图片列表失败')
@@ -89,9 +88,9 @@ function AdminPictureManagement() {
     fetchPictureList(1, pagination.pageSize, value)
   }
 
-  const handleReview = async (pictureId, status) => {
+  const handleReview = async (pictureId, status, selected) => {
     try {
-      await reviewPicture(pictureId, status)
+      await reviewPicture(pictureId, status, selected)
       const statusText = status === 1 ? '通过' : '拒绝'
       message.success(`图片已${statusText}`)
       fetchPictureList(pagination.current, pagination.pageSize, statusFilter)
@@ -101,31 +100,71 @@ function AdminPictureManagement() {
   }
 
   const handleBatchReview = (status) => {
-    const pendingIds = pictures
-      .filter(p => p.status === 2)
-      .map(p => p.id)
-    if (pendingIds.length === 0) {
-      message.warning('没有待审核的图片')
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择图片')
       return
     }
     const statusText = status === 1 ? '通过' : '拒绝'
-    Modal.confirm({
+    modal.confirm({
       title: `批量${statusText}`,
-      content: `确定要将 ${pendingIds.length} 张待审核图片${statusText}吗？`,
+      content: `确定要将选中的 ${selectedRowKeys.length} 张图片${statusText}吗？`,
       okText: '确定',
       cancelText: '取消',
       onOk: async () => {
         try {
-          for (const id of pendingIds) {
-            await reviewPicture(id, status)
+          for (const id of selectedRowKeys) {
+            const record = pictures.find(p => p.id === id)
+            await reviewPicture(id, status, record?.isPrivate)
           }
-          message.success(`已批量${statusText} ${pendingIds.length} 张图片`)
+          message.success(`已批量${statusText} ${selectedRowKeys.length} 张图片`)
           fetchPictureList(pagination.current, pagination.pageSize, statusFilter)
         } catch (error) {
           message.error(error.message || '批量审核失败')
         }
       },
     })
+  }
+
+  const handleBatchFeatured = (selectedValue) => {
+    if (selectedRowKeys.length === 0) {
+      message.warning('请先选择图片')
+      return
+    }
+    const actionText = selectedValue === 1 ? '精选' : '取消精选'
+    modal.confirm({
+      title: `批量${actionText}`,
+      content: `确定要将选中的 ${selectedRowKeys.length} 张图片${actionText}吗？`,
+      okText: '确定',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          for (const id of selectedRowKeys) {
+            const record = pictures.find(p => p.id === id)
+            await reviewPicture(id, record?.status, selectedValue)
+          }
+          message.success(`已批量${actionText} ${selectedRowKeys.length} 张图片`)
+          fetchPictureList(pagination.current, pagination.pageSize, statusFilter)
+        } catch (error) {
+          message.error(error.message || '批量操作失败')
+        }
+      },
+    })
+  }
+
+  const handleToggleFeatured = async (record, selectedValue) => {
+    try {
+      await reviewPicture(record.id, record.status, selectedValue)
+      const actionText = selectedValue === 1 ? '精选' : '取消精选'
+      message.success(`已${actionText}`)
+      fetchPictureList(pagination.current, pagination.pageSize, statusFilter)
+    } catch (error) {
+      message.error(error.message || '操作失败')
+    }
+  }
+
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: (keys) => setSelectedRowKeys(keys),
   }
 
   const columns = [
@@ -220,7 +259,7 @@ function AdminPictureManagement() {
     {
       title: '操作',
       key: 'action',
-      width: 150,
+      width: 220,
       fixed: 'right',
       render: (_, record) => {
         if (record.status === 2) {
@@ -229,7 +268,7 @@ function AdminPictureManagement() {
               <Popconfirm
                 title="确认通过"
                 description="确定通过该图片审核？"
-                onConfirm={() => handleReview(record.id, 1)}
+                onConfirm={() => handleReview(record.id, 1, record.isPrivate)}
                 okText="通过"
                 cancelText="取消"
                 okButtonProps={{ danger: false }}
@@ -245,7 +284,7 @@ function AdminPictureManagement() {
               <Popconfirm
                 title="确认拒绝"
                 description="确定拒绝该图片审核？"
-                onConfirm={() => handleReview(record.id, 0)}
+                onConfirm={() => handleReview(record.id, 0, record.isPrivate)}
                 okText="拒绝"
                 cancelText="取消"
                 okButtonProps={{ danger: true }}
@@ -267,7 +306,7 @@ function AdminPictureManagement() {
               <Popconfirm
                 title="确认禁用"
                 description="确定禁用该图片？"
-                onConfirm={() => handleReview(record.id, 0)}
+                onConfirm={() => handleReview(record.id, 0, record.isPrivate)}
                 okText="确定"
                 cancelText="取消"
                 okButtonProps={{ danger: true }}
@@ -280,6 +319,39 @@ function AdminPictureManagement() {
                   禁用
                 </Button>
               </Popconfirm>
+              {record.isPrivate === 0 ? (
+                <Popconfirm
+                  title="确认精选"
+                  description="确定精选该图片？"
+                  onConfirm={() => handleToggleFeatured(record, 1)}
+                  okText="确定"
+                  cancelText="取消"
+                >
+                  <Button
+                    size="small"
+                    icon={<StarOutlined />}
+                    style={{ color: '#d4a017', borderColor: '#d4a017' }}
+                  >
+                    精选
+                  </Button>
+                </Popconfirm>
+              ) : (
+                <Popconfirm
+                  title="确认取消精选"
+                  description="确定取消精选该图片？"
+                  onConfirm={() => handleToggleFeatured(record, 0)}
+                  okText="确定"
+                  cancelText="取消"
+                >
+                  <Button
+                    size="small"
+                    icon={<StarFilled />}
+                    style={{ color: '#d4a017', borderColor: '#d4a017' }}
+                  >
+                    取消精选
+                  </Button>
+                </Popconfirm>
+              )}
             </Space>
           )
         }
@@ -289,7 +361,7 @@ function AdminPictureManagement() {
               <Popconfirm
                 title="确认启用"
                 description="确定启用该图片？"
-                onConfirm={() => handleReview(record.id, 1)}
+                onConfirm={() => handleReview(record.id, 1, record.isPrivate)}
                 okText="确定"
                 cancelText="取消"
               >
@@ -301,6 +373,39 @@ function AdminPictureManagement() {
                   启用
                 </Button>
               </Popconfirm>
+              {record.isPrivate === 0 ? (
+                <Popconfirm
+                  title="确认精选"
+                  description="确定精选该图片？"
+                  onConfirm={() => handleToggleFeatured(record, 1)}
+                  okText="确定"
+                  cancelText="取消"
+                >
+                  <Button
+                    size="small"
+                    icon={<StarOutlined />}
+                    style={{ color: '#d4a017', borderColor: '#d4a017' }}
+                  >
+                    精选
+                  </Button>
+                </Popconfirm>
+              ) : (
+                <Popconfirm
+                  title="确认取消精选"
+                  description="确定取消精选该图片？"
+                  onConfirm={() => handleToggleFeatured(record, 0)}
+                  okText="确定"
+                  cancelText="取消"
+                >
+                  <Button
+                    size="small"
+                    icon={<StarFilled />}
+                    style={{ color: '#d4a017', borderColor: '#d4a017' }}
+                  >
+                    取消精选
+                  </Button>
+                </Popconfirm>
+              )}
             </Space>
           )
         }
@@ -337,16 +442,34 @@ function AdminPictureManagement() {
             <Button
               type="primary"
               icon={<CheckOutlined />}
+              disabled={selectedRowKeys.length === 0}
               onClick={() => handleBatchReview(1)}
             >
-              批量通过
+              批量通过 {selectedRowKeys.length > 0 && `(${selectedRowKeys.length})`}
             </Button>
             <Button
               danger
               icon={<CloseOutlined />}
+              disabled={selectedRowKeys.length === 0}
               onClick={() => handleBatchReview(0)}
             >
-              批量拒绝
+              批量拒绝 {selectedRowKeys.length > 0 && `(${selectedRowKeys.length})`}
+            </Button>
+            <Button
+              disabled={selectedRowKeys.length === 0}
+              icon={<StarOutlined />}
+              style={{ color: '#d4a017', borderColor: '#d4a017' }}
+              onClick={() => handleBatchFeatured(1)}
+            >
+              批量精选 {selectedRowKeys.length > 0 && `(${selectedRowKeys.length})`}
+            </Button>
+            <Button
+              danger
+              icon={<StarFilled />}
+              disabled={selectedRowKeys.length === 0}
+              onClick={() => handleBatchFeatured(0)}
+            >
+              批量不精选 {selectedRowKeys.length > 0 && `(${selectedRowKeys.length})`}
             </Button>
           </Space>
           <span className="admin-picture-total">
@@ -357,6 +480,7 @@ function AdminPictureManagement() {
           columns={columns}
           dataSource={pictures}
           rowKey="id"
+          rowSelection={rowSelection}
           loading={loading}
           pagination={{
             ...pagination,
@@ -367,7 +491,7 @@ function AdminPictureManagement() {
             pageSizeOptions: ['10', '20', '50', '100'],
           }}
           onChange={handleTableChange}
-          scroll={{ x: 1050 }}
+          scroll={{ x: 1120 }}
         />
       </Card>
     </main>
