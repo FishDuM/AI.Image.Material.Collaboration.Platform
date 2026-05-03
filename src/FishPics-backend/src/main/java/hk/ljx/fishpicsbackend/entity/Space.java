@@ -40,6 +40,26 @@ public class Space implements Serializable {
      */
     private Long userId;
 
+    /**
+     * 空间的存储大小(KB)：512MB-5G-10G
+     */
+    private Long storageSize;
+
+    /**
+     * 空间级别：普通-VIP-SVIP
+     */
+    private Integer level;
+
+    /**
+     * 空间名
+     */
+    private String name;
+
+    /**
+     * 现在使用大小
+     */
+    private Long size;
+
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }

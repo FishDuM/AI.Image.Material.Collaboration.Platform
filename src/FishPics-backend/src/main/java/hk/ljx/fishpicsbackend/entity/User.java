@@ -105,6 +105,11 @@ public class User implements Serializable {
      */
     private Integer isPrivateFans;
 
+    /**
+     * 0-普通，1-VIP，2-SVIP
+     */
+    private Integer level;
+
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }

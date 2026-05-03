@@ -10,6 +10,7 @@ public interface RedisConstants {
     String LOGIN_CODE_KEY = "LOGIN_CODE";
     String REGISTER_CODE_KEY = "REGISTER_CODE";
     String TOKEN_KEY = "TOKEN";
+    String USER_ID_KEY = "USER_ID:";
 
     // 点赞类
     String LIKE_POST_KEY = "LIKE_POST";
@@ -22,5 +23,10 @@ public interface RedisConstants {
     // 获取登录验证码 key
     static String getLoginCodeKey(String str) {
         return LOGIN_CODE_KEY + str;
+    }
+
+    // 获取用户 id key
+    static String getUserIdKey(Long str) {
+        return USER_ID_KEY + str;
     }
 }

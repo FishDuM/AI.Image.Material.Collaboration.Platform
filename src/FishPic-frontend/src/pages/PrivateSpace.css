@@ -6,7 +6,13 @@
 
 .private-space-header {
   margin-bottom: 24px;
-  text-align: center;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.private-space-header-left {
+  text-align: left;
 }
 
 .private-space-header h2 {
@@ -37,4 +43,39 @@
   justify-content: center;
   align-items: center;
   min-height: 400px;
+}
+
+.private-space-card {
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.2s;
+}
+
+.private-space-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.space-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.space-card-icon {
+  font-size: 20px;
+  color: #1677ff;
+}
+
+.space-card-name {
+  font-size: 16px;
+}
+
+.space-card-info {
+  margin-bottom: 8px;
+}
+
+.space-card-meta {
+  font-size: 12px;
 }

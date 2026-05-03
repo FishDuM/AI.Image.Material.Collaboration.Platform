@@ -13,6 +13,7 @@ import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.dto.user.*;
 import hk.ljx.fishpicsbackend.entity.User;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
+import hk.ljx.fishpicsbackend.service.LoginUser;
 import hk.ljx.fishpicsbackend.service.UserService;
 import hk.ljx.fishpicsbackend.vo.user.CheckCodeVO;
 import hk.ljx.fishpicsbackend.vo.user.UserLoginVO;
@@ -38,6 +39,9 @@ public class UserController {
 
     @Resource
     private UserMapper userMapper;
+
+    @Resource
+    private LoginUser loginUser;
 
     @PostMapping("/login")
     public Response<UserLoginVO> userLogin(@RequestBody UserLoginRequest userLoginRequest,
@@ -83,7 +87,7 @@ public class UserController {
 
     @GetMapping("/getUser")
     public Response<UserLoginVO> getUser(HttpServletRequest request) {
-        User user = userService.getLoginUser(request);
+        User user = loginUser.getLoginUser(request);
         UserLoginVO userLoginVO = new UserLoginVO();
         BeanUtil.copyProperties(user, userLoginVO);
         return ResUtils.success(userLoginVO);

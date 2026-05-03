@@ -15,7 +15,7 @@ public class ResUtils implements Serializable {
     }
 
     public static Response fail(BaseException be) {
-        return new Response(be.getCode(), be.getMessage(), null);
+        return new Response(0, be.getMessage(), null);
     }
 
     public static Response fail(RuntimeException re) {

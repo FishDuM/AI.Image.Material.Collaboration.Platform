@@ -23,12 +23,13 @@
             <result property="isPrivatePostCollect" column="is_private_post_collect" />
             <result property="isPrivateLikes" column="is_private_likes" />
             <result property="isPrivateFans" column="is_private_fans" />
+            <result property="level" column="level" />
     </resultMap>
 
     <sql id="Base_Column_List">
         id,username,password,avatar,email,phone,
         nickname,status,is_delete,role,create_time,
         update_time,like_num,collect_num,is_private_follows,is_private_post_collect,
-        is_private_likes,is_private_fans
+        is_private_likes,is_private_fans,level
     </sql>
 </mapper>

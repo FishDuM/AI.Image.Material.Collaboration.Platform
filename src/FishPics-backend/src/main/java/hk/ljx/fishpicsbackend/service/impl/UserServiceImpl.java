@@ -20,17 +20,13 @@ import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
+import hk.ljx.fishpicsbackend.dto.space.CreateSpace;
 import hk.ljx.fishpicsbackend.dto.user.*;
-import hk.ljx.fishpicsbackend.entity.Post;
 import hk.ljx.fishpicsbackend.entity.User;
-import hk.ljx.fishpicsbackend.entity.UserPostCollect;
-import hk.ljx.fishpicsbackend.entity.UserPostLikes;
-import hk.ljx.fishpicsbackend.mapper.PostMapper;
-import hk.ljx.fishpicsbackend.mapper.UserPostCollectMapper;
-import hk.ljx.fishpicsbackend.mapper.UserPostLikesMapper;
+import hk.ljx.fishpicsbackend.service.LoginUser;
+import hk.ljx.fishpicsbackend.service.SpaceService;
 import hk.ljx.fishpicsbackend.service.UserService;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
-import hk.ljx.fishpicsbackend.vo.post.PostListVO;
 import hk.ljx.fishpicsbackend.vo.user.UserLoginVO;
 import hk.ljx.fishpicsbackend.vo.user.UserMessageVO;
 import lombok.extern.slf4j.Slf4j;
@@ -42,13 +38,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import java.io.ByteArrayOutputStream;
-import java.util.ArrayList;
 import java.util.Date;
-import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
-import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.TOKEN_KEY;
+import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.*;
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.DEFAULT_NICK_NAME;
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.SALT;
 
@@ -69,13 +62,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     private UserMapper userMapper;
 
     @Resource
-    private PostMapper postMapper;
+    private SpaceService spaceService;
 
     @Resource
-    private UserPostCollectMapper userPostCollectMapper;
-
-    @Resource
-    private UserPostLikesMapper userPostLikesMapper;
+    private LoginUser loginUser;
 
     @Override
     public String getCheckCode(String str, Integer len, Integer minute) {
@@ -108,20 +98,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         byte[] imageBytes = outputStream.toByteArray();
 
         return Base64.encode(imageBytes);
-    }
-
-    /**
-     * 系统内获取当前登录用户
-     *
-     * @param request 请求信息
-     * @return 用户实体
-     */
-    @Override
-    public User getLoginUser(HttpServletRequest request) {
-        // session 查询用户信息
-        User user = (User) request.getSession().getAttribute(TOKEN_KEY);
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.UNAUTHORIZED, "用户未登录");
-        return user;
     }
 
     @Override
@@ -166,6 +142,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         int insert = userMapper.insert(user);
         ExcUtils.throwIfTrue(insert != 1, ExceptionCode.DATABASE_ERROR, "注册失败");
         stringRedisTemplate.delete(checkCodeKeyByRegister);
+        // 创建默认私人空间
+        Boolean spaceRequest = spaceService.createSpace(new CreateSpace(user.getNickname() + "的私人空间", "你的专属私密存储空间", 0), request);
+        ExcUtils.throwIfTrue(!spaceRequest, ExceptionCode.DATABASE_ERROR, "创建私人空间失败");
         return ResUtils.success(true);
     }
 
@@ -193,7 +172,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         ExcUtils.throwIfTrue(user == null, ExceptionCode.PARAMETER_ERROR, "账号或密码错误");
 
         // 查询到则存入 session
-        request.getSession().setAttribute(TOKEN_KEY, user);
+        Long id = user.getId();
+        request.getSession().setAttribute(TOKEN_KEY, id);
+        stringRedisTemplate.opsForValue().set(getUserIdKey(id), JSONUtil.toJsonStr(user), 1, TimeUnit.DAYS);
+
         // 查到用户数据返回封装类
         UserLoginVO userLoginVO = BeanUtil.copyProperties(user, UserLoginVO.class);
         return ResUtils.success(userLoginVO);
@@ -239,6 +221,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         ExcUtils.throwIfTrue(ObjectUtil.isNull(user), ExceptionCode.NOT_FOUND, "未找到该用户");
         user.setStatus(user.getStatus() == 1 ? 0 : 1);
         int i = userMapper.updateById(user);
+        stringRedisTemplate.opsForValue().set(getUserIdKey(userId), JSONUtil.toJsonStr(user), 1, TimeUnit.DAYS);
         return i > 0;
     }
 
@@ -264,6 +247,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
         // 5. 更新
         int rows = userMapper.updateById(user);
+        stringRedisTemplate.opsForValue().set(getUserIdKey(id), JSONUtil.toJsonStr(user), 1, TimeUnit.DAYS);
         ExcUtils.throwIfTrue(rows != 1, ExceptionCode.DATABASE_ERROR, "更新用户失败");
 
         return true;
@@ -271,31 +255,19 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
     @Override
     public UserMessageVO getMyselfMessage(HttpServletRequest request) {
-        User loginUser = getLoginUser(request);
-        ExcUtils.throwIfTrue(loginUser == null || loginUser.getId() == null,
+        User user = loginUser.getLoginUser(request);
+        ExcUtils.throwIfTrue(user == null || user.getId() == null,
                 ExceptionCode.NOT_FOUND, "未登录");
         UserMessageVO vo = new UserMessageVO();
-        BeanUtil.copyProperties(loginUser, vo);
+        BeanUtil.copyProperties(user, vo);
         return vo;
-    }
-
-    // 抽取成工具方法：消除重复代码
-    private List<PostListVO> convertToVO(List<Post> posts) {
-        if (posts == null || posts.isEmpty()) {
-            return new ArrayList<>();
-        }
-        return posts.stream().map(post -> {
-            PostListVO vo = new PostListVO();
-            BeanUtil.copyProperties(post, vo);
-            return vo;
-        }).collect(Collectors.toList());
     }
 
     @Override
     public Boolean editMyself(UserEditRequest userEditRequest, HttpServletRequest request) {
         // 获得当前登录用户信息
-        User loginUser = this.getLoginUser(request);
-        ExcUtils.throwIfTrue(ObjectUtil.isAllEmpty(loginUser, loginUser.getId()), ExceptionCode.NOT_LOGIN);
+        User userLogin = loginUser.getLoginUser(request);
+        ExcUtils.throwIfTrue(ObjectUtil.isAllEmpty(userLogin, userLogin.getId()), ExceptionCode.NOT_LOGIN);
         // 参数校验
         Long id = userEditRequest.getId();
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), ExceptionCode.PARAMETER_ERROR);
@@ -331,13 +303,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         boolean result = this.updateById(user);
         ExcUtils.throwIfTrue(!result, ExceptionCode.DATABASE_ERROR, "更新失败");
         // 更新 redis 缓存
-        request.setAttribute(TOKEN_KEY, user);
+        stringRedisTemplate.opsForValue().set(getUserIdKey(id), JSONUtil.toJsonStr(user), 1, TimeUnit.DAYS);
         return true;
     }
 
     @Override
     public Boolean isMe(Long id, HttpServletRequest request) {
-        User loginUser = this.getLoginUser(request);
-        return loginUser.getId().equals(id);
+        User user = loginUser.getLoginUser(request);
+        return user.getId().equals(id);
     }
 }

@@ -96,4 +96,8 @@ export const getAdminPictureList = (current = 1, pageSize = 20, status = 3) =>
 
 export const reviewPicture = (pictureId, status, selected) => api.post('/picture/admin/review', null, { params: { pictureId, status, selected } })
 
+export const createSpace = (data) => api.post('/space/create', data)
+
+export const listSpace = (type) => api.get('/space/list', { params: { type } })
+
 export default api

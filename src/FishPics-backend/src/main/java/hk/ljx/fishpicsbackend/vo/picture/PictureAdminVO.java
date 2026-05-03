@@ -19,7 +19,7 @@ public class PictureAdminVO {
 
     private String height;
 
-    private String size;
+    private Long size;
 
     private Integer status;
 

@@ -49,7 +49,7 @@ public class Picture implements Serializable {
     /**
      * 大小
      */
-    private String size;
+    private Long size;
 
     /**
      * 状态 1-正常 0-禁用 2-待审核

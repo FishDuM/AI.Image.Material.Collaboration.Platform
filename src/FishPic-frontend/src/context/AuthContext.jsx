@@ -1,5 +1,6 @@
 import { createContext, useState, useEffect } from 'react'
 import { getUserInfo, saveUserInfo, removeUserInfo } from '../utils/storage'
+import { getUser } from '../api'
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const AuthContext = createContext(null)
@@ -12,8 +13,23 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const user = getUserInfo()
     if (user) {
-      setUserInfo(user)
-      setIsAuthenticated(true)
+      getUser()
+        .then((freshUser) => {
+          if (freshUser) {
+            saveUserInfo(freshUser)
+            setUserInfo(freshUser)
+            setIsAuthenticated(true)
+          } else {
+            removeUserInfo()
+            setUserInfo(null)
+            setIsAuthenticated(false)
+          }
+        })
+        .catch(() => {
+          removeUserInfo()
+          setUserInfo(null)
+          setIsAuthenticated(false)
+        })
     } else {
       setUserInfo(null)
       setIsAuthenticated(false)

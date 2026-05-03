@@ -21,6 +21,7 @@ import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
 import hk.ljx.fishpicsbackend.mapper.UserPostCollectMapper;
 import hk.ljx.fishpicsbackend.mapper.UserPostLikesMapper;
+import hk.ljx.fishpicsbackend.service.LoginUser;
 import hk.ljx.fishpicsbackend.service.PictureService;
 import hk.ljx.fishpicsbackend.service.PostService;
 import hk.ljx.fishpicsbackend.mapper.PostMapper;
@@ -74,6 +75,9 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
     @Resource
     private UserPostCollectMapper userPostCollectMapper;
 
+    @Resource
+    private LoginUser loginUser;
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void uploadPost(UploadPostRequest uploadPostRequest, HttpServletRequest request) {
@@ -88,8 +92,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         ExcUtils.throwIfTrue(imageId.size() > 15, "最多只能上传 15 张图片");
         ExcUtils.throwIfTrue(ObjectUtil.isAllEmpty(title, content, cover, isPrivate), "参数不能为空");
         // 获取用户信息
-        User loginUser = userService.getLoginUser(request);
-        Long userId = loginUser.getId();
+        User user = loginUser.getLoginUser(request);
+        Long userId = user.getId();
 
         // 校验图片是否属于该用户
         QueryWrapper<Picture> pictureQueryWrapper = new QueryWrapper<>();
@@ -143,7 +147,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         }
 
         // 判断是否是自己的帖子 || 是否为管理员
-        User loginUser = userService.getLoginUser(request);
+        User user = loginUser.getLoginUser(request);
         // 校验封面
         if (cover != null) {
             Picture picture = pictureMapper.selectById(cover);
@@ -153,7 +157,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         // 查找该帖子
         Post post = postMapper.selectById(id);
         ExcUtils.throwIfTrue(post == null || post.getUserId() == null, ExceptionCode.PARAMETER_ERROR, "帖子不存在");
-        ExcUtils.throwIfFalse(loginUser.getId().equals(post.getUserId()) || loginUser.getRole().equals(ADMIN), ExceptionCode.PARAMETER_ERROR, "只能修改自己的帖子");
+        ExcUtils.throwIfFalse(user.getId().equals(post.getUserId()) || user.getRole().equals(ADMIN), ExceptionCode.PARAMETER_ERROR, "只能修改自己的帖子");
 
         // 修改帖子
         BeanUtil.copyProperties(editPostRequest, post, CopyOptions.create().setIgnoreNullValue(true));
@@ -255,7 +259,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(post) || id == null ,ExceptionCode.DATABASE_ERROR, "帖子不存在");
 
         // 获取用户
-        User user = userService.getLoginUser(request);
+        User user = loginUser.getLoginUser(request);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user) || user.getId() == null, "用户不存在");
         Long userId = user.getId();
         Long postId = post.getId();
@@ -310,8 +314,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
      */
     @Override
     public IPage<PostListVO> getMyPosts(PageRequest pageRequest, HttpServletRequest request) {
-        User loginUser = userService.getLoginUser(request);
-        Long userId = loginUser.getId();
+        User user = loginUser.getLoginUser(request);
+        Long userId = user.getId();
 
         Page<Post> page = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
         QueryWrapper<Post> queryWrapper = new QueryWrapper<>();
@@ -325,8 +329,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
     // getMyCollects方法修改
     @Override
     public IPage<PostListVO> getMyCollects(PageRequest pageRequest, HttpServletRequest request) {
-        User loginUser = userService.getLoginUser(request);
-        Long userId = loginUser.getId();
+        User user = loginUser.getLoginUser(request);
+        Long userId = user.getId();
 
         // 第一步：查询用户的收藏帖子ID列表
         List<Long> collectPostIds = userPostCollectMapper.selectList(
@@ -353,8 +357,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
     // getMyLikes方法同理
     @Override
     public IPage<PostListVO> getMyLikes(PageRequest pageRequest, HttpServletRequest request) {
-        User loginUser = userService.getLoginUser(request);
-        Long userId = loginUser.getId();
+        User user = loginUser.getLoginUser(request);
+        Long userId = user.getId();
 
         // 第一步：查询用户的点赞帖子ID列表
         List<Long> likePostIds = userPostLikesMapper.selectList(

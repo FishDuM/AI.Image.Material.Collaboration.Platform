@@ -3,18 +3,21 @@ package hk.ljx.fishpicsbackend.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.ObjUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
+import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.dto.picture.PictureMessage;
 import hk.ljx.fishpicsbackend.entity.Picture;
+import hk.ljx.fishpicsbackend.entity.Space;
 import hk.ljx.fishpicsbackend.entity.User;
+import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
-import hk.ljx.fishpicsbackend.service.CosService;
-import hk.ljx.fishpicsbackend.service.PictureService;
+import hk.ljx.fishpicsbackend.service.*;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
-import hk.ljx.fishpicsbackend.service.UserService;
 import hk.ljx.fishpicsbackend.vo.picture.PictureAdminVO;
 import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
 import hk.ljx.fishpicsbackend.vo.picture.PicturePostVO;
@@ -50,14 +53,23 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     @Resource
     private PictureMapper pictureMapper;
 
+    @Resource
+    private SpaceService spaceService;
+
+    @Resource
+    private SpaceMapper spaceMapper;
+
+    @Resource
+    private LoginUser loginUser;
+
     @Override
     public String uploadAvatar(MultipartFile file, Long id, HttpServletRequest request) {
-        User loginUser = userService.getLoginUser(request);
-        ExcUtils.throwIfTrue(loginUser == null || loginUser.getId() == null, "请先登录");
-        User user = userMapper.selectById(loginUser.getId());
+        User userLogin = loginUser.getLoginUser(request);
+        ExcUtils.throwIfTrue(userLogin == null || userLogin.getId() == null, "请先登录");
+        User user = userMapper.selectById(userLogin.getId());
         ExcUtils.throwIfTrue(user == null, "用户不存在");
         // 只有自己或管理员可以修改头像
-        ExcUtils.throwIfTrue(!loginUser.getId().equals(id) && !loginUser.getRole().equals(ADMIN), "没有权限");
+        ExcUtils.throwIfTrue(!userLogin.getId().equals(id) && !userLogin.getRole().equals(ADMIN), "没有权限");
         user = userMapper.selectById(id);
         // 删除旧头像
         cosService.deletePicture(user.getAvatar());
@@ -69,9 +81,9 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
     @Override
     public PicturePostVO uploadPicture4Post(MultipartFile file, HttpServletRequest request) {
-        User loginUser = userService.getLoginUser(request);
-        Long userId = loginUser.getId();
-        ExcUtils.throwIfTrue(ObjUtil.isEmpty(loginUser) || userId == null, "请先登录");
+        User userLogin = loginUser.getLoginUser(request);
+        Long userId = userLogin.getId();
+        ExcUtils.throwIfTrue(ObjUtil.isEmpty(userLogin) || userId == null, "请先登录");
         // 上传图片
         String key = cosService.uploadPicture(file);
         // 获取图片信息
@@ -79,13 +91,27 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         Picture picture = new Picture();
         BeanUtil.copyProperties(pictureMessage, picture);
         picture.setUserId(userId);
+        // 判断私人空间磁盘是否充足
+        Long size = picture.getSize();
+        List<Space> spaceList = spaceService.listSpace(0, request);
+        ExcUtils.throwIfTrue(spaceList == null || spaceList.isEmpty(), "私人空间不存在，请联系管理员");
+        Space space = spaceList.get(0);
+        Long usedSize = space.getSize();
+        Long storageSize = space.getStorageSize();
+        long updateSize = usedSize + size;
+        if (updateSize > storageSize){
+            cosService.deletePicture(key);
+            throw new BaseException(ExceptionCode.UNAUTHORIZED,"私人空间磁盘不足，请升级空间或删除图片");
+        }
+        int update = spaceMapper.update(space, new UpdateWrapper<Space>().set("size", updateSize).eq("id", space.getId()));
+        ExcUtils.throwIfTrue(update <= 0, "上传失败，数据库错误");
+
         // 管理员上传直接通过，普通用户上传需要审核
-        if (ADMIN.equals(loginUser.getRole())) {
+        if (ADMIN.equals(userLogin.getRole())) {
             picture.setStatus(1);
         } else {
             picture.setStatus(2);
         }
-
         ExcUtils.throwIfTrue(pictureMapper.insert(picture) != 1, "上传失败，数据库错误");
         return PicturePostVO.builder().url(picture.getUrl()).pictureId(picture.getId()).build();
     }

@@ -29,13 +29,6 @@ public interface UserService extends IService<User> {
     String getCheckCode(String str, Integer len, Integer minute);
 
     /**
-     * 系统内获取当前登录用户
-     * @param request 请求信息
-     * @return 用户实体
-     */
-    User getLoginUser(HttpServletRequest request);
-
-    /**
      * 用户注册
      *
      * @param userRequestRequest 用户注册请求
