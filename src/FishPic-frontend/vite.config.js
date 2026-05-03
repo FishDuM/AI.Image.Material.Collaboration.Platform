@@ -11,4 +11,7 @@ export default defineConfig({
       },
     },
   },
+  optimizeDeps: {
+    include: ['antd/locale/zh_CN'],
+  },
 })

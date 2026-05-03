@@ -31,6 +31,7 @@ function HomePage() {
   const [imgLoaded, setImgLoaded] = useState({})
   const [searchValue, setSearchValue] = useState('')
   const [categoryList, setCategoryList] = useState([])
+  const [selectedCategory, setSelectedCategory] = useState('热门')
   const [pictureList, setPictureList] = useState([])
   const [picturePage, setPicturePage] = useState(1)
   const [pictureLoading, setPictureLoading] = useState(false)
@@ -38,6 +39,9 @@ function HomePage() {
   const carouselRef = useRef(null)
   const loadMoreRef = useRef(null)
   const PAGE_SIZE = 20
+  const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 1025px)').matches)
+  const [coverflowIndex, setCoverflowIndex] = useState(0)
+  const coverflowTimerRef = useRef(null)
 
   const masonryItems = useMemo(() => pictureList.map((pic) => ({
     key: `pic-${pic.id}`,
@@ -80,18 +84,19 @@ function HomePage() {
       try {
         const result = await api.get('/system/list')
         if (Array.isArray(result)) {
-          setCategoryList(result)
+          const merged = ['热门', ...result.filter(c => c !== '推荐' && c !== '热门')]
+          setCategoryList(merged)
         }
       } catch (e) {
-        void e
+        setCategoryList(['热门'])
       }
     }
     fetchCategoryList()
   }, [])
 
-  const handleCategoryClick = useCallback((cat) => {
-    navigate(`/community?search=${encodeURIComponent(cat)}`)
-  }, [navigate])
+  const handleCategoryClick = useCallback(() => {
+    void 0
+  }, [])
 
   const loadPictures = useCallback(async (page) => {
     setPictureLoading(true)
@@ -143,6 +148,38 @@ function HomePage() {
     if (el) observer.observe(el)
     return () => { if (el) observer.unobserve(el) }
   }, [hasMore, pictureLoading, picturePage, loadPictures])
+
+  const useCoverflow = isDesktop && marqueeImages.length >= 3
+
+  useEffect(() => {
+    const mql = window.matchMedia('(min-width: 1025px)')
+    const handler = (e) => setIsDesktop(e.matches)
+    mql.addEventListener('change', handler)
+    return () => mql.removeEventListener('change', handler)
+  }, [])
+
+  useEffect(() => {
+    if (!useCoverflow) return
+    coverflowTimerRef.current = setInterval(() => {
+      setCoverflowIndex((prev) => (prev + 1) % marqueeImages.length)
+    }, 4500)
+    return () => clearInterval(coverflowTimerRef.current)
+  }, [useCoverflow, marqueeImages.length])
+
+  const handleCoverflowPrev = useCallback(() => {
+    clearInterval(coverflowTimerRef.current)
+    setCoverflowIndex((prev) => (prev - 1 + marqueeImages.length) % marqueeImages.length)
+  }, [marqueeImages.length])
+
+  const handleCoverflowNext = useCallback(() => {
+    clearInterval(coverflowTimerRef.current)
+    setCoverflowIndex((prev) => (prev + 1) % marqueeImages.length)
+  }, [marqueeImages.length])
+
+  const handleCoverflowDot = useCallback((idx) => {
+    clearInterval(coverflowTimerRef.current)
+    setCoverflowIndex(idx)
+  }, [])
 
   const handleCancel = () => {
     if (isRegisterMode) {
@@ -310,51 +347,108 @@ function HomePage() {
   return (
     <>
       {marqueeImages.length > 0 && (
-        <div className="carousel-section">
-          <div className="carousel-wrapper">
-            <Carousel
-              ref={carouselRef}
-              autoplay
-              autoplaySpeed={4500}
-              dots
-              arrows={false}
-              speed={600}
-              effect="fade"
-              fade
-              afterChange={(current) => setCurrentSlide(current)}
-              pauseOnHover
-            >
-              {marqueeImages.map((url, index) => (
-                <div key={index} className="carousel-slide">
-                  {!imgLoaded[index] && <div className="carousel-skeleton" />}
-                  <img
-                    src={url}
-                    alt={`轮播图 ${index + 1}`}
-                    className="carousel-image"
-                    style={{ opacity: imgLoaded[index] ? 1 : 0 }}
-                    onLoad={() => setImgLoaded(prev => ({ ...prev, [index]: true }))}
-                    onError={(e) => {
-                      e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwMCIgaGVpZ2h0PSI1MDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjEyMDAiIGhlaWdodD0iNTAwIiBmaWxsPSIjMWYxZjFmIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJhcmlhbCIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzZiNmI2YiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPua2ieWPiuWfuuinpuWNoOe6qTwvdGV4dD48L3N2Zz4='
-                      setImgLoaded(prev => ({ ...prev, [index]: true }))
-                    }}
-                  />
-                </div>
-              ))}
-            </Carousel>
+        <div className={`carousel-section${useCoverflow ? ' carousel-section-coverflow' : ''}`}>
+          <div className={`carousel-wrapper${useCoverflow ? ' carousel-wrapper-coverflow' : ''}`}>
+            {useCoverflow ? (
+              <div className="coverflow-container">
+                {[-1, 0, 1].map((offset) => {
+                  const idx = ((coverflowIndex + offset) % marqueeImages.length + marqueeImages.length) % marqueeImages.length
+                  const isActive = offset === 0
+                  const url = marqueeImages[idx]
+                  return (
+                    <div
+                      key={`cf-${offset}`}
+                      className={`coverflow-slide${isActive ? ' coverflow-slide-active' : ''} coverflow-slide-pos-${offset < 0 ? 'left' : offset === 0 ? 'center' : 'right'}`}
+                      onClick={() => {
+                        if (offset < 0) handleCoverflowPrev()
+                        else if (offset > 0) handleCoverflowNext()
+                      }}
+                    >
+                      {!imgLoaded[idx] && <div className="carousel-skeleton" />}
+                      <img
+                        src={url}
+                        alt={`轮播图 ${idx + 1}`}
+                        className="carousel-image coverflow-image"
+                        style={{ opacity: imgLoaded[idx] ? 1 : 0 }}
+                        onLoad={() => setImgLoaded(prev => ({ ...prev, [idx]: true }))}
+                        onError={(e) => {
+                          e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwMCIgaGVpZ2h0PSI1MDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjEyMDAiIGhlaWdodD0iNTAwIiBmaWxsPSIjMWYxZjFmIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJhcmlhbCIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzZiNmI2YiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPua2ieWPiuWfuuinpuWNoOe6qTwvdGV4dD48L3N2Zz4='
+                          setImgLoaded(prev => ({ ...prev, [idx]: true }))
+                        }}
+                      />
+                      {isActive && marqueeImages.length > 1 && (
+                        <>
+                          <button
+                            type="button"
+                            className="coverflow-arrow coverflow-arrow-left"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleCoverflowPrev()
+                            }}
+                          >
+                            ‹
+                          </button>
+                          <button
+                            type="button"
+                            className="coverflow-arrow coverflow-arrow-right"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleCoverflowNext()
+                            }}
+                          >
+                            ›
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <Carousel
+                ref={carouselRef}
+                autoplay
+                autoplaySpeed={4500}
+                dots
+                arrows={false}
+                speed={600}
+                effect="fade"
+                fade
+                afterChange={(current) => setCurrentSlide(current)}
+                pauseOnHover
+              >
+                {marqueeImages.map((url, index) => (
+                  <div key={index} className="carousel-slide">
+                    {!imgLoaded[index] && <div className="carousel-skeleton" />}
+                    <img
+                      src={url}
+                      alt={`轮播图 ${index + 1}`}
+                      className="carousel-image"
+                      style={{ opacity: imgLoaded[index] ? 1 : 0 }}
+                      onLoad={() => setImgLoaded(prev => ({ ...prev, [index]: true }))}
+                      onError={(e) => {
+                        e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwMCIgaGVpZ2h0PSI1MDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjEyMDAiIGhlaWdodD0iNTAwIiBmaWxsPSIjMWYxZjFmIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJhcmlhbCIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzZiNmI2YiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPua2ieWPiuWfuuinpuWNoOe6qTwvdGV4dD48L3N2Zz4='
+                        setImgLoaded(prev => ({ ...prev, [index]: true }))
+                      }}
+                    />
+                  </div>
+                ))}
+              </Carousel>
+            )}
 
             {marqueeImages.length > 1 && (
               <>
                 <button
                   type="button"
                   className="carousel-arrow-btn carousel-arrow-left"
-                  onClick={handlePrev}
+                  onClick={useCoverflow ? handleCoverflowPrev : handlePrev}
                 >
                   ‹
                 </button>
                 <button
                   type="button"
                   className="carousel-arrow-btn carousel-arrow-right"
-                  onClick={handleNext}
+                  onClick={useCoverflow ? handleCoverflowNext : handleNext}
                 >
                   ›
                 </button>
@@ -363,7 +457,19 @@ function HomePage() {
 
             {marqueeImages.length > 1 && (
               <div className="carousel-counter-badge">
-                {currentSlide + 1} / {marqueeImages.length}
+                {(useCoverflow ? coverflowIndex : currentSlide) + 1} / {marqueeImages.length}
+              </div>
+            )}
+
+            {useCoverflow && (
+              <div className="coverflow-dots">
+                {marqueeImages.map((_, idx) => (
+                  <span
+                    key={idx}
+                    className={`coverflow-dot${idx === coverflowIndex ? ' coverflow-dot-active' : ''}`}
+                    onClick={() => handleCoverflowDot(idx)}
+                  />
+                ))}
               </div>
             )}
           </div>
@@ -398,8 +504,8 @@ function HomePage() {
             {categoryList.map((cat) => (
               <span
                 key={cat}
-                className="home-category-tag"
-                onClick={() => handleCategoryClick(cat)}
+                className={`home-category-tag ${selectedCategory === cat ? 'home-category-tag-active' : ''}`}
+                onClick={() => setSelectedCategory(cat)}
               >
                 {cat}
               </span>

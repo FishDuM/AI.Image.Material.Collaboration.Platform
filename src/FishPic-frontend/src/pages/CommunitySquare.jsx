@@ -55,9 +55,9 @@ function CommunitySquare() {
   const [postDetailLoading, setPostDetailLoading] = useState(false)
   const [detailImageIndex, setDetailImageIndex] = useState(0)
   const [categoryList, setCategoryList] = useState([])
-  const [selectedCategory, setSelectedCategory] = useState(null)
+  const [selectedCategory, setSelectedCategory] = useState('热门')
   const [searchText, setSearchText] = useState('')
-  const [currentHotPost, setCurrentHotPost] = useState(false)
+  const [currentHotPost, setCurrentHotPost] = useState(true)
   const [, setCurrentPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -197,13 +197,11 @@ function CommunitySquare() {
       try {
         const result = await api.get('/system/list')
         if (Array.isArray(result)) {
-          setCategoryList(result)
-          if (result.length > 0) {
-            setSelectedCategory(result[0])
-          }
+          const merged = ['热门', ...result.filter(c => c !== '推荐' && c !== '热门')]
+          setCategoryList(merged)
         }
       } catch (e) {
-        void e
+        setCategoryList(['热门'])
       }
     }
     fetchCategoryList()
@@ -269,7 +267,7 @@ function CommunitySquare() {
       setCurrentPage(1)
       currentPageRef.current = 1
       setHasMore(true)
-      if (cat === '推荐') {
+      if (cat === '热门') {
         setCurrentHotPost(true)
         fetchPostList({ text: searchText, hotPost: true, page: 1, append: false })
       } else {

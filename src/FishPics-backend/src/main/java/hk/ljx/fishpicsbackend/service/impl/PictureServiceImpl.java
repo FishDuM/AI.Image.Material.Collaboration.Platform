@@ -15,6 +15,7 @@ import hk.ljx.fishpicsbackend.service.CosService;
 import hk.ljx.fishpicsbackend.service.PictureService;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.service.UserService;
+import hk.ljx.fishpicsbackend.vo.picture.PictureAdminVO;
 import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
 import hk.ljx.fishpicsbackend.vo.picture.PicturePostVO;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -78,6 +79,12 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         Picture picture = new Picture();
         BeanUtil.copyProperties(pictureMessage, picture);
         picture.setUserId(userId);
+        // 管理员上传直接通过，普通用户上传需要审核
+        if (ADMIN.equals(loginUser.getRole())) {
+            picture.setStatus(1);
+        } else {
+            picture.setStatus(2);
+        }
 
         ExcUtils.throwIfTrue(pictureMapper.insert(picture) != 1, "上传失败，数据库错误");
         return PicturePostVO.builder().url(picture.getUrl()).pictureId(picture.getId()).build();
@@ -99,15 +106,45 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     }
 
     @Override
-    public IPage<PictureListVO> getPictureList(int current, int pageSize) {
+    public IPage<PictureListVO> getPictureList(int current, int pageSize, int flag) {
         QueryWrapper<Picture> queryWrapper = new QueryWrapper<Picture>()
-                .ne("status", 0)
+                .eq("status", flag)
                 .isNotNull("url")
                 .ne("url", "")
                 .orderByDesc("create_time");
         Page<Picture> page = new Page<>(current, pageSize);
         IPage<Picture> picturePage = pictureMapper.selectPage(page, queryWrapper);
         return picturePage.convert(p -> new PictureListVO(p.getId(), p.getUrl()));
+    }
+
+    @Override
+    public IPage<PictureAdminVO> getAdminPictureList(int current, int pageSize) {
+        QueryWrapper<Picture> queryWrapper = new QueryWrapper<Picture>()
+                .isNotNull("url")
+                .ne("url", "")
+                .orderByDesc("create_time");
+        Page<Picture> page = new Page<>(current, pageSize);
+        IPage<Picture> picturePage = pictureMapper.selectPage(page, queryWrapper);
+        return picturePage.convert(p -> new PictureAdminVO(
+                p.getId(),
+                p.getUrl(),
+                p.getWidth(),
+                p.getHeight(),
+                p.getSize(),
+                p.getStatus(),
+                p.getCreateTime(),
+                p.getUserId()
+        ));
+    }
+
+    @Override
+    public void reviewPicture(Long pictureId, Integer status) {
+        ExcUtils.throwIfTrue(pictureId == null, "图片id不能为空");
+        ExcUtils.throwIfTrue(status == null || (status != 0 && status != 1), "状态值无效");
+        Picture picture = pictureMapper.selectById(pictureId);
+        ExcUtils.throwIfTrue(picture == null, "图片不存在");
+        picture.setStatus(status);
+        ExcUtils.throwIfTrue(pictureMapper.updateById(picture) != 1, "审核更新失败");
     }
 }
 

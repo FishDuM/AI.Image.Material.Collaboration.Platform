@@ -11,6 +11,7 @@ import SpaceManagement from './pages/SpaceManagement'
 import TeamManagement from './pages/TeamManagement'
 import AIManagement from './pages/AIManagement'
 import SystemManagement from './pages/SystemManagement'
+import AdminPictureManagement from './pages/AdminPictureManagement'
 import CommunitySquare from './pages/CommunitySquare'
 import PrivateSpace from './pages/PrivateSpace'
 import TeamSpace from './pages/TeamSpace'
@@ -23,11 +24,12 @@ function App() {
         <Routes>
           <Route path="/" element={<HomePage/>}/>
           <Route path="/profile" element={<ProtectedRoute><UserProfile/></ProtectedRoute>}/>
-          <Route path="/community" element={<ProtectedRoute><CommunitySquare/></ProtectedRoute>}/>
+          <Route path="/community" element={<CommunitySquare/>}/>
           <Route path="/private-space" element={<ProtectedRoute><PrivateSpace/></ProtectedRoute>}/>
           <Route path="/team-space" element={<ProtectedRoute><TeamSpace/></ProtectedRoute>}/>
           <Route path="/notifications" element={<ProtectedRoute><Notifications/></ProtectedRoute>}/>
           <Route path="/admin/users" element={<ProtectedRoute requireAdmin><UserManagement/></ProtectedRoute>}/>
+          <Route path="/admin/pictures" element={<ProtectedRoute requireAdmin><AdminPictureManagement/></ProtectedRoute>}/>
           <Route path="/admin/spaces" element={<ProtectedRoute requireAdmin><SpaceManagement/></ProtectedRoute>}/>
           <Route path="/admin/teams" element={<ProtectedRoute requireAdmin><TeamManagement/></ProtectedRoute>}/>
           <Route path="/admin/ai" element={<ProtectedRoute requireAdmin><AIManagement/></ProtectedRoute>}/>

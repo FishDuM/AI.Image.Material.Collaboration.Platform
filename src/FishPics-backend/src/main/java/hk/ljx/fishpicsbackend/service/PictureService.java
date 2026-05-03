@@ -3,6 +3,7 @@ package hk.ljx.fishpicsbackend.service;
 import hk.ljx.fishpicsbackend.entity.Picture;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
+import hk.ljx.fishpicsbackend.vo.picture.PictureAdminVO;
 import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
 import hk.ljx.fishpicsbackend.vo.picture.PicturePostVO;
 import org.springframework.web.multipart.MultipartFile;
@@ -49,5 +50,20 @@ public interface PictureService extends IService<Picture> {
      * @param pageSize 每页数量
      * @return 图片分页列表
      */
-    IPage<PictureListVO> getPictureList(int current, int pageSize);
+    IPage<PictureListVO> getPictureList(int current, int pageSize, int flag);
+
+    /**
+     * 管理员获取所有图片列表（分页，不按状态过滤）
+     * @param current 当前页
+     * @param pageSize 每页数量
+     * @return 图片分页列表
+     */
+    IPage<PictureAdminVO> getAdminPictureList(int current, int pageSize);
+
+    /**
+     * 管理员审核图片
+     * @param pictureId 图片id
+     * @param status 目标状态 1-通过 0-拒绝
+     */
+    void reviewPicture(Long pictureId, Integer status);
 }

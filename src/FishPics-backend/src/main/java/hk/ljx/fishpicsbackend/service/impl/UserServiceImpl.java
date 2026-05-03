@@ -36,6 +36,7 @@ import hk.ljx.fishpicsbackend.vo.user.UserMessageVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.RequestBody;
 
 import javax.annotation.Resource;
@@ -124,6 +125,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Response<Boolean> userRegister(UserRequestRequest userRequestRequest, HttpServletRequest request) {
         // 基础参数校验
         String username = userRequestRequest.getUsername();

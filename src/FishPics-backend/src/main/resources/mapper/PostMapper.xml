@@ -19,11 +19,12 @@
             <result property="isPrivate" column="is_private" />
             <result property="cover" column="cover" />
             <result property="viewsNum" column="views_num" />
+            <result property="hot" column="hot" />
     </resultMap>
 
     <sql id="Base_Column_List">
         id,user_id,title,content,status,create_time,
         update_time,is_delete,likes_num,collects_num,comment_num,
-        is_private,cover,views_num
+        is_private,cover,views_num,hot
     </sql>
 </mapper>

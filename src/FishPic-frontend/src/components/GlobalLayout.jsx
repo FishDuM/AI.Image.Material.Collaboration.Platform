@@ -19,6 +19,7 @@ import {
   MessageOutlined,
   LockFilled,
   ToolOutlined,
+  PictureOutlined,
   GithubOutlined,
   QqOutlined,
   GlobalOutlined,
@@ -320,6 +321,12 @@ function GlobalLayout({ children }) {
             onClick: () => handleSidebarMenuClick('/admin/users'),
           },
           {
+            key: '/admin/pictures',
+            icon: <PictureOutlined />,
+            label: '图片管理',
+            onClick: () => handleSidebarMenuClick('/admin/pictures'),
+          },
+          {
             key: '/admin/spaces',
             icon: <AppstoreOutlined />,
             label: '空间管理',
@@ -371,6 +378,12 @@ function GlobalLayout({ children }) {
       icon: <UserOutlined />,
       label: '用户管理',
       onClick: () => navigate('/admin/users'),
+    },
+    {
+      key: 'picture-management',
+      icon: <PictureOutlined />,
+      label: '图片管理',
+      onClick: () => navigate('/admin/pictures'),
     },
       {
           key: 'space-management',

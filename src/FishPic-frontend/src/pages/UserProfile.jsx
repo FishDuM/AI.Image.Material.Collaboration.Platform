@@ -593,6 +593,7 @@ function UserProfile() {
           open={avatarVisible}
           onCancel={() => setAvatarVisible(false)}
           footer={null}
+          closable={false}
           width={600}
         >
           {userData?.avatar && <img src={userData.avatar} alt="avatar" />}
@@ -743,10 +744,11 @@ function UserProfile() {
 
   return (
     <div className="user-profile-page">
-      {renderProfileHeader()}
-      
-      <div className="profile-tabs-section">
-        <div className="profile-tabs-container">
+      <div className="profile-card">
+        <div className="profile-card-header">
+          {renderProfileHeader()}
+        </div>
+        <div className="profile-card-body">
           <Tabs
             activeKey={activeTab}
             onChange={setActiveTab}

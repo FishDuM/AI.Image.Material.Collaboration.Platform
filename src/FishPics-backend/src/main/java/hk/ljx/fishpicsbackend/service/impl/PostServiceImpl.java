@@ -6,6 +6,7 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.toolkit.CollectionUtils;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
@@ -15,10 +16,7 @@ import hk.ljx.fishpicsbackend.dto.post.EditPostRequest;
 import hk.ljx.fishpicsbackend.dto.post.PostQueryRequest;
 import hk.ljx.fishpicsbackend.dto.post.PostQueryWrapper;
 import hk.ljx.fishpicsbackend.dto.post.UploadPostRequest;
-import hk.ljx.fishpicsbackend.entity.Picture;
-import hk.ljx.fishpicsbackend.entity.Post;
-import hk.ljx.fishpicsbackend.entity.User;
-import hk.ljx.fishpicsbackend.entity.UserPostLikes;
+import hk.ljx.fishpicsbackend.entity.*;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
 import hk.ljx.fishpicsbackend.mapper.UserPostCollectMapper;
@@ -32,6 +30,7 @@ import hk.ljx.fishpicsbackend.vo.post.PostListVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
@@ -76,6 +75,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
     private UserPostCollectMapper userPostCollectMapper;
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void uploadPost(UploadPostRequest uploadPostRequest, HttpServletRequest request) {
         // 校验参数
         List<Long> imageId = uploadPostRequest.getImageId();
@@ -240,7 +240,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         // 构建热门查询
         if (ObjectUtil.isNotNull(hotPost)) {
             // 热门的定义：点赞数 * 0.3 + 收藏数 * 0.3 + 评论数 *0.2 + 点击数 * 0.2
-            queryWrapper.orderByDesc("(likes_num * 0.3 + collects_num * 0.2 + comment_num * 0.3 + views_num * 0.2)");
+            queryWrapper.orderByDesc("hot");
         }
 
         queryWrapper.orderBy(ObjectUtil.isNotNull(sortField), "asc".equalsIgnoreCase(sortOrder), sortField);
@@ -248,6 +248,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void likePost(Long id, HttpServletRequest request) {
         // 获取帖子 id
         Post post = postMapper.selectById(id);
@@ -321,38 +322,55 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         return convertToPostListVO(postPage);
     }
 
-    /**
-     * 获取本人收藏的帖子列表（分页）
-     * 通过子查询关联 user_post_collect 表获取收藏的帖子
-     * 用户可以查看自己收藏过的所有帖子，与社区广场查询逻辑保持一致
-     */
+    // getMyCollects方法修改
     @Override
     public IPage<PostListVO> getMyCollects(PageRequest pageRequest, HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
         Long userId = loginUser.getId();
 
+        // 第一步：查询用户的收藏帖子ID列表
+        List<Long> collectPostIds = userPostCollectMapper.selectList(
+                        new QueryWrapper<UserPostCollect>().eq("user_id", userId)
+                ).stream()
+                .map(UserPostCollect::getPostId)
+                .collect(Collectors.toList());
+
+        // 如果没有收藏，直接返回空分页
+        if (CollectionUtils.isEmpty(collectPostIds)) {
+            return new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize()).convert(p -> new PostListVO());
+        }
+
+        // 第二步：查询这些帖子
         Page<Post> page = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
         QueryWrapper<Post> queryWrapper = new QueryWrapper<>();
-        queryWrapper.inSql("id", "SELECT post_id FROM user_post_collect WHERE user_id = " + userId);
+        queryWrapper.in("id", collectPostIds);  // 使用in方法，参数安全
         queryWrapper.orderByDesc("create_time");
 
         IPage<Post> postPage = postMapper.selectPage(page, queryWrapper);
         return convertToPostListVO(postPage);
     }
 
-    /**
-     * 获取本人点赞的帖子列表（分页）
-     * 通过子查询关联 user_post_likes 表获取点赞的帖子
-     * 用户可以查看自己点赞过的所有帖子，与社区广场查询逻辑保持一致
-     */
+    // getMyLikes方法同理
     @Override
     public IPage<PostListVO> getMyLikes(PageRequest pageRequest, HttpServletRequest request) {
         User loginUser = userService.getLoginUser(request);
         Long userId = loginUser.getId();
 
+        // 第一步：查询用户的点赞帖子ID列表
+        List<Long> likePostIds = userPostLikesMapper.selectList(
+                        new QueryWrapper<UserPostLikes>().eq("user_id", userId)
+                ).stream()
+                .map(UserPostLikes::getPostId)
+                .collect(Collectors.toList());
+
+        if (CollectionUtils.isEmpty(likePostIds)) {
+            return new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize()).convert(p -> new PostListVO());
+        }
+
+        // 第二步：查询这些帖子
         Page<Post> page = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
         QueryWrapper<Post> queryWrapper = new QueryWrapper<>();
-        queryWrapper.inSql("id", "SELECT post_id FROM user_post_likes WHERE user_id = " + userId);
+        queryWrapper.in("id", likePostIds);
         queryWrapper.orderByDesc("create_time");
 
         IPage<Post> postPage = postMapper.selectPage(page, queryWrapper);

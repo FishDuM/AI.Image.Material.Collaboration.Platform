@@ -7,10 +7,8 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import java.io.Serializable;
 import java.util.Date;
 
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
 /**
  * 帖子表
@@ -18,8 +16,6 @@ import lombok.NoArgsConstructor;
  */
 @TableName(value ="post")
 @Data
-@AllArgsConstructor
-@NoArgsConstructor
 @Builder
 public class Post implements Serializable {
     /**
@@ -92,6 +88,11 @@ public class Post implements Serializable {
      * 查看数
      */
     private Long viewsNum;
+
+    /**
+     * 
+     */
+    private Integer hot;
 
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;
