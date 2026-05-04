@@ -38,6 +38,9 @@ public class CosService {
     @Value("${cos.public:false}")
     private boolean isPublic = true;
 
+    @Value("${cos.url}")
+    private String url;
+
     // ====================== 配置常量 ======================
     /**
      * 最大文件大小 5MB
@@ -152,10 +155,24 @@ public class CosService {
     }
 
     /**
+     * 根据 COS 的文件 key 删除文件
+     * @param allUrl 文件唯一标识
+     */
+    public void deletePictureByUrl(String allUrl) {
+        ExcUtils.throwIfTrue(allUrl == null || allUrl.isEmpty(), "文件key不能为空");
+        int length = url.length();
+        String key = allUrl.substring(length);
+        try {
+            cosClient.deleteObject(bucket, key);
+        } catch (Exception e) {
+            throw new RuntimeException("图片删除失败：" + e.getMessage());
+        }
+    }
+
+    /**
      * 根据 key 获取图片信息
      * @param key 文件唯一标识
      * @return 图片信息
-     * @throws IOException IO异常
      */
     public PictureMessage getPictureMessage(String key) {
         // 1. 构建获取图片信息的请求

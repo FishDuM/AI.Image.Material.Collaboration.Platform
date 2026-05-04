@@ -8,7 +8,7 @@ import hk.ljx.fishpicsbackend.dto.space.SpaceQueryWrapper;
 import hk.ljx.fishpicsbackend.dto.space.UpdateSpace;
 import hk.ljx.fishpicsbackend.entity.Space;
 import com.baomidou.mybatisplus.extension.service.IService;
-import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
+import hk.ljx.fishpicsbackend.vo.picture.PicturePageVO;
 
 import javax.servlet.http.HttpServletRequest;
 import java.util.List;
@@ -52,7 +52,7 @@ public interface SpaceService extends IService<Space> {
      * @param request          请求
      * @return 图片列表
      */
-    List<PictureListVO> pictureList(SpacePictureList spacePictureList, HttpServletRequest request);
+    PicturePageVO pictureList(SpacePictureList spacePictureList, HttpServletRequest request);
 
     /**
      * 获取空间查询条件

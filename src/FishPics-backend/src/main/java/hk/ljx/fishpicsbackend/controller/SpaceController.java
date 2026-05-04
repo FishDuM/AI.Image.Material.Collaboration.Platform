@@ -10,7 +10,7 @@ import hk.ljx.fishpicsbackend.dto.space.SpacePictureList;
 import hk.ljx.fishpicsbackend.dto.space.UpdateSpace;
 import hk.ljx.fishpicsbackend.entity.Space;
 import hk.ljx.fishpicsbackend.service.SpaceService;
-import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
+import hk.ljx.fishpicsbackend.vo.picture.PicturePageVO;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
@@ -43,7 +43,7 @@ public class SpaceController {
     }
 
     @PostMapping("/pictureList")
-    public Response<List<PictureListVO>> pictureList(@RequestBody SpacePictureList spacePictureList, HttpServletRequest request) {
+    public Response<PicturePageVO> pictureList(@RequestBody SpacePictureList spacePictureList, HttpServletRequest request) {
         ExcUtils.throwIfTrue(spacePictureList == null, ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
         return ResUtils.success(spaceService.pictureList(spacePictureList, request));
     }

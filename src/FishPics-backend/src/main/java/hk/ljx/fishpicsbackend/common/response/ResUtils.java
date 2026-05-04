@@ -14,6 +14,11 @@ public class ResUtils implements Serializable {
         return new Response(1, "success", data);
     }
 
+    public static <T> Response<T> successOfMessage(String message) {
+        return new Response(1, message, null);
+    }
+
+
     public static Response fail(BaseException be) {
         return new Response(0, be.getMessage(), null);
     }

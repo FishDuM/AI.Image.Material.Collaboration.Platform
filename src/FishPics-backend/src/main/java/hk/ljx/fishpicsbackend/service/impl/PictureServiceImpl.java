@@ -1,6 +1,7 @@
 package hk.ljx.fishpicsbackend.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
@@ -10,10 +11,13 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
+import hk.ljx.fishpicsbackend.dto.picture.DeleteByIdList;
 import hk.ljx.fishpicsbackend.dto.picture.PictureMessage;
 import hk.ljx.fishpicsbackend.entity.Picture;
+import hk.ljx.fishpicsbackend.entity.Post;
 import hk.ljx.fishpicsbackend.entity.Space;
 import hk.ljx.fishpicsbackend.entity.User;
+import hk.ljx.fishpicsbackend.mapper.PostMapper;
 import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
 import hk.ljx.fishpicsbackend.service.*;
@@ -28,7 +32,9 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
@@ -61,6 +67,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
     @Resource
     private LoginUser loginUser;
+    @Autowired
+    private PostMapper postMapper;
 
     @Override
     public String uploadAvatar(MultipartFile file, Long id, HttpServletRequest request) {
@@ -186,6 +194,33 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             picture.setIsPrivate(selected);
         }
         ExcUtils.throwIfTrue(pictureMapper.updateById(picture) != 1, "审核更新失败");
+    }
+
+    @Override
+    public String deletePicture(DeleteByIdList deleteByIdList, HttpServletRequest request) {
+        List<Long> ids = deleteByIdList.getIds();
+        ExcUtils.throwIfTrue(CollUtil.isEmpty(ids), "图片id不能为空");
+
+        User user = loginUser.getLoginUser(request);
+        String role = user.getRole();
+        // 批量查询图片
+        List<Picture> pictureList = pictureMapper.selectList(new QueryWrapper<Picture>().in("id", ids));
+        ExcUtils.throwIfTrue(CollUtil.isEmpty(pictureList), "图片不存在");
+        Set<Long> userIds = new HashSet<>();
+        pictureList.forEach(picture -> userIds.add(picture.getUserId()));
+        // 判断是否为图片的主人或者管理员
+        ExcUtils.throwIfFalse(role.equals(ADMIN) || userIds.stream().findFirst().map(id -> id.equals(user.getId())).orElse(false) || userIds.size() != 1, ExceptionCode.UNAUTHORIZED, "没有权限删除图片");
+        // 帖子封面图禁止删除
+        List<Post> posts = postMapper.selectList(new QueryWrapper<Post>().in("cover", ids));
+        if (!posts.isEmpty()){
+            posts.forEach(post -> {
+                ids.remove(post.getCover());
+            });
+        }
+        int i = pictureMapper.delete(new QueryWrapper<Picture>().in("id", ids));
+        ExcUtils.throwIfTrue(i == 0, "删除失败");
+        pictureList.forEach(picture -> cosService.deletePictureByUrl(picture.getUrl()));
+        return !posts.isEmpty() ? "删除成功，但有"+ posts.size() + "个图片为帖子封面无法删除" : "删除成功";
     }
 }
 

@@ -1,10 +1,13 @@
 package hk.ljx.fishpicsbackend.controller;
 
+import cn.hutool.core.util.ObjUtil;
 import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import hk.ljx.fishpicsbackend.dto.base.DeleteById;
+import hk.ljx.fishpicsbackend.dto.picture.DeleteByIdList;
 import hk.ljx.fishpicsbackend.dto.picture.PictureMessage;
 import hk.ljx.fishpicsbackend.service.PictureService;
 import hk.ljx.fishpicsbackend.vo.picture.PictureAdminVO;
@@ -50,6 +53,12 @@ public class PictureController {
         ExcUtils.throwIfTrue(current < 1, "页码不能小于1");
         ExcUtils.throwIfTrue(pageSize < 1 || pageSize > 100, "每页数量应在1-100之间");
         return ResUtils.success(pictureService.getPictureList(current, pageSize, 1));
+    }
+
+    @PostMapping("/delete")
+    public Response<String> deletePicture(@RequestBody DeleteByIdList deleteByIdList, HttpServletRequest request) {
+        ExcUtils.throwIfTrue(ObjUtil.isEmpty(deleteByIdList), "id不能为空");
+        return ResUtils.successOfMessage(pictureService.deletePicture(deleteByIdList, request));
     }
 
     @AuthCheck(role = ADMIN)

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { App as AntApp, Typography, Button, Modal, Form, Input, Pagination, Masonry, Image as AntImage, Spin, Empty } from 'antd'
-import { SearchOutlined, ReloadOutlined } from '@ant-design/icons'
-import { createSpace, updateSpace, listSpace, spaceListPicture } from '../api'
+import { App as AntApp, Typography, Button, Modal, Form, Input, Pagination, Masonry, Image as AntImage, Spin, Empty, Popconfirm } from 'antd'
+import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons'
+import { createSpace, updateSpace, listSpace, spaceListPicture, deletePicture } from '../api'
 import './PrivateSpace.css'
 
 const { Title } = Typography
@@ -38,6 +38,9 @@ function PrivateSpace() {
   const [pictureLoading, setPictureLoading] = useState(false)
   const [searchKeyword, setSearchKeyword] = useState('')
 
+  const [batchMode, setBatchMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState([])
+
   const fetchSpaces = useCallback(async () => {
     try {
       const result = await listSpace(0)
@@ -63,13 +66,10 @@ function PrivateSpace() {
         params.keyword = keyword.trim()
       }
       const result = await spaceListPicture(params)
-      const list = Array.isArray(result) ? result : []
+      const list = Array.isArray(result?.records) ? result.records : []
+      const total = typeof result?.total === 'number' ? result.total : list.length
       setPictures(list)
-      if (list.length < PAGE_SIZE) {
-        setPictureTotal((page - 1) * PAGE_SIZE + list.length)
-      } else {
-        setPictureTotal(page * PAGE_SIZE + 1)
-      }
+      setPictureTotal(total)
     } catch {
       setPictures([])
     } finally {
@@ -109,6 +109,49 @@ function PrivateSpace() {
       fetchPictures(spaces[0].id, 1, '')
     }
   }, [spaces, fetchPictures])
+
+  const handleDeletePicture = useCallback(async (pictureId) => {
+    try {
+      const res = await deletePicture([pictureId])
+      message.success(res?.message || '删除成功')
+      if (spaces.length > 0 && spaces[0].id) {
+        await fetchPictures(spaces[0].id, picturePage, searchKeyword)
+      }
+    } catch (error) {
+      message.error(error.message || '删除失败')
+    }
+  }, [spaces, fetchPictures, picturePage, searchKeyword, message])
+
+  const toggleBatchMode = useCallback(() => {
+    setBatchMode((prev) => {
+      if (prev) setSelectedIds([])
+      return !prev
+    })
+  }, [])
+
+  const toggleSelect = useCallback((pictureId) => {
+    setSelectedIds((prev) =>
+      prev.includes(pictureId) ? prev.filter((id) => id !== pictureId) : [...prev, pictureId]
+    )
+  }, [])
+
+  const handleBatchDelete = useCallback(async () => {
+    if (selectedIds.length === 0) {
+      message.warning('请先选择要删除的图片')
+      return
+    }
+    try {
+      const res = await deletePicture(selectedIds)
+      message.success(res?.message || '删除成功')
+      setSelectedIds([])
+      setBatchMode(false)
+      if (spaces.length > 0 && spaces[0].id) {
+        await fetchPictures(spaces[0].id, picturePage, searchKeyword)
+      }
+    } catch (error) {
+      message.error(error.message || '批量删除失败')
+    }
+  }, [selectedIds, spaces, fetchPictures, picturePage, searchKeyword, message])
 
   const masonryItems = useMemo(() => pictureListToMasonry(pictures), [pictures])
 
@@ -191,6 +234,14 @@ function PrivateSpace() {
           <Button icon={<ReloadOutlined />} onClick={handleSearchReset}>
             重置
           </Button>
+          <Button
+            icon={<DeleteOutlined />}
+            onClick={toggleBatchMode}
+            type={batchMode ? 'primary' : 'default'}
+            danger={batchMode}
+          >
+            {batchMode ? '退出批量' : '批量删除'}
+          </Button>
         </div>
       )}
 
@@ -210,17 +261,82 @@ function PrivateSpace() {
               gutter={[12, 12]}
               fresh
               items={masonryItems}
-              itemRender={(item) => (
-                <div className="private-space-masonry-item">
-                  <AntImage
-                    src={item.data.url}
-                    alt=""
-                    preview={false}
-                    className="private-space-masonry-image"
-                  />
-                </div>
-              )}
+              itemRender={(item) => {
+                const isSelected = selectedIds.includes(item.data.id)
+                return (
+                  <div
+                    className={`private-space-masonry-item ${batchMode ? 'batch-mode' : ''}`}
+                    onClick={batchMode ? () => toggleSelect(item.data.id) : undefined}
+                  >
+                    <AntImage
+                      src={item.data.url}
+                      alt=""
+                      preview={false}
+                      className="private-space-masonry-image"
+                    />
+                    {batchMode ? (
+                      <div className="private-space-masonry-select">
+                        <div className={`private-space-masonry-checkbox ${isSelected ? 'checked' : ''}`}>
+                          {isSelected && <CheckOutlined />}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="private-space-masonry-actions">
+                        <Popconfirm
+                          title="确认删除"
+                          description="确定要删除这张图片吗？"
+                          onConfirm={() => handleDeletePicture(item.data.id)}
+                          okText="删除"
+                          cancelText="取消"
+                          okButtonProps={{ danger: true }}
+                        >
+                          <Button
+                            type="primary"
+                            danger
+                            size="small"
+                            icon={<DeleteOutlined />}
+                          >
+                            删除
+                          </Button>
+                        </Popconfirm>
+                      </div>
+                    )}
+                  </div>
+                )
+              }}
             />
+          )}
+          {batchMode && (
+            <div className="private-space-batch-bar">
+              <span className="private-space-batch-count">
+                已选择 <strong>{selectedIds.length}</strong> 张图片
+              </span>
+              <div className="private-space-batch-actions">
+                <Button
+                  icon={<CloseOutlined />}
+                  onClick={toggleBatchMode}
+                >
+                  取消
+                </Button>
+                <Popconfirm
+                  title="确认删除"
+                  description={`确定要删除选中的 ${selectedIds.length} 张图片吗？`}
+                  onConfirm={handleBatchDelete}
+                  okText="删除"
+                  cancelText="取消"
+                  okButtonProps={{ danger: true, disabled: selectedIds.length === 0 }}
+                >
+                  <Button
+                    type="primary"
+                    danger
+                    icon={<DeleteOutlined />}
+                    disabled={selectedIds.length === 0}
+                  >
+                    删除选中
+                  </Button>
+                </Popconfirm>
+              </div>
+            </div>
           )}
           {pictureTotal > PAGE_SIZE && (
             <div className="private-space-pagination">

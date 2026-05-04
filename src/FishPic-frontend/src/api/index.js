@@ -32,7 +32,7 @@ api.interceptors.response.use(
     if (responseData.code !== 1) {
       return Promise.reject(new Error(responseData.message || '请求失败'))
     }
-    return responseData.data
+    return responseData.data ?? responseData
   },
   (error) => {
     const message = error.response?.data?.message || error.message || '请求失败，请重试'
@@ -103,5 +103,7 @@ export const updateSpace = (data) => api.post('/space/update', data)
 export const listSpace = (type) => api.get('/space/list', { params: { type } })
 
 export const spaceListPicture = (data) => api.post('/space/pictureList', data)
+
+export const deletePicture = (ids) => api.post('/picture/delete', { ids })
 
 export default api

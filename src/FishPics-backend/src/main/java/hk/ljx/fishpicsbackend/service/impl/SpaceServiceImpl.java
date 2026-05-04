@@ -22,6 +22,7 @@ import hk.ljx.fishpicsbackend.service.SpaceService;
 import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
 import hk.ljx.fishpicsbackend.service.UserService;
 import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
+import hk.ljx.fishpicsbackend.vo.picture.PicturePageVO;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -134,7 +135,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
     }
 
     @Override
-    public List<PictureListVO> pictureList(SpacePictureList spacePictureList, HttpServletRequest request) {
+    public PicturePageVO pictureList(SpacePictureList spacePictureList, HttpServletRequest request) {
         Long spaceId = spacePictureList.getSpaceId();
         int current = spacePictureList.getCurrent();
         int pageSize = spacePictureList.getPageSize();
@@ -160,7 +161,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
             pictureListVO.setUrl(picture.getUrl());
             pictureListVOS.add(pictureListVO);
         });
-        return pictureListVOS;
+        return new PicturePageVO(pictureListVOS, pictureList.getTotal());
     }
 
     @Override
