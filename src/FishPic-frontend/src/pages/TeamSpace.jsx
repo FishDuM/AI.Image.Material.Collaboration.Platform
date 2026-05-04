@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import { App as AntApp, Card, Typography, Button, Empty, Modal, Form, Input, Spin, Row, Col, Tag } from 'antd'
+import { App as AntApp, Card, Typography, Button, Empty, Modal, Form, Input, Spin, Row, Col } from 'antd'
 import { TeamOutlined } from '@ant-design/icons'
-import { createSpace, listSpace } from '../api'
+import { createSpace, updateSpace, listSpace } from '../api'
 import './TeamSpace.css'
 
 const { Title, Text } = Typography
@@ -11,8 +11,11 @@ function TeamSpace() {
   const [spaces, setSpaces] = useState([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
+  const [showEdit, setShowEdit] = useState(false)
   const [createLoading, setCreateLoading] = useState(false)
+  const [updateLoading, setUpdateLoading] = useState(false)
   const [form] = Form.useForm()
+  const [editForm] = Form.useForm()
 
   const fetchSpaces = useCallback(async () => {
     setLoading(true)
@@ -51,6 +54,32 @@ function TeamSpace() {
     }
   }
 
+  const handleEditOpen = () => {
+    if (spaces.length > 0) {
+      editForm.setFieldsValue({ name: spaces[0].name, introduction: spaces[0].introduction })
+      setShowEdit(true)
+    }
+  }
+
+  const handleUpdate = async (values) => {
+    setUpdateLoading(true)
+    try {
+      await updateSpace({
+        id: spaces[0].id,
+        name: values.name,
+        introduction: values.introduction || '',
+      })
+      message.success('修改成功')
+      setShowEdit(false)
+      editForm.resetFields()
+      fetchSpaces()
+    } catch (error) {
+      message.error(error.message || '修改失败')
+    } finally {
+      setUpdateLoading(false)
+    }
+  }
+
   return (
     <main className="team-space-container">
       <div className="team-space-header">
@@ -62,6 +91,11 @@ function TeamSpace() {
             {spaces.length > 0 && spaces[0].introduction ? spaces[0].introduction : '团队协作和共享空间'}
           </p>
         </div>
+        {spaces.length > 0 && (
+          <Button onClick={handleEditOpen}>
+            修改空间
+          </Button>
+        )}
       </div>
 
       <Spin spinning={loading}>
@@ -104,6 +138,47 @@ function TeamSpace() {
           </>
         )}
       </Spin>
+
+      <Modal
+        title="修改空间"
+        open={showEdit}
+        onCancel={() => { setShowEdit(false); editForm.resetFields() }}
+        footer={
+          <div style={{ textAlign: 'right' }}>
+            <Button onClick={() => { setShowEdit(false); editForm.resetFields() }} style={{ marginRight: 8 }}>
+              取消
+            </Button>
+            <Button type="primary" onClick={() => editForm.submit()} loading={updateLoading}>
+              保存
+            </Button>
+          </div>
+        }
+        closable={false}
+      >
+        <Form
+          form={editForm}
+          layout="vertical"
+          onFinish={handleUpdate}
+          style={{ marginTop: 16 }}
+        >
+          <Form.Item
+            name="name"
+            label="团队名称"
+            rules={[
+              { required: true, message: '请输入团队名称' },
+              { max: 20, message: '团队名称不超过 20 个字符' },
+            ]}
+          >
+            <Input placeholder="请输入团队名称" maxLength={20} />
+          </Form.Item>
+          <Form.Item
+            name="introduction"
+            label="空间介绍"
+          >
+            <Input.TextArea placeholder="请输入空间介绍" maxLength={200} rows={3} showCount />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       <Modal
         title="创建团队空间"

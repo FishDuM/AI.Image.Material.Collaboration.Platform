@@ -35,7 +35,10 @@ function GlobalLayout({ children }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { isDarkMode, toggleTheme } = useContext(ThemeContext)
-  const { userInfo, login: authLogin, logout: authLogout } = useContext(AuthContext)
+  const auth = useContext(AuthContext)
+  const userInfo = auth?.userInfo
+  const authLogin = auth?.login
+  const authLogout = auth?.logout
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
   const [loginForm] = Form.useForm()
   const [loginLoading, setLoginLoading] = useState(false)

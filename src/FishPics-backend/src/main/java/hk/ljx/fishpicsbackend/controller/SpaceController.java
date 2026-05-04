@@ -6,8 +6,11 @@ import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.dto.space.CreateSpace;
+import hk.ljx.fishpicsbackend.dto.space.SpacePictureList;
+import hk.ljx.fishpicsbackend.dto.space.UpdateSpace;
 import hk.ljx.fishpicsbackend.entity.Space;
 import hk.ljx.fishpicsbackend.service.SpaceService;
+import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
@@ -31,5 +34,17 @@ public class SpaceController {
     public Response<List<Space>> listSpace(@RequestParam Integer type,HttpServletRequest request) {
         ExcUtils.throwIfTrue(type == null , ExceptionCode.PARAMETER_ERROR, "空间类型不能为空");
         return ResUtils.success(spaceService.listSpace(type, request));
+    }
+
+    @PostMapping("/update")
+    public Response<Boolean> updateSpace(@RequestBody UpdateSpace updateSpace, HttpServletRequest request) {
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(updateSpace), ExceptionCode.PARAMETER_ERROR, "更新空间参数不能为空");
+        return ResUtils.success(spaceService.updateSpace(updateSpace, request));
+    }
+
+    @PostMapping("/pictureList")
+    public Response<List<PictureListVO>> pictureList(@RequestBody SpacePictureList spacePictureList, HttpServletRequest request) {
+        ExcUtils.throwIfTrue(spacePictureList == null, ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
+        return ResUtils.success(spaceService.pictureList(spacePictureList, request));
     }
 }

@@ -5,11 +5,13 @@ import com.baomidou.mybatisplus.annotation.TableLogic;
 import hk.ljx.fishpicsbackend.dto.base.PageRequest;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
 import java.util.Date;
 
+@EqualsAndHashCode(callSuper = true)
 @Data
 @AllArgsConstructor
 @NoArgsConstructor

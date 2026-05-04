@@ -105,7 +105,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         }
         int update = spaceMapper.update(space, new UpdateWrapper<Space>().set("size", updateSize).eq("id", space.getId()));
         ExcUtils.throwIfTrue(update <= 0, "上传失败，数据库错误");
-
+        picture.setSpaceId(space.getId());
         // 管理员上传直接通过，普通用户上传需要审核
         if (ADMIN.equals(userLogin.getRole())) {
             picture.setStatus(1);

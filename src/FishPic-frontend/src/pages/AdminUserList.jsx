@@ -147,11 +147,11 @@ function AdminUserList() {
             current: pagination.current,
             pageSize: pagination.pageSize,
             total: pagination.total,
-            locale: PAGINATION_LOCALE,
             showSizeChanger: true,
             showQuickJumper: true,
             showTotal: (total) => `共 ${total} 条`,
             pageSizeOptions: ['10', '20', '50', '100'],
+            locale: PAGINATION_LOCALE,
           }}
           onChange={handleTableChange}
           scroll={{ x: 800 }}

@@ -1,28 +1,44 @@
-import { useState, useEffect, useCallback } from 'react'
-import { App as AntApp, Card, Typography, Button, Empty, Modal, Form, Input, Spin, Row, Col, Tag } from 'antd'
-import { LockOutlined } from '@ant-design/icons'
-import { createSpace, listSpace } from '../api'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { App as AntApp, Typography, Button, Modal, Form, Input, Pagination, Masonry, Image as AntImage, Spin, Empty } from 'antd'
+import { SearchOutlined, ReloadOutlined } from '@ant-design/icons'
+import { createSpace, updateSpace, listSpace, spaceListPicture } from '../api'
 import './PrivateSpace.css'
 
-const { Title, Text } = Typography
+const { Title } = Typography
 
-const STORAGE_OPTIONS = [
-  { value: '10GB', label: '10 GB' },
-  { value: '50GB', label: '50 GB' },
-  { value: '100GB', label: '100 GB' },
-  { value: '250GB', label: '250 GB' },
-]
+const PAGE_SIZE = 20
+
+const PAGINATION_LOCALE = {
+  items_per_page: '条/页',
+  jump_to: '跳至',
+  jump_to_confirm: '确定',
+  page: '页',
+  prev_page: '上一页',
+  next_page: '下一页',
+  prev_5: '向前 5 页',
+  next_5: '向后 5 页',
+  prev_3: '向前 3 页',
+  next_3: '向后 3 页',
+  page_size: '页码',
+}
 
 function PrivateSpace() {
   const { message } = AntApp.useApp()
   const [spaces, setSpaces] = useState([])
-  const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
+  const [showEdit, setShowEdit] = useState(false)
   const [createLoading, setCreateLoading] = useState(false)
+  const [updateLoading, setUpdateLoading] = useState(false)
   const [form] = Form.useForm()
+  const [editForm] = Form.useForm()
+
+  const [pictures, setPictures] = useState([])
+  const [picturePage, setPicturePage] = useState(1)
+  const [pictureTotal, setPictureTotal] = useState(0)
+  const [pictureLoading, setPictureLoading] = useState(false)
+  const [searchKeyword, setSearchKeyword] = useState('')
 
   const fetchSpaces = useCallback(async () => {
-    setLoading(true)
     try {
       const result = await listSpace(0)
       const list = Array.isArray(result) ? result : []
@@ -31,14 +47,70 @@ function PrivateSpace() {
     } catch {
       setSpaces([])
       setShowCreate(true)
+    }
+  }, [])
+
+  const fetchPictures = useCallback(async (spaceId, page, keyword) => {
+    setPictureLoading(true)
+    setPicturePage(page)
+    try {
+      const params = {
+        spaceId,
+        current: page,
+        pageSize: PAGE_SIZE,
+      }
+      if (keyword && keyword.trim()) {
+        params.keyword = keyword.trim()
+      }
+      const result = await spaceListPicture(params)
+      const list = Array.isArray(result) ? result : []
+      setPictures(list)
+      if (list.length < PAGE_SIZE) {
+        setPictureTotal((page - 1) * PAGE_SIZE + list.length)
+      } else {
+        setPictureTotal(page * PAGE_SIZE + 1)
+      }
+    } catch {
+      setPictures([])
     } finally {
-      setLoading(false)
+      setPictureLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    fetchSpaces()
+    const init = async () => { await fetchSpaces() }
+    init()
   }, [fetchSpaces])
+
+  useEffect(() => {
+    const load = async () => {
+      if (spaces.length > 0 && spaces[0].id) {
+        await fetchPictures(spaces[0].id, 1)
+      }
+    }
+    load()
+  }, [spaces, fetchPictures])
+
+  const handlePageChange = useCallback((page) => {
+    if (spaces.length > 0 && spaces[0].id) {
+      fetchPictures(spaces[0].id, page, searchKeyword)
+    }
+  }, [spaces, fetchPictures, searchKeyword])
+
+  const handleSearch = useCallback(() => {
+    if (spaces.length > 0 && spaces[0].id) {
+      fetchPictures(spaces[0].id, 1, searchKeyword)
+    }
+  }, [spaces, fetchPictures, searchKeyword])
+
+  const handleSearchReset = useCallback(() => {
+    setSearchKeyword('')
+    if (spaces.length > 0 && spaces[0].id) {
+      fetchPictures(spaces[0].id, 1, '')
+    }
+  }, [spaces, fetchPictures])
+
+  const masonryItems = useMemo(() => pictureListToMasonry(pictures), [pictures])
 
   const handleCreate = async (values) => {
     setCreateLoading(true)
@@ -58,6 +130,32 @@ function PrivateSpace() {
     }
   }
 
+  const handleEditOpen = () => {
+    if (spaces.length > 0) {
+      editForm.setFieldsValue({ name: spaces[0].name, introduction: spaces[0].introduction })
+      setShowEdit(true)
+    }
+  }
+
+  const handleUpdate = async (values) => {
+    setUpdateLoading(true)
+    try {
+      await updateSpace({
+        id: spaces[0].id,
+        name: values.name,
+        introduction: values.introduction || '',
+      })
+      message.success('修改成功')
+      setShowEdit(false)
+      editForm.resetFields()
+      fetchSpaces()
+    } catch (error) {
+      message.error(error.message || '修改失败')
+    } finally {
+      setUpdateLoading(false)
+    }
+  }
+
   return (
     <main className="private-space-container">
       <div className="private-space-header">
@@ -69,48 +167,117 @@ function PrivateSpace() {
             {spaces.length > 0 && spaces[0].introduction ? spaces[0].introduction : '你的专属私密存储空间'}
           </p>
         </div>
+        {spaces.length > 0 && (
+          <Button onClick={handleEditOpen}>
+            修改空间
+          </Button>
+        )}
       </div>
 
-      <Spin spinning={loading}>
-        {!loading && (
-          <>
-            {spaces.length > 0 && (
-              <Row gutter={[16, 16]}>
-                {spaces.map((space) => (
-                  <Col key={space.id} xs={24} sm={12} lg={8}>
-                    <Card className="private-space-card" variant="borderless">
-                      <div className="space-card-header">
-                        <LockOutlined className="space-card-icon" />
-                        <Text strong className="space-card-name">{space.name}</Text>
-                      </div>
-                      {space.introduction && (
-                        <div className="space-card-intro">
-                          <Text type="secondary">{space.introduction}</Text>
-                        </div>
-                      )}
-                      <div className="space-card-meta">
-                        <Text type="secondary">
-                          创建于 {new Date(space.createTime).toLocaleString('zh-CN', {
-                            year: 'numeric', month: '2-digit', day: '2-digit',
-                            hour: '2-digit', minute: '2-digit', second: '2-digit',
-                          })}
-                        </Text>
-                      </div>
-                    </Card>
-                  </Col>
-                ))}
-              </Row>
-            )}
-            {spaces.length === 0 && (
-              <Card className="private-content-card" variant="borderless">
-                <div className="empty-state-wrapper">
-                  <Empty description="暂无私人空间，创建一个吧" />
+      {spaces.length > 0 && (
+        <div className="private-space-search-bar">
+          <Input
+            className="private-space-search-input"
+            placeholder="搜索图片..."
+            prefix={<SearchOutlined />}
+            value={searchKeyword}
+            onChange={(e) => setSearchKeyword(e.target.value)}
+            onPressEnter={handleSearch}
+            allowClear
+          />
+          <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
+            搜索
+          </Button>
+          <Button icon={<ReloadOutlined />} onClick={handleSearchReset}>
+            重置
+          </Button>
+        </div>
+      )}
+
+      {spaces.length > 0 && (
+        <div className="private-space-masonry-section">
+          {pictureLoading && (
+            <div className="private-space-loading">
+              <Spin />
+            </div>
+          )}
+          {!pictureLoading && masonryItems.length === 0 && (
+            <Empty description="暂无图片" style={{ marginTop: 60 }} />
+          )}
+          {!pictureLoading && masonryItems.length > 0 && (
+            <Masonry
+              columns={{ xs: 2, sm: 3, md: 4, lg: 5 }}
+              gutter={[12, 12]}
+              fresh
+              items={masonryItems}
+              itemRender={(item) => (
+                <div className="private-space-masonry-item">
+                  <AntImage
+                    src={item.data.url}
+                    alt=""
+                    preview={false}
+                    className="private-space-masonry-image"
+                  />
                 </div>
-              </Card>
-            )}
-          </>
-        )}
-      </Spin>
+              )}
+            />
+          )}
+          {pictureTotal > PAGE_SIZE && (
+            <div className="private-space-pagination">
+              <Pagination
+                current={picturePage}
+                total={pictureTotal}
+                pageSize={PAGE_SIZE}
+                onChange={handlePageChange}
+                showSizeChanger={false}
+                showQuickJumper
+                locale={PAGINATION_LOCALE}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      <Modal
+        title="修改空间"
+        open={showEdit}
+        onCancel={() => { setShowEdit(false); editForm.resetFields() }}
+        footer={
+          <div style={{ textAlign: 'right' }}>
+            <Button onClick={() => { setShowEdit(false); editForm.resetFields() }} style={{ marginRight: 8 }}>
+              取消
+            </Button>
+            <Button type="primary" onClick={() => editForm.submit()} loading={updateLoading}>
+              保存
+            </Button>
+          </div>
+        }
+        closable={false}
+      >
+        <Form
+          form={editForm}
+          layout="vertical"
+          onFinish={handleUpdate}
+          style={{ marginTop: 16 }}
+        >
+          <Form.Item
+            name="name"
+            label="空间名称"
+            rules={[
+              { required: true, message: '请输入空间名称' },
+              { max: 20, message: '空间名称不超过 20 个字符' },
+            ]}
+          >
+            <Input placeholder="请输入空间名称" maxLength={20} />
+          </Form.Item>
+          <Form.Item
+            name="introduction"
+            label="空间介绍"
+          >
+            <Input.TextArea placeholder="请输入空间介绍" maxLength={200} rows={3} showCount />
+          </Form.Item>
+        </Form>
+      </Modal>
 
       <Modal
         title="创建私人空间"
@@ -151,10 +318,17 @@ function PrivateSpace() {
           >
             <Input.TextArea placeholder="请输入空间介绍" maxLength={200} rows={3} showCount />
           </Form.Item>
-          </Form>
-        </Modal>
+        </Form>
+      </Modal>
     </main>
   )
+}
+
+function pictureListToMasonry(pictures) {
+  return pictures.map((pic) => ({
+    key: `pic-${pic.id}`,
+    data: pic,
+  }))
 }
 
 export default PrivateSpace

@@ -98,6 +98,10 @@ export const reviewPicture = (pictureId, status, selected) => api.post('/picture
 
 export const createSpace = (data) => api.post('/space/create', data)
 
+export const updateSpace = (data) => api.post('/space/update', data)
+
 export const listSpace = (type) => api.get('/space/list', { params: { type } })
+
+export const spaceListPicture = (data) => api.post('/space/pictureList', data)
 
 export default api

@@ -484,11 +484,11 @@ function AdminPictureManagement() {
           loading={loading}
           pagination={{
             ...pagination,
-            locale: PAGINATION_LOCALE,
             showSizeChanger: true,
             showQuickJumper: true,
             showTotal: (total) => `共 ${total} 条`,
             pageSizeOptions: ['10', '20', '50', '100'],
+            locale: PAGINATION_LOCALE,
           }}
           onChange={handleTableChange}
           scroll={{ x: 1120 }}

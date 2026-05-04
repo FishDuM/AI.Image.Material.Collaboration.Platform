@@ -1,10 +1,18 @@
 package hk.ljx.fishpicsbackend.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.plugins.pagination.PageDTO;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
+import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.dto.space.CreateSpace;
+import hk.ljx.fishpicsbackend.dto.space.SpacePictureList;
+import hk.ljx.fishpicsbackend.dto.space.SpaceQueryWrapper;
+import hk.ljx.fishpicsbackend.dto.space.UpdateSpace;
 import hk.ljx.fishpicsbackend.entity.Picture;
 import hk.ljx.fishpicsbackend.entity.Space;
 import hk.ljx.fishpicsbackend.entity.User;
@@ -13,18 +21,18 @@ import hk.ljx.fishpicsbackend.service.LoginUser;
 import hk.ljx.fishpicsbackend.service.SpaceService;
 import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
 import hk.ljx.fishpicsbackend.service.UserService;
+import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static hk.ljx.fishpicsbackend.common.constants.SpaceConstants.*;
+import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
 /**
 * @author abc
@@ -100,6 +108,85 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         QueryWrapper<Space> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("user_id", userId).eq("type", type);
         return spaceMapper.selectList(queryWrapper);
+    }
+
+    @Override
+    public Boolean updateSpace(UpdateSpace updateSpace, HttpServletRequest request) {
+        Long id = updateSpace.getId();
+        String name = updateSpace.getName();
+        String introduction = updateSpace.getIntroduction();
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(name), ExceptionCode.PARAMETER_ERROR, "空间名称不能为空");
+
+        User user = loginUser.getLoginUser(request);
+        Long userId = user.getId();
+        // 1. 查询空间是否存在
+        Space space = spaceMapper.selectById(id);
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
+        // 2. 判断用户是否为空间主人或管理员
+        ExcUtils.throwIfFalse(space.getUserId().equals(userId) || user.getRole().equals(ADMIN), ExceptionCode.PARAMETER_ERROR, "无权限修改空间信息");
+        // 3. 更新空间信息
+        space.setName(name);
+        space.setIntroduction(introduction);
+        int update = spaceMapper.update(space, new QueryWrapper<Space>().eq("id", id));
+        ExcUtils.throwIfTrue(update <= 0, ExceptionCode.PARAMETER_ERROR, "更新空间信息失败");
+        return true;
+    }
+
+    @Override
+    public List<PictureListVO> pictureList(SpacePictureList spacePictureList, HttpServletRequest request) {
+        Long spaceId = spacePictureList.getSpaceId();
+        int current = spacePictureList.getCurrent();
+        int pageSize = spacePictureList.getPageSize();
+        String sortField = spacePictureList.getSortField();
+        String sortOrder = spacePictureList.getSortOrder();
+
+        ExcUtils.throwIfTrue(spaceId == null, ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
+        User user = loginUser.getLoginUser(request);
+        Long userId = user.getId();
+        // 1. 查询是否为自己的空间
+        Space space = spaceMapper.selectById(spaceId);
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space) || !Objects.equals(space.getUserId(), userId), ExceptionCode.PARAMETER_ERROR, "空间不存在或无权限");
+        // 2. 查询图片列表
+        Page<Picture> picturePage = new Page<>(current, pageSize);
+        QueryWrapper<Picture> pictureQueryWrapper = new QueryWrapper<>();
+        pictureQueryWrapper.eq("space_id", spaceId);
+        pictureQueryWrapper.orderBy(ObjectUtil.isNotNull(sortField), sortOrder.equals("ascend"), sortField);
+        Page<Picture> pictureList = pictureMapper.selectPage(picturePage, pictureQueryWrapper);
+        ArrayList<PictureListVO> pictureListVOS = new ArrayList<>();
+        pictureList.getRecords().forEach(picture -> {
+            PictureListVO pictureListVO = new PictureListVO();
+            pictureListVO.setId(picture.getId());
+            pictureListVO.setUrl(picture.getUrl());
+            pictureListVOS.add(pictureListVO);
+        });
+        return pictureListVOS;
+    }
+
+    @Override
+    public QueryWrapper<Space> getSpaceQueryWrapper(SpaceQueryWrapper spaceQueryWrapper) {
+        Long id = spaceQueryWrapper.getId();
+        String introduction = spaceQueryWrapper.getIntroduction();
+        Integer type = spaceQueryWrapper.getType();
+        String teamUsersId = spaceQueryWrapper.getTeamUsersId();
+        Long userId = spaceQueryWrapper.getUserId();
+        Long storageSize = spaceQueryWrapper.getStorageSize();
+        Integer level = spaceQueryWrapper.getLevel();
+        String name = spaceQueryWrapper.getName();
+        String sortField = spaceQueryWrapper.getSortField();
+        String sortOrder = spaceQueryWrapper.getSortOrder();
+
+        QueryWrapper<Space> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq(!ObjectUtil.isEmpty(id), "id", id);
+        queryWrapper.eq(!ObjectUtil.isEmpty(introduction), "introduction", introduction);
+        queryWrapper.eq(!ObjectUtil.isEmpty(type), "type", type);
+        queryWrapper.eq(!ObjectUtil.isEmpty(teamUsersId), "team_users_id", teamUsersId);
+        queryWrapper.eq(!ObjectUtil.isEmpty(userId), "user_id", userId);
+        queryWrapper.eq(!ObjectUtil.isEmpty(storageSize), "storage_size", storageSize);
+        queryWrapper.eq(!ObjectUtil.isEmpty(level), "level", level);
+        queryWrapper.eq(!ObjectUtil.isEmpty(name), "name", name);
+        queryWrapper.orderBy(ObjectUtil.isNotNull(sortField), sortOrder.equals("ascend"), sortField);
+        return queryWrapper;
     }
 }
 
