@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { App as AntApp, Typography, Button, Modal, Form, Input, Pagination, Masonry, Image as AntImage, Spin, Empty, Popconfirm } from 'antd'
-import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons'
+import { App as AntApp, Typography, Button, Modal, Form, Input, Pagination, Masonry, Image as AntImage, Spin, Empty, Popconfirm, Progress, Popover } from 'antd'
+import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowUpOutlined, CrownOutlined, CloudServerOutlined, CheckCircleFilled } from '@ant-design/icons'
 import { createSpace, updateSpace, listSpace, spaceListPicture, deletePicture } from '../api'
 import './PrivateSpace.css'
 
@@ -22,6 +22,51 @@ const PAGINATION_LOCALE = {
   page_size: '页码',
 }
 
+const storageStrokeColor = {
+  '0%': '#108ee9',
+  '100%': '#87d068',
+}
+
+const formatStorage = (bytes) => {
+  if (!bytes || bytes === 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(1024))
+  const val = bytes / Math.pow(1024, i)
+  return `${val.toFixed(i > 2 ? 1 : (i > 1 ? 2 : 0))} ${units[i]}`
+}
+
+const LEVEL_MAP = {
+  0: { label: '普通', className: 'level-normal', cardClass: 'storage-card-normal' },
+  1: { label: 'VIP', className: 'level-vip', cardClass: 'storage-card-vip' },
+  2: { label: 'SVIP', className: 'level-svip', cardClass: 'storage-card-svip' },
+}
+
+const UPGRADE_PLANS = [
+  {
+    key: 'vip',
+    name: 'VIP',
+    price: '¥9.9',
+    period: '/月',
+    level: 1,
+    features: ['5 GB 专属存储空间', '支持上传单张 5 MB 图片', '优先审核通过', '专属客服通道'],
+  },
+  {
+    key: 'svip',
+    name: 'SVIP',
+    price: '¥19.9',
+    period: '/月',
+    level: 2,
+    hot: true,
+    features: ['10 GB 专属存储空间', '支持上传单张 5 MB 图片', '极速审核通过', '专属客服通道', '优先体验新功能'],
+  },
+]
+
+const ADDON_PLANS = [
+  { key: 'addon-1g', name: '+1 GB', size: '1 GB', price: '¥1.0', period: '/月' },
+  { key: 'addon-5g', name: '+5 GB', size: '5 GB', price: '¥3.9', period: '/月' },
+  { key: 'addon-10g', name: '+10 GB', size: '10 GB', price: '¥6.9', period: '/月' },
+]
+
 function PrivateSpace() {
   const { message } = AntApp.useApp()
   const [spaces, setSpaces] = useState([])
@@ -40,6 +85,8 @@ function PrivateSpace() {
 
   const [batchMode, setBatchMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState([])
+  const [showUpgrade, setShowUpgrade] = useState(false)
+  const [selectedPlan, setSelectedPlan] = useState(null)
 
   const fetchSpaces = useCallback(async () => {
     try {
@@ -90,6 +137,15 @@ function PrivateSpace() {
     }
     load()
   }, [spaces, fetchPictures])
+
+  const spaceInfo = useMemo(() => {
+    if (!spaces.length) return null
+    const s = spaces[0]
+    const sizeBytes = parseFloat(s.size) || 0
+    const storageBytes = parseFloat(s.storageSize) || 0
+    const percent = storageBytes > 0 ? Math.min(100, Math.round((sizeBytes / storageBytes) * 100)) : 0
+    return { ...s, percent, usedText: formatStorage(sizeBytes), totalText: formatStorage(storageBytes) }
+  }, [spaces])
 
   const handlePageChange = useCallback((page) => {
     if (spaces.length > 0 && spaces[0].id) {
@@ -210,10 +266,53 @@ function PrivateSpace() {
             {spaces.length > 0 && spaces[0].introduction ? spaces[0].introduction : '你的专属私密存储空间'}
           </p>
         </div>
-        {spaces.length > 0 && (
-          <Button onClick={handleEditOpen}>
-            修改空间
-          </Button>
+        {spaceInfo && (
+          <div className="private-space-header-right">
+            <Popover
+              content={
+                <div className={`storage-card ${LEVEL_MAP[spaceInfo.level]?.cardClass || ''}`}>
+                  <div className="storage-card-title">空间详情</div>
+                  <div className="storage-card-row">
+                    <span className="storage-card-label">空间等级</span>
+                    <span className={`storage-card-value ${LEVEL_MAP[spaceInfo.level]?.className || ''}`}>{LEVEL_MAP[spaceInfo.level]?.label || '-'}</span>
+                  </div>
+                  <div className="storage-card-row">
+                    <span className="storage-card-label">占用比例</span>
+                    <span className="storage-card-value">{spaceInfo.percent}%</span>
+                  </div>
+                  <div className="storage-card-row">
+                    <span className="storage-card-label">已占用空间</span>
+                    <span className="storage-card-value">{spaceInfo.usedText}</span>
+                  </div>
+                  <div className="storage-card-row">
+                    <span className="storage-card-label">总空间</span>
+                    <span className="storage-card-value">{spaceInfo.totalText}</span>
+                  </div>
+                </div>
+              }
+              trigger="hover"
+              placement="bottom"
+            >
+              <Progress
+                type="circle"
+                percent={spaceInfo.percent}
+                strokeColor={storageStrokeColor}
+                size={72}
+                className="storage-progress"
+                format={() => (
+                  <div className="level-center">
+                    {LEVEL_MAP[spaceInfo.level] && (
+                      <span className={`level-text ${LEVEL_MAP[spaceInfo.level].className}`}>{LEVEL_MAP[spaceInfo.level].label}</span>
+                    )}
+                    <span className="level-percent">{spaceInfo.percent}%</span>
+                  </div>
+                )}
+              />
+            </Popover>
+            <Button onClick={handleEditOpen}>
+              修改空间
+            </Button>
+          </div>
         )}
       </div>
 
@@ -241,6 +340,9 @@ function PrivateSpace() {
             danger={batchMode}
           >
             {batchMode ? '退出批量' : '批量删除'}
+          </Button>
+          <Button icon={<ArrowUpOutlined />} className="private-space-upgrade-btn" onClick={() => setShowUpgrade(true)}>
+            升级空间
           </Button>
         </div>
       )}
@@ -436,6 +538,96 @@ function PrivateSpace() {
           </Form.Item>
         </Form>
       </Modal>
+
+      {showUpgrade && (
+      <div className="upgrade-overlay" onClick={() => { setShowUpgrade(false); setSelectedPlan(null) }}>
+      <div className="upgrade-content" onClick={(e) => e.stopPropagation()}>
+          <div className="upgrade-header">
+            <h2 className="upgrade-title">升级空间</h2>
+            <p className="upgrade-subtitle">解锁更多存储，享受专属特权</p>
+          </div>
+
+          <div className="upgrade-section">
+            <div className="upgrade-section-title">
+              <CrownOutlined className="upgrade-section-icon" />
+              <span>会员套餐</span>
+            </div>
+            <div className="upgrade-plan-grid">
+              {UPGRADE_PLANS.map((plan) => (
+                <div
+                  key={plan.key}
+                  className={`upgrade-plan-card ${plan.hot ? 'upgrade-plan-hot' : ''} ${selectedPlan === plan.key ? 'upgrade-plan-selected' : ''} level-${plan.key}`}
+                  onClick={() => setSelectedPlan(plan.key)}
+                >
+                  {plan.hot && <div className="upgrade-hot-badge">推荐</div>}
+                  <div className="upgrade-plan-name">{plan.name}</div>
+                  <div className="upgrade-plan-price">
+                    <span className="upgrade-price-amount">{plan.price}</span>
+                    <span className="upgrade-price-period">{plan.period}</span>
+                  </div>
+                  <div className="upgrade-plan-features">
+                    {plan.features.map((f, i) => (
+                      <div key={i} className="upgrade-feature-item">
+                        <CheckCircleFilled className="upgrade-feature-check" />
+                        <span>{f}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    type={selectedPlan === plan.key ? 'primary' : 'default'}
+                    block
+                    className="upgrade-plan-btn"
+                  >
+                    {selectedPlan === plan.key ? '已选择' : '选择套餐'}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="upgrade-section">
+            <div className="upgrade-section-title">
+              <CloudServerOutlined className="upgrade-section-icon" />
+              <span>空间增量包</span>
+            </div>
+            <div className="upgrade-addon-grid">
+              {ADDON_PLANS.map((addon) => (
+                <div
+                  key={addon.key}
+                  className={`upgrade-addon-card ${selectedPlan === addon.key ? 'upgrade-addon-selected' : ''}`}
+                  onClick={() => setSelectedPlan(addon.key)}
+                >
+                  <div className="upgrade-addon-name">{addon.name}</div>
+                  <div className="upgrade-addon-size">{addon.size}</div>
+                  <div className="upgrade-addon-price">
+                    <span className="upgrade-price-amount">{addon.price}</span>
+                    <span className="upgrade-price-period">{addon.period}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="upgrade-footer">
+            <Button size="large" onClick={() => { setShowUpgrade(false); setSelectedPlan(null) }}>
+              取消
+            </Button>
+            <Button
+              type="primary"
+              size="large"
+              disabled={!selectedPlan}
+              onClick={() => {
+                message.success('升级申请已提交，等待审核')
+                setShowUpgrade(false)
+                setSelectedPlan(null)
+              }}
+            >
+              确认升级
+            </Button>
+          </div>
+        </div>
+      </div>
+      )}
     </main>
   )
 }

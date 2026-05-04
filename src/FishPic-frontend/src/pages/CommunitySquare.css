@@ -241,15 +241,11 @@
   padding: 0 !important;
   border-radius: var(--radius-lg) !important;
   overflow: hidden !important;
-}
-
-.create-post-modal .ant-modal-content {
   background: var(--bg-secondary);
-  border-radius: var(--radius-lg);
-  height: auto;
-  overflow: hidden;
-  padding: 0 !important;
-  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  height: 100% !important;
+  max-height: 100% !important;
 }
 
 .create-post-modal .ant-modal-header {
@@ -277,8 +273,8 @@
 .create-post-modal .ant-modal-body {
   background: var(--bg-secondary);
   padding: 0 !important;
-  height: 70vh;
-  max-height: 90vh;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -291,6 +287,7 @@
   display: flex;
   gap: 0;
   height: 100%;
+  min-height: 0;
   width: 100% !important;
   padding: 0 !important;
   margin: 0 !important;
@@ -382,6 +379,7 @@
   flex-direction: column;
   align-self: stretch;
   min-width: 0;
+  min-height: 0;
   padding: 20px 24px;
   overflow-y: auto;
   gap: 16px;
@@ -393,14 +391,17 @@
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-height: 0;
 }
 
 .modal-submit-buttons {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   gap: 12px;
   margin-top: auto;
   padding-top: 16px;
+  flex-shrink: 0;
 }
 
 .form-header {
@@ -553,9 +554,9 @@
 }
 
 .post-form #content {
-  height: 370px !important;
-  min-height: 300px !important;
-  max-height: 400px !important;
+  height: 200px !important;
+  min-height: 150px !important;
+  max-height: 300px !important;
 }
 
 .carousel-main {
@@ -648,26 +649,23 @@
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.6);
-  border: none;
+  background: rgba(0, 0, 0, 0.5);
+  border: 2px solid rgba(255, 255, 255, 0.6);
   color: #ffffff;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
-  opacity: 0;
+  opacity: 1;
   z-index: 20;
   backdrop-filter: blur(4px);
   pointer-events: auto !important;
 }
 
-.carousel-main:hover .carousel-remove-btn {
-  opacity: 1 !important;
-}
-
 .carousel-remove-btn:hover {
   background: rgba(255, 59, 48, 0.9);
+  border-color: rgba(255, 59, 48, 0.9);
   transform: scale(1.1);
 }
 
@@ -871,24 +869,23 @@
     top: 0;
     padding: 0;
     margin: 0;
+    height: 100%;
   }
 
   .create-post-modal .ant-modal-container {
-    height: auto;
-    max-height: 100vh;
-    border-radius: 0 !important;
-  }
-
-  .create-post-modal .ant-modal-content {
     overflow-y: auto;
     border-radius: 0 !important;
     max-height: 100vh;
+    height: auto !important;
+    flex: none !important;
   }
 
   .create-post-modal .ant-modal-body {
     padding: 0 !important;
     max-height: 100vh;
     overflow-y: auto;
+    flex: none !important;
+    height: auto !important;
   }
 
   .upload-step {
@@ -952,7 +949,7 @@
     width: 32px;
     height: 32px;
     top: 8px;
-    right: 8px;
+    left: 8px;
   }
 
   .carousel-counter {
@@ -1012,6 +1009,16 @@
     padding-top: 12px;
   }
 
+  .modal-submit-left,
+  .modal-submit-right {
+    width: 100%;
+  }
+
+  .modal-submit-right {
+    flex-direction: column;
+    gap: 8px;
+  }
+
   .modal-submit-buttons .ant-btn {
     width: 100%;
     height: 44px;
@@ -1063,9 +1070,9 @@
   }
 
   .post-form #content {
-    height: 280px !important;
-    min-height: 250px !important;
-    max-height: 300px !important;
+    height: 200px !important;
+    min-height: 150px !important;
+    max-height: 250px !important;
   }
 
   .modal-submit-buttons .ant-btn {
@@ -1255,7 +1262,8 @@
 
 .modal-submit-buttons {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   gap: 12px;
 }
 
