@@ -203,13 +203,6 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
         User user = loginUser.getLoginUser(request);
         String role = user.getRole();
-        // 批量查询图片
-        List<Picture> pictureList = pictureMapper.selectList(new QueryWrapper<Picture>().in("id", ids));
-        ExcUtils.throwIfTrue(CollUtil.isEmpty(pictureList), "图片不存在");
-        Set<Long> userIds = new HashSet<>();
-        pictureList.forEach(picture -> userIds.add(picture.getUserId()));
-        // 判断是否为图片的主人或者管理员
-        ExcUtils.throwIfFalse(role.equals(ADMIN) || userIds.stream().findFirst().map(id -> id.equals(user.getId())).orElse(false) || userIds.size() != 1, ExceptionCode.UNAUTHORIZED, "没有权限删除图片");
         // 帖子封面图禁止删除
         List<Post> posts = postMapper.selectList(new QueryWrapper<Post>().in("cover", ids));
         if (!posts.isEmpty()){
@@ -217,6 +210,14 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 ids.remove(post.getCover());
             });
         }
+        // 批量查询图片
+        List<Picture> pictureList = pictureMapper.selectList(new QueryWrapper<Picture>().in("id", ids));
+        ExcUtils.throwIfTrue(CollUtil.isEmpty(pictureList), "图片不存在");
+        Set<Long> userIds = new HashSet<>();
+        pictureList.forEach(picture -> userIds.add(picture.getUserId()));
+        // 判断是否为图片的主人或者管理员
+        ExcUtils.throwIfFalse(role.equals(ADMIN) || userIds.stream().findFirst().map(id -> id.equals(user.getId())).orElse(false) || userIds.size() != 1, ExceptionCode.UNAUTHORIZED, "没有权限删除图片");
+
         int i = pictureMapper.delete(new QueryWrapper<Picture>().in("id", ids));
         ExcUtils.throwIfTrue(i == 0, "删除失败");
         pictureList.forEach(picture -> cosService.deletePictureByUrl(picture.getUrl()));

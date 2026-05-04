@@ -85,8 +85,7 @@
     background: var(--bg-secondary);
     display: flex;
     gap: 0;
-    height: auto !important;
-    max-height: none !important;
+    height: 100%;
     width: 100% !important;
     padding: 0 !important;
     margin: 0 !important;
