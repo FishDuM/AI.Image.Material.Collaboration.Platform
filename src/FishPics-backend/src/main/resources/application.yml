@@ -48,6 +48,7 @@ knife4j:
 #  region:
 #  bucket:
 #  public: true  # 开发true 生产false
+#  url: # 阿里云图片 url 前缀
 
 logging:
   level:
