@@ -9,8 +9,11 @@ import hk.ljx.fishpicsbackend.dto.space.CreateSpace;
 import hk.ljx.fishpicsbackend.dto.space.SpacePictureList;
 import hk.ljx.fishpicsbackend.dto.space.UpdateSpace;
 import hk.ljx.fishpicsbackend.entity.Space;
+import hk.ljx.fishpicsbackend.entity.User;
+import hk.ljx.fishpicsbackend.service.LoginUser;
 import hk.ljx.fishpicsbackend.service.SpaceService;
 import hk.ljx.fishpicsbackend.vo.picture.PicturePageVO;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
@@ -23,11 +26,14 @@ public class SpaceController {
 
     @Resource
     private SpaceService spaceService;
+    @Autowired
+    private LoginUser loginUser;
 
     @PostMapping("/create")
     public Response<Boolean> createSpace(@RequestBody CreateSpace createSpace, HttpServletRequest request) {
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(createSpace), ExceptionCode.PARAMETER_ERROR, "创建空间参数不能为空");
-        return ResUtils.success(spaceService.createSpace(createSpace, request));
+        User user = loginUser.getLoginUser(request);
+        return ResUtils.success(spaceService.createSpace(createSpace, user));
     }
 
     @GetMapping("/list")

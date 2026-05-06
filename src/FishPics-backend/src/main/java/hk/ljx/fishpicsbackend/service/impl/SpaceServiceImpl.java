@@ -24,6 +24,7 @@ import hk.ljx.fishpicsbackend.service.UserService;
 import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
 import hk.ljx.fishpicsbackend.vo.picture.PicturePageVO;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
@@ -54,19 +55,19 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
     private LoginUser loginUser;
 
     @Override
-    public Boolean createSpace(CreateSpace createSpace, HttpServletRequest request) {
+    @Transactional(rollbackFor = Exception.class)
+    public Boolean createSpace(CreateSpace createSpace,User user) {
         String name = createSpace.getName();
         String introduction = createSpace.getIntroduction();
         Integer type = createSpace.getType();
         ExcUtils.throwIfTrue(name == null || type == null, "空间名称不能为空");
         // 获取创建用户
-        User user = loginUser.getLoginUser(request);
         Integer level = user.getLevel();
-        ExcUtils.throwIfTrue(user == null && user.getId() == null, "用户不存在");
+        ExcUtils.throwIfTrue(user == null || user.getId() == null, "用户不存在");
         // 判断空间类型
         List<Space> spaceList = spaceMapper.selectList(new QueryWrapper<Space>().eq("user_id", user.getId()).eq("type", type));
         if (type == 0) {
-            ExcUtils.throwIfTrue(CollUtil.isNotEmpty(spaceList), "私人空间已存在");
+            ExcUtils.throwIfTrue(!spaceList.isEmpty(), "私人空间已存在");
         } else if (type == 1) {
             if (level == 0) {
                 ExcUtils.throwIfTrue(CollUtil.isNotEmpty(spaceList), "团队空间已存在");

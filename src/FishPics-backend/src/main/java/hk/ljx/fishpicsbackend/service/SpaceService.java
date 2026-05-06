@@ -8,6 +8,7 @@ import hk.ljx.fishpicsbackend.dto.space.SpaceQueryWrapper;
 import hk.ljx.fishpicsbackend.dto.space.UpdateSpace;
 import hk.ljx.fishpicsbackend.entity.Space;
 import com.baomidou.mybatisplus.extension.service.IService;
+import hk.ljx.fishpicsbackend.entity.User;
 import hk.ljx.fishpicsbackend.vo.picture.PicturePageVO;
 
 import javax.servlet.http.HttpServletRequest;
@@ -26,7 +27,7 @@ public interface SpaceService extends IService<Space> {
      * @param createSpace 创建空间参数
      * @return 结果
      */
-    Boolean createSpace(CreateSpace createSpace, HttpServletRequest request);
+    Boolean createSpace(CreateSpace createSpace, User user);
 
     /**
      * 获取空间列表

@@ -136,6 +136,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         User user = new User();
         user.setUsername(username);
         user.setPassword(password);
+        user.setLevel(0);
         user.setNickname(DEFAULT_NICK_NAME + RandomUtil.randomString(6));
         // 默认头像
         user.setAvatar("https://avatars.githubusercontent.com/u/179127403?v=4");
@@ -143,7 +144,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         ExcUtils.throwIfTrue(insert != 1, ExceptionCode.DATABASE_ERROR, "注册失败");
         stringRedisTemplate.delete(checkCodeKeyByRegister);
         // 创建默认私人空间
-        Boolean spaceRequest = spaceService.createSpace(new CreateSpace(user.getNickname() + "的私人空间", "你的专属私密存储空间", 0), request);
+        Boolean spaceRequest = spaceService.createSpace(new CreateSpace(user.getNickname() + "的私人空间", "你的专属私密存储空间", 0), user);
         ExcUtils.throwIfTrue(!spaceRequest, ExceptionCode.DATABASE_ERROR, "创建私人空间失败");
         return ResUtils.success(true);
     }
