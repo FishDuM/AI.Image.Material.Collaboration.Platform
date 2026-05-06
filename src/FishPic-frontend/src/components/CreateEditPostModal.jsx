@@ -232,21 +232,30 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess }) => {
       setIsEditing(true)
       setEditingPostId(editPostDetail.id)
       const existingPics = (editPostDetail.pics || editPostDetail.pictureUrl || []).filter(url => url && url.trim())
+      const existingIds = editPostDetail.pictureIds || []
       const existingImages = existingPics.map((url, index) => ({
         uid: `existing-${index}`,
         name: `image-${index}`,
         status: 'done',
         url,
-        pictureId: null,
+        pictureId: existingIds[index] ?? null,
       }))
       setUploadedImages(existingImages)
-      setImageId([])
+      setImageId(existingIds.filter(Boolean))
       setCurrentImageIndex(0)
       setShowUploadSlide(false)
       setModalStep(2)
+      const coverIndex = (() => {
+        if (editPostDetail.cover) {
+          const idx = existingIds.indexOf(editPostDetail.cover)
+          return idx >= 0 ? idx : 0
+        }
+        return 0
+      })()
       form.setFieldsValue({
         title: editPostDetail.title || '',
         content: editPostDetail.content || '',
+        coverIndex,
       })
     } else if (open) {
       setIsEditing(false)
@@ -260,6 +269,7 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess }) => {
       setSpaceImagePage(1)
       setUploadTabKey('manual')
       form.resetFields()
+      form.setFieldsValue({ coverIndex: 0 })
     }
   }, [open, editPostDetail, form])
 
@@ -328,12 +338,17 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess }) => {
       url: img.url,
       pictureId: img.id,
     }))
+    setCurrentImageIndex(uploadedImages.length + newImages.length - 1)
+    setShowUploadSlide(false)
     setUploadedImages(prev => [...prev, ...newImages])
     setImageId(prev => [...prev, ...selected.map(img => img.id)])
     setModalStep(2)
     setSelectedSpaceImageIds([])
     setSpaceImagePage(1)
-  }, [selectedSpaceImageIds, spaceImages])
+    if (uploadedImages.length === 0) {
+      form.setFieldsValue({ coverIndex: 0 })
+    }
+  }, [selectedSpaceImageIds, spaceImages, uploadedImages.length, form])
 
   const handleSpacePickerConfirm = useCallback((selected) => {
     const newImages = selected.map((img) => ({
@@ -343,10 +358,15 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess }) => {
       url: img.url,
       pictureId: img.id,
     }))
+    setCurrentImageIndex(uploadedImages.length + newImages.length - 1)
+    setShowUploadSlide(false)
     setUploadedImages(prev => [...prev, ...newImages])
     setImageId(prev => [...prev, ...selected.map(img => img.id)])
     setModalStep(2)
-  }, [])
+    if (uploadedImages.length === 0) {
+      form.setFieldsValue({ coverIndex: 0 })
+    }
+  }, [uploadedImages.length, form])
 
   const beforeUpload = (file) => {
     const isAllowedImage = ALLOWED_IMAGE_TYPES.includes(file.type)
@@ -382,6 +402,9 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess }) => {
       setUploadedImages(prev => [...prev, { uid: file.uid, name: file.name, status: 'done', url, pictureId }])
       setImageId(prev => [...prev, pictureId])
       setModalStep(2)
+      if (uploadedImages.length === 0) {
+        form.setFieldsValue({ coverIndex: 0 })
+      }
       if (showUploadSlide) {
         setCurrentImageIndex(prev => prev + 1)
         setShowUploadSlide(false)
@@ -694,7 +717,7 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess }) => {
                       type="button"
                       className="carousel-arrow carousel-arrow-left"
                       onClick={handlePrevImage}
-                      disabled={uploadedImages.length <= 1 || (currentImageIndex === 0 && !showUploadSlide)}
+                      disabled={!showUploadSlide && (uploadedImages.length <= 1 || currentImageIndex === 0)}
                     >
                       <LeftOutlined />
                     </button>
@@ -764,6 +787,10 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess }) => {
                   <Select
                     placeholder="选择帖子封面"
                     disabled={uploadedImages.length === 0}
+                    onChange={(value) => {
+                      setCurrentImageIndex(value)
+                      setShowUploadSlide(false)
+                    }}
                   >
                     {uploadedImages.map((img, index) => (
                       <Select.Option key={index} value={index}>

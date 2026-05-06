@@ -112,7 +112,7 @@ create table space
     storage_size  bigint  default 524288 not null comment '空间的存储大小(KB)：512MB-5G-10G',
     level         tinyint default 0      not null comment '空间级别：普通-VIP-SVIP',
     name          varchar(246)           not null comment '空间名',
-    size          bigint                 null comment '现在使用大小'
+    size          bigint  default 0      not null comment '现在使用大小'
 )
     comment '空间表';
 
@@ -137,8 +137,8 @@ create table user
     role                    varchar(32) default 'user'            null comment '用户的权限',
     create_time             datetime    default CURRENT_TIMESTAMP not null comment '创建时间',
     update_time             datetime    default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
-    like_num                bigint                                null,
-    collect_num             bigint                                null,
+    like_num                bigint      default 0                 null,
+    collect_num             bigint      default 0                 null,
     is_private_follows      tinyint     default 0                 not null comment '0-公开关注列表，1-不公开关注列表',
     is_private_post_collect tinyint     default 0                 not null comment '0-公开帖子列表，1-不公开帖子列表',
     is_private_likes        tinyint     default 0                 not null comment '0-公开点赞帖子列表，1-不公开点赞帖子列表',
@@ -187,4 +187,3 @@ create table user_post_likes
 
 create index user_post_likes_user_id_index
     on user_post_likes (user_id);
-

@@ -65,4 +65,14 @@ public class PostDetailVO {
      * 图片 url 列表
      */
     private List<String> pictureUrl;
+
+    /**
+     * 图片 id 列表
+     */
+    private List<Long> pictureIds;
+
+    /**
+     * 封面图片 id
+     */
+    private Long cover;
 }

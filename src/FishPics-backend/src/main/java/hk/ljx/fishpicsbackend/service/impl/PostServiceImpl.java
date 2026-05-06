@@ -123,8 +123,10 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         // 获取图片列表
         List<Picture> pictures = pictureMapper.selectList(new QueryWrapper<Picture>().eq("post_id", id));
         ArrayList<String> pictureUrls = new ArrayList<>();
+        ArrayList<Long> pictureIds = new ArrayList<>();
         for (Picture picture : pictures) {
             pictureUrls.add(picture.getUrl());
+            pictureIds.add(picture.getId());
         }
         // 获取发帖者信息
         User user = userMapper.selectById(post.getUserId());
@@ -133,6 +135,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         postDetailVO.setUsername(user.getUsername());
 
         postDetailVO.setPictureUrl(pictureUrls);
+        postDetailVO.setPictureIds(pictureIds);
         return postDetailVO;
     }
 
