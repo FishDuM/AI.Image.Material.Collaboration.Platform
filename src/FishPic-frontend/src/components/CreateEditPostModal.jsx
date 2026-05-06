@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { App, Modal, Form, Input, Button, Upload, Select, Switch, Image as AntImage, Tabs, Pagination, Spin, Empty } from 'antd'
 import { PlusOutlined, DeleteOutlined, LeftOutlined, RightOutlined, SendOutlined, CheckOutlined, CloudOutlined } from '@ant-design/icons'
 import api, { listSpace, spaceListPicture } from '../api'
+import MobilePageWrapper from './MobilePageWrapper'
 import './CreateEditPostModal.css'
 
 const CHINESE_NUMS = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二', '十三', '十四', '十五']
@@ -205,7 +206,7 @@ const SpacePickerModal = ({ open, onClose, onConfirm, currentImageCount, existin
   )
 }
 
-const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess }) => {
+const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 'modal' }) => {
   const { message } = App.useApp()
   const [form] = Form.useForm()
   const [submitLoading, setSubmitLoading] = useState(false)
@@ -558,23 +559,21 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess }) => {
     onClose()
   }
 
-  return (
-    <Modal
-      open={open}
-      onCancel={handleCancel}
-      footer={null}
-      closable={false}
-      className={`create-post-modal ${modalStep === 1 && uploadTabKey === 'manual' ? 'create-post-modal-compact' : ''}`}
-      width={modalStep === 1 && uploadTabKey === 'manual' ? 600 : 900}
-    >
-      <Form form={form} layout="vertical" onFinish={handleSubmit} autoComplete="off" className="post-form">
+  const renderContent = () => (
+    <Form form={form} layout="vertical" onFinish={handleSubmit} autoComplete="off" className="post-form">
       {modalStep === 1 ? (
         <div className="upload-step">
           <div className="upload-step-hint">至少上传一张图片</div>
           <Tabs
             className="upload-tabs"
             activeKey={uploadTabKey}
-            onChange={setUploadTabKey}
+            onChange={(key) => {
+              setUploadTabKey(key)
+              if (key === 'space' && spaceId) {
+                setSpaceImagePage(1)
+                fetchSpaceImages(1)
+              }
+            }}
             items={[
               {
                 key: 'manual',
@@ -756,89 +755,138 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess }) => {
             )}
           </div>
           <div className="right-form-area">
-              <Form.Item
-                name="title"
-                rules={[
-                  { required: true, message: '请输入标题' },
-                  { max: 50, message: '标题最多50个字' }
-                ]}
-              >
-                <Input placeholder="给帖子起个吸引人的标题吧~" size="large" />
+            <Form.Item
+              name="title"
+              rules={[
+                { required: true, message: '请输入标题' },
+                { max: 50, message: '标题最多50个字' }
+              ]}
+            >
+              <Input placeholder="给帖子起个吸引人的标题吧~" size="large" />
+            </Form.Item>
+
+            <Form.Item
+              name="content"
+              rules={[
+                { required: true, message: '请输入正文' },
+                { max: 5000, message: '正文最多5000个字' }
+              ]}
+            >
+              <Input.TextArea
+                placeholder="写下你的精彩故事，分享生活的每个瞬间..."
+                autoSize={{ minRows: 10, maxRows: 12 }}
+                maxLength={5000}
+                showCount
+              />
+            </Form.Item>
+
+            <div className="form-row">
+              <Form.Item label="帖子封面" name="coverIndex" initialValue={0} layout="horizontal"
+                style={{ marginBottom: 0 }}>
+                <Select
+                  placeholder="选择帖子封面"
+                  disabled={uploadedImages.length === 0}
+                  onChange={(value) => {
+                    setCurrentImageIndex(value)
+                    setShowUploadSlide(false)
+                  }}
+                >
+                  {uploadedImages.map((img, index) => (
+                    <Select.Option key={index} value={index}>
+                      图片{CHINESE_NUMS[index] || index + 1}
+                    </Select.Option>
+                  ))}
+                </Select>
               </Form.Item>
 
-              <Form.Item
-                name="content"
-                rules={[
-                  { required: true, message: '请输入正文' },
-                  { max: 5000, message: '正文最多5000个字' }
-                ]}
-              >
-                <Input.TextArea
-                  placeholder="写下你的精彩故事，分享生活的每个瞬间..."
-                  autoSize={{ minRows: 10, maxRows: 12 }}
-                  maxLength={5000}
-                  showCount
-                />
+              <Form.Item name="isPrivate" valuePropName="checked" initialValue={false}>
+                <div className="privacy-toggle">
+                  <Switch checkedChildren="私密" unCheckedChildren="公开" />
+                </div>
               </Form.Item>
+            </div>
 
-              <div className="form-row">
-                <Form.Item label="帖子封面" name="coverIndex" initialValue={0} layout="horizontal"
-                  style={{ marginBottom: 0 }}>
-                  <Select
-                    placeholder="选择帖子封面"
-                    disabled={uploadedImages.length === 0}
-                    onChange={(value) => {
-                      setCurrentImageIndex(value)
-                      setShowUploadSlide(false)
-                    }}
-                  >
-                    {uploadedImages.map((img, index) => (
-                      <Select.Option key={index} value={index}>
-                        图片{CHINESE_NUMS[index] || index + 1}
-                      </Select.Option>
-                    ))}
-                  </Select>
-                </Form.Item>
-
-                <Form.Item name="isPrivate" valuePropName="checked" initialValue={false}>
-                  <div className="privacy-toggle">
-                    <Switch checkedChildren="私密" unCheckedChildren="公开" />
-                  </div>
-                </Form.Item>
+            <div className="modal-submit-buttons">
+              <div className="modal-submit-left">
+                <Button
+                  size="large"
+                  icon={<CloudOutlined />}
+                  onClick={() => setSpacePickerOpen(true)}
+                  disabled={imageId.length >= 15}
+                  className="space-fetch-button"
+                >
+                  从空间中获取
+                </Button>
               </div>
-
-              <div className="modal-submit-buttons">
-                <div className="modal-submit-left">
-                  <Button
-                    size="large"
-                    icon={<CloudOutlined />}
-                    onClick={() => setSpacePickerOpen(true)}
-                    disabled={imageId.length >= 15}
-                    className="space-fetch-button"
-                  >
-                    从空间中获取
-                  </Button>
-                </div>
-                <div className="modal-submit-right">
-                  <Button size="large" onClick={handleCancel}>
-                    取消
-                  </Button>
-                  <Button
-                    type="primary"
-                    htmlType="submit"
-                    size="large"
-                    icon={<SendOutlined />}
-                    loading={submitLoading}
-                    className="modal-submit-button"
-                  >
-                    {isEditing ? '保存' : '发布'}
-                  </Button>
-                </div>
+              <div className="modal-submit-right">
+                {mode !== 'page' && (
+                  <>
+                    <Button size="large" onClick={handleCancel}>
+                      取消
+                    </Button>
+                    <Button
+                      type="primary"
+                      htmlType="submit"
+                      size="large"
+                      icon={<SendOutlined />}
+                      loading={submitLoading}
+                      className="modal-submit-button"
+                    >
+                      {isEditing ? '保存' : '发布'}
+                    </Button>
+                  </>
+                )}
               </div>
+            </div>
           </div>
         </div>
       )}
-      </Form>
+    </Form>
+  )
+
+  if (mode === 'page') {
+    return (
+      <MobilePageWrapper
+        title={isEditing ? '编辑帖子' : '发布帖子'}
+        onClose={handleCancel}
+        rightContent={
+          modalStep === 2 ? (
+            <Button
+              type="primary"
+              htmlType="submit"
+              size="small"
+              icon={<SendOutlined />}
+              loading={submitLoading}
+              className="modal-submit-button"
+              onClick={() => form.submit()}
+            >
+              {isEditing ? '保存' : '发布'}
+            </Button>
+          ) : null
+        }
+      >
+        {renderContent()}
+        <SpacePickerModal
+          open={spacePickerOpen}
+          onClose={() => setSpacePickerOpen(false)}
+          onConfirm={handleSpacePickerConfirm}
+          currentImageCount={imageId.length}
+          existingImageIds={imageId}
+        />
+      </MobilePageWrapper>
+    )
+  }
+
+  return (
+    <Modal
+      open={open}
+      onCancel={handleCancel}
+      footer={null}
+      closable={false}
+      className={`create-post-modal ${modalStep === 1 && uploadTabKey === 'manual' ? 'create-post-modal-compact' : ''}`}
+      width={modalStep === 1 && uploadTabKey === 'manual' ? 600 : 900}
+    >
+      {renderContent()}
       <SpacePickerModal
         open={spacePickerOpen}
         onClose={() => setSpacePickerOpen(false)}

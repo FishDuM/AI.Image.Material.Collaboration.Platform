@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback, useContext } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { App, Button, Input, Image as AntImage, Masonry, Empty, Spin } from 'antd'
 import { PlusOutlined, LikeOutlined, SearchOutlined, ReloadOutlined, UpOutlined } from '@ant-design/icons'
 import api from '../api'
 import { AuthContext } from '../context/AuthContext'
 import PostDetailModal from '../components/PostDetailModal'
 import CreateEditPostModal from '../components/CreateEditPostModal'
+import { useIsMobile } from '../components/MobilePageWrapper'
 import './CommunitySquare.css'
 
 function PostCard({ post, onClick }) {
@@ -47,6 +48,8 @@ function CommunitySquare() {
   const { message } = App.useApp()
   const { userInfo } = useContext(AuthContext)
   const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const isMobile = useIsMobile()
   const [loading, setLoading] = useState(false)
   const [postList, setPostList] = useState([])
   const [masonryItems, setMasonryItems] = useState([])
@@ -127,6 +130,10 @@ function CommunitySquare() {
   }, [message, pageSize])
 
   const fetchPostDetail = useCallback(async (postId) => {
+    if (isMobile) {
+      navigate(`/mobile/post/detail/${postId}`)
+      return
+    }
     setPostDetailLoading(true)
     setDetailImageIndex(0)
     try {
@@ -141,7 +148,7 @@ function CommunitySquare() {
     } finally {
       setPostDetailLoading(false)
     }
-  }, [message, setSearchParams])
+  }, [message, setSearchParams, isMobile, navigate])
 
   const handlePostClick = useCallback((post) => {
     fetchPostDetail(post.id)
@@ -278,6 +285,10 @@ function CommunitySquare() {
   }
 
   const handleCreatePost = () => {
+    if (isMobile) {
+      navigate('/mobile/post/create')
+      return
+    }
     setEditingPostDetail(null)
     setCreateEditModalOpen(true)
   }

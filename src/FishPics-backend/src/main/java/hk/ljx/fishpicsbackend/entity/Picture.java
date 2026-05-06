@@ -86,6 +86,11 @@ public class Picture implements Serializable {
      */
     private String introduction;
 
+    /**
+     * 父亲图片id（为空则是父亲图片，不为空则指向被复制的图片）
+     */
+    private Long parentId;
+
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }

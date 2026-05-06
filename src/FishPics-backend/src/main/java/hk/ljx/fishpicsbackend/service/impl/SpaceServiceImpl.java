@@ -3,9 +3,7 @@ package hk.ljx.fishpicsbackend.service.impl;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.baomidou.mybatisplus.extension.plugins.pagination.PageDTO;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
@@ -20,7 +18,6 @@ import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.service.LoginUser;
 import hk.ljx.fishpicsbackend.service.SpaceService;
 import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
-import hk.ljx.fishpicsbackend.service.UserService;
 import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
 import hk.ljx.fishpicsbackend.vo.picture.PicturePageVO;
 import org.springframework.stereotype.Service;
@@ -30,8 +27,6 @@ import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 
 import static hk.ljx.fishpicsbackend.common.constants.SpaceConstants.*;
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
@@ -153,6 +148,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         Page<Picture> picturePage = new Page<>(current, pageSize);
         QueryWrapper<Picture> pictureQueryWrapper = new QueryWrapper<>();
         pictureQueryWrapper.eq("space_id", spaceId);
+        pictureQueryWrapper.isNull("parent_id");
         pictureQueryWrapper.orderBy(ObjectUtil.isNotNull(sortField), sortOrder.equals("ascend"), sortField);
         Page<Picture> pictureList = pictureMapper.selectPage(picturePage, pictureQueryWrapper);
         ArrayList<PictureListVO> pictureListVOS = new ArrayList<>();

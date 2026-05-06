@@ -55,12 +55,12 @@
 
 .upload-step-hint {
     text-align: center;
-    color: var(--color-primary, #1677ff);
+    color: #1677ff;
     font-size: 13px;
     font-weight: 500;
     padding: 6px 12px;
-    background: var(--color-primary-bg, #e6f4ff);
-    border: 1px solid var(--color-primary, #1677ff);
+    background: #e6f4ff;
+    border: 1px solid #1677ff;
     border-radius: 6px;
     margin: 8px auto 0;
     flex-shrink: 0;
@@ -196,13 +196,25 @@
 }
 
 .space-fetch-button {
-    color: var(--color-primary, #1677ff) !important;
-    border-color: var(--color-primary, #1677ff) !important;
+    color: #1677ff !important;
+    border-color: #1677ff !important;
 }
 
 .space-fetch-button:hover {
-    color: var(--color-primary-hover, #4096ff) !important;
-    border-color: var(--color-primary-hover, #4096ff) !important;
+    color: #4096ff !important;
+    border-color: #4096ff !important;
+}
+
+.modal-submit-button.ant-btn-primary {
+    background: #1677ff !important;
+    border-color: #1677ff !important;
+    color: #fff !important;
+}
+
+.modal-submit-button.ant-btn-primary:hover {
+    background: #4096ff !important;
+    border-color: #4096ff !important;
+    color: #fff !important;
 }
 
 .space-picker-modal .ant-modal-body {
@@ -604,7 +616,7 @@
 }
 
 .form-item-compact {
-    margin-bottom: 0px;
+    margin-bottom: 0;
 }
 
 .form-item-compact .ant-form-item-explain {
@@ -685,11 +697,11 @@
 }
 
 .space-image-item:hover {
-    border-color: var(--color-primary, #1677ff);
+    border-color: #1677ff;
 }
 
 .space-image-selected {
-    border-color: var(--color-primary, #1677ff);
+    border-color: #1677ff;
 }
 
 .space-image-thumb {
@@ -717,7 +729,7 @@
     width: 24px;
     height: 24px;
     border-radius: 50%;
-    background: var(--color-primary, #1677ff);
+    background: #1677ff;
     color: #fff;
     font-size: 13px;
     font-weight: 600;
@@ -737,7 +749,7 @@
 }
 
 .space-image-item:hover .space-order-empty {
-    border-color: var(--color-primary, #1677ff);
+    border-color: #1677ff;
 }
 
 .space-image-in-carousel {

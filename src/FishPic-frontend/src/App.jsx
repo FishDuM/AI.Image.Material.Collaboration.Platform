@@ -16,29 +16,41 @@ import CommunitySquare from './pages/CommunitySquare'
 import PrivateSpace from './pages/PrivateSpace'
 import TeamSpace from './pages/TeamSpace'
 import Notifications from './pages/Notifications'
+import MobileLoginPage from './pages/MobileLoginPage'
+import MobileRegisterPage from './pages/MobileRegisterPage'
+import MobilePostCreatePage from './pages/MobilePostCreatePage'
+import MobilePostDetailPage from './pages/MobilePostDetailPage'
 
 function App() {
   return (
     <AuthProvider>
-      <GlobalLayout>
-        <Routes>
-          <Route path="/" element={<HomePage/>}/>
-          <Route path="/profile" element={<ProtectedRoute><UserProfile/></ProtectedRoute>}/>
-          <Route path="/community" element={<CommunitySquare/>}/>
-          <Route path="/private-space" element={<ProtectedRoute><PrivateSpace/></ProtectedRoute>}/>
-          <Route path="/team-space" element={<ProtectedRoute><TeamSpace/></ProtectedRoute>}/>
-          <Route path="/notifications" element={<ProtectedRoute><Notifications/></ProtectedRoute>}/>
-          <Route path="/admin/users" element={<ProtectedRoute requireAdmin><UserManagement/></ProtectedRoute>}/>
-          <Route path="/admin/pictures" element={<ProtectedRoute requireAdmin><AdminPictureManagement/></ProtectedRoute>}/>
-          <Route path="/admin/spaces" element={<ProtectedRoute requireAdmin><SpaceManagement/></ProtectedRoute>}/>
-          <Route path="/admin/teams" element={<ProtectedRoute requireAdmin><TeamManagement/></ProtectedRoute>}/>
-          <Route path="/admin/ai" element={<ProtectedRoute requireAdmin><AIManagement/></ProtectedRoute>}/>
-          <Route path="/admin/system" element={<ProtectedRoute requireAdmin><SystemManagement/></ProtectedRoute>}/>
-          <Route path="/admin/user-list" element={<ProtectedRoute requireAdmin><AdminUserList/></ProtectedRoute>}/>
-          <Route path="/404" element={<NotFound/>}/>
-          <Route path="*" element={<NotFound/>}/>
-        </Routes>
-      </GlobalLayout>
+      <Routes>
+        <Route path="/mobile/login" element={<MobileLoginPage/>}/>
+        <Route path="/mobile/register" element={<MobileRegisterPage/>}/>
+        <Route path="/mobile/post/create" element={<ProtectedRoute><MobilePostCreatePage/></ProtectedRoute>}/>
+        <Route path="/mobile/post/detail/:postId" element={<MobilePostDetailPage/>}/>
+        <Route path="*" element={
+          <GlobalLayout>
+            <Routes>
+              <Route path="/" element={<HomePage/>}/>
+              <Route path="/profile" element={<ProtectedRoute><UserProfile/></ProtectedRoute>}/>
+              <Route path="/community" element={<CommunitySquare/>}/>
+              <Route path="/private-space" element={<ProtectedRoute><PrivateSpace/></ProtectedRoute>}/>
+              <Route path="/team-space" element={<ProtectedRoute><TeamSpace/></ProtectedRoute>}/>
+              <Route path="/notifications" element={<ProtectedRoute><Notifications/></ProtectedRoute>}/>
+              <Route path="/admin/users" element={<ProtectedRoute requireAdmin><UserManagement/></ProtectedRoute>}/>
+              <Route path="/admin/pictures" element={<ProtectedRoute requireAdmin><AdminPictureManagement/></ProtectedRoute>}/>
+              <Route path="/admin/spaces" element={<ProtectedRoute requireAdmin><SpaceManagement/></ProtectedRoute>}/>
+              <Route path="/admin/teams" element={<ProtectedRoute requireAdmin><TeamManagement/></ProtectedRoute>}/>
+              <Route path="/admin/ai" element={<ProtectedRoute requireAdmin><AIManagement/></ProtectedRoute>}/>
+              <Route path="/admin/system" element={<ProtectedRoute requireAdmin><SystemManagement/></ProtectedRoute>}/>
+              <Route path="/admin/user-list" element={<ProtectedRoute requireAdmin><AdminUserList/></ProtectedRoute>}/>
+              <Route path="/404" element={<NotFound/>}/>
+              <Route path="*" element={<NotFound/>}/>
+            </Routes>
+          </GlobalLayout>
+        }/>
+      </Routes>
     </AuthProvider>
   )
 }

@@ -28,6 +28,7 @@ import {
 } from '@ant-design/icons'
 import { AuthContext } from '../context/AuthContext.jsx'
 import { getLoginCheckCode, login, getRegisterCheckCode, register, logout } from '../api'
+import { useIsMobile } from './MobilePageWrapper'
 import { ThemeContext } from '../context/ThemeContext.jsx'
 
 function GlobalLayout({ children }) {
@@ -39,6 +40,7 @@ function GlobalLayout({ children }) {
   const userInfo = auth?.userInfo
   const authLogin = auth?.login
   const authLogout = auth?.logout
+  const isMobile = useIsMobile()
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
   const [loginForm] = Form.useForm()
   const [loginLoading, setLoginLoading] = useState(false)
@@ -144,12 +146,20 @@ function GlobalLayout({ children }) {
   }
 
   const showRegisterModal = () => {
+    if (isMobile) {
+      navigate('/mobile/register')
+      return
+    }
     setIsLoginModalOpen(false)
     setIsRegisterModalOpen(true)
     fetchRegisterCheckCode()
   }
 
   const showLoginFromRegister = () => {
+    if (isMobile) {
+      navigate('/mobile/login')
+      return
+    }
     setIsRegisterModalOpen(false)
     setIsLoginModalOpen(true)
     fetchLoginCheckCode()
@@ -227,6 +237,10 @@ function GlobalLayout({ children }) {
   }
 
   const handleLoginButtonClick = () => {
+    if (isMobile) {
+      navigate('/mobile/login')
+      return
+    }
     if (location.pathname === '/') {
       showLoginModal()
     } else {

@@ -500,3 +500,91 @@
     object-fit: contain;
   }
 }
+
+@media (max-width: 768px) {
+  .mobile-page-wrapper .xiaohongshu-layout {
+    flex-direction: column;
+    overflow: visible;
+    background: var(--bg-primary);
+  }
+
+  .mobile-page-wrapper .left-image-area {
+    flex: none !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    aspect-ratio: 1 / 1;
+    background: #000;
+    border-radius: 0 !important;
+  }
+
+  .mobile-page-wrapper .left-image-area .carousel-main {
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: none !important;
+  }
+
+  .mobile-page-wrapper .left-image-area .carousel-main-image {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  .mobile-page-wrapper .right-form-area {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    gap: 12px;
+    background: var(--bg-primary);
+    border-radius: 0 !important;
+    overflow: visible;
+  }
+
+  .mobile-page-wrapper .post-detail-title {
+    color: var(--text-primary);
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.5;
+    margin: 0;
+  }
+
+  .mobile-page-wrapper .post-detail-content {
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    word-break: break-word;
+    flex: none;
+  }
+
+  .mobile-page-wrapper .post-detail-time {
+    color: var(--text-muted);
+    font-size: 12px;
+    display: block;
+    padding: 8px 0;
+  }
+
+  .mobile-page-wrapper .post-detail-stats {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding-top: 12px;
+    padding-bottom: 16px;
+    border-top: 1px solid var(--border-color);
+  }
+
+  .mobile-page-wrapper .post-detail-stat-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+
+  .mobile-page-wrapper .post-detail-stat-item .anticon {
+    font-size: 18px;
+  }
+}
