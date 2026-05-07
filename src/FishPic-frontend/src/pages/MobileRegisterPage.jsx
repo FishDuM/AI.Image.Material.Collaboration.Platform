@@ -114,7 +114,8 @@ export default function MobileRegisterPage() {
               { min: 8, message: '密码至少 8 个字符' },
             ]}
           >
-            <Input.Password prefix={<LockOutlined />} placeholder="请输入密码" size="large" />
+              <Input.Password prefix={<LockOutlined/>} placeholder="请输入密码" size="large"
+                              autoComplete="new-password"/>
           </Form.Item>
           <Form.Item
             name="checkPassword"

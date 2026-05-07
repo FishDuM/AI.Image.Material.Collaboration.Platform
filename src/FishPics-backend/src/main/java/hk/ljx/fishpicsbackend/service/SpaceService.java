@@ -1,7 +1,6 @@
 package hk.ljx.fishpicsbackend.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.dto.space.CreateSpace;
 import hk.ljx.fishpicsbackend.dto.space.SpacePictureList;
 import hk.ljx.fishpicsbackend.dto.space.SpaceQueryWrapper;

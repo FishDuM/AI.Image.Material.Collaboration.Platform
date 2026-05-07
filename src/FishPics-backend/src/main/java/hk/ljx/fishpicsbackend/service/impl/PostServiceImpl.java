@@ -5,6 +5,7 @@ import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.CollectionUtils;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -12,20 +13,17 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.dto.base.PageRequest;
-import hk.ljx.fishpicsbackend.dto.post.EditPostRequest;
-import hk.ljx.fishpicsbackend.dto.post.PostQueryRequest;
-import hk.ljx.fishpicsbackend.dto.post.PostQueryWrapper;
-import hk.ljx.fishpicsbackend.dto.post.UploadPostRequest;
+import hk.ljx.fishpicsbackend.dto.post.*;
+import hk.ljx.fishpicsbackend.dto.space.SpacePictureList;
 import hk.ljx.fishpicsbackend.entity.*;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
 import hk.ljx.fishpicsbackend.mapper.UserPostCollectMapper;
 import hk.ljx.fishpicsbackend.mapper.UserPostLikesMapper;
-import hk.ljx.fishpicsbackend.service.LoginUser;
-import hk.ljx.fishpicsbackend.service.PictureService;
-import hk.ljx.fishpicsbackend.service.PostService;
+import hk.ljx.fishpicsbackend.service.*;
 import hk.ljx.fishpicsbackend.mapper.PostMapper;
-import hk.ljx.fishpicsbackend.service.UserService;
+import hk.ljx.fishpicsbackend.vo.picture.PictureListByEditPostVO;
+import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
 import hk.ljx.fishpicsbackend.vo.post.PostDetailVO;
 import hk.ljx.fishpicsbackend.vo.post.PostListVO;
 import org.apache.ibatis.executor.BatchResult;
@@ -78,6 +76,9 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
     @Resource
     private LoginUser loginUser;
 
+    @Resource
+    private SpaceService spaceService;
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void uploadPost(UploadPostRequest uploadPostRequest, HttpServletRequest request) {
@@ -97,10 +98,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
         // 校验图片是否属于该用户
         QueryWrapper<Picture> pictureQueryWrapper = new QueryWrapper<>();
-        for (Long id : imageId) {
-            pictureQueryWrapper.or(
-                    wrapper -> wrapper.eq("id", id).eq("user_id", userId));
-        }
+        pictureQueryWrapper.in("id", imageId).eq("user_id", userId);
 
         List<Picture> pictures = pictureMapper.selectList(pictureQueryWrapper);
         ExcUtils.throwIfTrue(imageId.size() != pictures.size(), "有图片不存在");
@@ -176,9 +174,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         List<Long> imageId = editPostRequest.getImageId();
         Long cover = editPostRequest.getCover();
         ExcUtils.throwIfTrue(id == null, ExceptionCode.PARAMETER_ERROR, "帖子ID不能为空");
-        ExcUtils.throwIfTrue(imageId.isEmpty(), ExceptionCode.PARAMETER_ERROR, "图片不能为空");
+        ExcUtils.throwIfTrue(imageId == null || imageId.isEmpty(), ExceptionCode.PARAMETER_ERROR, "图片不能为空");
         ExcUtils.throwIfTrue(imageId.size() > 15, ExceptionCode.PARAMETER_ERROR, "图片数量不能超过15张");
-
 
         // 判断是否是自己的帖子 || 是否为管理员
         User user = loginUser.getLoginUser(request);
@@ -206,10 +203,29 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         List<Picture> pictures = pictureMapper.selectList(pictureQueryWrapper);
         ExcUtils.throwIfTrue(imageId.size() != pictures.size(), "有图片不存在");
 
-        // 清除该帖子旧的图片关联
-        QueryWrapper<Picture> deleteOldWrapper = new QueryWrapper<>();
-        deleteOldWrapper.eq("post_id", id);
-        pictureMapper.delete(deleteOldWrapper);
+        // 旧图片ID集合
+        QueryWrapper<Picture> oldWrapper = new QueryWrapper<>();
+        oldWrapper.eq("post_id", id);
+        List<Long> oldPictureIds = pictureMapper.selectList(oldWrapper)
+                .stream()
+                .map(Picture::getId)
+                .collect(Collectors.toList());
+
+        Set<Long> needRemoveIds = new HashSet<>(oldPictureIds);
+        needRemoveIds.removeAll(new HashSet<>(imageId));
+
+        // 执行清空：把这些图片和帖子解绑
+        if (!needRemoveIds.isEmpty()) {
+            pictureMapper.update(null,
+                    new LambdaUpdateWrapper<Picture>()
+                            .set(Picture::getPostId, null)
+                            .in(Picture::getId, needRemoveIds));
+        }
+
+        // 除去原有的图片（不重复处理）
+        pictures = pictures.stream()
+                .filter(pci -> !oldPictureIds.contains(pci.getId()))
+                .collect(Collectors.toList());
 
         ArrayList<Picture> newPicList = new ArrayList<>();
         // 判断图片是否为已上传的图片
@@ -460,6 +476,62 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
         IPage<Post> postPage = postMapper.selectPage(page, queryWrapper);
         return convertToPostListVO(postPage);
+    }
+
+    @Override
+    public List<PictureListByEditPostVO> getPictureList(GetPictureBySpaceRequest getPictureBySpaceRequest,
+            HttpServletRequest request) {
+        Long spaceId = getPictureBySpaceRequest.getSpaceId();
+        List<Long> pictureIds = getPictureBySpaceRequest.getPictureIds();
+
+        ExcUtils.throwIfTrue(spaceId == null, "spaceId不能为空");
+
+        // 1. 查询空间内所有图片
+        List<PictureListVO> spacePictureList = spaceService.pictureList(new SpacePictureList(spaceId), request)
+                .getRecords();
+
+        // 2. 已选中的旧图片ID
+        Set<Long> selectedPictureIdSet = new HashSet<>();
+        if (pictureIds != null && !pictureIds.isEmpty()) {
+            selectedPictureIdSet = new HashSet<>(pictureIds);
+        }
+
+        // 3. 查询空间图片和已选中图片的实体
+        List<Long> spacePicIds = spacePictureList.stream()
+                .map(PictureListVO::getId)
+                .collect(Collectors.toList());
+        List<Picture> pictureEntities = pictureMapper.selectByIds(spacePicIds);
+
+        Map<Long, Picture> pictureMap = pictureEntities.stream()
+                .collect(Collectors.toMap(Picture::getId, p -> p));
+
+        List<Picture> selectedPicEntities = (pictureIds != null && !pictureIds.isEmpty())
+                ? pictureMapper.selectByIds(pictureIds)
+                : new ArrayList<>();
+        Set<Long> selectedParentIds = selectedPicEntities.stream()
+                .map(Picture::getParentId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        // 遍历空间图片列表
+        List<PictureListByEditPostVO> resultList = new ArrayList<>();
+        for (PictureListVO spacePic : spacePictureList) {
+            Long picId = spacePic.getId();
+            Picture picture = pictureMap.get(picId);
+
+            PictureListByEditPostVO vo = new PictureListByEditPostVO();
+            vo.setId(picId);
+            vo.setUrl(spacePic.getUrl());
+
+            boolean isSelected = selectedPictureIdSet.contains(picId)
+                    || (picture != null && selectedPictureIdSet.contains(picture.getParentId()))
+                    || selectedParentIds.contains(picId);
+
+            vo.setFlag(!isSelected);
+            resultList.add(vo);
+        }
+
+        return resultList;
     }
 
     /**

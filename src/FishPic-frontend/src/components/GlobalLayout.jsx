@@ -787,6 +787,7 @@ function GlobalLayout({ children }) {
                     prefix={<LockOutlined className="input-icon" />}
                     placeholder="请再次输入密码"
                     className="xhs-input"
+                    autoComplete="new-password"
                   />
                 </Form.Item>
 

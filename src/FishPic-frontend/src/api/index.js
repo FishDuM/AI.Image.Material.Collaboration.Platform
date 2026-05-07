@@ -8,8 +8,31 @@ const api = axios.create({
   },
 })
 
+const pendingRequests = new Map()
+
+let requestCounter = 0
+
+function getRequestKey(config) {
+  const { method, url, params, data } = config
+  return [method, url, JSON.stringify(params || {}), JSON.stringify(data || {})].join('&')
+}
+
 api.interceptors.request.use(
   (config) => {
+    if (config.noDedup) {
+      return config
+    }
+    const key = getRequestKey(config)
+    const oldEntry = pendingRequests.get(key)
+    if (oldEntry) {
+      oldEntry.controller.abort()
+      pendingRequests.delete(key)
+    }
+    const controller = new AbortController()
+    config.signal = controller.signal
+    config._dedupId = ++requestCounter
+    config._dedupKey = key
+    pendingRequests.set(key, { controller, id: config._dedupId })
     return config
   },
   (error) => {
@@ -19,6 +42,12 @@ api.interceptors.request.use(
 
 api.interceptors.response.use(
   (response) => {
+    if (!response || !response.config) return response
+    const key = response.config._dedupKey || getRequestKey(response.config)
+    const entry = pendingRequests.get(key)
+    if (entry && entry.id === response.config._dedupId) {
+      pendingRequests.delete(key)
+    }
     if (response.config.responseType === 'blob') {
       return response
     }
@@ -35,6 +64,16 @@ api.interceptors.response.use(
     return responseData.data ?? responseData
   },
   (error) => {
+    if (error.config) {
+      const key = error.config._dedupKey || getRequestKey(error.config)
+      const entry = pendingRequests.get(key)
+      if (entry && entry.id === error.config._dedupId) {
+        pendingRequests.delete(key)
+      }
+    }
+    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
+      return new Promise(() => {})
+    }
     const message = error.response?.data?.message || error.message || '请求失败，请重试'
     return Promise.reject(new Error(message))
   }
@@ -103,6 +142,8 @@ export const updateSpace = (data) => api.post('/space/update', data)
 export const listSpace = (type) => api.get('/space/list', { params: { type } })
 
 export const spaceListPicture = (data) => api.post('/space/pictureList', data)
+
+export const postPictureList = (data) => api.post('/post/pictureList', data)
 
 export const deletePicture = (ids) => api.post('/picture/delete', { ids })
 

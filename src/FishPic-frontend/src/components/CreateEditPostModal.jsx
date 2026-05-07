@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { App, Modal, Form, Input, Button, Upload, Select, Switch, Image as AntImage, Tabs, Pagination, Spin, Empty } from 'antd'
 import { PlusOutlined, DeleteOutlined, LeftOutlined, RightOutlined, SendOutlined, CheckOutlined, CloudOutlined } from '@ant-design/icons'
-import api, { listSpace, spaceListPicture } from '../api'
+import api, { listSpace, postPictureList } from '../api'
 import MobilePageWrapper from './MobilePageWrapper'
 import './CreateEditPostModal.css'
 
@@ -31,11 +31,18 @@ const SpacePickerModal = ({ open, onClose, onConfirm, currentImageCount, existin
       setActiveTab('private')
       setSelectedIds([])
       setPage(1)
+        setSpaceId(null)
+        setImages([])
+        setTotal(0)
+    } else {
+        setSpaceId(null)
+        setImages([])
+        setTotal(0)
     }
   }, [open])
 
   useEffect(() => {
-    const loadSpace = async () => {
+    const loadSpaceId = async () => {
       try {
         const result = await listSpace(0)
         const list = Array.isArray(result) ? result : []
@@ -48,35 +55,34 @@ const SpacePickerModal = ({ open, onClose, onConfirm, currentImageCount, existin
         setSpaceId(null)
       }
     }
-    if (open && activeTab === 'private') loadSpace()
+    if (open && activeTab === 'private') loadSpaceId()
   }, [open, activeTab])
 
-  const fetchImages = useCallback(async (p) => {
-    if (!spaceId) return
+  const fetchImages = useCallback(async (p, sid, ids) => {
+    if (!sid) return
     setLoading(true)
     try {
-      const result = await spaceListPicture({ spaceId, current: p, pageSize: 20 })
-      const list = Array.isArray(result?.records) ? result.records : []
-      const t = typeof result?.total === 'number' ? result.total : list.length
+      const result = await postPictureList({ spaceId: sid, pictureIds: ids, current: p, pageSize: 20 })
+      const list = Array.isArray(result) ? result : []
       setImages(list)
-      setTotal(t)
+      setTotal(list.length)
     } catch {
       setImages([])
     } finally {
       setLoading(false)
     }
-  }, [spaceId])
+  }, [])
 
   useEffect(() => {
-    if (spaceId && activeTab === 'private') fetchImages(page)
-  }, [spaceId, page, fetchImages, activeTab])
+    if (spaceId && activeTab === 'private' && open) fetchImages(page, spaceId, existingImageIds)
+  }, [spaceId, page, fetchImages, activeTab, open, existingImageIds])
 
   const toggleImage = useCallback((img) => {
     if (selectedIds.includes(img.id)) {
       setSelectedIds(prev => prev.filter(id => id !== img.id))
       return
     }
-    if (existingImageIds.includes(img.id)) {
+    if (img.flag === false) {
       msg.warning('该图片已添加，请勿重复选择')
       return
     }
@@ -85,7 +91,7 @@ const SpacePickerModal = ({ open, onClose, onConfirm, currentImageCount, existin
       return
     }
     setSelectedIds(prev => [...prev, img.id])
-  }, [currentImageCount, selectedIds, existingImageIds, msg])
+  }, [currentImageCount, selectedIds, msg])
 
   const handleConfirm = useCallback(() => {
     if (selectedIds.length === 0) {
@@ -147,7 +153,7 @@ const SpacePickerModal = ({ open, onClose, onConfirm, currentImageCount, existin
                         {images.map((img) => {
                           const orderIndex = selectedIds.indexOf(img.id)
                           const isSelected = orderIndex !== -1
-                          const isInCarousel = existingImageIds.includes(img.id)
+                          const isInCarousel = img.flag === false
                           return (
                             <div
                               key={img.id}
@@ -268,21 +274,23 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
       setModalStep(1)
       setSelectedSpaceImageIds([])
       setSpaceImagePage(1)
+        setSpaceImages([])
+        setSpaceImageTotal(0)
+        setSpaceId(null)
       setUploadTabKey('manual')
       form.resetFields()
       form.setFieldsValue({ coverIndex: 0 })
     }
   }, [open, editPostDetail, form])
 
-  const fetchSpaceImages = useCallback(async (page) => {
+  const fetchSpaceImages = useCallback(async (page, ids) => {
     if (!spaceId) return
     setSpaceImageLoading(true)
     try {
-      const result = await spaceListPicture({ spaceId, current: page, pageSize: 20 })
-      const list = Array.isArray(result?.records) ? result.records : []
-      const total = typeof result?.total === 'number' ? result.total : list.length
+      const result = await postPictureList({ spaceId, pictureIds: ids, current: page, pageSize: 20 })
+      const list = Array.isArray(result) ? result : []
       setSpaceImages(list)
-      setSpaceImageTotal(total)
+      setSpaceImageTotal(list.length)
     } catch {
       setSpaceImages([])
     } finally {
@@ -306,15 +314,15 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
   }, [open, editPostDetail])
 
   useEffect(() => {
-    if (spaceId) fetchSpaceImages(spaceImagePage)
-  }, [spaceId, spaceImagePage, fetchSpaceImages])
+    if (spaceId) fetchSpaceImages(spaceImagePage, imageId)
+  }, [spaceId, spaceImagePage, fetchSpaceImages, imageId])
 
   const toggleSpaceImage = useCallback((img) => {
     if (selectedSpaceImageIds.includes(img.id)) {
       setSelectedSpaceImageIds(prev => prev.filter(id => id !== img.id))
       return
     }
-    if (imageId.includes(img.id)) {
+    if (img.flag === false) {
       message.warning('该图片已添加，请勿重复选择')
       return
     }
@@ -571,7 +579,6 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
               setUploadTabKey(key)
               if (key === 'space' && spaceId) {
                 setSpaceImagePage(1)
-                fetchSpaceImages(1)
               }
             }}
             items={[
@@ -615,7 +622,7 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
                             {spaceImages.map((img) => {
                               const orderIndex = selectedSpaceImageIds.indexOf(img.id)
                               const isSelected = orderIndex !== -1
-                              const isInCarousel = imageId.includes(img.id)
+                              const isInCarousel = img.flag === false
                               return (
                                 <div
                                   key={img.id}

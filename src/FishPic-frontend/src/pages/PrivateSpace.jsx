@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { App as AntApp, Typography, Button, Modal, Form, Input, Pagination, Masonry, Image as AntImage, Spin, Empty, Popconfirm, Progress, Popover } from 'antd'
 import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowUpOutlined, CrownOutlined, CloudServerOutlined, CheckCircleFilled } from '@ant-design/icons'
-import { createSpace, updateSpace, listSpace, spaceListPicture, deletePicture } from '../api'
+import { updateSpace, listSpace, spaceListPicture, deletePicture } from '../api'
 import './PrivateSpace.css'
 
 const { Title } = Typography
@@ -70,11 +70,8 @@ const ADDON_PLANS = [
 function PrivateSpace() {
   const { message } = AntApp.useApp()
   const [spaces, setSpaces] = useState([])
-  const [showCreate, setShowCreate] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
-  const [createLoading, setCreateLoading] = useState(false)
   const [updateLoading, setUpdateLoading] = useState(false)
-  const [form] = Form.useForm()
   const [editForm] = Form.useForm()
 
   const [pictures, setPictures] = useState([])
@@ -93,10 +90,8 @@ function PrivateSpace() {
       const result = await listSpace(0)
       const list = Array.isArray(result) ? result : []
       setSpaces(list)
-      setShowCreate(list.length === 0)
     } catch {
       setSpaces([])
-      setShowCreate(true)
     }
   }, [])
 
@@ -211,24 +206,6 @@ function PrivateSpace() {
 
   const masonryItems = useMemo(() => pictureListToMasonry(pictures), [pictures])
 
-  const handleCreate = async (values) => {
-    setCreateLoading(true)
-    try {
-      await createSpace({
-        name: values.name,
-        type: 0,
-        introduction: values.introduction || '',
-      })
-      message.success('私人空间创建成功')
-      form.resetFields()
-      fetchSpaces()
-    } catch (error) {
-      message.error(error.message || '创建失败')
-    } finally {
-      setCreateLoading(false)
-    }
-  }
-
   const handleEditOpen = () => {
     if (spaces.length > 0) {
       editForm.setFieldsValue({ name: spaces[0].name, introduction: spaces[0].introduction })
@@ -315,6 +292,10 @@ function PrivateSpace() {
           </div>
         )}
       </div>
+
+      {spaces.length === 0 && (
+        <Empty description="暂无私人空间" style={{ marginTop: 80 }} />
+      )}
 
       {spaces.length > 0 && (
         <div className="private-space-search-bar">
@@ -476,48 +457,6 @@ function PrivateSpace() {
           form={editForm}
           layout="vertical"
           onFinish={handleUpdate}
-          style={{ marginTop: 16 }}
-        >
-          <Form.Item
-            name="name"
-            label="空间名称"
-            rules={[
-              { required: true, message: '请输入空间名称' },
-              { max: 20, message: '空间名称不超过 20 个字符' },
-            ]}
-          >
-            <Input placeholder="请输入空间名称" maxLength={20} />
-          </Form.Item>
-          <Form.Item
-            name="introduction"
-            label="空间介绍"
-          >
-            <Input.TextArea placeholder="请输入空间介绍" maxLength={200} rows={3} showCount />
-          </Form.Item>
-        </Form>
-      </Modal>
-
-      <Modal
-        title="创建私人空间"
-        open={showCreate}
-        onCancel={() => { setShowCreate(false); form.resetFields() }}
-        footer={
-          <div style={{ textAlign: 'right' }}>
-            <Button onClick={() => { setShowCreate(false); form.resetFields() }} style={{ marginRight: 8 }}>
-              取消
-            </Button>
-            <Button type="primary" onClick={() => form.submit()} loading={createLoading}>
-              创建
-            </Button>
-          </div>
-        }
-        destroyOnHidden
-        closable={false}
-      >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleCreate}
           style={{ marginTop: 16 }}
         >
           <Form.Item

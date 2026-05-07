@@ -7,9 +7,12 @@ import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.dto.base.PageRequest;
 import hk.ljx.fishpicsbackend.dto.post.EditPostRequest;
+import hk.ljx.fishpicsbackend.dto.post.GetPictureBySpaceRequest;
 import hk.ljx.fishpicsbackend.dto.post.PostQueryRequest;
 import hk.ljx.fishpicsbackend.dto.post.UploadPostRequest;
 import hk.ljx.fishpicsbackend.service.PostService;
+import hk.ljx.fishpicsbackend.vo.picture.PictureListByEditPostVO;
+import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
 import hk.ljx.fishpicsbackend.vo.post.PostDetailVO;
 import hk.ljx.fishpicsbackend.vo.post.PostListVO;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +20,7 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import java.util.List;
 
 @RestController
 @RequestMapping("/post")
@@ -56,6 +60,12 @@ public class PostController {
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), "帖子不存在");
         postService.likePost(id, request);
         return ResUtils.success(true);
+    }
+
+    @PostMapping("/pictureList")
+    public Response<List<PictureListByEditPostVO>> getPictureList(@RequestBody GetPictureBySpaceRequest getPictureBySpaceRequest, HttpServletRequest request) {
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(getPictureBySpaceRequest), "获取图片列表，空间不能为空");
+        return ResUtils.success(postService.getPictureList(getPictureBySpaceRequest, request));
     }
 
     /**

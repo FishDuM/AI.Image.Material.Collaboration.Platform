@@ -178,7 +178,6 @@ function UserProfile() {
     
     setLoading(true)
     fetchUserInfo().finally(() => setLoading(false))
-    fetchTabData('notes', 1, false)
   }, [navigate, message])
 
   useEffect(() => {

@@ -27,6 +27,7 @@ import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static hk.ljx.fishpicsbackend.common.constants.SpaceConstants.*;
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;

@@ -4,6 +4,7 @@ import hk.ljx.fishpicsbackend.dto.base.PageRequest;
 import lombok.*;
 
 import java.io.Serializable;
+import java.util.List;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
@@ -12,5 +13,4 @@ import java.io.Serializable;
 public class SpacePictureList extends PageRequest implements Serializable {
 
     private Long spaceId;
-
 }

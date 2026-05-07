@@ -3,12 +3,10 @@ package hk.ljx.fishpicsbackend.service;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.dto.base.PageRequest;
-import hk.ljx.fishpicsbackend.dto.post.EditPostRequest;
-import hk.ljx.fishpicsbackend.dto.post.PostQueryRequest;
-import hk.ljx.fishpicsbackend.dto.post.PostQueryWrapper;
-import hk.ljx.fishpicsbackend.dto.post.UploadPostRequest;
+import hk.ljx.fishpicsbackend.dto.post.*;
 import hk.ljx.fishpicsbackend.entity.Post;
 import com.baomidou.mybatisplus.extension.service.IService;
+import hk.ljx.fishpicsbackend.vo.picture.PictureListByEditPostVO;
 import hk.ljx.fishpicsbackend.vo.post.PostDetailVO;
 import hk.ljx.fishpicsbackend.vo.post.PostListVO;
 
@@ -95,4 +93,12 @@ public interface PostService extends IService<Post> {
      * @return 帖子列表
      */
     IPage<PostListVO> getMyLikes(PageRequest pageRequest, HttpServletRequest request);
+
+    /**
+     * 获取空间图片（去除帖子已有图片）
+     *
+     * @param getPictureBySpaceRequest request
+     * @return 图片列表
+     */
+    List<PictureListByEditPostVO> getPictureList(GetPictureBySpaceRequest getPictureBySpaceRequest, HttpServletRequest request);
 }

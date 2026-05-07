@@ -102,7 +102,8 @@ export default function MobileLoginPage() {
               { min: 8, message: '密码至少 8 个字符' },
             ]}
           >
-            <Input.Password prefix={<LockOutlined />} placeholder="请输入密码" size="large" />
+              <Input.Password prefix={<LockOutlined/>} placeholder="请输入密码" size="large"
+                              autoComplete="current-password"/>
           </Form.Item>
           <div className="mobile-captcha-row">
             <Form.Item

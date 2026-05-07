@@ -119,18 +119,8 @@ function HomePage() {
   }, [])
 
   useEffect(() => {
-    let cancelled = false
-    getPictureList(1, PAGE_SIZE).then((result) => {
-      if (cancelled) return
-      if (result && Array.isArray(result.records)) {
-        setPictureList(result.records)
-        setHasMore(result.records.length === PAGE_SIZE)
-      }
-    }).catch(() => {
-      if (!cancelled) setHasMore(false)
-    })
-    return () => { cancelled = true }
-  }, [])
+    loadPictures(1)
+  }, [loadPictures])
 
   useEffect(() => {
     if (!hasMore || pictureLoading) return
