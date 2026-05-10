@@ -165,6 +165,19 @@
 +------------------------------------------+
 ```
 
+#### PictureChild 实体类
+
+```
++------------------------------------------+
+|              PictureChild                |
++------------------------------------------+
+| - id: Long (PK, AUTO_INCREMENT)          |
+| - pictureId: Long (FK->Picture)          |
+| - postId: Long (FK->Post)                |
+| - sortNum: Integer (排序序号)            |
++------------------------------------------+
+```
+
 #### Comment 实体类
 
 ```
@@ -609,6 +622,8 @@
 | - collectsNum: Long                      |
 | - commentNum: Integer                    |
 | - pictureUrl: List<String> (图片URL列表) |
+| - pictureIds: List<Long> (图片ID列表)    |
+| - cover: Long (封面图片ID)               |
 +------------------------------------------+
 ```
 
@@ -695,6 +710,7 @@
 | + GET  /user/myself                      |
 | + GET  /user/getUser                     |
 | + POST /user/editUser                    |
+| + GET  /user/logout (退出登录)           |
 | + POST /user/admin/getUser               |
 | + POST /user/admin/userList              |
 | + POST /user/admin/setStatus             |
@@ -715,6 +731,9 @@
 | + POST /post/editPost (编辑帖子)         |
 | + POST /post/postList (获取帖子列表)     |
 | + POST /post/like (点赞帖子)             |
+| + POST /post/myPosts (我的帖子列表)      |
+| + POST /post/myCollects (我的收藏列表)   |
+| + POST /post/myLikes (我的点赞列表)      |
 +------------------------------------------+
 ```
 
@@ -746,7 +765,7 @@
 | + POST /space/create (创建空间)          |
 | + GET  /space/list (获取空间列表)        |
 | + POST /space/update (更新空间)          |
-| + POST /space/listPicture (空间图片列表) |
+| + POST /space/pictureList (空间图片列表) |
 +------------------------------------------+
 ```
 
@@ -803,6 +822,9 @@
 | + getPostList(queryRequest)              |
 | + newQueryWrapper(queryWrapper)          |
 | + likePost(id, request)                  |
+| + getMyPosts(pageRequest, request)       |
+| + getMyCollects(pageRequest, request)    |
+| + getMyLikes(pageRequest, request)       |
 +------------------------------------------+
 ```
 
@@ -820,6 +842,15 @@
 | + getAdminPictureList(current, pageSize, status)|
 | + reviewPicture(pictureId, status, selected)|
 | + deletePicture(ids)                     |
++------------------------------------------+
+```
+
+#### PictureChildService 接口
+
+```
++------------------------------------------+
+|         PictureChildService              |
+| extends IService<PictureChild>           |
 +------------------------------------------+
 ```
 
@@ -934,6 +965,7 @@
 - UserServiceImpl → StringRedisTemplate (服务实现依赖Redis)
 - UserServiceImpl → LoginUser (服务实现依赖登录用户工具)
 - PostServiceImpl → PictureService (帖子服务依赖图片服务)
+- PostServiceImpl → PictureChildService (帖子服务依赖子图片关联服务)
 - PostServiceImpl → UserPostLikesService (帖子服务依赖点赞服务)
 - PictureServiceImpl → CosService (图片服务依赖COS存储)
 - PictureServiceImpl → SpaceMapper (图片服务依赖空间数据访问)
@@ -945,6 +977,7 @@
 - UserServiceImpl —|> UserService (实现接口)
 - PostServiceImpl —|> PostService (实现接口)
 - PictureServiceImpl —|> PictureService (实现接口)
+- PictureChildServiceImpl —|> PictureChildService (实现接口)
 - CommentServiceImpl —|> CommentService (实现接口)
 - UserPostCollectServiceImpl —|> UserPostCollectService (实现接口)
 - UserPostLikesServiceImpl —|> UserPostLikesService (实现接口)
@@ -957,6 +990,7 @@
 - UserServiceImpl —|> ServiceImpl<UserMapper, User> (MyBatis-Plus基类)
 - PostServiceImpl —|> ServiceImpl<PostMapper, Post> (MyBatis-Plus基类)
 - PictureServiceImpl —|> ServiceImpl<PictureMapper, Picture> (MyBatis-Plus基类)
+- PictureChildServiceImpl —|> ServiceImpl<PictureChildMapper, PictureChild> (MyBatis-Plus基类)
 - CommentServiceImpl —|> ServiceImpl<CommentMapper, Comment> (MyBatis-Plus基类)
 - UserPostCollectServiceImpl —|> ServiceImpl<UserPostCollectMapper, UserPostCollect> (MyBatis-Plus基类)
 - UserPostLikesServiceImpl —|> ServiceImpl<UserPostLikesMapper, UserPostLikes> (MyBatis-Plus基类)
@@ -1150,13 +1184,17 @@ PostController -> PostService: getPost(id)
 PostService -> PostMapper: selectById(id)
 PostMapper -> MySQL: SELECT * FROM post WHERE id=?
 MySQL --> PostMapper: 返回帖子数据
+PostService -> PictureChildMapper: list(postId=id, order by sortNum)
+PictureChildMapper -> MySQL: SELECT * FROM picture_child WHERE post_id=? ORDER BY sort_num
+MySQL --> PictureChildMapper: 返回图片关联列表(pictureIds)
+PostService -> PictureMapper: list(id IN pictureIds)
+PictureMapper -> MySQL: SELECT * FROM picture WHERE id IN (...)
+MySQL --> PictureMapper: 返回图片数据
+PostService -> 同步过滤: 构建urlMap，遍历pictureIds，同时过滤已删除图片，保证pictureUrl和pictureIds一一对应
 PostService -> UserMapper: selectById(post.userId)
 UserMapper -> MySQL: SELECT * FROM user WHERE id=?
 MySQL --> UserMapper: 返回用户数据
-PostService -> PictureMapper: selectList(postId=xxx)
-PictureMapper -> MySQL: SELECT * FROM picture WHERE post_id=?
-MySQL --> PictureMapper: 返回图片列表
-PostService -> 组装PostDetailVO (帖子+用户+图片URL列表)
+PostService -> 组装PostDetailVO (帖子+用户+pictureUrl列表+pictureIds列表)
 PostService --> 后端: Response<PostDetailVO>
 后端 --> 前端: 帖子详情数据
 前端 --> 用户: 渲染帖子详情
@@ -1500,7 +1538,7 @@ PictureService --> 后端: Response<Boolean>
 #### 页面组件
 
 - **HomePage.jsx**: 首页/登录/注册
-- **CommunitySquare.jsx**: 社区广场 (帖子瀑布流展示)
+- **CommunitySquare.jsx**: 社区广场 (帖子瀑布流展示，滚动100px后显示返回顶部按钮)
 - **PrivateSpace.jsx**: 个人空间
 - **TeamSpace.jsx**: 团队空间
 - **Notifications.jsx**: 通知消息
@@ -1567,6 +1605,7 @@ PictureService --> 后端: Response<Boolean>
 - **UserMapper**: 用户数据访问
 - **PostMapper**: 帖子数据访问
 - **PictureMapper**: 图片数据访问
+- **PictureChildMapper**: 子图片关联数据访问
 - **CommentMapper**: 评论数据访问
 - **SpaceMapper**: 空间数据访问
 - **PicSystemMapper**: 系统配置数据访问
@@ -1633,7 +1672,7 @@ Spring Boot (FishPics-backend)
   │     └── 依赖
   ├── 数据访问层 (MyBatis-Plus Mapper)
   │     ↓ 依赖
-  ├── MySQL数据库 (FishPics, 9张表)
+  ├── MySQL数据库 (FishPics, 10张表)
   ├── Redis缓存服务器 (192.168.163.101:6379, Session存储+业务缓存)
   ├── Redisson (分布式锁)
   └── 腾讯云COS (对象存储服务)
@@ -2031,6 +2070,7 @@ hk.ljx.fishpicsbackend
 ├── entity (实体类)
 │   ├── Comment.java (评论)
 │   ├── Picture.java (图片, 含spaceId/introduction, size为Long类型)
+│   ├── PictureChild.java (子图片关联, pictureId/postId/sortNum)
 │   ├── Post.java (帖子, 含hot热度字段)
 │   ├── User.java (用户, 含level/size字段)
 │   ├── Space.java (空间, 含type/level/storageSize等)
@@ -2043,6 +2083,7 @@ hk.ljx.fishpicsbackend
 ├── mapper (数据访问层)
 │   ├── CommentMapper.java
 │   ├── PictureMapper.java
+│   ├── PictureChildMapper.java
 │   ├── PostMapper.java
 │   ├── SpaceMapper.java
 │   ├── PicSystemMapper.java
@@ -2055,6 +2096,7 @@ hk.ljx.fishpicsbackend
 │   ├── CosService.java
 │   ├── LoginUser.java (登录用户获取工具)
 │   ├── PictureService.java
+│   ├── PictureChildService.java
 │   ├── PostService.java
 │   ├── SpaceService.java
 │   ├── PicSystemService.java
@@ -2242,6 +2284,15 @@ src/
 | space_id     | bigint       | FK                        | 空间id (关联space表)         |
 | introduction | varchar(256) | -                         | 图片简介                     |
 
+#### picture_child 表 (子图片关联表)
+
+| 字段       | 类型    | 约束               | 说明               |
+| ---------- | ------- | ------------------ | ------------------ |
+| id         | bigint  | PK, AUTO_INCREMENT | 主键               |
+| picture_id | bigint  | NOT NULL, FK       | 关联图片ID         |
+| post_id    | bigint  | NOT NULL, FK       | 关联帖子ID         |
+| sort_num   | int     | -                  | 在帖子中的排序序号 |
+
 #### comment 表 (评论表)
 
 | 字段        | 类型     | 约束                      | 说明                        |
@@ -2372,6 +2423,7 @@ PicSystem (独立配置表, syskey=sysvalue 存储系统配置)
 | GET  | /user/myself     | 获取个人主页     | -                         | Response\<UserMessageVO\>          | 登录用户                     |
 | GET  | /user/getUser    | 获取当前用户信息 | -                         | Response\<UserLoginVO\>            | 登录用户                     |
 | POST | /user/editUser   | 编辑个人信息     | UserEditRequest           | Response\<Boolean\>                | 登录用户(仅自己)             |
+| GET  | /user/logout     | 退出登录         | -                         | Response\<Boolean\>                | 登录用户                     |
 | POST | /picture/avatar  | 上传头像         | MultipartFile + id        | Response\<String\>                 | 登录用户(仅自己, 管理员除外) |
 | POST | /picture/post    | 上传帖子图片     | MultipartFile             | Response\<PicturePostVO\>          | 登录用户                     |
 | GET  | /picture/list    | 获取公开图片列表 | current, pageSize (query) | Response\<IPage\<PictureListVO\>\> | 无                           |
@@ -2380,9 +2432,9 @@ PicSystem (独立配置表, syskey=sysvalue 存储系统配置)
 | GET  | /post/getPost    | 获取帖子详情     | id (query)                | Response\<PostDetailVO\>           | 登录用户                     |
 | POST | /post/postList   | 获取帖子列表     | PostQueryRequest          | Response\<IPage\<PostListVO\>\>    | 无                           |
 | POST | /post/like       | 点赞帖子         | id (query)                | Response\<Boolean\>                | 登录用户                     |
-| GET  | /post/myPosts    | 获取我的帖子列表 | current, pageSize (query) | Response\<IPage\<PostListVO\>\>    | 登录用户                     |
-| GET  | /post/myCollects | 获取我的收藏列表 | current, pageSize (query) | Response\<IPage\<PostListVO\>\>    | 登录用户                     |
-| GET  | /post/myLikes    | 获取我的点赞列表 | current, pageSize (query) | Response\<IPage\<PostListVO\>\>    | 登录用户                     |
+| POST | /post/myPosts    | 获取我的帖子列表 | PageRequest               | Response\<IPage\<PostListVO\>\>    | 登录用户                     |
+| POST | /post/myCollects | 获取我的收藏列表 | PageRequest               | Response\<IPage\<PostListVO\>\>    | 登录用户                     |
+| POST | /post/myLikes    | 获取我的点赞列表 | PageRequest               | Response\<IPage\<PostListVO\>\>    | 登录用户                     |
 
 ### 10.3 管理员接口 (需admin角色)
 
@@ -2392,13 +2444,13 @@ PicSystem (独立配置表, syskey=sysvalue 存储系统配置)
 | POST | /user/admin/userList  | 获取用户列表       | UserQueryWrapper                    | Response\<IPage\<User\>\>           | admin |
 | POST | /user/admin/setStatus | 设置用户状态       | UserIdRequest                       | Response\<Boolean\>                 | admin |
 | POST | /user/admin/editUser  | 编辑用户信息       | UserEditByAdminRequest              | Response\<Boolean\>                 | admin |
-| POST | /picture/admin/list   | 管理员获取图片列表 | PictureQueryWrapper                 | Response\<IPage\<PictureAdminVO\>\> | admin |
+| GET  | /picture/admin/list   | 管理员获取图片列表 | current, pageSize, status (query)   | Response\<IPage\<PictureAdminVO\>\> | admin |
 | POST | /picture/admin/review | 图片审核           | pictureId, status, selected (query) | Response\<Boolean\>                 | admin |
 | POST | /picture/delete       | 删除图片           | DeleteByIdList                      | Response\<Boolean\>                 | admin |
 | POST | /space/create         | 创建空间           | CreateSpace                         | Response\<Boolean\>                 | admin |
-| POST | /space/list           | 获取空间列表       | SpaceQueryWrapper                   | Response\<IPage\<Space\>\>          | admin |
+| GET  | /space/list           | 获取空间列表       | type (query)                        | Response\<IPage\<Space\>\>          | admin |
 | POST | /space/update         | 更新空间           | UpdateSpace                         | Response\<Boolean\>                 | admin |
-| POST | /space/listPicture    | 获取空间图片列表   | SpacePictureList                    | Response\<IPage\<PictureListVO\>\>  | admin |
+| POST | /space/pictureList    | 获取空间图片列表   | SpacePictureList                    | Response\<IPage\<PictureListVO\>\>  | admin |
 | POST | /system/addList       | 添加分类标签       | AddSysPicType                       | Response\<Boolean\>                 | admin |
 | POST | /system/deleteType    | 删除分类标签       | type (query)                        | Response\<Boolean\>                 | admin |
 | GET  | /system/marquee       | 获取跑马灯图片     | -                                   | Response\<List\<String\>\>          | 无    |

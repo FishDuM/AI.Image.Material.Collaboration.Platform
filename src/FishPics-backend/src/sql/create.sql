@@ -1,6 +1,6 @@
-create database if not exists FishPics;
+create database if not exists fishpics;
 
-use FishPics;
+use fishpics;
 
 create table comment
 (
@@ -38,7 +38,7 @@ create table picture
     id           bigint auto_increment comment '主键'
         primary key,
     user_id      bigint                             not null comment '用户id',
-    picture_name bigint                             not null comment '图片名称',
+    picture_name varchar(256)                       null comment '图片名称',
     url          varchar(512)                       not null comment '图片地址',
     width        varchar(32)                        null comment '宽度',
     height       varchar(32)                        null comment '高度',
@@ -47,7 +47,6 @@ create table picture
     create_time  datetime default CURRENT_TIMESTAMP not null comment '创建时间',
     update_time  datetime default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
     is_private   tinyint  default 0                 not null comment '0-不公开到首页，1-公开到首页',
-    post_id      bigint                             null comment '帖子id',
     space_id     bigint                             null comment '空间Id',
     introduction varchar(256)                       null comment '图片介绍'
 )
@@ -68,6 +67,24 @@ create index picture_space_id_index
 create index picture_update_time_index
     on picture (update_time);
 
+create table picture_child
+(
+    id         bigint auto_increment comment '主键'
+        primary key,
+    picture_id bigint null comment '关联图片id',
+    post_id    bigint null comment '关联帖子id',
+    sort_num   int    null comment '在帖子中的顺序',
+    constraint picture_child_picture_id_post_id_uindex
+        unique (picture_id, post_id)
+)
+    comment '子图片表';
+
+create index picture_child_picture_id_index
+    on picture_child (picture_id);
+
+create index picture_child_post_id_index
+    on picture_child (post_id);
+
 create table post
 (
     id           bigint auto_increment comment '主键'
@@ -83,7 +100,7 @@ create table post
     collects_num bigint   default 0                 not null comment '收藏数',
     comment_num  int      default 0                 not null comment '评论数',
     is_private   tinyint  default 0                 not null comment '0-公开，1-仅自己可见，',
-    cover        bigint                             null comment '封面图片的id',
+    cover        bigint                             null comment '封面图片的id（主图）',
     views_num    bigint   default 0                 not null comment '查看数',
     hot          decimal  default 0                 null
 )
@@ -112,7 +129,7 @@ create table space
     storage_size  bigint  default 524288 not null comment '空间的存储大小(KB)：512MB-5G-10G',
     level         tinyint default 0      not null comment '空间级别：普通-VIP-SVIP',
     name          varchar(246)           not null comment '空间名',
-    size          bigint  default 0      not null comment '现在使用大小'
+    size          bigint                 null comment '现在使用大小'
 )
     comment '空间表';
 
@@ -137,8 +154,8 @@ create table user
     role                    varchar(32) default 'user'            null comment '用户的权限',
     create_time             datetime    default CURRENT_TIMESTAMP not null comment '创建时间',
     update_time             datetime    default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
-    like_num                bigint      default 0                 null,
-    collect_num             bigint      default 0                 null,
+    like_num                bigint                                null,
+    collect_num             bigint                                null,
     is_private_follows      tinyint     default 0                 not null comment '0-公开关注列表，1-不公开关注列表',
     is_private_post_collect tinyint     default 0                 not null comment '0-公开帖子列表，1-不公开帖子列表',
     is_private_likes        tinyint     default 0                 not null comment '0-公开点赞帖子列表，1-不公开点赞帖子列表',
@@ -187,3 +204,4 @@ create table user_post_likes
 
 create index user_post_likes_user_id_index
     on user_post_likes (user_id);
+

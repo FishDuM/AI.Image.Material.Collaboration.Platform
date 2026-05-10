@@ -225,7 +225,7 @@ FishPics（FishPics Image Collaboration Platform）是一个基于前后端分�
 #### 2.1.13 前端页面模块
 
 - **主页**（HomePage）：平台首页，登录/注册入口
-- **社区广场**（CommunitySquare）：社区内容展示，瀑布流布局，支持分类标签筛选、搜索、发帖、编辑、帖子详情弹窗
+- **社区广场**（CommunitySquare）：社区内容展示，瀑布流布局，支持分类标签筛选、搜索、发帖、编辑、帖子详情弹窗、返回顶部按钮（向下滚动100px后显示，平滑滚动）
 - **私人空间**（PrivateSpace）：用户个人私密内容管理
 - **团队空间**（TeamSpace）：团队协作内容管理
 - **通知中心**（Notifications）：用户通知消息（评论互动、赞和收藏、新增关注、系统通知、私信五个分类）
@@ -258,17 +258,18 @@ FishPics（FishPics Image Collaboration Platform）是一个基于前后端分�
 
 ### 3.1 实体清单
 
-系统包含 **9个核心实体**：
+系统包含 **10个核心实体**：
 
 1. **User** (用户表) - 系统用户信息
 2. **Post** (帖子表) - 用户发布的帖子
 3. **Picture** (图片表) - 图片资源信息
-4. **Comment** (评论表) - 帖子评论
-5. **Space** (空间表) - 私人空间和团队空间
-6. **PicSystem** (系统表) - 系统配置信息（分类标签、跑马灯等）
-7. **UserFans** (用户粉丝表) - 粉丝关系记录
-8. **UserPostCollect** (用户帖子收藏表) - 收藏关系记录
-9. **UserPostLikes** (用户点赞帖子表) - 点赞关系记录
+4. **PictureChild** (子图片表) - 帖子与图片的关联关系（含排序序号）
+5. **Comment** (评论表) - 帖子评论
+6. **Space** (空间表) - 私人空间和团队空间
+7. **PicSystem** (系统表) - 系统配置信息（分类标签、跑马灯等）
+8. **UserFans** (用户粉丝表) - 粉丝关系记录
+9. **UserPostCollect** (用户帖子收藏表) - 收藏关系记录
+10. **UserPostLikes** (用户点赞帖子表) - 点赞关系记录
 
 ### 3.2 实体关系图 (ERD)
 
@@ -278,6 +279,8 @@ User (1) ───< (N) Picture
 User (1) ───< (N) Comment
 User (1) ───< (N) Space
 Post (1) ───< (N) Comment
+Post (1) ───< (N) PictureChild (通过postId关联，含排序)
+PictureChild (N) >── (1) Picture (通过pictureId关联)
 Post (1) ───< (N) Picture (通过postId关联)
 Post (1) ───< (N) UserPostCollect
 Post (1) ───< (N) UserPostLikes
@@ -332,7 +335,7 @@ User (1) ───< (N) UserPostLikes
 | views_num    | bigint       | 查看数                          | -                                   |
 | hot          | decimal      | 热度值                          | DEFAULT 0                           |
 
-**注意**: Post表不包含picture_ids字段，图片通过Picture表的postId字段关联
+**注意**: Post表不包含picture_ids字段，图片通过Picture表的postId字段关联，同时通过PictureChild表维护帖子与图片的有序关联关系
 
 #### 3.3.3 Picture 表
 
@@ -355,7 +358,18 @@ User (1) ───< (N) UserPostLikes
 
 **注意**: Picture表包含postId字段用于关联帖子，包含spaceId字段用于关联空间
 
-#### 3.3.4 Comment 表
+#### 3.3.4 PictureChild 表
+
+| 字段       | 类型    | 描述                | 约束                        |
+| ---------- | ------- | ------------------- | --------------------------- |
+| id         | bigint  | 主键                | PRIMARY KEY, AUTO_INCREMENT |
+| picture_id | bigint  | 关联图片ID          | NOT NULL, FOREIGN KEY       |
+| post_id    | bigint  | 关联帖子ID          | NOT NULL, FOREIGN KEY       |
+| sort_num   | int     | 在帖子中的排序序号  | -                           |
+
+**注意**: PictureChild表用于维护帖子与图片的多对多有序关联，getPost时按sortNum排序获取图片列表
+
+#### 3.3.5 Comment 表
 
 | 字段        | 类型     | 描述                            | 约束                        |
 | ----------- | -------- | ------------------------------- | --------------------------- |
@@ -370,7 +384,7 @@ User (1) ───< (N) UserPostLikes
 
 **注意**: Comment表不包含update_time字段
 
-#### 3.3.5 Space 表
+#### 3.3.6 Space 表
 
 | 字段          | 类型          | 描述                               | 约束                        |
 | ------------- | ------------- | ---------------------------------- | --------------------------- |
@@ -384,7 +398,7 @@ User (1) ───< (N) UserPostLikes
 | name          | varchar(246)  | 空间名                             | NOT NULL                    |
 | size          | bigint        | 当前已使用大小                     | -                           |
 
-#### 3.3.6 PicSystem 表
+#### 3.3.7 PicSystem 表
 
 | 字段     | 类型          | 描述 | 约束                        |
 | -------- | ------------- | ---- | --------------------------- |
@@ -392,7 +406,7 @@ User (1) ───< (N) UserPostLikes
 | syskey   | varchar(256)  | 键名 | NOT NULL, UNIQUE            |
 | sysvalue | varchar(1024) | 值   | -                           |
 
-#### 3.3.7 UserFans 表
+#### 3.3.8 UserFans 表
 
 | 字段    | 类型   | 描述   |
 | ------- | ------ | ------ |
@@ -400,7 +414,7 @@ User (1) ───< (N) UserPostLikes
 | user_id | bigint | 用户ID |
 | fan_id  | bigint | 粉丝ID |
 
-#### 3.3.8 UserPostCollect 表
+#### 3.3.9 UserPostCollect 表
 
 | 字段    | 类型   | 描述   |
 | ------- | ------ | ------ |
@@ -408,7 +422,7 @@ User (1) ───< (N) UserPostLikes
 | user_id | bigint | 用户ID |
 | post_id | bigint | 帖子ID |
 
-#### 3.3.9 UserPostLikes 表
+#### 3.3.10 UserPostLikes 表
 
 | 字段    | 类型   | 描述   |
 | ------- | ------ | ------ |
@@ -576,6 +590,19 @@ User (1) ───< (N) UserPostLikes
 - **描述**: 获取指定帖子的详细信息
 - **请求参数**: id (帖子ID)
 - **返回**: PostDetailVO
+  - id: 帖子ID
+  - userId: 作者ID
+  - username: 作者用户名
+  - avatar: 作者头像
+  - title: 标题
+  - content: 内容
+  - updateTime: 更新时间
+  - likesNum: 点赞数
+  - collectsNum: 收藏数
+  - commentNum: 评论数
+  - pictureUrl: 图片URL列表（按PictureChild.sortNum排序，已同步过滤已删除图片）
+  - pictureIds: 图片ID列表（与pictureUrl一一对应）
+  - cover: 封面图片ID
 
 #### 4.3.8 编辑帖子
 
@@ -591,6 +618,37 @@ User (1) ───< (N) UserPostLikes
 - **描述**: 点赞指定帖子
 - **认证**: HTTP Session
 - **请求参数**: id (帖子ID)
+- **返回**: Boolean (成功/失败)
+
+#### 4.3.10 获取本人帖子列表
+
+- **接口**: `POST /api/post/myPosts`
+- **描述**: 获取当前登录用户发布的帖子列表（分页）
+- **认证**: HTTP Session
+- **请求体**: PageRequest (current, pageSize)
+- **返回**: IPage<PostListVO>
+
+#### 4.3.11 获取本人收藏列表
+
+- **接口**: `POST /api/post/myCollects`
+- **描述**: 获取当前登录用户收藏的帖子列表（分页）
+- **认证**: HTTP Session
+- **请求体**: PageRequest (current, pageSize)
+- **返回**: IPage<PostListVO>
+
+#### 4.3.12 获取本人点赞列表
+
+- **接口**: `POST /api/post/myLikes`
+- **描述**: 获取当前登录用户点赞的帖子列表（分页）
+- **认证**: HTTP Session
+- **请求体**: PageRequest (current, pageSize)
+- **返回**: IPage<PostListVO>
+
+#### 4.3.13 退出登录
+
+- **接口**: `GET /api/user/logout`
+- **描述**: 退出登录，清除Session
+- **认证**: HTTP Session
 - **返回**: Boolean (成功/失败)
 
 ### 4.4 公共查询接口
@@ -1094,8 +1152,8 @@ FishPics-backend/src/main/java/hk/ljx/fishpicsbackend/
 │   └── utils/
 │       └── LimitedInputStream.java # 受限输入流（文件大小限制）
 ├── controller/                 # 控制器层
-│   ├── UserController.java     # 用户控制器（登录/注册/验证码/管理）
-│   ├── PostController.java     # 帖子控制器（发布/编辑/列表/点赞）
+│   ├── UserController.java     # 用户控制器（登录/注册/验证码/退出登录/管理）
+│   ├── PostController.java     # 帖子控制器（发布/编辑/列表/点赞/我的帖子/收藏/点赞列表）
 │   ├── PictureController.java  # 图片控制器（上传/列表/删除/审核）
 │   ├── SpaceController.java    # 空间控制器（创建/列表/更新/图片列表）
 │   └── SystemController.java   # 系统控制器（标签/跑马灯管理）
@@ -1130,6 +1188,7 @@ FishPics-backend/src/main/java/hk/ljx/fishpicsbackend/
 │   ├── Comment.java            # 评论实体
 │   ├── PicSystem.java          # 系统配置实体（syskey, sysvalue）
 │   ├── Picture.java            # 图片实体（含spaceId, introduction字段）
+│   ├── PictureChild.java       # 子图片关联实体（pictureId, postId, sortNum）
 │   ├── Post.java               # 帖子实体（含hot热度字段）
 │   ├── Space.java              # 空间实体（type, level, storageSize等）
 │   ├── User.java               # 用户实体（含level, size字段）
@@ -1142,6 +1201,7 @@ FishPics-backend/src/main/java/hk/ljx/fishpicsbackend/
 │   ├── CommentMapper.java      # 评论Mapper
 │   ├── PicSystemMapper.java    # 系统配置Mapper
 │   ├── PictureMapper.java      # 图片Mapper
+│   ├── PictureChildMapper.java # 子图片关联Mapper
 │   ├── PostMapper.java         # 帖子Mapper
 │   ├── SpaceMapper.java        # 空间Mapper
 │   ├── UserFansMapper.java     # 粉丝Mapper
@@ -1153,6 +1213,7 @@ FishPics-backend/src/main/java/hk/ljx/fishpicsbackend/
 │   │   ├── CommentServiceImpl.java
 │   │   ├── PicSystemServiceImpl.java
 │   │   ├── PictureServiceImpl.java
+│   │   ├── PictureChildServiceImpl.java
 │   │   ├── PostServiceImpl.java
 │   │   ├── SpaceServiceImpl.java
 │   │   ├── UserFansServiceImpl.java
@@ -1164,6 +1225,7 @@ FishPics-backend/src/main/java/hk/ljx/fishpicsbackend/
 │   ├── LoginUser.java          # 登录用户获取工具（Session + Redis）
 │   ├── PicSystemService.java   # 系统配置服务（标签/跑马灯）
 │   ├── PictureService.java     # 图片服务接口
+│   ├── PictureChildService.java # 子图片关联服务接口
 │   ├── PostService.java        # 帖子服务接口
 │   ├── SpaceService.java       # 空间服务接口
 │   ├── UserFansService.java    # 粉丝服务接口
@@ -1177,7 +1239,7 @@ FishPics-backend/src/main/java/hk/ljx/fishpicsbackend/
 │   │   ├── PicturePageVO.java  # 图片分页VO（records, total）
 │   │   └── PicturePostVO.java  # 帖子图片VO
 │   ├── post/
-│   │   ├── PostDetailVO.java   # 帖子详情VO
+│   │   ├── PostDetailVO.java   # 帖子详情VO（含pictureUrl/pictureIds同步过滤、cover）
 │   │   └── PostListVO.java     # 帖子列表VO
 │   └── user/
 │       ├── CheckCodeVO.java    # 验证码VO（captchaKey, base64Image）
