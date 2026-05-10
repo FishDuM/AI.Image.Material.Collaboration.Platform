@@ -42,7 +42,11 @@ public class AuthInterceptor {
         RequestAttributes requestAttributes = RequestContextHolder.currentRequestAttributes();
         HttpServletRequest request = ((ServletRequestAttributes) requestAttributes).getRequest();
 
-        String userId = request.getSession().getAttribute(TOKEN_KEY).toString();
+        Object attribute = request.getSession().getAttribute(TOKEN_KEY);
+        String userId = null;
+        if (attribute != null){
+            userId = attribute.toString();
+        }
 
         // 如果用户为空则为未登录或登陆过期
         ExcUtils.throwIfTrue(userId == null, ExceptionCode.NOT_LOGIN, "未登录或登录过期");

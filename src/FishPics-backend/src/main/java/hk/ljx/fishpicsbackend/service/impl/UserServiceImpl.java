@@ -172,6 +172,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         User user = userMapper.selectOne(new QueryWrapper<User>().eq("username", username).eq("password", password));
         ExcUtils.throwIfTrue(user == null, ExceptionCode.PARAMETER_ERROR, "账号或密码错误");
 
+        ExcUtils.throwIfTrue(user.getStatus() == null || user.getStatus() != 1, ExceptionCode.PARAMETER_ERROR, "账号已被禁用");
+
         // 查询到则存入 session
         Long id = user.getId();
         request.getSession().setAttribute(TOKEN_KEY, id);
@@ -196,7 +198,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         String sortOrder = userQueryWrapper.getSortOrder();
 
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
-        queryWrapper.like(ObjectUtil.isNotNull(id), "id", id);
+        queryWrapper.eq(ObjectUtil.isNotNull(id), "id", id);
         queryWrapper.like(ObjectUtil.isNotNull(username), "username", username);
         queryWrapper.like(ObjectUtil.isNotNull(email), "email", email);
         queryWrapper.like(ObjectUtil.isNotNull(phone), "phone", phone);
@@ -297,6 +299,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         // 更新用户信息
         BeanUtil.copyProperties(userEditRequest, user, CopyOptions.create().ignoreNullValue());
         if (StrUtil.isNotBlank(password)) {
+            // 校验原始密码
+            String originalPassword = userEditRequest.getOriginalPassword();
+            ExcUtils.throwIfTrue(StrUtil.isEmpty(originalPassword), ExceptionCode.PARAMETER_ERROR, "请输入初始密码");
+            user = userMapper.selectById(userLogin.getId());
+            String oldPassword = user.getPassword();
+            ExcUtils.throwIfTrue(!DigestUtil.md5Hex(originalPassword + SALT).equals(oldPassword), ExceptionCode.PARAMETER_ERROR, "初始密码错误");
             // 密码加盐
             password = DigestUtil.md5Hex(password + SALT);
             user.setPassword(password);

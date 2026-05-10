@@ -25,23 +25,3 @@ export const removeUserInfo = () => {
     console.error('清除用户信息失败', error)
   }
 }
-
-export const request = async (url, options = {}) => {
-  const headers = {
-    'Content-Type': 'application/json',
-    ...options.headers,
-  }
-  
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  })
-  
-  const result = await response.json()
-  
-  if (result.code !== 1) {
-    throw new Error(result.message || '请求失败')
-  }
-  
-  return result
-}

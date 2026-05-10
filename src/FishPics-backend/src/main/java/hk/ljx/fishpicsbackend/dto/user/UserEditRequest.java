@@ -26,6 +26,11 @@ public class UserEditRequest {
     private String password;
 
     /**
+     * 如果修改密码要先输入原始密码
+     */
+    private String originalPassword;
+
+    /**
      * 邮箱
      */
     private String email;

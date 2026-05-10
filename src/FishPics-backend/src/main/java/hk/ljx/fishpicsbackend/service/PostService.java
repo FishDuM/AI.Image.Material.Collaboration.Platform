@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.dto.base.PageRequest;
 import hk.ljx.fishpicsbackend.dto.post.*;
+import hk.ljx.fishpicsbackend.entity.Picture;
 import hk.ljx.fishpicsbackend.entity.Post;
 import com.baomidou.mybatisplus.extension.service.IService;
 import hk.ljx.fishpicsbackend.vo.picture.PictureListByEditPostVO;
@@ -42,6 +43,23 @@ public interface PostService extends IService<Post> {
      * @param request         request
      */
     void editPost(EditPostRequest editPostRequest, HttpServletRequest request);
+
+    /**
+     * 判断是否是自己的图片并返回原图
+     *
+     * @param userId  用户ID
+     * @param imageId 图片ID列表
+     * @return 图片列表
+     */
+    List<Picture> isMyPicture(Long userId, List<Long> imageId);
+
+    /**
+     * 批量保存子图片
+     *
+     * @param pictures 图片列表
+     * @param postId   帖子ID
+     */
+    void savePictureChildBatch(List<Picture> pictures, Long postId);
 
     /**
      * 获取帖子列表

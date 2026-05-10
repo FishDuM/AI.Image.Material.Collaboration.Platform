@@ -73,7 +73,7 @@ function HomePage() {
           setMarqueeImages(images)
         }
       } catch (error) {
-        console.error('获取轮播图失败', error)
+        void error
       }
     }
     fetchMarquee()
@@ -87,15 +87,11 @@ function HomePage() {
           const merged = ['热门', ...result.filter(c => c !== '推荐' && c !== '热门')]
           setCategoryList(merged)
         }
-      } catch (e) {
+      } catch {
         setCategoryList(['热门'])
       }
     }
     fetchCategoryList()
-  }, [])
-
-  const handleCategoryClick = useCallback(() => {
-    void 0
   }, [])
 
   const loadPictures = useCallback(async (page) => {
@@ -188,28 +184,18 @@ function HomePage() {
   const fetchLoginCheckCode = async () => {
     try {
       const response = await getLoginCheckCode()
-      
-      const data = response?.data || response
-      
-      if (data && data.code === 1 && data.data) {
-        const { captchaKey, base64Image } = data.data
-        
-        if (captchaKey && base64Image && base64Image.length > 0) {
-          setLoginKey(captchaKey)
-          const imageSrc = base64Image.startsWith('data:') 
-            ? base64Image 
-            : `data:image/png;base64,${base64Image}`
-          setLoginCheckCodeUrl(imageSrc)
-        } else {
-          console.warn('验证码数据不完整', { captchaKey, base64Image })
-          message.error('获取验证码失败')
-        }
+      const data = response?.data ?? response
+      const inner = data?.data ?? data
+      if (inner?.captchaKey && inner?.base64Image) {
+        setLoginKey(inner.captchaKey)
+        const imageSrc = inner.base64Image.startsWith('data:')
+          ? inner.base64Image
+          : `data:image/png;base64,${inner.base64Image}`
+        setLoginCheckCodeUrl(imageSrc)
       } else {
-        console.warn('未获取到验证码', data)
         message.error('获取验证码失败')
       }
-    } catch (error) {
-      console.error('获取验证码失败', error)
+    } catch {
       message.error('获取验证码失败')
     }
   }
@@ -217,28 +203,18 @@ function HomePage() {
   const fetchRegisterCheckCode = async () => {
     try {
       const response = await getRegisterCheckCode()
-      
-      const data = response?.data || response
-      
-      if (data && data.code === 1 && data.data) {
-        const { captchaKey, base64Image } = data.data
-        
-        if (captchaKey && base64Image && base64Image.length > 0) {
-          setRegisterKey(captchaKey)
-          const imageSrc = base64Image.startsWith('data:') 
-            ? base64Image 
-            : `data:image/png;base64,${base64Image}`
-          setRegisterCheckCodeUrl(imageSrc)
-        } else {
-          console.warn('验证码数据不完整', { captchaKey, base64Image })
-          message.error('获取验证码失败')
-        }
+      const data = response?.data ?? response
+      const inner = data?.data ?? data
+      if (inner?.captchaKey && inner?.base64Image) {
+        setRegisterKey(inner.captchaKey)
+        const imageSrc = inner.base64Image.startsWith('data:')
+          ? inner.base64Image
+          : `data:image/png;base64,${inner.base64Image}`
+        setRegisterCheckCodeUrl(imageSrc)
       } else {
-        console.warn('未获取到验证码', data)
         message.error('获取验证码失败')
       }
-    } catch (error) {
-      console.error('获取验证码失败', error)
+    } catch {
       message.error('获取验证码失败')
     }
   }

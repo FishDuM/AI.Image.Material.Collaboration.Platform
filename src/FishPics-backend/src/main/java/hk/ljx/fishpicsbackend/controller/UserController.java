@@ -20,6 +20,7 @@ import hk.ljx.fishpicsbackend.vo.user.UserLoginVO;
 import hk.ljx.fishpicsbackend.vo.user.UserMessageVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
@@ -27,6 +28,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 
+import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.USER_ID_KEY;
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
 @RestController
@@ -42,6 +44,8 @@ public class UserController {
 
     @Resource
     private LoginUser loginUser;
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
 
     @PostMapping("/login")
     public Response<UserLoginVO> userLogin(@RequestBody UserLoginRequest userLoginRequest,
@@ -101,16 +105,18 @@ public class UserController {
 
     @GetMapping("/logout")
     public Response<?> logout(HttpServletRequest request) {
+        User user = loginUser.getLoginUser(request);
         HttpSession session = request.getSession(false);
         if (session != null) {
             session.invalidate();
         }
+        stringRedisTemplate.delete(USER_ID_KEY + user.getId());
         return ResUtils.success();
     }
 
     @AuthCheck(role = ADMIN)
     @PostMapping("/admin/getUser")
-    public Response<User> editMyself(@RequestBody UserIdRequest userIdRequest) {
+    public Response<User> adminGetUser(@RequestBody UserIdRequest userIdRequest) {
         Long userId = userIdRequest.getUserId();
         ExcUtils.throwIfTrue(ObjectUtil.isNull(userId), ExceptionCode.PARAMETER_ERROR);
         User user = userMapper.selectById(userId);

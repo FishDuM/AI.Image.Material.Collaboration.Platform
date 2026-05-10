@@ -1,9 +1,8 @@
-import { useState, useEffect, useCallback, useContext } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Form, Input, Button, App } from 'antd'
 import { UserOutlined, LockOutlined, SafetyCertificateOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
-import { getRegisterCheckCode, register, login, getUserMyself } from '../api'
-import { AuthContext } from '../context/AuthContext'
+import { getRegisterCheckCode, register } from '../api'
 import MobilePageWrapper from '../components/MobilePageWrapper'
 import './MobileLoginRegister.css'
 
@@ -11,7 +10,6 @@ export default function MobileRegisterPage() {
   const navigate = useNavigate()
   const { message } = App.useApp()
   const [form] = Form.useForm()
-  const { login: authLogin } = useContext(AuthContext)
   const [loading, setLoading] = useState(false)
   const [captchaImage, setCaptchaImage] = useState('')
   const [captchaKey, setCaptchaKey] = useState('')
@@ -31,8 +29,8 @@ export default function MobileRegisterPage() {
         setCaptchaKey(inner.captchaKey)
         setCaptchaImage(inner.captchaImage)
       }
-    } catch (e) {
-      console.error('获取验证码失败:', e)
+    } catch {
+      void 0
     }
   }, [])
 
@@ -64,20 +62,9 @@ export default function MobileRegisterPage() {
         captchaKey,
       }
       await register(registerData)
-      message.success('注册成功！正在自动登录...')
-      try {
-        await login({
-          username: values.username,
-          password: values.password,
-        })
-        const userData = await getUserMyself()
-        authLogin(userData)
-        form.resetFields()
-        navigate('/', { replace: true })
-      } catch {
-        message.info('注册成功，请手动登录')
-        navigate('/mobile/login', { replace: true })
-      }
+      message.success('注册成功，请登录')
+      form.resetFields()
+      navigate('/mobile/login', { replace: true })
     } catch (err) {
       message.error(err.message || '注册失败，请重试')
       fetchCaptcha()

@@ -4,8 +4,8 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjectUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.CollectionUtils;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -16,17 +16,12 @@ import hk.ljx.fishpicsbackend.dto.base.PageRequest;
 import hk.ljx.fishpicsbackend.dto.post.*;
 import hk.ljx.fishpicsbackend.dto.space.SpacePictureList;
 import hk.ljx.fishpicsbackend.entity.*;
-import hk.ljx.fishpicsbackend.mapper.PictureMapper;
-import hk.ljx.fishpicsbackend.mapper.UserMapper;
-import hk.ljx.fishpicsbackend.mapper.UserPostCollectMapper;
-import hk.ljx.fishpicsbackend.mapper.UserPostLikesMapper;
 import hk.ljx.fishpicsbackend.service.*;
 import hk.ljx.fishpicsbackend.mapper.PostMapper;
 import hk.ljx.fishpicsbackend.vo.picture.PictureListByEditPostVO;
 import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
 import hk.ljx.fishpicsbackend.vo.post.PostDetailVO;
 import hk.ljx.fishpicsbackend.vo.post.PostListVO;
-import org.apache.ibatis.executor.BatchResult;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -50,28 +45,25 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         implements PostService {
 
     @Resource
-    private PictureMapper pictureMapper;
-
-    @Resource
-    private UserService userService;
-
-    @Resource
     private PostMapper postMapper;
+
+    @Resource
+    private PictureChildService pictureChildService;
 
     @Resource
     private PictureService pictureService;
 
     @Resource
-    private UserMapper userMapper;
+    private UserService userService;
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
 
     @Resource
-    private UserPostLikesMapper userPostLikesMapper;
+    private UserPostLikesService userPostLikesService;
 
     @Resource
-    private UserPostCollectMapper userPostCollectMapper;
+    private UserPostCollectService userPostCollectService;
 
     @Resource
     private LoginUser loginUser;
@@ -86,60 +78,29 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         List<Long> imageId = uploadPostRequest.getImageId();
         String title = uploadPostRequest.getTitle();
         String content = uploadPostRequest.getContent();
-        Long cover = uploadPostRequest.getCover();
+        Integer cover = uploadPostRequest.getIndex();
         Integer isPrivate = uploadPostRequest.getIsPrivate();
 
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(imageId), "图片不能为空");
         ExcUtils.throwIfTrue(imageId.size() > 15, "最多只能上传 15 张图片");
         ExcUtils.throwIfTrue(ObjectUtil.isAllEmpty(title, content, cover, isPrivate), "参数不能为空");
+        ExcUtils.throwIfTrue(imageId.size() < cover + 1 || imageId.get(cover) == null, "封面图片不存在");
         // 获取用户信息
         User user = loginUser.getLoginUser(request);
         Long userId = user.getId();
 
-        // 校验图片是否属于该用户
-        QueryWrapper<Picture> pictureQueryWrapper = new QueryWrapper<>();
-        pictureQueryWrapper.in("id", imageId).eq("user_id", userId);
-
-        List<Picture> pictures = pictureMapper.selectList(pictureQueryWrapper);
-        ExcUtils.throwIfTrue(imageId.size() != pictures.size(), "有图片不存在");
+        // 判断是否为自己的图片并返回原图
+        List<Picture> pictures = isMyPicture(userId, imageId);
 
         // 保存帖子
-        Post post = Post.builder().userId(userId).title(title).content(content).cover(cover).isPrivate(isPrivate)
+        Post post = Post.builder().userId(userId).title(title).content(content).cover(imageId.get(cover)).isPrivate(isPrivate)
                 .build();
         int insert = postMapper.insert(post);
         ExcUtils.throwIfTrue(insert != 1, ExceptionCode.INTERNAL_SERVER_ERROR, "保存失败，数据库错误");
+        Long postId = post.getId();
 
-        ArrayList<Picture> newPicList = new ArrayList<>();
-        // 判断图片是否为已上传的图片
-        for (Picture picture : pictures) {
-            if (picture.getPostId() != null) {
-                Picture newPicture = new Picture();
-                BeanUtil.copyProperties(picture, newPicture);
-                newPicture.setPostId(null);
-                newPicture.setId(null);
-                newPicture.setCreateTime(null);
-                newPicture.setUpdateTime(null);
-                newPicture.setPostId(post.getId());
-                newPicture.setParentId(picture.getId());
-                newPicList.add(newPicture);
-            } else {
-                picture.setPostId(post.getId());
-                newPicList.add(picture);
-            }
-        }
-        List<BatchResult> results = pictureMapper.insertOrUpdate(newPicList);
-        int total = 0;
-
-        for (BatchResult batchResult : results) {
-            // 拿到当前批次所有SQL的影响行数数组
-            int[] updateCounts = batchResult.getUpdateCounts();
-            // 遍历数组，累加每一条SQL的影响行数
-            for (int count : updateCounts) {
-                total += count;
-            }
-        }
-
-        ExcUtils.throwIfTrue(total != pictures.size(), "图片上传失败");
+        // 批量设置子图片
+        savePictureChildBatch(pictures, postId);
     }
 
     @Override
@@ -148,22 +109,31 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(post) || post.getId() == null, ExceptionCode.NOT_FOUND, "帖子不存在");
         PostDetailVO postDetailVO = new PostDetailVO();
         BeanUtil.copyProperties(post, postDetailVO);
-        // 获取图片列表
-        List<Picture> pictures = pictureMapper.selectList(new QueryWrapper<Picture>().eq("post_id", id));
-        ArrayList<String> pictureUrls = new ArrayList<>();
-        ArrayList<Long> pictureIds = new ArrayList<>();
-        for (Picture picture : pictures) {
-            pictureUrls.add(picture.getUrl());
-            pictureIds.add(picture.getId());
+        // 获取子图片列表
+        List<Long> pictureIds = pictureChildService.list(new LambdaQueryWrapper<PictureChild>().eq(PictureChild::getPostId, id).orderByAsc(PictureChild::getSortNum)).stream().map(PictureChild::getPictureId).collect(Collectors.toList());
+
+        // todo: 后续根据用户等级判断可上传的图片数
+
+        // 获取图片 url 列表（按 pictureIds 顺序排列），同时过滤已删除图片，保持两个列表一一对应
+        Map<Long, String> urlMap = pictureService.list(new LambdaQueryWrapper<Picture>().in(Picture::getId, pictureIds))
+                .stream().collect(Collectors.toMap(Picture::getId, Picture::getUrl));
+        List<Long> validPictureIds = new ArrayList<>();
+        List<String> pictureUrls = new ArrayList<>();
+        for (Long pid : pictureIds) {
+            String url = urlMap.get(pid);
+            if (url != null) {
+                validPictureIds.add(pid);
+                pictureUrls.add(url);
+            }
         }
         // 获取发帖者信息
-        User user = userMapper.selectById(post.getUserId());
+        User user = userService.getById(post.getUserId());
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user) || user.getId() == null, ExceptionCode.NOT_FOUND, "用户不存在");
         postDetailVO.setAvatar(user.getAvatar());
         postDetailVO.setUsername(user.getUsername());
 
         postDetailVO.setPictureUrl(pictureUrls);
-        postDetailVO.setPictureIds(pictureIds);
+        postDetailVO.setPictureIds(validPictureIds);
         return postDetailVO;
     }
 
@@ -172,10 +142,16 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
     public void editPost(EditPostRequest editPostRequest, HttpServletRequest request) {
         Long id = editPostRequest.getId();
         List<Long> imageId = editPostRequest.getImageId();
-        Long cover = editPostRequest.getCover();
+        Integer cover = editPostRequest.getCover();
+        String title = editPostRequest.getTitle();
+        String content = editPostRequest.getContent();
+        Integer isPrivate = editPostRequest.getIsPrivate();
+
+        ExcUtils.throwIfTrue(ObjectUtil.isAllEmpty(title, content, isPrivate), ExceptionCode.PARAMETER_ERROR, "标题、内容、是否私密不能为空");
         ExcUtils.throwIfTrue(id == null, ExceptionCode.PARAMETER_ERROR, "帖子ID不能为空");
         ExcUtils.throwIfTrue(imageId == null || imageId.isEmpty(), ExceptionCode.PARAMETER_ERROR, "图片不能为空");
         ExcUtils.throwIfTrue(imageId.size() > 15, ExceptionCode.PARAMETER_ERROR, "图片数量不能超过15张");
+        ExcUtils.throwIfTrue(imageId.size() < cover + 1 || imageId.get(cover) == null, "封面图片不存在");
 
         // 判断是否是自己的帖子 || 是否为管理员
         User user = loginUser.getLoginUser(request);
@@ -187,81 +163,60 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         ExcUtils.throwIfFalse(user.getId().equals(post.getUserId()) || user.getRole().equals(ADMIN),
                 ExceptionCode.PARAMETER_ERROR, "只能修改自己的帖子");
 
-        // 校验封面
-        if (cover != null) {
-            Picture picture = pictureMapper.selectById(cover);
-            ExcUtils.throwIfTrue(picture == null, ExceptionCode.PARAMETER_ERROR, "封面图片不存在");
-            post.setCover(picture.getId());
-        }
+        // 判断是不是自己的图片并返回原图id
+        List<Picture> pictures = isMyPicture(userId, imageId);
+        // 批量删除旧图片
+        boolean remove = pictureChildService.remove(new LambdaQueryWrapper<PictureChild>().eq(PictureChild::getPostId, id));
+        ExcUtils.throwIfFalse(remove, ExceptionCode.DATABASE_ERROR, "旧图片删除失败");
+        // 批量插入新图片
+        savePictureChildBatch(pictures, id);
 
-        // 校验图片是否属于该用户
-        QueryWrapper<Picture> pictureQueryWrapper = new QueryWrapper<>();
-        for (Long picId : imageId) {
-            pictureQueryWrapper.or(
-                    wrapper -> wrapper.eq("id", picId).eq("user_id", userId));
-        }
-        List<Picture> pictures = pictureMapper.selectList(pictureQueryWrapper);
+        // 更新帖子
+        post = Post.builder().id(id).userId(post.getUserId()).title(title).content(content).cover(imageId.get(cover)).isPrivate(isPrivate)
+                .build();
+        int insert = postMapper.updateById(post);
+        ExcUtils.throwIfTrue(insert != 1, ExceptionCode.INTERNAL_SERVER_ERROR, "保存失败，数据库错误");
+    }
+
+    /**
+     * 判断是否是自己的图片并返回原图
+     *
+     * @param userId  用户ID
+     * @param imageId 图片ID列表
+     * @return 图片列表
+     */
+    @Override
+    public List<Picture> isMyPicture(Long userId, List<Long> imageId) {
+        QueryWrapper<Space> spaceQueryWrapper = new QueryWrapper<>();
+        spaceQueryWrapper.eq("user_id", userId).or().eq("type", 1).like("team_users_id", userId);
+        List<Long> spaceIds = spaceService.list(spaceQueryWrapper).stream().map(Space::getId).collect(Collectors.toList());
+        // 校验图片是否存在
+        LambdaQueryWrapper<Picture> pictureQueryWrapper = new LambdaQueryWrapper<>();
+        pictureQueryWrapper.in(Picture::getId, imageId).in(Picture::getSpaceId, spaceIds);
+        List<Picture> pictures = pictureService.list(pictureQueryWrapper);
         ExcUtils.throwIfTrue(imageId.size() != pictures.size(), "有图片不存在");
+        return pictures;
+    }
 
-        // 旧图片ID集合
-        QueryWrapper<Picture> oldWrapper = new QueryWrapper<>();
-        oldWrapper.eq("post_id", id);
-        List<Long> oldPictureIds = pictureMapper.selectList(oldWrapper)
-                .stream()
-                .map(Picture::getId)
-                .collect(Collectors.toList());
-
-        Set<Long> needRemoveIds = new HashSet<>(oldPictureIds);
-        needRemoveIds.removeAll(new HashSet<>(imageId));
-
-        // 执行清空：把这些图片和帖子解绑
-        if (!needRemoveIds.isEmpty()) {
-            pictureMapper.update(null,
-                    new LambdaUpdateWrapper<Picture>()
-                            .set(Picture::getPostId, null)
-                            .in(Picture::getId, needRemoveIds));
+    /**
+     * 批量保存子图片
+     *
+     * @param pictures 图片列表
+     * @param postId   帖子ID
+     */
+    @Override
+    public void savePictureChildBatch(List<Picture> pictures, Long postId) {
+        ArrayList<PictureChild> pictureChildren = new ArrayList<>();
+        // 批量设置子图片
+        for (int i = 0; i < pictures.size(); i++) {
+            PictureChild pictureChild = new PictureChild();
+            pictureChild.setPictureId(pictures.get(i).getId());
+            pictureChild.setPostId(postId);
+            pictureChild.setSortNum(i + 1);
+            pictureChildren.add(pictureChild);
         }
-
-        // 除去原有的图片（不重复处理）
-        pictures = pictures.stream()
-                .filter(pci -> !oldPictureIds.contains(pci.getId()))
-                .collect(Collectors.toList());
-
-        ArrayList<Picture> newPicList = new ArrayList<>();
-        // 判断图片是否为已上传的图片
-        for (Picture picture : pictures) {
-            if (picture.getPostId() != null) {
-                Picture newPicture = new Picture();
-                BeanUtil.copyProperties(picture, newPicture);
-                newPicture.setPostId(null);
-                newPicture.setId(null);
-                newPicture.setCreateTime(null);
-                newPicture.setUpdateTime(null);
-                newPicture.setPostId(id);
-                newPicture.setParentId(picture.getId());
-                newPicList.add(newPicture);
-            } else {
-                picture.setPostId(id);
-                newPicList.add(picture);
-            }
-        }
-        List<BatchResult> insert = pictureMapper.insertOrUpdate(newPicList);
-        int total = 0;
-
-        for (BatchResult batchResult : insert) {
-            // 拿到当前批次所有SQL的影响行数数组
-            int[] updateCounts = batchResult.getUpdateCounts();
-            // 遍历数组，累加每一条SQL的影响行数
-            for (int count : updateCounts) {
-                total += count;
-            }
-        }
-
-        ExcUtils.throwIfTrue(total != pictures.size(), "图片上传失败");
-
-        // 修改帖子
-        BeanUtil.copyProperties(editPostRequest, post, CopyOptions.create().setIgnoreNullValue(true));
-        postMapper.updateById(post);
+        boolean result = pictureChildService.saveBatch(pictureChildren);
+        ExcUtils.throwIfFalse(result, ExceptionCode.INTERNAL_SERVER_ERROR, "保存失败，数据库错误");
     }
 
     @Override
@@ -272,47 +227,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         IPage<Post> postPage = postMapper.selectPage(page, newQueryWrapper(queryWrapper));
 
         // 批量查询封面
-        List<Long> coverIds = postPage.getRecords().stream()
-                .map(Post::getCover)
-                .filter(ObjectUtil::isNotNull)
-                .collect(Collectors.toList());
-
-        // 一次性构建 map
-        Map<Long, String> coverUrlMap = new HashMap<>();
-        if (CollUtil.isNotEmpty(coverIds)) {
-            coverUrlMap = pictureMapper.selectByIds(coverIds).stream()
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toMap(Picture::getId, Picture::getUrl));
-        }
-
-        // 批量查询用户
-        List<Long> userIds = postPage.getRecords().stream()
-                .map(Post::getUserId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-        Map<Long, User> userMap = new HashMap<>();
-        if (CollUtil.isNotEmpty(userIds)) {
-            userMap = userMapper.selectByIds(userIds).stream()
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toMap(User::getId, user -> user));
-        }
-
-        // 封装VO
-        Map<Long, String> finalCoverUrlMap = coverUrlMap;
-        Map<Long, User> finalUserMap = userMap;
-        return postPage.convert(post -> {
-            PostListVO vo = new PostListVO();
-            BeanUtil.copyProperties(post, vo);
-            // 帖子关联的用户可能已被删除，需要做空指针保护
-            User postUser = finalUserMap.get(post.getUserId());
-            if (postUser != null) {
-                vo.setUsername(postUser.getUsername());
-                vo.setAvatar(postUser.getAvatar());
-            }
-            // 帖子关联的封面图片可能已被删除，使用 getOrDefault 避免空指针
-            vo.setUrl(finalCoverUrlMap.getOrDefault(post.getCover(), null));
-            return vo;
-        });
+        return convertToPostListVO(postPage);
     }
 
     @Override
@@ -327,8 +242,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         String sortOrder = postQueryWrapper.getSortOrder();
 
         QueryWrapper<Post> queryWrapper = new QueryWrapper<>();
-        queryWrapper.like(ObjectUtil.isNotNull(id), "id", id);
-        queryWrapper.like(ObjectUtil.isNotNull(userId), "user_id", userId);
+        queryWrapper.eq(ObjectUtil.isNotNull(id), "id", id);
+        queryWrapper.eq(ObjectUtil.isNotNull(userId), "user_id", userId);
         queryWrapper.eq(ObjectUtil.isNotNull(status), "status", status);
         queryWrapper.eq(ObjectUtil.isNotNull(isPrivate), "is_private", isPrivate);
 
@@ -372,15 +287,15 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         // 获取用户是否点赞过
         QueryWrapper<UserPostLikes> queryWrapper = new QueryWrapper<UserPostLikes>().eq("user_id", userId).eq("post_id",
                 postId);
-        UserPostLikes userPostLikes = userPostLikesMapper.selectOne(queryWrapper);
+        UserPostLikes userPostLikes = userPostLikesService.getOne(queryWrapper);
         if (ObjectUtil.isEmpty(userPostLikes) || userPostLikes.getId() == null) {
             // 没点赞过，添加点赞
             UserPostLikes userPostLike = new UserPostLikes();
             userPostLike.setUserId(userId);
             userPostLike.setPostId(postId);
             // 查入数据
-            int insert = userPostLikesMapper.insert(userPostLike);
-            ExcUtils.throwIfTrue(insert != 1, "点赞失败");
+            boolean insert = userPostLikesService.save(userPostLike);
+            ExcUtils.throwIfTrue(!insert, "点赞失败");
 
             try {
                 QueryWrapper<Post> postQueryWrapper = new QueryWrapper<>();
@@ -398,8 +313,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         } else {
             // 点赞过，删除点赞
             try {
-                int delete = userPostLikesMapper.deleteById(userPostLikes.getId());
-                ExcUtils.throwIfTrue(delete != 1, "取消点赞失败");
+                boolean delete = userPostLikesService.removeById(userPostLikes.getId());
+                ExcUtils.throwIfTrue(!delete, "取消点赞失败");
             } finally {
                 // 释放锁
                 stringRedisTemplate.delete(LIKE_POST_KEY + userId);
@@ -432,8 +347,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         Long userId = user.getId();
 
         // 第一步：查询用户的收藏帖子ID列表
-        List<Long> collectPostIds = userPostCollectMapper.selectList(
-                new QueryWrapper<UserPostCollect>().eq("user_id", userId)).stream()
+        List<Long> collectPostIds = userPostCollectService.list(
+                        new QueryWrapper<UserPostCollect>().eq("user_id", userId)).stream()
                 .map(UserPostCollect::getPostId)
                 .collect(Collectors.toList());
 
@@ -459,8 +374,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         Long userId = user.getId();
 
         // 第一步：查询用户的点赞帖子ID列表
-        List<Long> likePostIds = userPostLikesMapper.selectList(
-                new QueryWrapper<UserPostLikes>().eq("user_id", userId)).stream()
+        List<Long> likePostIds = userPostLikesService.list(
+                        new QueryWrapper<UserPostLikes>().eq("user_id", userId)).stream()
                 .map(UserPostLikes::getPostId)
                 .collect(Collectors.toList());
 
@@ -480,58 +395,43 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
     @Override
     public List<PictureListByEditPostVO> getPictureList(GetPictureBySpaceRequest getPictureBySpaceRequest,
-            HttpServletRequest request) {
+                                                        HttpServletRequest request) {
         Long spaceId = getPictureBySpaceRequest.getSpaceId();
+        int current = getPictureBySpaceRequest.getCurrent();
+        int pageSize = getPictureBySpaceRequest.getPageSize();
+        String sortField = getPictureBySpaceRequest.getSortField();
+        String sortOrder = getPictureBySpaceRequest.getSortOrder();
+
         List<Long> pictureIds = getPictureBySpaceRequest.getPictureIds();
+        HashSet<Long> picIds = new HashSet<>(pictureIds);
 
         ExcUtils.throwIfTrue(spaceId == null, "spaceId不能为空");
 
-        // 1. 查询空间内所有图片
-        List<PictureListVO> spacePictureList = spaceService.pictureList(new SpacePictureList(spaceId), request)
+        // 1. 查询空间内默认20张图片
+        SpacePictureList spacePictures = new SpacePictureList();
+        spacePictures.setSpaceId(spaceId);
+        spacePictures.setCurrent(current);
+        spacePictures.setPageSize(pageSize);
+        spacePictures.setSortField(sortField);
+        spacePictures.setSortOrder(sortOrder);
+        List<PictureListVO> spacePictureList = spaceService.pictureList(spacePictures, request)
                 .getRecords();
 
-        // 2. 已选中的旧图片ID
-        Set<Long> selectedPictureIdSet = new HashSet<>();
-        if (pictureIds != null && !pictureIds.isEmpty()) {
-            selectedPictureIdSet = new HashSet<>(pictureIds);
+        // 2. 已选的图片则返回 false
+        ArrayList<PictureListByEditPostVO> editPostVOS = new ArrayList<>();
+        for (int i = 0; i < spacePictureList.size(); i++) {
+            PictureListVO pictureListVO = spacePictureList.get(i);
+            PictureListByEditPostVO editPostVO = new PictureListByEditPostVO();
+            editPostVO.setId(pictureListVO.getId());
+            editPostVO.setUrl(pictureListVO.getUrl());
+            if (picIds.contains(pictureListVO.getId())){
+                editPostVO.setFlag(false);
+            } else {
+                editPostVO.setFlag(true);
+            }
+            editPostVOS.add(editPostVO);
         }
-
-        // 3. 查询空间图片和已选中图片的实体
-        List<Long> spacePicIds = spacePictureList.stream()
-                .map(PictureListVO::getId)
-                .collect(Collectors.toList());
-        List<Picture> pictureEntities = pictureMapper.selectByIds(spacePicIds);
-
-        Map<Long, Picture> pictureMap = pictureEntities.stream()
-                .collect(Collectors.toMap(Picture::getId, p -> p));
-
-        List<Picture> selectedPicEntities = (pictureIds != null && !pictureIds.isEmpty())
-                ? pictureMapper.selectByIds(pictureIds)
-                : new ArrayList<>();
-        Set<Long> selectedParentIds = selectedPicEntities.stream()
-                .map(Picture::getParentId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-
-        // 遍历空间图片列表
-        List<PictureListByEditPostVO> resultList = new ArrayList<>();
-        for (PictureListVO spacePic : spacePictureList) {
-            Long picId = spacePic.getId();
-            Picture picture = pictureMap.get(picId);
-
-            PictureListByEditPostVO vo = new PictureListByEditPostVO();
-            vo.setId(picId);
-            vo.setUrl(spacePic.getUrl());
-
-            boolean isSelected = selectedPictureIdSet.contains(picId)
-                    || (picture != null && selectedPictureIdSet.contains(picture.getParentId()))
-                    || selectedParentIds.contains(picId);
-
-            vo.setFlag(!isSelected);
-            resultList.add(vo);
-        }
-
-        return resultList;
+        return editPostVOS;
     }
 
     /**
@@ -550,7 +450,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
         Map<Long, String> coverUrlMap = new HashMap<>();
         if (CollUtil.isNotEmpty(coverIds)) {
-            coverUrlMap = pictureMapper.selectByIds(coverIds).stream()
+            coverUrlMap = pictureService.listByIds(coverIds).stream()
                     .filter(Objects::nonNull)
                     .collect(Collectors.toMap(Picture::getId, Picture::getUrl));
         }
@@ -562,7 +462,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
                 .collect(Collectors.toList());
         Map<Long, User> userMap = new HashMap<>();
         if (CollUtil.isNotEmpty(userIds)) {
-            userMap = userMapper.selectByIds(userIds).stream()
+            userMap = userService.listByIds(userIds).stream()
                     .filter(Objects::nonNull)
                     .collect(Collectors.toMap(User::getId, user -> user));
         }

@@ -30,20 +30,13 @@ public interface PictureService extends IService<Picture> {
     String uploadAvatar(MultipartFile file, Long id, HttpServletRequest request);
 
     /**
-     * 用户上传帖子图片
+     * 用户上传图片
      *
      * @param file    图片
      * @param request token
-     * @return 图片地址
+     * @return 图片
      */
-    PicturePostVO uploadPicture4Post(MultipartFile file, HttpServletRequest request);
-
-    /**
-     * 设置图片和帖子的关联
-     * @param imageId 图片id
-     * @param id 帖子id
-     */
-    void setPicturePostId(List<Long> imageId, Long id);
+    Picture uploadPicture(MultipartFile file, HttpServletRequest request);
 
     /**
      * 首页获取图片列表（分页）

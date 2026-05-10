@@ -29,9 +29,9 @@ public class UploadPostRequest implements Serializable {
     private String content;
 
     /**
-     * 封面图片的 id
+     * 封面图片的 id（根据图片列表的索引）
      */
-    private Long cover;
+    private Integer index;
 
     /**
      * 0-公开，1-仅自己可见，

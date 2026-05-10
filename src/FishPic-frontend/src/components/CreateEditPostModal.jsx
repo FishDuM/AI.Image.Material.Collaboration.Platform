@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { App, Modal, Form, Input, Button, Upload, Select, Switch, Image as AntImage, Tabs, Pagination, Spin, Empty } from 'antd'
 import { PlusOutlined, DeleteOutlined, LeftOutlined, RightOutlined, SendOutlined, CheckOutlined, CloudOutlined } from '@ant-design/icons'
 import api, { listSpace, postPictureList } from '../api'
@@ -25,19 +25,23 @@ const SpacePickerModal = ({ open, onClose, onConfirm, currentImageCount, existin
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(false)
   const [selectedIds, setSelectedIds] = useState([])
+  const prevIdsRef = useRef('')
+  const prevPageRef = useRef(1)
 
   useEffect(() => {
     if (open) {
       setActiveTab('private')
       setSelectedIds([])
       setPage(1)
-        setSpaceId(null)
-        setImages([])
-        setTotal(0)
+      setSpaceId(null)
+      setImages([])
+      setTotal(0)
+      prevIdsRef.current = undefined
+      prevPageRef.current = undefined
     } else {
-        setSpaceId(null)
-        setImages([])
-        setTotal(0)
+      setSpaceId(null)
+      setImages([])
+      setTotal(0)
     }
   }, [open])
 
@@ -74,8 +78,13 @@ const SpacePickerModal = ({ open, onClose, onConfirm, currentImageCount, existin
   }, [])
 
   useEffect(() => {
-    if (spaceId && activeTab === 'private' && open) fetchImages(page, spaceId, existingImageIds)
-  }, [spaceId, page, fetchImages, activeTab, open, existingImageIds])
+    if (!spaceId || activeTab !== 'private' || !open) return
+    const idsKey = (existingImageIds || []).join(',')
+    if (idsKey === prevIdsRef.current && page === prevPageRef.current) return
+    prevIdsRef.current = idsKey
+    prevPageRef.current = page
+    fetchImages(page, spaceId, existingImageIds)
+  }, [spaceId, page, activeTab, open, existingImageIds, fetchImages])
 
   const toggleImage = useCallback((img) => {
     if (selectedIds.includes(img.id)) {
@@ -234,18 +243,26 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
   const [uploadTabKey, setUploadTabKey] = useState('manual')
   const [spacePickerOpen, setSpacePickerOpen] = useState(false)
 
+  const uploadedImagesRef = useRef(uploadedImages)
+  uploadedImagesRef.current = uploadedImages
+
+  const existingImageIds = useMemo(
+    () => uploadedImages.map(img => img.pictureId).filter(Boolean),
+    [uploadedImages]
+  )
+
   useEffect(() => {
     if (open && editPostDetail) {
       setIsEditing(true)
       setEditingPostId(editPostDetail.id)
-      const existingPics = (editPostDetail.pics || editPostDetail.pictureUrl || []).filter(url => url && url.trim())
-      const existingIds = editPostDetail.pictureIds || []
-      const existingImages = existingPics.map((url, index) => ({
+      const existingUrls = (editPostDetail.pics || editPostDetail.pictureUrl || []).filter(url => url && url.trim())
+      const existingIds = (editPostDetail.pictureIds || []).filter(Boolean)
+      const existingImages = existingIds.map((id, index) => ({
         uid: `existing-${index}`,
         name: `image-${index}`,
         status: 'done',
-        url,
-        pictureId: existingIds[index] ?? null,
+        url: existingUrls[index] || undefined,
+        pictureId: id,
       }))
       setUploadedImages(existingImages)
       setImageId(existingIds.filter(Boolean))
@@ -259,11 +276,12 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
         }
         return 0
       })()
-      form.setFieldsValue({
-        title: editPostDetail.title || '',
-        content: editPostDetail.content || '',
-        coverIndex,
-      })
+      const title = editPostDetail.title || ''
+      const content = editPostDetail.content || ''
+      const isPrivate = editPostDetail.isPrivate === 1 || editPostDetail.isPrivate === true
+      setTimeout(() => {
+        form.setFieldsValue({ title, content, isPrivate, coverIndex })
+      }, 0)
     } else if (open) {
       setIsEditing(false)
       setEditingPostId(null)
@@ -274,12 +292,14 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
       setModalStep(1)
       setSelectedSpaceImageIds([])
       setSpaceImagePage(1)
-        setSpaceImages([])
-        setSpaceImageTotal(0)
-        setSpaceId(null)
+      setSpaceImages([])
+      setSpaceImageTotal(0)
+      setSpaceId(null)
       setUploadTabKey('manual')
       form.resetFields()
-      form.setFieldsValue({ coverIndex: 0 })
+      setTimeout(() => {
+        form.setFieldsValue({ coverIndex: 0 })
+      }, 0)
     }
   }, [open, editPostDetail, form])
 
@@ -354,7 +374,8 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
     setModalStep(2)
     setSelectedSpaceImageIds([])
     setSpaceImagePage(1)
-    if (uploadedImages.length === 0) {
+    const currentCover = form.getFieldValue('coverIndex')
+    if (currentCover == null) {
       form.setFieldsValue({ coverIndex: 0 })
     }
   }, [selectedSpaceImageIds, spaceImages, uploadedImages.length, form])
@@ -372,7 +393,8 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
     setUploadedImages(prev => [...prev, ...newImages])
     setImageId(prev => [...prev, ...selected.map(img => img.id)])
     setModalStep(2)
-    if (uploadedImages.length === 0) {
+    const currentCover = form.getFieldValue('coverIndex')
+    if (currentCover == null) {
       form.setFieldsValue({ coverIndex: 0 })
     }
   }, [uploadedImages.length, form])
@@ -400,18 +422,19 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
     formData.append('file', file)
 
     try {
-      const result = await api.post('/picture/post', formData, {
+      const result = await api.post('/picture/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
 
-      const { url, pictureId } = result
-      onUploadSuccess({ url, pictureId })
+      const { url, id } = result
+      onUploadSuccess({ url, pictureId: id })
       message.success('上传成功')
 
-      setUploadedImages(prev => [...prev, { uid: file.uid, name: file.name, status: 'done', url, pictureId }])
-      setImageId(prev => [...prev, pictureId])
+      setUploadedImages(prev => [...prev, { uid: file.uid, name: file.name, status: 'done', url, pictureId: id }])
+      setImageId(prev => [...prev, id])
       setModalStep(2)
-      if (uploadedImages.length === 0) {
+      const currentCover = form.getFieldValue('coverIndex')
+      if (currentCover == null) {
         form.setFieldsValue({ coverIndex: 0 })
       }
       if (showUploadSlide) {
@@ -509,30 +532,31 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
   const handleSubmit = async (values) => {
     setSubmitLoading(true)
     try {
+      const currentImageIds = [...new Set(uploadedImagesRef.current
+        .map(img => img.pictureId)
+        .filter(Boolean))]
+
       if (isEditing) {
+        const coverIndex = values.coverIndex ?? 0
         const editData = {
           id: editingPostId,
           title: values.title,
           content: values.content,
           isPrivate: values.isPrivate ? 1 : 0,
+          cover: coverIndex,
         }
-        const coverIndex = values.coverIndex ?? 0
-        const selectedImage = uploadedImages[coverIndex]
-        if (selectedImage?.pictureId) {
-          editData.cover = selectedImage.pictureId
-        }
-        if (imageId.length > 0) {
-          editData.imageId = imageId
+        if (currentImageIds.length > 0) {
+          editData.imageId = currentImageIds
         }
         await api.post('/post/editPost', editData)
         message.success('编辑成功！')
       } else {
         const coverIndex = values.coverIndex ?? 0
         const submitData = {
-          imageId: imageId,
+          imageId: currentImageIds,
           title: values.title,
           content: values.content,
-          cover: imageId[coverIndex] || imageId[0] || null,
+          index: coverIndex,
           isPrivate: values.isPrivate ? 1 : 0
         }
         await api.post('/post/post', submitData)
@@ -788,7 +812,7 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
             </Form.Item>
 
             <div className="form-row">
-              <Form.Item label="帖子封面" name="coverIndex" initialValue={0} layout="horizontal"
+              <Form.Item label="帖子封面" name="coverIndex" layout="horizontal"
                 style={{ marginBottom: 0 }}>
                 <Select
                   placeholder="选择帖子封面"
@@ -877,8 +901,8 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
           open={spacePickerOpen}
           onClose={() => setSpacePickerOpen(false)}
           onConfirm={handleSpacePickerConfirm}
-          currentImageCount={imageId.length}
-          existingImageIds={imageId}
+          currentImageCount={existingImageIds.length}
+          existingImageIds={existingImageIds}
         />
       </MobilePageWrapper>
     )
@@ -898,8 +922,8 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
         open={spacePickerOpen}
         onClose={() => setSpacePickerOpen(false)}
         onConfirm={handleSpacePickerConfirm}
-        currentImageCount={imageId.length}
-        existingImageIds={imageId}
+        currentImageCount={existingImageIds.length}
+        existingImageIds={existingImageIds}
       />
     </Modal>
   )

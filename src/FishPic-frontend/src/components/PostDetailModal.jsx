@@ -1,4 +1,4 @@
-import { Modal, Image as AntImage, Empty, Spin } from 'antd'
+import { Modal, Image as AntImage, Spin } from 'antd'
 import { LikeOutlined, HeartOutlined, StarOutlined, LeftOutlined, RightOutlined, FileTextOutlined } from '@ant-design/icons'
 import MobilePageWrapper from './MobilePageWrapper'
 import './PostDetailModal.css'
@@ -39,7 +39,13 @@ function PostDetailModal({
 }) {
   if (!open) return null
 
-  const validPics = (postDetail?.pictureUrl || []).filter(url => url && url.trim())
+  if (postDetail != null && typeof postDetail !== 'object') {
+    return null
+  }
+
+  const validPics = Array.isArray(postDetail?.pictureUrl)
+    ? postDetail.pictureUrl.filter(url => typeof url === 'string' && url.trim())
+    : []
 
   const handlePrevImage = () => {
     if (detailImageIndex > 0) {

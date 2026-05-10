@@ -61,7 +61,6 @@ function AdminPictureManagement() {
       }))
       setSelectedRowKeys([])
     } catch (error) {
-      console.error('获取图片列表失败:', error)
       message.error(error.message || '获取图片列表失败')
     } finally {
       setLoading(false)

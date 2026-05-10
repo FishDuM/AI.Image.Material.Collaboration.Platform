@@ -3,19 +3,24 @@ import React from 'react'
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props)
-    this.state = { hasError: false, error: null, errorInfo: null }
+    this.state = { hasError: false, errorMessage: '' }
   }
 
   static getDerivedStateFromError(error) {
-    return { hasError: true, error }
+    const message = error instanceof Error
+      ? error.message
+      : typeof error === 'string'
+        ? error
+        : '发生了未知错误'
+    return { hasError: true, errorMessage: message }
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error('ErrorBoundary caught an error:', error, errorInfo)
+    void errorInfo
   }
 
   handleReset = () => {
-    this.setState({ hasError: false, error: null, errorInfo: null })
+    this.setState({ hasError: false, errorMessage: '' })
     window.location.href = '/'
   }
 
@@ -34,7 +39,7 @@ class ErrorBoundary extends React.Component {
         }}>
           <h1 style={{ color: '#ff4d4f', marginBottom: '16px' }}>页面出错了</h1>
           <p style={{ color: '#666', marginBottom: '24px' }}>
-            {this.state.error?.message || '发生了未知错误'}
+            {this.state.errorMessage}
           </p>
           <button
             onClick={this.handleReset}

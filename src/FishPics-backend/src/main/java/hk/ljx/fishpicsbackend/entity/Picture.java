@@ -29,7 +29,7 @@ public class Picture implements Serializable {
     /**
      * 图片名称
      */
-    private Long pictureName;
+    private String pictureName;
 
     /**
      * 图片地址
@@ -72,11 +72,6 @@ public class Picture implements Serializable {
     private Integer isPrivate;
 
     /**
-     * 帖子id
-     */
-    private Long postId;
-
-    /**
      * 空间Id
      */
     private Long spaceId;
@@ -85,11 +80,6 @@ public class Picture implements Serializable {
      * 图片介绍
      */
     private String introduction;
-
-    /**
-     * 父亲图片id（为空则是父亲图片，不为空则指向被复制的图片）
-     */
-    private Long parentId;
 
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;

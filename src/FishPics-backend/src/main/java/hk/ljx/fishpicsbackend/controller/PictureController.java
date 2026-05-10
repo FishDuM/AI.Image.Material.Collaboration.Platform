@@ -7,6 +7,7 @@ import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.dto.picture.DeleteByIdList;
+import hk.ljx.fishpicsbackend.entity.Picture;
 import hk.ljx.fishpicsbackend.service.PictureService;
 import hk.ljx.fishpicsbackend.vo.picture.PictureAdminVO;
 import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
@@ -36,11 +37,14 @@ public class PictureController {
         return ResUtils.success(pictureService.uploadAvatar(file,id,request));
     }
 
-    @PostMapping("/post")
-    public Response<PicturePostVO> uploadPicture4Post(@RequestParam("file") MultipartFile file, HttpServletRequest request) {
+    @PostMapping("/upload")
+    public Response<PictureListVO> uploadPicture(@RequestParam("file") MultipartFile file, HttpServletRequest request) {
         ExcUtils.throwIfTrue(file.isEmpty(), "文件不能为空");
-        ExcUtils.throwIfTrue(file.getSize() > 1024 * 1024 * 5, "文件大小不能超过5MB");
-        return ResUtils.success(pictureService.uploadPicture4Post(file, request));
+        Picture picture = pictureService.uploadPicture(file, request);
+        PictureListVO pictureListVO = new PictureListVO();
+        pictureListVO.setId(picture.getId());
+        pictureListVO.setUrl(picture.getUrl());
+        return ResUtils.success(pictureListVO);
     }
 
     @GetMapping("/list")

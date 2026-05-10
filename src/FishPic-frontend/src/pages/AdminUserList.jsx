@@ -43,16 +43,13 @@ function AdminUserList() {
       })
 
       const { records, total } = result
-      console.log('用户数据:', records, '总数:', total)
       setUsers(records || [])
       setPagination({
         current,
         pageSize,
         total: total || 0,
       })
-      message.success('获取用户列表成功')
     } catch (error) {
-      console.error('获取用户列表失败:', error)
       message.error(error.message || '获取用户列表失败')
       setTimeout(() => {
         navigate('/404', { replace: true })

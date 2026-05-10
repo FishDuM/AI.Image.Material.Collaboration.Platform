@@ -16,15 +16,13 @@
             <result property="createTime" column="create_time" />
             <result property="updateTime" column="update_time" />
             <result property="isPrivate" column="is_private" />
-            <result property="postId" column="post_id" />
             <result property="spaceId" column="space_id" />
             <result property="introduction" column="introduction" />
-            <result property="parentId" column="parent_id" />
     </resultMap>
 
     <sql id="Base_Column_List">
         id,user_id,picture_name,url,width,height,
         size,status,create_time,update_time,is_private,
-        post_id,space_id,introduction,parent_id
+        space_id,introduction
     </sql>
 </mapper>

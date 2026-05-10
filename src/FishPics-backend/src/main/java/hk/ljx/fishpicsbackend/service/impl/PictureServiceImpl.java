@@ -13,20 +13,15 @@ import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.dto.picture.DeleteByIdList;
 import hk.ljx.fishpicsbackend.dto.picture.PictureMessage;
-import hk.ljx.fishpicsbackend.entity.Picture;
-import hk.ljx.fishpicsbackend.entity.Post;
-import hk.ljx.fishpicsbackend.entity.Space;
-import hk.ljx.fishpicsbackend.entity.User;
-import hk.ljx.fishpicsbackend.mapper.PostMapper;
-import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
-import hk.ljx.fishpicsbackend.mapper.UserMapper;
+import hk.ljx.fishpicsbackend.entity.*;
 import hk.ljx.fishpicsbackend.service.*;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.vo.picture.PictureAdminVO;
 import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
 import hk.ljx.fishpicsbackend.vo.picture.PicturePostVO;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
@@ -35,6 +30,7 @@ import javax.servlet.http.HttpServletRequest;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
@@ -48,10 +44,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     implements PictureService {
 
     @Resource
-    private UserService userService;
-
-    @Resource
-    private UserMapper userMapper;
+    private PictureChildService pictureChildService;
 
     @Resource
     private CosService cosService;
@@ -59,39 +52,60 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     @Resource
     private PictureMapper pictureMapper;
 
+    @Lazy
     @Resource
     private SpaceService spaceService;
 
     @Resource
-    private SpaceMapper spaceMapper;
-
-    @Resource
     private LoginUser loginUser;
-    @Autowired
-    private PostMapper postMapper;
+
+    @Lazy
+    @Resource
+    private UserService userService;
+
+    @Lazy
+    @Resource
+    private PostService postService;
 
     @Override
     public String uploadAvatar(MultipartFile file, Long id, HttpServletRequest request) {
         User userLogin = loginUser.getLoginUser(request);
         ExcUtils.throwIfTrue(userLogin == null || userLogin.getId() == null, "请先登录");
-        User user = userMapper.selectById(userLogin.getId());
+        User user = userService.getById(userLogin.getId());
         ExcUtils.throwIfTrue(user == null, "用户不存在");
         // 只有自己或管理员可以修改头像
         ExcUtils.throwIfTrue(!userLogin.getId().equals(id) && !userLogin.getRole().equals(ADMIN), "没有权限");
-        user = userMapper.selectById(id);
+        if (id != null) {
+            user = userService.getById(id);
+            ExcUtils.throwIfTrue(user == null, "该用户不存在");
+        }
         // 删除旧头像
-        cosService.deletePicture(user.getAvatar());
+        if (user != null && user.getAvatar() != null) {
+            cosService.deletePictureByUrl(user.getAvatar());
+        }
         String url = cosService.uploadAndGetImageUrl(file);
         user.setAvatar(url);
-        ExcUtils.throwIfTrue(userMapper.updateById(user) != 1, "上传失败，数据库错误");
+        ExcUtils.throwIfFalse(userService.updateById(user), ExceptionCode.DATABASE_ERROR, "上传失败，数据库错误");
         return url;
     }
 
     @Override
-    public PicturePostVO uploadPicture4Post(MultipartFile file, HttpServletRequest request) {
+    @Transactional(rollbackFor = Exception.class)
+    public Picture uploadPicture(MultipartFile file, HttpServletRequest request) {
         User userLogin = loginUser.getLoginUser(request);
         Long userId = userLogin.getId();
+        Integer level = userLogin.getLevel();
         ExcUtils.throwIfTrue(ObjUtil.isEmpty(userLogin) || userId == null, "请先登录");
+
+        // 判断用户等级 0-普通 3MB，1-VIP 5MB，2-SVIP 20MB
+        if (level == 0) {
+            ExcUtils.throwIfTrue(file.getSize() > 1024 * 1024 * 3, "普通用户上传图片大小不能超过3MB");
+        } else if (level == 1) {
+            ExcUtils.throwIfTrue(file.getSize() > 1024 * 1024 * 5, "VIP用户上传图片大小不能超过5MB");
+        } else if (level == 2) {
+            ExcUtils.throwIfTrue(file.getSize() > 1024 * 1024 * 20, "SVIP用户上传图片大小不能超过20MB");
+        }
+
         // 上传图片
         String key = cosService.uploadPicture(file);
         // 获取图片信息
@@ -111,8 +125,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             cosService.deletePicture(key);
             throw new BaseException(ExceptionCode.UNAUTHORIZED,"私人空间磁盘不足，请升级空间或删除图片");
         }
-        int update = spaceMapper.update(space, new UpdateWrapper<Space>().set("size", updateSize).eq("id", space.getId()));
-        ExcUtils.throwIfTrue(update <= 0, "上传失败，数据库错误");
+        Boolean update = spaceService.update(space, new UpdateWrapper<Space>().set("size", updateSize).eq("id", space.getId()));
+        ExcUtils.throwIfFalse(update, ExceptionCode.DATABASE_ERROR, "上传失败，数据库错误");
         picture.setSpaceId(space.getId());
         // 管理员上传直接通过，普通用户上传需要审核
         if (ADMIN.equals(userLogin.getRole())) {
@@ -121,22 +135,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             picture.setStatus(2);
         }
         ExcUtils.throwIfTrue(pictureMapper.insert(picture) != 1, "上传失败，数据库错误");
-        return PicturePostVO.builder().url(picture.getUrl()).pictureId(picture.getId()).build();
-    }
-
-    @Override
-    public void setPicturePostId(List<Long> imageId, Long postId) {
-        // 构建条件：id in (?)
-        QueryWrapper<Picture> wrapper = new QueryWrapper<>();
-        wrapper.in("id", imageId);
-
-        // 构建要更新的字段
-        Picture picture = new Picture();
-        picture.setPostId(postId);
-
-        // 一次性批量更新
-        int update = pictureMapper.update(picture, wrapper);
-        ExcUtils.throwIfTrue(update != imageId.size(), "更新失败，数据库错误");
+        return picture;
     }
 
     @Override
@@ -204,11 +203,15 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         User user = loginUser.getLoginUser(request);
         String role = user.getRole();
         // 帖子封面图禁止删除
-        List<Post> posts = postMapper.selectList(new QueryWrapper<Post>().in("cover", ids));
+        List<Post> posts = postService.list(new QueryWrapper<Post>().in("cover", ids));
+        Set<Long> count = posts.stream().map(Post::getCover).collect(Collectors.toSet());
         if (!posts.isEmpty()){
             posts.forEach(post -> {
                 ids.remove(post.getCover());
             });
+        }
+        if (CollUtil.isEmpty(ids)) {
+            return "所选的都为帖子封面图，请先删除帖子再删图片";
         }
         // 批量查询图片
         List<Picture> pictureList = pictureMapper.selectList(new QueryWrapper<Picture>().in("id", ids));
@@ -221,7 +224,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         int i = pictureMapper.delete(new QueryWrapper<Picture>().in("id", ids));
         ExcUtils.throwIfTrue(i == 0, "删除失败");
         pictureList.forEach(picture -> cosService.deletePictureByUrl(picture.getUrl()));
-        return !posts.isEmpty() ? "删除成功，但有"+ posts.size() + "个图片为帖子封面无法删除" : "删除成功";
+        return !count.isEmpty() ? "删除成功，但有"+ count.size() + "个图片为帖子封面无法删除" : "删除成功";
     }
 }
 

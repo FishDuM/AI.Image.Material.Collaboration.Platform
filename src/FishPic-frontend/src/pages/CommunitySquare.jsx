@@ -6,7 +6,7 @@ import api from '../api'
 import { AuthContext } from '../context/AuthContext'
 import PostDetailModal from '../components/PostDetailModal'
 import CreateEditPostModal from '../components/CreateEditPostModal'
-import { useIsMobile } from '../components/MobilePageWrapper'
+import { useIsMobile } from '../hooks/useIsMobile'
 import './CommunitySquare.css'
 
 function PostCard({ post, onClick }) {
@@ -65,6 +65,7 @@ function CommunitySquare() {
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [createEditModalOpen, setCreateEditModalOpen] = useState(false)
+  const [showBackToTop, setShowBackToTop] = useState(false)
   const [editingPostDetail, setEditingPostDetail] = useState(null)
   const pageSize = 20
   const loadMoreRef = useRef(null)
@@ -84,7 +85,7 @@ function CommunitySquare() {
     try {
       const params = {
         current: page,
-        size: pageSize,
+        pageSize: pageSize,
       }
       if (text && text.trim()) {
         params.text = text.trim()
@@ -207,7 +208,7 @@ function CommunitySquare() {
           const merged = ['热门', ...result.filter(c => c !== '推荐' && c !== '热门')]
           setCategoryList(merged)
         }
-      } catch (e) {
+      } catch {
         setCategoryList(['热门'])
       }
     }
@@ -239,9 +240,10 @@ function CommunitySquare() {
   useEffect(() => {
     let lastScrollY = window.scrollY
     const handleScroll = () => {
-      const header = document.querySelector('.app-header')
-      if (!header) return
       const currentScrollY = window.scrollY
+      setShowBackToTop(currentScrollY > 100)
+      const header = document.querySelector('.app-header')
+      if (!header) { lastScrollY = currentScrollY; return }
       if (currentScrollY > lastScrollY && currentScrollY > 80) {
         header.classList.add('header-hidden')
       } else if (currentScrollY < lastScrollY) {
@@ -415,9 +417,11 @@ function CommunitySquare() {
         <button type="button" className="floating-btn" onClick={handleRefresh} title="刷新">
           <ReloadOutlined />
         </button>
-        <button type="button" className="floating-btn" onClick={handleScrollToTop} title="返回顶部">
-          <UpOutlined />
-        </button>
+        {showBackToTop && (
+          <button type="button" className="floating-btn" onClick={handleScrollToTop} title="返回顶部">
+            <UpOutlined />
+          </button>
+        )}
       </div>
     </main>
   )

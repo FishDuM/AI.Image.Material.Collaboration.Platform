@@ -28,7 +28,7 @@ import {
 } from '@ant-design/icons'
 import { AuthContext } from '../context/AuthContext.jsx'
 import { getLoginCheckCode, login, getRegisterCheckCode, register, logout } from '../api'
-import { useIsMobile } from './MobilePageWrapper'
+import { useIsMobile } from '../hooks/useIsMobile'
 import { ThemeContext } from '../context/ThemeContext.jsx'
 
 function GlobalLayout({ children }) {
@@ -58,8 +58,8 @@ function GlobalLayout({ children }) {
   const handleLogout = async () => {
     try {
       await logout()
-    } catch (error) {
-      console.error('退出登录请求失败:', error)
+    } catch {
+      void 0
     } finally {
       authLogout()
       message.success('退出成功')
@@ -70,25 +70,18 @@ function GlobalLayout({ children }) {
   const fetchLoginCheckCode = async () => {
     try {
       const response = await getLoginCheckCode()
-      const data = response?.data || response
-      
-      if (data && data.code === 1 && data.data) {
-        const { captchaKey, base64Image } = data.data
-        
-        if (captchaKey && base64Image && base64Image.length > 0) {
-          setLoginKey(captchaKey)
-          const imageSrc = base64Image.startsWith('data:') 
-            ? base64Image 
-            : `data:image/png;base64,${base64Image}`
-          setLoginCheckCodeUrl(imageSrc)
-        } else {
-          message.error('获取验证码失败')
-        }
+      const data = response?.data ?? response
+      const inner = data?.data ?? data
+      if (inner?.captchaKey && inner?.base64Image) {
+        setLoginKey(inner.captchaKey)
+        const imageSrc = inner.base64Image.startsWith('data:')
+          ? inner.base64Image
+          : `data:image/png;base64,${inner.base64Image}`
+        setLoginCheckCodeUrl(imageSrc)
       } else {
         message.error('获取验证码失败')
       }
-    } catch (e) {
-      void e
+    } catch {
       message.error('获取验证码失败')
     }
   }
@@ -122,25 +115,18 @@ function GlobalLayout({ children }) {
   const fetchRegisterCheckCode = async () => {
     try {
       const response = await getRegisterCheckCode()
-      const data = response?.data || response
-      
-      if (data && data.code === 1 && data.data) {
-        const { captchaKey, base64Image } = data.data
-        
-        if (captchaKey && base64Image && base64Image.length > 0) {
-          setRegisterKey(captchaKey)
-          const imageSrc = base64Image.startsWith('data:') 
-            ? base64Image 
-            : `data:image/png;base64,${base64Image}`
-          setRegisterCheckCodeUrl(imageSrc)
-        } else {
-          message.error('获取验证码失败')
-        }
+      const data = response?.data ?? response
+      const inner = data?.data ?? data
+      if (inner?.captchaKey && inner?.base64Image) {
+        setRegisterKey(inner.captchaKey)
+        const imageSrc = inner.base64Image.startsWith('data:')
+          ? inner.base64Image
+          : `data:image/png;base64,${inner.base64Image}`
+        setRegisterCheckCodeUrl(imageSrc)
       } else {
         message.error('获取验证码失败')
       }
-    } catch (e) {
-      void e
+    } catch {
       message.error('获取验证码失败')
     }
   }

@@ -62,9 +62,7 @@ function UserManagement() {
         pageSize,
         total: total || 0,
       }))
-      message.success('获取用户列表成功')
     } catch (error) {
-      console.error('获取用户列表失败:', error)
       message.error(error.message || '获取用户列表失败')
       setTimeout(() => {
         navigate('/404', { replace: true })
@@ -99,7 +97,6 @@ function UserManagement() {
       message.success('操作成功')
       fetchUserList(pagination.current, pagination.pageSize)
     } catch (error) {
-      console.error('操作失败:', error)
       message.error('操作失败：' + error.message)
     }
   }
@@ -147,7 +144,6 @@ function UserManagement() {
       setEditingUser(data)
       setIsModalOpen(true)
     } catch (error) {
-      console.error('获取用户信息失败:', error)
       message.error('获取用户信息失败：' + error.message)
     }
   }
@@ -171,7 +167,6 @@ function UserManagement() {
       setIsModalOpen(false)
       fetchUserList(pagination.current, pagination.pageSize)
     } catch (error) {
-      console.error('编辑用户失败:', error)
       message.error('编辑用户失败：' + error.message)
     }
   }

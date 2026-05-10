@@ -22,7 +22,11 @@ public class LoginUser {
 
     public User getLoginUser(HttpServletRequest request) {
         // session 查询用户信息
-        Long userId = Long.parseLong(request.getSession().getAttribute(TOKEN_KEY).toString());
+        Object attribute = request.getSession().getAttribute(TOKEN_KEY);
+        Long userId = null;
+        if (attribute != null){
+            userId = Long.parseLong(attribute.toString());
+        }
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(userId), ExceptionCode.UNAUTHORIZED, "用户未登录");
         // 查询 redis 获取用户信息
         String userJson = stringRedisTemplate.opsForValue().get(getUserIdKey(userId));

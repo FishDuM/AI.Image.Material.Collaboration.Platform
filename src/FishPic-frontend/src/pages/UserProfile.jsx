@@ -1,6 +1,6 @@
 import { useContext, useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { App as AntApp, Avatar, Tabs, Empty, Skeleton, Modal, Button, Form, Input, Upload, Spin, Image as AntImage, Masonry, Tooltip } from 'antd'
+import { App as AntApp, Avatar, Tabs, Empty, Skeleton, Modal, Button, Form, Input, Upload, Spin, Image as AntImage, Masonry, Tooltip, Switch } from 'antd'
 import { 
   UserOutlined, 
   MailOutlined, 
@@ -13,7 +13,8 @@ import {
   LockOutlined,
   LoadingOutlined,
   PlusOutlined,
-  HeartFilled
+  HeartFilled,
+  EyeOutlined
 } from '@ant-design/icons'
 import { getUserMyself, getUser, editUser, uploadAvatar, getMyPosts, getMyCollects, getMyLikes } from '../api'
 import api from '../api'
@@ -56,6 +57,7 @@ function UserProfile() {
   const [uploadedAvatarUrl, setUploadedAvatarUrl] = useState(null)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(null)
+  const [showPasswordSection, setShowPasswordSection] = useState(false)
   const hasFetchedRef = useRef(false)
 
   const [tabState, setTabState] = useState({
@@ -147,7 +149,6 @@ function UserProfile() {
       }
     } catch (error) {
       message.error(error.message || '获取个人信息失败')
-      console.error('获取个人信息失败:', error)
     }
   }
 
@@ -162,7 +163,6 @@ function UserProfile() {
       }
     } catch (error) {
       message.error(error.message || '刷新用户信息失败')
-      console.error('刷新用户信息失败:', error)
     }
   }
 
@@ -323,8 +323,9 @@ function UserProfile() {
         phone: values.phone || null,
         nickname: values.nickname
       }
-      if (values.password && values.password.trim() !== '') {
+      if (showPasswordSection && values.password && values.password.trim() !== '') {
         submitData.password = values.password
+        submitData.originalPassword = values.originalPassword
       }
       await editUser(submitData)
       editForm.resetFields()
@@ -344,6 +345,7 @@ function UserProfile() {
     setEditModalVisible(false)
     setUploadedAvatarUrl(null)
     setAvatarPreviewUrl(null)
+    setShowPasswordSection(false)
   }
 
   const getBase64 = (file) => {
@@ -652,20 +654,49 @@ function UserProfile() {
               />
             </Form.Item>
 
-            <Form.Item
-              label="密码"
-              name="password"
-              tooltip="留空表示不修改密码"
-              rules={[
-                { min: 8, message: '密码长度不能小于 8 个字符' },
-                { max: 20, message: '密码长度不能大于 20 个字符' }
-              ]}
-            >
-              <Input.Password 
-                prefix={<LockOutlined />} 
-                placeholder="请输入新密码，留空表示不修改"
-              />
-            </Form.Item>
+            <div className="password-section">
+              <div className="password-section-header">
+                <span className="password-section-label">
+                  <LockOutlined className="password-section-icon" />
+                  修改密码
+                </span>
+                <Switch
+                  size="small"
+                  checked={showPasswordSection}
+                  onChange={(checked) => {
+                    setShowPasswordSection(checked)
+                    if (!checked) {
+                      editForm.setFieldsValue({ password: '', originalPassword: '' })
+                    }
+                  }}
+                />
+              </div>
+              {showPasswordSection && (
+                <div className="password-section-fields">
+                  <Form.Item
+                    name="password"
+                    rules={[
+                      { required: true, message: '请输入新密码' },
+                      { min: 8, message: '密码长度不能小于 8 个字符' },
+                      { max: 20, message: '密码长度不能大于 20 个字符' }
+                    ]}
+                  >
+                    <Input.Password 
+                      prefix={<LockOutlined />} 
+                      placeholder="请输入新密码"
+                    />
+                  </Form.Item>
+                  <Form.Item
+                    name="originalPassword"
+                  >
+                    <Input.Password 
+                      prefix={<EyeOutlined />} 
+                      placeholder="请输入原始密码"
+                    />
+                  </Form.Item>
+                </div>
+              )}
+            </div>
 
             <Form.Item
               label="昵称"

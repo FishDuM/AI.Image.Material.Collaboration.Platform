@@ -33,9 +33,9 @@ public class EditPostRequest implements Serializable {
     private String content;
 
     /**
-     * 封面图片的 id
+     * 封面图片的 id（图片列表索引）
      */
-    private Long cover;
+    private Integer cover;
 
     /**
      * 0-公开，1-仅自己可见，

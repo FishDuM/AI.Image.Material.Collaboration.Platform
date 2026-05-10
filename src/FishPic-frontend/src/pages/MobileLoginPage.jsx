@@ -31,8 +31,8 @@ export default function MobileLoginPage() {
         setCaptchaKey(inner.captchaKey)
         setCaptchaImage(inner.captchaImage)
       }
-    } catch (e) {
-      console.error('获取验证码失败:', e)
+    } catch {
+      void 0
     }
   }, [])
 
@@ -60,7 +60,7 @@ export default function MobileLoginPage() {
         ...values,
         captchaKey,
       }
-      const result = await login(loginData)
+      await login(loginData)
       message.success('登录成功')
       const userData = await getUserMyself()
       authLogin(userData)

@@ -1,22 +1,15 @@
-import { useState, useEffect, useCallback, useContext } from 'react'
+import { useCallback, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LeftOutlined } from '@ant-design/icons'
 import { ThemeContext } from '../context/ThemeContext'
+import { useIsMobile } from '../hooks/useIsMobile'
 import './MobilePageWrapper.css'
-
-const MOBILE_BREAKPOINT = 768
 
 export default function MobilePageWrapper({ title, titleContent, children, onClose, rightContent, showBack = true }) {
   const navigate = useNavigate()
   const { isDarkMode } = useContext(ThemeContext)
   const theme = isDarkMode ? 'dark' : 'light'
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= MOBILE_BREAKPOINT)
-
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT)
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
+  const isMobile = useIsMobile()
 
   const handleBack = useCallback(() => {
     if (onClose) {
@@ -54,16 +47,4 @@ export default function MobilePageWrapper({ title, titleContent, children, onClo
       </div>
     </div>
   )
-}
-
-export function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= MOBILE_BREAKPOINT)
-
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT)
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
-
-  return isMobile
 }

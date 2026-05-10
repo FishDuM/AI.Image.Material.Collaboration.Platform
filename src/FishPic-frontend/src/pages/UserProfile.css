@@ -553,6 +553,50 @@
   font-size: 14px;
 }
 
+.password-section {
+  background: var(--bg-primary);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border-color);
+  transition: all 0.3s ease;
+}
+
+.password-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: default;
+}
+
+.password-section-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.password-section-icon {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.password-section-fields {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.password-section-fields .ant-form-item {
+  margin-bottom: 12px;
+}
+
+.password-section-fields .ant-form-item:last-child {
+  margin-bottom: 0;
+}
+
 @media (max-width: 768px) {
   .profile-card {
     width: 92%;

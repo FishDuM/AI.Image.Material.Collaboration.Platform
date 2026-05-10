@@ -14,8 +14,8 @@ import hk.ljx.fishpicsbackend.dto.space.UpdateSpace;
 import hk.ljx.fishpicsbackend.entity.Picture;
 import hk.ljx.fishpicsbackend.entity.Space;
 import hk.ljx.fishpicsbackend.entity.User;
-import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.service.LoginUser;
+import hk.ljx.fishpicsbackend.service.PictureService;
 import hk.ljx.fishpicsbackend.service.SpaceService;
 import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
 import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
@@ -27,7 +27,6 @@ import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 import static hk.ljx.fishpicsbackend.common.constants.SpaceConstants.*;
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
@@ -45,7 +44,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
     private SpaceMapper spaceMapper;
 
     @Resource
-    private PictureMapper pictureMapper;
+    private PictureService pictureService;
 
     @Resource
     private LoginUser loginUser;
@@ -149,9 +148,8 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         Page<Picture> picturePage = new Page<>(current, pageSize);
         QueryWrapper<Picture> pictureQueryWrapper = new QueryWrapper<>();
         pictureQueryWrapper.eq("space_id", spaceId);
-        pictureQueryWrapper.isNull("parent_id");
         pictureQueryWrapper.orderBy(ObjectUtil.isNotNull(sortField), sortOrder.equals("ascend"), sortField);
-        Page<Picture> pictureList = pictureMapper.selectPage(picturePage, pictureQueryWrapper);
+        Page<Picture> pictureList = pictureService.page(picturePage, pictureQueryWrapper);
         ArrayList<PictureListVO> pictureListVOS = new ArrayList<>();
         pictureList.getRecords().forEach(picture -> {
             PictureListVO pictureListVO = new PictureListVO();

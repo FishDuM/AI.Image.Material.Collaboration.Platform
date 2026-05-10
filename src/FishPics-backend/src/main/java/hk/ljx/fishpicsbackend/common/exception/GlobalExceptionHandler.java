@@ -7,7 +7,6 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 
 @RestControllerAdvice
 @Slf4j
@@ -24,13 +23,8 @@ public class GlobalExceptionHandler {
             Exception e,
             HttpServletRequest request) {
 
-        // 关键：如果是图片验证码请求，直接返回 null，不处理！
-        String uri = request.getRequestURI();
-        if (uri.contains("captcha") || uri.contains("checkCode")) {
-            return null; // 直接返回null，不输出JSON，不操作流
-        }
-        log.error("====> 业务异常,异常信息：{}", e.getMessage());
-        // 其他接口正常返回JSON
-        return ResUtils.fail("业务异常");
+        log.error("====> 系统异常, 请求路径：{}, 异常信息：", request.getRequestURI(), e);
+
+        return ResUtils.fail(new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "服务器内部错误，请稍后重试"));
     }
 }

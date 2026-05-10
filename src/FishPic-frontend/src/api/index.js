@@ -110,15 +110,6 @@ export const uploadAvatar = (formData, onProgress) => api.post('/picture/avatar'
   }
 })
 
-export const uploadPostPicture = (formData, onProgress) => api.post('/picture/post', formData, {
-  headers: { 'Content-Type': 'multipart/form-data' },
-  onUploadProgress: (progressEvent) => {
-    if (onProgress && progressEvent.total) {
-      onProgress({ percent: Math.round((progressEvent.loaded * 100) / progressEvent.total) })
-    }
-  }
-})
-
 export const getMyPosts = (data) => api.post('/post/myPosts', data)
 
 export const getMyCollects = (data) => api.post('/post/myCollects', data)
@@ -146,5 +137,11 @@ export const spaceListPicture = (data) => api.post('/space/pictureList', data)
 export const postPictureList = (data) => api.post('/post/pictureList', data)
 
 export const deletePicture = (ids) => api.post('/picture/delete', { ids })
+
+export const likePost = (id) => api.post('/post/like', null, { params: { id } })
+
+export const getPost = (id) => api.get('/post/getPost', { params: { id } })
+
+export const editPost = (data) => api.post('/post/editPost', data)
 
 export default api
