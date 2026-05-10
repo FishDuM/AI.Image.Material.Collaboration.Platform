@@ -1,17 +1,36 @@
-import { useState, useEffect, useCallback } from 'react'
-import { App as AntApp, Card, Typography, Button, Empty, Modal, Form, Input, Spin, Row, Col } from 'antd'
-import { TeamOutlined } from '@ant-design/icons'
+import { useState, useEffect, useCallback, useContext } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { App as AntApp, Typography, Button, Empty, Modal, Form, Input, Spin, Avatar, Progress, Tooltip, Tag } from 'antd'
+import { TeamOutlined, EditOutlined, PlusOutlined, PictureOutlined, CloudServerOutlined, UserOutlined } from '@ant-design/icons'
 import { createSpace, updateSpace, listSpace } from '../api'
+import { ThemeContext } from '../context/ThemeContext'
 import './TeamSpace.css'
 
 const { Title, Text } = Typography
 
+const LEVEL_MAP = {
+  0: { color: 'blue', label: '普通' },
+  1: { color: 'gold', label: 'VIP' },
+  2: { color: 'red', label: 'SVIP' },
+}
+
+const formatSize = (bytes) => {
+  if (!bytes || bytes <= 0) return '0 B'
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
+}
+
 function TeamSpace() {
   const { message } = AntApp.useApp()
+  const { isDarkMode } = useContext(ThemeContext)
+  const navigate = useNavigate()
   const [spaces, setSpaces] = useState([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
+  const [editTarget, setEditTarget] = useState(null)
   const [createLoading, setCreateLoading] = useState(false)
   const [updateLoading, setUpdateLoading] = useState(false)
   const [form] = Form.useForm()
@@ -54,23 +73,23 @@ function TeamSpace() {
     }
   }
 
-  const handleEditOpen = () => {
-    if (spaces.length > 0) {
-      editForm.setFieldsValue({ name: spaces[0].name, introduction: spaces[0].introduction })
-      setShowEdit(true)
-    }
+  const handleEditOpen = (space) => {
+    setEditTarget(space)
+    editForm.setFieldsValue({ name: space.name, introduction: space.introduction || '' })
+    setShowEdit(true)
   }
 
   const handleUpdate = async (values) => {
     setUpdateLoading(true)
     try {
       await updateSpace({
-        id: spaces[0].id,
+        id: editTarget.id,
         name: values.name,
         introduction: values.introduction || '',
       })
       message.success('修改成功')
       setShowEdit(false)
+      setEditTarget(null)
       editForm.resetFields()
       fetchSpaces()
     } catch (error) {
@@ -80,72 +99,143 @@ function TeamSpace() {
     }
   }
 
+  const renderSpaceRow = (space) => {
+    const usedPercent = space.storageSize > 0
+      ? Math.min(((space.size || 0) / space.storageSize) * 100, 100).toFixed(1)
+      : 0
+    const levelInfo = LEVEL_MAP[space.level] || LEVEL_MAP[0]
+    const members = space.teamMembers || []
+
+    return (
+      <div key={space.id} className="ts-list-item" onClick={() => navigate(`/team-space/${space.id}`)}>
+        <div className="ts-list-left">
+          <div className="ts-list-name-row">
+            <Text strong className="ts-list-name">{space.name}</Text>
+            <Tag color={levelInfo.color} variant="filled" className="ts-level-tag">
+              {levelInfo.label}
+            </Tag>
+          </div>
+          {space.introduction && (
+            <Text type="secondary" className="ts-list-intro" ellipsis={{ tooltip: space.introduction }}>
+              {space.introduction}
+            </Text>
+          )}
+        </div>
+
+        <div className="ts-list-center">
+          <div className="ts-list-stat">
+            <PictureOutlined className="ts-list-stat-icon" />
+            <Text type="secondary" className="ts-list-stat-label">图片</Text>
+            <Text strong className="ts-list-stat-value">{space.pictureCount ?? 0}</Text>
+          </div>
+
+          <div className="ts-list-divider" />
+
+          <div className="ts-list-stat">
+            <CloudServerOutlined className="ts-list-stat-icon" />
+            <Text type="secondary" className="ts-list-stat-label">存储</Text>
+            <Text type="secondary" className="ts-list-stat-value">
+              {formatSize(space.size || 0)} / {formatSize(space.storageSize || 0)}
+            </Text>
+          </div>
+
+          <div className="ts-list-divider" />
+
+          <div className="ts-list-stat">
+            <UserOutlined className="ts-list-stat-icon" />
+            <Text type="secondary" className="ts-list-stat-label">创建人</Text>
+            <Avatar size={18} src={space.userAvatar} icon={<UserOutlined />} />
+            <Text className="ts-list-stat-value">{space.userName || '未知'}</Text>
+          </div>
+
+          {members.length > 0 && (
+            <>
+              <div className="ts-list-divider" />
+              <div className="ts-list-stat">
+                <TeamOutlined className="ts-list-stat-icon" />
+                <Text type="secondary" className="ts-list-stat-label">成员</Text>
+                <Avatar.Group
+                  max={{ count: 10, style: { backgroundColor: isDarkMode ? '#434343' : '#f0f0f0', color: isDarkMode ? 'rgba(255,255,255,0.65)' : '#999' } }}
+                  size={22}
+                >
+                  {members.map((m) => (
+                    <Tooltip title={m.nickname || '成员'} key={m.id}>
+                      <Avatar size={22} src={m.avatar} icon={<UserOutlined />} />
+                    </Tooltip>
+                  ))}
+                </Avatar.Group>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="ts-list-right">
+          <div className="ts-list-storage-bar">
+            <Progress
+              percent={Number(usedPercent)}
+              strokeColor={Number(usedPercent) > 80 ? '#ff4d4f' : '#1677ff'}
+              showInfo={false}
+              size="small"
+            />
+          </div>
+          <Tooltip title="编辑空间">
+            <Button type="text" size="small" icon={<EditOutlined />} onClick={(e) => { e.stopPropagation(); handleEditOpen(space) }} />
+          </Tooltip>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <main className="team-space-container">
       <div className="team-space-header">
         <div className="team-space-header-left">
-          <Title level={2}>
-            团队空间{spaces.length > 0 && ` - ${spaces[0].name}`}
-          </Title>
-          <p className="header-subtitle">
-            {spaces.length > 0 && spaces[0].introduction ? spaces[0].introduction : '团队协作和共享空间'}
-          </p>
+          <div className="ts-title-row">
+            <Title level={3} style={{ margin: 0 }}>团队空间列表</Title>
+            {spaces.length > 0 && (
+              <Tag color="blue" variant="filled">{spaces.length} 个空间</Tag>
+            )}
+          </div>
+          <Text type="secondary">管理和协作你的团队图片资源</Text>
         </div>
-        {spaces.length > 0 && (
-          <Button onClick={handleEditOpen}>
-            修改空间
-          </Button>
-        )}
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={() => setShowCreate(true)}
+        >
+          创建空间
+        </Button>
       </div>
 
       <Spin spinning={loading}>
-        {!loading && (
-          <>
-            {spaces.length > 0 && (
-              <Row gutter={[16, 16]}>
-                {spaces.map((space) => (
-                  <Col key={space.id} xs={24} sm={12} lg={8}>
-                    <Card className="team-space-card" variant="borderless">
-                      <div className="space-card-header">
-                        <TeamOutlined className="space-card-icon" />
-                        <Text strong className="space-card-name">{space.name}</Text>
-                      </div>
-                      {space.introduction && (
-                        <div className="space-card-intro">
-                          <Text type="secondary">{space.introduction}</Text>
-                        </div>
-                      )}
-                      <div className="space-card-meta">
-                        <Text type="secondary">
-                          创建于 {new Date(space.createTime).toLocaleString('zh-CN', {
-                            year: 'numeric', month: '2-digit', day: '2-digit',
-                            hour: '2-digit', minute: '2-digit', second: '2-digit',
-                          })}
-                        </Text>
-                      </div>
-                    </Card>
-                  </Col>
-                ))}
-              </Row>
-            )}
-            {spaces.length === 0 && (
-              <Card className="team-content-card" variant="borderless">
-                <div className="empty-state-wrapper">
-                  <Empty description="暂无团队空间，创建一个吧" />
-                </div>
-              </Card>
-            )}
-          </>
+        {!loading && spaces.length > 0 && (
+          <div className="ts-list">
+            <div className="ts-list-header">
+              <div className="ts-list-header-left">空间信息</div>
+              <div className="ts-list-header-center">详情</div>
+              <div className="ts-list-header-right">存储 / 操作</div>
+            </div>
+            {spaces.map(renderSpaceRow)}
+          </div>
+        )}
+        {!loading && spaces.length === 0 && (
+          <div className="empty-state-wrapper">
+            <Empty description="暂无团队空间，创建一个吧">
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => setShowCreate(true)}>
+                创建团队空间
+              </Button>
+            </Empty>
+          </div>
         )}
       </Spin>
 
       <Modal
-        title="修改空间"
+        title="编辑空间"
         open={showEdit}
-        onCancel={() => { setShowEdit(false); editForm.resetFields() }}
+        onCancel={() => { setShowEdit(false); setEditTarget(null); editForm.resetFields() }}
         footer={
           <div style={{ textAlign: 'right' }}>
-            <Button onClick={() => { setShowEdit(false); editForm.resetFields() }} style={{ marginRight: 8 }}>
+            <Button onClick={() => { setShowEdit(false); setEditTarget(null); editForm.resetFields() }} style={{ marginRight: 8 }}>
               取消
             </Button>
             <Button type="primary" onClick={() => editForm.submit()} loading={updateLoading}>
@@ -155,26 +245,15 @@ function TeamSpace() {
         }
         closable={false}
       >
-        <Form
-          form={editForm}
-          layout="vertical"
-          onFinish={handleUpdate}
-          style={{ marginTop: 16 }}
-        >
+        <Form form={editForm} layout="vertical" onFinish={handleUpdate} style={{ marginTop: 16 }}>
           <Form.Item
             name="name"
-            label="团队名称"
-            rules={[
-              { required: true, message: '请输入团队名称' },
-              { max: 20, message: '团队名称不超过 20 个字符' },
-            ]}
+            label="空间名称"
+            rules={[{ required: true, message: '请输入空间名称' }, { max: 20, message: '不超过20个字符' }]}
           >
-            <Input placeholder="请输入团队名称" maxLength={20} />
+            <Input placeholder="请输入空间名称" maxLength={20} />
           </Form.Item>
-          <Form.Item
-            name="introduction"
-            label="空间介绍"
-          >
+          <Form.Item name="introduction" label="空间介绍">
             <Input.TextArea placeholder="请输入空间介绍" maxLength={200} rows={3} showCount />
           </Form.Item>
         </Form>
@@ -197,30 +276,19 @@ function TeamSpace() {
         destroyOnHidden
         closable={false}
       >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleCreate}
-          style={{ marginTop: 16 }}
-        >
+        <Form form={form} layout="vertical" onFinish={handleCreate} style={{ marginTop: 16 }}>
           <Form.Item
             name="name"
             label="团队名称"
-            rules={[
-              { required: true, message: '请输入团队名称' },
-              { max: 20, message: '团队名称不超过 20 个字符' },
-            ]}
+            rules={[{ required: true, message: '请输入团队名称' }, { max: 20, message: '不超过20个字符' }]}
           >
             <Input placeholder="请输入团队名称" maxLength={20} />
           </Form.Item>
-          <Form.Item
-            name="introduction"
-            label="空间介绍"
-          >
+          <Form.Item name="introduction" label="空间介绍">
             <Input.TextArea placeholder="请输入空间介绍" maxLength={200} rows={3} showCount />
           </Form.Item>
-          </Form>
-        </Modal>
+        </Form>
+      </Modal>
     </main>
   )
 }

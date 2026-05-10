@@ -115,7 +115,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         picture.setUserId(userId);
         // 判断私人空间磁盘是否充足
         Long size = picture.getSize();
-        List<Space> spaceList = spaceService.listSpace(0, request);
+        List<? extends Space> spaceList = spaceService.listSpace(0, request);
         ExcUtils.throwIfTrue(spaceList == null || spaceList.isEmpty(), "私人空间不存在，请联系管理员");
         Space space = spaceList.get(0);
         Long usedSize = space.getSize();

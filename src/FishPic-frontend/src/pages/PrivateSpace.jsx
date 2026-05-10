@@ -320,7 +320,7 @@ function PrivateSpace() {
             type={batchMode ? 'primary' : 'default'}
             danger={batchMode}
           >
-            {batchMode ? '退出批量' : '批量删除'}
+            {batchMode ? '退出批量' : '批量选择'}
           </Button>
           <Button icon={<ArrowUpOutlined />} className="private-space-upgrade-btn" onClick={() => setShowUpgrade(true)}>
             升级空间

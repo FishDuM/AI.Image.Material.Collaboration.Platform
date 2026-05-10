@@ -15,6 +15,7 @@ import AdminPictureManagement from './pages/AdminPictureManagement'
 import CommunitySquare from './pages/CommunitySquare'
 import PrivateSpace from './pages/PrivateSpace'
 import TeamSpace from './pages/TeamSpace'
+import TeamSpaceDetail from './pages/TeamSpaceDetail'
 import Notifications from './pages/Notifications'
 import MobileLoginPage from './pages/MobileLoginPage'
 import MobileRegisterPage from './pages/MobileRegisterPage'
@@ -37,6 +38,7 @@ function App() {
               <Route path="/community" element={<CommunitySquare/>}/>
               <Route path="/private-space" element={<ProtectedRoute><PrivateSpace/></ProtectedRoute>}/>
               <Route path="/team-space" element={<ProtectedRoute><TeamSpace/></ProtectedRoute>}/>
+              <Route path="/team-space/:id" element={<ProtectedRoute><TeamSpaceDetail/></ProtectedRoute>}/>
               <Route path="/notifications" element={<ProtectedRoute><Notifications/></ProtectedRoute>}/>
               <Route path="/admin/users" element={<ProtectedRoute requireAdmin><UserManagement/></ProtectedRoute>}/>
               <Route path="/admin/pictures" element={<ProtectedRoute requireAdmin><AdminPictureManagement/></ProtectedRoute>}/>

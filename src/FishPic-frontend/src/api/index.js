@@ -132,6 +132,8 @@ export const updateSpace = (data) => api.post('/space/update', data)
 
 export const listSpace = (type) => api.get('/space/list', { params: { type } })
 
+export const getSpace = (id) => api.get('/space/getSpace', { params: { id } })
+
 export const spaceListPicture = (data) => api.post('/space/pictureList', data)
 
 export const postPictureList = (data) => api.post('/post/pictureList', data)

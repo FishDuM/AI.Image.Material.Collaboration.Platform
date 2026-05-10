@@ -9,56 +9,60 @@ import hk.ljx.fishpicsbackend.entity.Space;
 import com.baomidou.mybatisplus.extension.service.IService;
 import hk.ljx.fishpicsbackend.entity.User;
 import hk.ljx.fishpicsbackend.vo.picture.PicturePageVO;
+import hk.ljx.fishpicsbackend.vo.space.SpaceVO;
 
 import javax.servlet.http.HttpServletRequest;
 import java.util.List;
 
 /**
-* @author abc
-* @description 针对表【space(空间表)】的数据库操作Service
-* @createDate 2026-05-03 15:29:23
-*/
+ * 空间服务接口，提供私人空间(type=0)和团队空间(type=1)的CRUD操作
+ */
 public interface SpaceService extends IService<Space> {
 
     /**
-     * 用户创建空间
-     *
-     * @param createSpace 创建空间参数
-     * @return 结果
+     * 创建空间
+     * @param createSpace 创建空间请求参数
+     * @param user 当前登录用户
+     * @return 创建成功返回true
      */
     Boolean createSpace(CreateSpace createSpace, User user);
 
     /**
-     * 获取空间列表
-     * @param type 空间类型 0:私人空间 1:团队空间
-     * @param request 请求
-     * @return 空间列表
+     * 获取当前用户的空间列表
+     * @param type 空间类型：0-私人空间，1-团队空间
+     * @param request HTTP请求
+     * @return 空间VO列表（含图片数量、创建人、成员信息）
      */
-    List<Space> listSpace(Integer type, HttpServletRequest request);
+    List<SpaceVO> listSpace(Integer type, HttpServletRequest request);
+
+    /**
+     * 获取单个空间详情
+     * @param id 空间ID
+     * @param request HTTP请求
+     * @return 空间VO
+     */
+    SpaceVO getSpace(Long id, HttpServletRequest request);
 
     /**
      * 更新空间信息
-     *
-     * @param updateSpace 更新空间参数
-     * @param request     请求
-     * @return 结果
+     * @param updateSpace 更新请求参数
+     * @param request HTTP请求
+     * @return 更新成功返回true
      */
     Boolean updateSpace(UpdateSpace updateSpace, HttpServletRequest request);
 
     /**
-     * 获取空间图片列表
-     *
-     * @param spacePictureList 空间ID
-     * @param request          请求
-     * @return 图片列表
+     * 获取空间图片列表（分页）
+     * @param spacePictureList 查询参数
+     * @param request HTTP请求
+     * @return 图片分页结果
      */
     PicturePageVO pictureList(SpacePictureList spacePictureList, HttpServletRequest request);
 
     /**
-     * 获取空间查询条件
-     *
-     * @param spaceQueryWrapper 空间条件
-     * @return 查询条件
+     * 构建空间查询条件
+     * @param spaceQueryWrapper 查询条件包装器
+     * @return QueryWrapper对象
      */
     QueryWrapper<Space> getSpaceQueryWrapper(SpaceQueryWrapper spaceQueryWrapper);
 }
