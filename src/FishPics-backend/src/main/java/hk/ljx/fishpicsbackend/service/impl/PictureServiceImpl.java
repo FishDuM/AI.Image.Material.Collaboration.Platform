@@ -18,7 +18,6 @@ import hk.ljx.fishpicsbackend.service.*;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.vo.picture.PictureAdminVO;
 import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
-import hk.ljx.fishpicsbackend.vo.picture.PicturePostVO;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,13 +34,13 @@ import java.util.stream.Collectors;
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
 /**
-* @author 30574
-* @description 针对表【picture(图片表)】的数据库操作Service实现
-* @createDate 2026-04-13 21:24:49
-*/
+ * @author 30574
+ * @description 针对表【picture(图片表)】的数据库操作Service实现
+ * @createDate 2026-04-13 21:24:49
+ */
 @Service
 public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
-    implements PictureService {
+        implements PictureService {
 
     @Resource
     private PictureChildService pictureChildService;
@@ -113,19 +112,25 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         Picture picture = new Picture();
         BeanUtil.copyProperties(pictureMessage, picture);
         picture.setUserId(userId);
+        // BeanUtil 可能无法将 String size 转为 Long，手动转换兜底
+        if (picture.getSize() == null && pictureMessage.getSize() != null) {
+            picture.setSize(Long.parseLong(pictureMessage.getSize()));
+        }
+        ExcUtils.throwIfTrue(picture.getSize() == null, ExceptionCode.INTERNAL_SERVER_ERROR, "获取图片大小失败");
         // 判断私人空间磁盘是否充足
-        Long size = picture.getSize();
+        long size = picture.getSize();
         List<? extends Space> spaceList = spaceService.listSpace(0, request);
         ExcUtils.throwIfTrue(spaceList == null || spaceList.isEmpty(), "私人空间不存在，请联系管理员");
         Space space = spaceList.get(0);
-        Long usedSize = space.getSize();
-        Long storageSize = space.getStorageSize();
+        long usedSize = space.getSize() != null ? space.getSize() : 0L;
+        long storageSize = space.getStorageSize() != null ? space.getStorageSize() : 0L;
         long updateSize = usedSize + size;
-        if (updateSize > storageSize){
+        if (updateSize > storageSize) {
             cosService.deletePicture(key);
-            throw new BaseException(ExceptionCode.UNAUTHORIZED,"私人空间磁盘不足，请升级空间或删除图片");
+            throw new BaseException(ExceptionCode.UNAUTHORIZED, "私人空间磁盘不足，请升级空间或删除图片");
         }
-        Boolean update = spaceService.update(space, new UpdateWrapper<Space>().set("size", updateSize).eq("id", space.getId()));
+        Boolean update = spaceService.update(space,
+                new UpdateWrapper<Space>().set("size", updateSize).eq("id", space.getId()));
         ExcUtils.throwIfFalse(update, ExceptionCode.DATABASE_ERROR, "上传失败，数据库错误");
         picture.setSpaceId(space.getId());
         // 管理员上传直接通过，普通用户上传需要审核
@@ -175,8 +180,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 p.getStatus(),
                 p.getCreateTime(),
                 p.getUserId(),
-                p.getIsPrivate()
-        ));
+                p.getIsPrivate()));
     }
 
     @Override
@@ -205,7 +209,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         // 帖子封面图禁止删除
         List<Post> posts = postService.list(new QueryWrapper<Post>().in("cover", ids));
         Set<Long> count = posts.stream().map(Post::getCover).collect(Collectors.toSet());
-        if (!posts.isEmpty()){
+        if (!posts.isEmpty()) {
             posts.forEach(post -> {
                 ids.remove(post.getCover());
             });
@@ -219,15 +223,13 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         Set<Long> userIds = new HashSet<>();
         pictureList.forEach(picture -> userIds.add(picture.getUserId()));
         // 判断是否为图片的主人或者管理员
-        ExcUtils.throwIfFalse(role.equals(ADMIN) || userIds.stream().findFirst().map(id -> id.equals(user.getId())).orElse(false) || userIds.size() != 1, ExceptionCode.UNAUTHORIZED, "没有权限删除图片");
+        ExcUtils.throwIfFalse(role.equals(ADMIN)
+                || userIds.stream().findFirst().map(id -> id.equals(user.getId())).orElse(false) || userIds.size() != 1,
+                ExceptionCode.UNAUTHORIZED, "没有权限删除图片");
 
         int i = pictureMapper.delete(new QueryWrapper<Picture>().in("id", ids));
         ExcUtils.throwIfTrue(i == 0, "删除失败");
         pictureList.forEach(picture -> cosService.deletePictureByUrl(picture.getUrl()));
-        return !count.isEmpty() ? "删除成功，但有"+ count.size() + "个图片为帖子封面无法删除" : "删除成功";
+        return !count.isEmpty() ? "删除成功，但有" + count.size() + "个图片为帖子封面无法删除" : "删除成功";
     }
 }
-
-
-
-

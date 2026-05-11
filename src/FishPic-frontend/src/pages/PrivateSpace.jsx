@@ -161,18 +161,6 @@ function PrivateSpace() {
     }
   }, [spaces, fetchPictures])
 
-  const handleDeletePicture = useCallback(async (pictureId) => {
-    try {
-      const res = await deletePicture([pictureId])
-      message.success(res?.message || '删除成功')
-      if (spaces.length > 0 && spaces[0].id) {
-        await fetchPictures(spaces[0].id, picturePage, searchKeyword)
-      }
-    } catch (error) {
-      message.error(error.message || '删除失败')
-    }
-  }, [spaces, fetchPictures, picturePage, searchKeyword, message])
-
   const toggleBatchMode = useCallback(() => {
     setBatchMode((prev) => {
       if (prev) setSelectedIds([])
@@ -354,34 +342,14 @@ function PrivateSpace() {
                     <AntImage
                       src={item.data.url}
                       alt=""
-                      preview={false}
+                      preview={!batchMode}
                       className="private-space-masonry-image"
                     />
-                    {batchMode ? (
+                    {batchMode && (
                       <div className="private-space-masonry-select">
                         <div className={`private-space-masonry-checkbox ${isSelected ? 'checked' : ''}`}>
                           {isSelected && <CheckOutlined />}
                         </div>
-                      </div>
-                    ) : (
-                      <div className="private-space-masonry-actions">
-                        <Popconfirm
-                          title="确认删除"
-                          description="确定要删除这张图片吗？"
-                          onConfirm={() => handleDeletePicture(item.data.id)}
-                          okText="删除"
-                          cancelText="取消"
-                          okButtonProps={{ danger: true }}
-                        >
-                          <Button
-                            type="primary"
-                            danger
-                            size="small"
-                            icon={<DeleteOutlined />}
-                          >
-                            删除
-                          </Button>
-                        </Popconfirm>
                       </div>
                     )}
                   </div>

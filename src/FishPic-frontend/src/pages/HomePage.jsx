@@ -492,7 +492,6 @@ function HomePage() {
                 <AntImage
                   src={item.data.url}
                   alt=""
-                  preview={false}
                   className="home-masonry-image"
                 />
               </div>

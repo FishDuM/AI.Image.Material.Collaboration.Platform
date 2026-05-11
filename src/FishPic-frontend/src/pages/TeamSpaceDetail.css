@@ -15,7 +15,7 @@
   margin-bottom: 24px;
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: stretch;
 }
 
 .tsd-header-left {
@@ -68,6 +68,7 @@
 .tsd-header-right {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 12px;
 }
 
@@ -187,10 +188,6 @@
   cursor: pointer;
 }
 
-.tsd-masonry-item:hover .tsd-masonry-actions {
-  opacity: 1;
-}
-
 .tsd-masonry-item.batch-mode:hover {
   opacity: 0.85;
 }
@@ -219,15 +216,6 @@
 .tsd-masonry-checkbox.checked {
   background: var(--color-primary, #1677ff);
   border-color: var(--color-primary, #1677ff);
-}
-
-.tsd-masonry-actions {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-  opacity: 0;
-  transition: opacity 0.25s ease;
-  z-index: 10;
 }
 
 .tsd-masonry-image {

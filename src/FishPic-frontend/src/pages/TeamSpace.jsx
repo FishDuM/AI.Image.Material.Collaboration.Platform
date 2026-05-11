@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useContext } from 'react'
+import { useState, useEffect, useCallback, useContext, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App as AntApp, Typography, Button, Empty, Modal, Form, Input, Spin, Avatar, Progress, Tooltip, Tag } from 'antd'
 import { TeamOutlined, EditOutlined, PlusOutlined, PictureOutlined, CloudServerOutlined, UserOutlined } from '@ant-design/icons'
@@ -79,6 +79,25 @@ function TeamSpace() {
     setShowEdit(true)
   }
 
+  const listRef = useRef(null)
+
+  useEffect(() => {
+    const container = listRef.current
+    if (!container) return
+    const handler = (e) => {
+      const el = e.currentTarget
+      if (el.scrollWidth > el.clientWidth) {
+        e.preventDefault()
+        el.scrollLeft += e.deltaY
+      }
+    }
+    const items = container.querySelectorAll('.ts-list-item')
+    items.forEach((el) => el.addEventListener('wheel', handler, { passive: false }))
+    return () => {
+      items.forEach((el) => el.removeEventListener('wheel', handler))
+    }
+  }, [spaces])
+
   const handleUpdate = async (values) => {
     setUpdateLoading(true)
     try {
@@ -108,79 +127,81 @@ function TeamSpace() {
 
     return (
       <div key={space.id} className="ts-list-item" onClick={() => navigate(`/team-space/${space.id}`)}>
-        <div className="ts-list-left">
-          <div className="ts-list-name-row">
-            <Text strong className="ts-list-name">{space.name}</Text>
-            <Tag color={levelInfo.color} variant="filled" className="ts-level-tag">
-              {levelInfo.label}
-            </Tag>
-          </div>
-          {space.introduction && (
-            <Text type="secondary" className="ts-list-intro" ellipsis={{ tooltip: space.introduction }}>
-              {space.introduction}
-            </Text>
-          )}
-        </div>
-
-        <div className="ts-list-center">
-          <div className="ts-list-stat">
-            <PictureOutlined className="ts-list-stat-icon" />
-            <Text type="secondary" className="ts-list-stat-label">图片</Text>
-            <Text strong className="ts-list-stat-value">{space.pictureCount ?? 0}</Text>
+        <div className="ts-list-inner">
+          <div className="ts-list-left">
+            <div className="ts-list-name-row">
+              <Text strong className="ts-list-name">{space.name}</Text>
+              <Tag color={levelInfo.color} variant="filled" className="ts-level-tag">
+                {levelInfo.label}
+              </Tag>
+            </div>
+            {space.introduction && (
+              <Text type="secondary" className="ts-list-intro" ellipsis={{ tooltip: space.introduction }}>
+                {space.introduction}
+              </Text>
+            )}
           </div>
 
-          <div className="ts-list-divider" />
+          <div className="ts-list-center">
+            <div className="ts-list-stat">
+              <PictureOutlined className="ts-list-stat-icon" />
+              <Text type="secondary" className="ts-list-stat-label">图片</Text>
+              <Text strong className="ts-list-stat-value">{space.pictureCount ?? 0}</Text>
+            </div>
 
-          <div className="ts-list-stat">
-            <CloudServerOutlined className="ts-list-stat-icon" />
-            <Text type="secondary" className="ts-list-stat-label">存储</Text>
-            <Text type="secondary" className="ts-list-stat-value">
-              {formatSize(space.size || 0)} / {formatSize(space.storageSize || 0)}
-            </Text>
+            <div className="ts-list-divider" />
+
+            <div className="ts-list-stat">
+              <CloudServerOutlined className="ts-list-stat-icon" />
+              <Text type="secondary" className="ts-list-stat-label">存储</Text>
+              <Text type="secondary" className="ts-list-stat-value">
+                {formatSize(space.size || 0)} / {formatSize(space.storageSize || 0)}
+              </Text>
+            </div>
+
+            <div className="ts-list-divider" />
+
+            <div className="ts-list-stat">
+              <UserOutlined className="ts-list-stat-icon" />
+              <Text type="secondary" className="ts-list-stat-label">创建人</Text>
+              <Avatar size={18} src={space.userAvatar} icon={<UserOutlined />} />
+              <Text className="ts-list-stat-value">{space.userName || '未知'}</Text>
+            </div>
+
+            {members.length > 0 && (
+              <>
+                <div className="ts-list-divider" />
+                <div className="ts-list-stat">
+                  <TeamOutlined className="ts-list-stat-icon" />
+                  <Text type="secondary" className="ts-list-stat-label">成员</Text>
+                  <Avatar.Group
+                    max={{ count: 10, style: { backgroundColor: isDarkMode ? '#434343' : '#f0f0f0', color: isDarkMode ? 'rgba(255,255,255,0.65)' : '#999' } }}
+                    size={22}
+                  >
+                    {members.map((m) => (
+                      <Tooltip title={m.nickname || '成员'} key={m.id}>
+                        <Avatar size={22} src={m.avatar} icon={<UserOutlined />} />
+                      </Tooltip>
+                    ))}
+                  </Avatar.Group>
+                </div>
+              </>
+            )}
           </div>
 
-          <div className="ts-list-divider" />
-
-          <div className="ts-list-stat">
-            <UserOutlined className="ts-list-stat-icon" />
-            <Text type="secondary" className="ts-list-stat-label">创建人</Text>
-            <Avatar size={18} src={space.userAvatar} icon={<UserOutlined />} />
-            <Text className="ts-list-stat-value">{space.userName || '未知'}</Text>
+          <div className="ts-list-right">
+            <div className="ts-list-storage-bar">
+              <Progress
+                percent={Number(usedPercent)}
+                strokeColor={Number(usedPercent) > 80 ? '#ff4d4f' : '#1677ff'}
+                showInfo={false}
+                size="small"
+              />
+            </div>
+            <Tooltip title="编辑空间">
+              <Button type="text" size="small" icon={<EditOutlined />} onClick={(e) => { e.stopPropagation(); handleEditOpen(space) }} />
+            </Tooltip>
           </div>
-
-          {members.length > 0 && (
-            <>
-              <div className="ts-list-divider" />
-              <div className="ts-list-stat">
-                <TeamOutlined className="ts-list-stat-icon" />
-                <Text type="secondary" className="ts-list-stat-label">成员</Text>
-                <Avatar.Group
-                  max={{ count: 10, style: { backgroundColor: isDarkMode ? '#434343' : '#f0f0f0', color: isDarkMode ? 'rgba(255,255,255,0.65)' : '#999' } }}
-                  size={22}
-                >
-                  {members.map((m) => (
-                    <Tooltip title={m.nickname || '成员'} key={m.id}>
-                      <Avatar size={22} src={m.avatar} icon={<UserOutlined />} />
-                    </Tooltip>
-                  ))}
-                </Avatar.Group>
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="ts-list-right">
-          <div className="ts-list-storage-bar">
-            <Progress
-              percent={Number(usedPercent)}
-              strokeColor={Number(usedPercent) > 80 ? '#ff4d4f' : '#1677ff'}
-              showInfo={false}
-              size="small"
-            />
-          </div>
-          <Tooltip title="编辑空间">
-            <Button type="text" size="small" icon={<EditOutlined />} onClick={(e) => { e.stopPropagation(); handleEditOpen(space) }} />
-          </Tooltip>
         </div>
       </div>
     )
@@ -209,7 +230,7 @@ function TeamSpace() {
 
       <Spin spinning={loading}>
         {!loading && spaces.length > 0 && (
-          <div className="ts-list">
+          <div className="ts-list" ref={listRef}>
             <div className="ts-list-header">
               <div className="ts-list-header-left">空间信息</div>
               <div className="ts-list-header-center">详情</div>

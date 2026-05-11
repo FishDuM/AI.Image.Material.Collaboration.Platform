@@ -152,10 +152,6 @@
   cursor: pointer;
 }
 
-.private-space-masonry-item:hover .private-space-masonry-actions {
-  opacity: 1;
-}
-
 .private-space-masonry-item.batch-mode:hover {
   opacity: 0.85;
 }
@@ -186,15 +182,6 @@
 .private-space-masonry-checkbox.checked {
   background: var(--color-primary, #1677ff);
   border-color: var(--color-primary, #1677ff);
-}
-
-.private-space-masonry-actions {
-  position: absolute;
-  bottom: 8px;
-  right: 8px;
-  opacity: 0;
-  transition: opacity 0.25s ease;
-  z-index: 10;
 }
 
 .private-space-masonry-image {
@@ -322,7 +309,7 @@
 
 .upgrade-plan-selected {
   border-color: var(--color-primary, #1677ff) !important;
-  box-shadow: 0 0 0 1px var(--color-primary, #1677ff);
+  box-shadow: 0 0 0 1px #1677ff;
 }
 
 .upgrade-plan-hot {
@@ -426,7 +413,7 @@
 
 .upgrade-addon-selected {
   border-color: var(--color-primary, #1677ff) !important;
-  box-shadow: 0 0 0 1px var(--color-primary, #1677ff);
+  box-shadow: 0 0 0 1px #1677ff;
   background: color-mix(in srgb, var(--color-primary, #1677ff) 5%, transparent);
 }
 

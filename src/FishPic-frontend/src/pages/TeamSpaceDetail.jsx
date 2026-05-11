@@ -129,17 +129,6 @@ function TeamSpaceDetail() {
     if (spaceInfo?.id) fetchPictures(spaceInfo.id, 1, '')
   }, [spaceInfo?.id, fetchPictures])
 
-  const handleDeletePicture = useCallback(async (pictureId) => {
-    try {
-      const res = await deletePicture([pictureId])
-      message.success(res?.message || '删除成功')
-      if (spaceInfo?.id) fetchPictures(spaceInfo.id, picturePage, searchKeyword)
-      fetchSpace()
-    } catch (error) {
-      message.error(error.message || '删除失败')
-    }
-  }, [spaceInfo?.id, fetchPictures, picturePage, searchKeyword, fetchSpace, message])
-
   const toggleBatchMode = useCallback(() => {
     setBatchMode((prev) => {
       if (prev) setSelectedIds([])
@@ -331,25 +320,12 @@ function TeamSpaceDetail() {
                   className={`tsd-masonry-item ${batchMode ? 'batch-mode' : ''}`}
                   onClick={batchMode ? () => toggleSelect(item.data.id) : undefined}
                 >
-                  <AntImage src={item.data.url} alt="" preview={false} className="tsd-masonry-image" />
-                  {batchMode ? (
+                  <AntImage src={item.data.url} alt="" preview={!batchMode} className="tsd-masonry-image" />
+                  {batchMode && (
                     <div className="tsd-masonry-select">
                       <div className={`tsd-masonry-checkbox ${isSelected ? 'checked' : ''}`}>
                         {isSelected && <CheckOutlined />}
                       </div>
-                    </div>
-                  ) : (
-                    <div className="tsd-masonry-actions">
-                      <Popconfirm
-                        title="确认删除"
-                        description="确定要删除这张图片吗？"
-                        onConfirm={() => handleDeletePicture(item.data.id)}
-                        okText="删除"
-                        cancelText="取消"
-                        okButtonProps={{ danger: true }}
-                      >
-                        <Button type="primary" danger size="small" icon={<DeleteOutlined />}>删除</Button>
-                      </Popconfirm>
                     </div>
                   )}
                 </div>

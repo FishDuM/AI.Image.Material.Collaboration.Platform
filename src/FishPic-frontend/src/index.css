@@ -17,6 +17,8 @@
   --text-secondary: #6b6b6b;
   --text-muted: #999999;
   --border-color: #e8e8e8;
+  --color-primary: #1677ff;
+  --primary-color: #1677ff;
   --accent: #262626;
   --accent-rgb: 38, 38, 38;
   --accent-hover: #434343;
@@ -53,6 +55,8 @@
   --text-secondary: rgba(255, 255, 255, 0.65);
   --text-muted: rgba(255, 255, 255, 0.45);
   --border-color: #434343;
+  --color-primary: #4096ff;
+  --primary-color: #4096ff;
   --accent: #4096ff;
   --accent-rgb: 64, 150, 255;
   --accent-hover: #69b1ff;

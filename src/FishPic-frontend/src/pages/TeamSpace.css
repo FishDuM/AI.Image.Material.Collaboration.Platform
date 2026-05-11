@@ -70,10 +70,32 @@
   background: var(--bg-secondary);
   transition: background 0.15s;
   cursor: pointer;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.ts-list-item::-webkit-scrollbar {
+  height: 4px;
+}
+
+.ts-list-item::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 2px;
+}
+
+.ts-list-item::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .ts-list-item:hover {
   background: var(--bg-hover);
+}
+
+.ts-list-inner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
 }
 
 .ts-list-left {
@@ -113,17 +135,16 @@
 }
 
 .ts-list-center {
-  flex: 1;
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 16px;
   min-width: 0;
 }
 
 .ts-list-stat {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   white-space: nowrap;
 }
 
@@ -139,7 +160,7 @@
 }
 
 .ts-list-stat-value {
-  font-size: 13px;
+  font-size: 12px;
   flex-shrink: 0;
 }
 

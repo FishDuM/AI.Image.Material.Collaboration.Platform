@@ -1,5 +1,5 @@
-import { Modal, Image as AntImage, Spin } from 'antd'
-import { LikeOutlined, HeartOutlined, StarOutlined, LeftOutlined, RightOutlined, FileTextOutlined } from '@ant-design/icons'
+import { Modal, Image as AntImage, Spin, Popover, QRCode, App } from 'antd'
+import { LikeOutlined, HeartOutlined, StarOutlined, LeftOutlined, RightOutlined, FileTextOutlined, ShareAltOutlined, CopyOutlined, SendOutlined } from '@ant-design/icons'
 import MobilePageWrapper from './MobilePageWrapper'
 import './PostDetailModal.css'
 
@@ -37,11 +37,52 @@ function PostDetailModal({
   onEdit,
   mode = 'modal',
 }) {
+  const { message } = App.useApp()
   if (!open) return null
 
   if (postDetail != null && typeof postDetail !== 'object') {
     return null
   }
+
+  const currentUrl = window.location.href
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(currentUrl)
+      message.success('链接已复制到剪贴板')
+    } catch {
+      const textarea = document.createElement('textarea')
+      textarea.value = currentUrl
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+      message.success('链接已复制到剪贴板')
+    }
+  }
+
+  const handleSendToFriend = () => {
+    message.info('私信功能开发中，敬请期待')
+  }
+
+  const shareContent = (
+    <div className="share-popover-content">
+      <div className="share-popover-buttons">
+        <button type="button" className="share-popover-btn" onClick={handleCopyLink}>
+          <CopyOutlined className="share-popover-btn-icon" />
+          <span>复制链接</span>
+        </button>
+        <button type="button" className="share-popover-btn" onClick={handleSendToFriend}>
+          <SendOutlined className="share-popover-btn-icon" />
+          <span>私信给好友</span>
+        </button>
+      </div>
+      <div className="share-popover-qrcode">
+        <QRCode value={currentUrl} size={120} />
+        <span className="share-popover-qrcode-tip">扫码分享</span>
+      </div>
+    </div>
+  )
 
   const validPics = Array.isArray(postDetail?.pictureUrl)
     ? postDetail.pictureUrl.filter(url => typeof url === 'string' && url.trim())
@@ -144,6 +185,18 @@ function PostDetailModal({
               <StarOutlined />
               <span>{postDetail.commentNum || 0}</span>
             </div>
+            <Popover
+              content={shareContent}
+              trigger="click"
+              placement="top"
+              overlayClassName="share-popover-overlay"
+              align={{ offset: [0, -8] }}
+            >
+              <div className="post-detail-stat-item post-detail-share-btn">
+                <ShareAltOutlined />
+                <span>分享</span>
+              </div>
+            </Popover>
           </div>
         </div>
       </div>
