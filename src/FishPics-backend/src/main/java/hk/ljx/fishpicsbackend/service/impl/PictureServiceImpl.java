@@ -13,6 +13,7 @@ import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.dto.picture.DeleteByIdList;
 import hk.ljx.fishpicsbackend.dto.picture.PictureMessage;
+import hk.ljx.fishpicsbackend.dto.picture.PictureUpdateRequest;
 import hk.ljx.fishpicsbackend.entity.*;
 import hk.ljx.fishpicsbackend.service.*;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
@@ -231,5 +232,23 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         ExcUtils.throwIfTrue(i == 0, "删除失败");
         pictureList.forEach(picture -> cosService.deletePictureByUrl(picture.getUrl()));
         return !count.isEmpty() ? "删除成功，但有" + count.size() + "个图片为帖子封面无法删除" : "删除成功";
+    }
+
+    @Override
+    public void updatePicture(PictureUpdateRequest request) {
+        Long ids = request.getIds();
+        ExcUtils.throwIfTrue(ObjUtil.isEmpty(ids), "图片id不能为空");
+        long count = pictureMapper.selectCount(new QueryWrapper<Picture>().eq("id", ids));
+        ExcUtils.throwIfTrue(count == 0, "图片不存在");
+        UpdateWrapper<Picture> updateWrapper = new UpdateWrapper<Picture>().eq("id", ids);
+        if (request.getPictureName() != null) {
+            updateWrapper.set("picture_name", request.getPictureName());
+        }
+        if (request.getIntroduction() != null) {
+            updateWrapper.set("introduction", request.getIntroduction());
+        }
+        if (updateWrapper.getSqlSet() != null && !updateWrapper.getSqlSet().isEmpty()) {
+            pictureMapper.update(null, updateWrapper);
+        }
     }
 }

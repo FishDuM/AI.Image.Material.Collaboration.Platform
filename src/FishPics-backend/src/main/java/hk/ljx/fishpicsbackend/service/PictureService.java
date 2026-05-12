@@ -1,6 +1,7 @@
 package hk.ljx.fishpicsbackend.service;
 
 import hk.ljx.fishpicsbackend.dto.picture.DeleteByIdList;
+import hk.ljx.fishpicsbackend.dto.picture.PictureUpdateRequest;
 import hk.ljx.fishpicsbackend.entity.Picture;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
@@ -68,4 +69,10 @@ public interface PictureService extends IService<Picture> {
      * @return 返回的 message
      */
     String deletePicture(DeleteByIdList deleteByIdList, HttpServletRequest request);
+
+    /**
+     * 批量编辑图片信息
+     * @param request 编辑请求
+     */
+    void updatePicture(PictureUpdateRequest request);
 }

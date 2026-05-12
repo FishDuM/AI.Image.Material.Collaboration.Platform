@@ -7,6 +7,7 @@ import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.dto.picture.DeleteByIdList;
+import hk.ljx.fishpicsbackend.dto.picture.PictureUpdateRequest;
 import hk.ljx.fishpicsbackend.entity.Picture;
 import hk.ljx.fishpicsbackend.service.PictureService;
 import hk.ljx.fishpicsbackend.vo.picture.PictureAdminVO;
@@ -60,6 +61,12 @@ public class PictureController {
     public Response<String> deletePicture(@RequestBody DeleteByIdList deleteByIdList, HttpServletRequest request) {
         ExcUtils.throwIfTrue(ObjUtil.isEmpty(deleteByIdList), "id不能为空");
         return ResUtils.successOfMessage(pictureService.deletePicture(deleteByIdList, request));
+    }
+
+    @PutMapping("/update")
+    public Response<Boolean> updatePicture(@RequestBody PictureUpdateRequest request) {
+        pictureService.updatePicture(request);
+        return ResUtils.success(true);
     }
 
     @AuthCheck(role = ADMIN)
