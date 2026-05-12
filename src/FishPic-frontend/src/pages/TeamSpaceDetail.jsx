@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useContext } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { App as AntApp, Typography, Button, Modal, Form, Input, Pagination, Masonry, Image as AntImage, Spin, Empty, Popconfirm, Progress, Popover, Avatar, Tooltip, Tag } from 'antd'
-import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowLeftOutlined, TeamOutlined, UserOutlined } from '@ant-design/icons'
-import { getSpace, updateSpace, spaceListPicture, deletePicture } from '../api'
+import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowLeftOutlined, TeamOutlined, UserOutlined, EditOutlined } from '@ant-design/icons'
+import { getSpace, updateSpace, spaceListPicture, deletePicture, updatePicture } from '../api'
+import { useIsMobile } from '../hooks/useIsMobile'
 import { ThemeContext } from '../context/ThemeContext'
 import './TeamSpaceDetail.css'
 
@@ -25,13 +26,13 @@ const PAGINATION_LOCALE = {
 }
 
 const LEVEL_MAP = {
-  0: { label: '普通', color: 'blue', className: 'level-normal', cardClass: 'storage-card-normal' },
+  0: { label: '普通', color: 'green', className: 'level-normal', cardClass: 'storage-card-normal' },
   1: { label: 'VIP', color: 'gold', className: 'level-vip', cardClass: 'storage-card-vip' },
-  2: { label: 'SVIP', color: 'red', className: 'level-svip', cardClass: 'storage-card-svip' },
+  2: { label: 'SVIP', color: 'orange', className: 'level-svip', cardClass: 'storage-card-svip' },
 }
 
 const storageStrokeColor = {
-  '0%': '#108ee9',
+  '0%': '#5A5A5A',
   '100%': '#87d068',
 }
 
@@ -46,6 +47,7 @@ const formatStorage = (bytes) => {
 function TeamSpaceDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
   const { message } = AntApp.useApp()
   const { isDarkMode } = useContext(ThemeContext)
 
@@ -60,6 +62,9 @@ function TeamSpaceDetail() {
 
   const [batchMode, setBatchMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState([])
+  const [showEditPicture, setShowEditPicture] = useState(false)
+  const [editPictureLoading, setEditPictureLoading] = useState(false)
+  const [editPictureForm] = Form.useForm()
 
   const [showEdit, setShowEdit] = useState(false)
   const [updateLoading, setUpdateLoading] = useState(false)
@@ -158,6 +163,53 @@ function TeamSpaceDetail() {
       message.error(error.message || '批量删除失败')
     }
   }, [selectedIds, spaceInfo?.id, fetchPictures, picturePage, searchKeyword, fetchSpace, message])
+
+  const handleEditPictureOpen = () => {
+    if (selectedIds.length === 0) {
+      message.warning('请先选择图片')
+      return
+    }
+    if (selectedIds.length > 1) {
+      message.warning('一次只能编辑一张图片')
+      return
+    }
+    if (isMobile) {
+      const pic = pictures.find(p => p.id === selectedIds[0])
+      navigate('/mobile/picture/edit', {
+        state: {
+          pictureId: selectedIds[0],
+          pictureUrl: pic?.url,
+          pictureName: pic?.pictureName,
+          introduction: pic?.introduction,
+        }
+      })
+      return
+    }
+    editPictureForm.resetFields()
+    setShowEditPicture(true)
+  }
+
+  const handleEditPictureSubmit = async (values) => {
+    setEditPictureLoading(true)
+    try {
+      await updatePicture({
+        ids: selectedIds,
+        pictureName: values.pictureName || undefined,
+        introduction: values.introduction || undefined,
+      })
+      message.success('编辑成功')
+      setShowEditPicture(false)
+      editPictureForm.resetFields()
+      setSelectedIds([])
+      setBatchMode(false)
+      if (spaceInfo?.id) fetchPictures(spaceInfo.id, picturePage, searchKeyword)
+      fetchSpace()
+    } catch (error) {
+      message.error(error.message || '编辑失败')
+    } finally {
+      setEditPictureLoading(false)
+    }
+  }
 
   const handleEditOpen = () => {
     if (spaceInfo) {
@@ -340,6 +392,13 @@ function TeamSpaceDetail() {
             </span>
             <div className="tsd-batch-actions">
               <Button icon={<CloseOutlined />} onClick={toggleBatchMode}>取消</Button>
+              <Button
+                icon={<EditOutlined />}
+                onClick={handleEditPictureOpen}
+                disabled={selectedIds.length === 0}
+              >
+                编辑图片
+              </Button>
               <Popconfirm
                 title="确认删除"
                 description={`确定要删除选中的 ${selectedIds.length} 张图片吗？`}
@@ -394,6 +453,48 @@ function TeamSpaceDetail() {
             <Input.TextArea placeholder="请输入空间介绍" maxLength={200} rows={3} showCount />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        className="edit-picture-modal"
+        title={null}
+        open={showEditPicture}
+        onCancel={() => { setShowEditPicture(false); editPictureForm.resetFields() }}
+        width="80vw"
+        style={{ maxHeight: '75vh' }}
+        footer={null}
+        closable={false}
+        destroyOnHidden
+      >
+        <div className="edit-picture-layout">
+          <div className="edit-picture-left">
+            {(() => {
+              const first = pictures.find(p => selectedIds.includes(p.id))
+              return first ? <img src={first.url} alt="" className="edit-picture-img" /> : null
+            })()}
+          </div>
+          <div className="edit-picture-right">
+            <div className="edit-picture-right-header">
+              <span className="edit-picture-title">编辑图片信息</span>
+            </div>
+            <Form form={editPictureForm} layout="vertical" onFinish={handleEditPictureSubmit} className="edit-picture-form">
+              <Form.Item name="pictureName" label="图片名称">
+                <Input placeholder="留空则不修改" maxLength={50} allowClear />
+              </Form.Item>
+              <Form.Item name="introduction" label="图片介绍">
+                <Input.TextArea placeholder="留空则不修改" maxLength={500} rows={3} allowClear />
+              </Form.Item>
+            </Form>
+            <div className="edit-picture-right-footer">
+              <Button onClick={() => { setShowEditPicture(false); editPictureForm.resetFields() }}>
+                取消
+              </Button>
+              <Button type="primary" onClick={() => editPictureForm.submit()} loading={editPictureLoading}>
+                保存
+              </Button>
+            </div>
+          </div>
+        </div>
       </Modal>
     </main>
   )

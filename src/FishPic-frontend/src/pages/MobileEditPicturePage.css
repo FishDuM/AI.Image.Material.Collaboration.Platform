@@ -1,0 +1,35 @@
+.mobile-edit-picture {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-edit-picture-image {
+  width: 100%;
+  height: 45vh;
+  min-height: 200px;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.mobile-edit-picture-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.mobile-edit-picture-placeholder {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: var(--text-base);
+}
+
+.mobile-edit-picture-form-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4);
+  -webkit-overflow-scrolling: touch;
+}

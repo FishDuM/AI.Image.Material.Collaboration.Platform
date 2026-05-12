@@ -29,7 +29,7 @@ const STATUS_OPTIONS = [
 ]
 
 const STATUS_MAP = {
-  0: { color: 'red', text: '禁用', icon: <EyeInvisibleOutlined /> },
+  0: { color: 'orange', text: '禁用', icon: <EyeInvisibleOutlined /> },
   1: { color: 'green', text: '正常', icon: <EyeOutlined /> },
   2: { color: 'orange', text: '待审核', icon: <PictureOutlined /> },
 }

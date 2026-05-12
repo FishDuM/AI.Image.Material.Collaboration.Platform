@@ -140,6 +140,8 @@ export const postPictureList = (data) => api.post('/post/pictureList', data)
 
 export const deletePicture = (ids) => api.post('/picture/delete', { ids })
 
+export const updatePicture = (data) => api.put('/picture/update', data)
+
 export const likePost = (id) => api.post('/post/like', null, { params: { id } })
 
 export const getPost = (id) => api.get('/post/getPost', { params: { id } })

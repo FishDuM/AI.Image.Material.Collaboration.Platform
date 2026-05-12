@@ -9,9 +9,9 @@ import './TeamSpace.css'
 const { Title, Text } = Typography
 
 const LEVEL_MAP = {
-  0: { color: 'blue', label: '普通' },
+  0: { color: 'green', label: '普通' },
   1: { color: 'gold', label: 'VIP' },
-  2: { color: 'red', label: 'SVIP' },
+  2: { color: 'orange', label: 'SVIP' },
 }
 
 const formatSize = (bytes) => {
@@ -193,7 +193,7 @@ function TeamSpace() {
             <div className="ts-list-storage-bar">
               <Progress
                 percent={Number(usedPercent)}
-                strokeColor={Number(usedPercent) > 80 ? '#ff4d4f' : '#1677ff'}
+                strokeColor={Number(usedPercent) > 80 ? '#D70015' : '#3A3A3A'}
                 showInfo={false}
                 size="small"
               />
@@ -214,7 +214,7 @@ function TeamSpace() {
           <div className="ts-title-row">
             <Title level={3} style={{ margin: 0 }}>团队空间列表</Title>
             {spaces.length > 0 && (
-              <Tag color="blue" variant="filled">{spaces.length} 个空间</Tag>
+              <Tag color="green" variant="filled">{spaces.length} 个空间</Tag>
             )}
           </div>
           <Text type="secondary">管理和协作你的团队图片资源</Text>

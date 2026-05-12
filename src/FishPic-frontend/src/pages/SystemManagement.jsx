@@ -254,8 +254,8 @@ function SystemManagement() {
                     className="system-tag"
                     icon={<TagOutlined />}
                     color={
-                      ['magenta', 'red', 'volcano', 'orange', 'gold', 'lime', 'green', 'cyan', 'blue', 'geekblue', 'purple'][
-                        index % 11
+                      ['magenta', 'orange', 'volcano', 'gold', 'lime', 'green', 'cyan', 'geekblue', 'purple', 'default'][
+                        index % 10
                       ]
                     }
                   >
@@ -394,7 +394,7 @@ function SystemManagement() {
                       borderRadius: 8,
                       overflow: 'hidden',
                       border: pickerSelectedIds.includes(pic.id)
-                        ? '2px solid #1677ff'
+                        ? '2px solid var(--accent)'
                         : '2px solid var(--border-secondary, #f0f0f0)',
                       transition: 'border-color 0.2s',
                     }}

@@ -1,16 +1,14 @@
-import { useContext, useState, useMemo } from 'react'
+import { useContext, useState, useMemo, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { App as AntApp, Button, Avatar, Dropdown, Modal, Form, Input, Card, Drawer, Menu } from 'antd'
-import { 
-  SettingOutlined, 
-  HomeOutlined, 
-  SunOutlined, 
-  MoonOutlined, 
+import { App as AntApp, Button, Avatar, Dropdown, Drawer, Menu, Form } from 'antd'
+import {
+  SettingOutlined,
+  HomeOutlined,
+  SunOutlined,
+  MoonOutlined,
   UserOutlined,
   LogoutOutlined,
   LoginOutlined,
-  LockOutlined,
-  ScanOutlined,
   MenuOutlined,
   CloseOutlined,
   TeamOutlined,
@@ -20,16 +18,16 @@ import {
   LockFilled,
   ToolOutlined,
   PictureOutlined,
-  GithubOutlined,
-  QqOutlined,
-  GlobalOutlined,
-  PlaySquareOutlined,
-  BellOutlined
+  BellOutlined,
 } from '@ant-design/icons'
 import { AuthContext } from '../context/AuthContext.jsx'
-import { getLoginCheckCode, login, getRegisterCheckCode, register, logout } from '../api'
+import { logout } from '../api'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { ThemeContext } from '../context/ThemeContext.jsx'
+import { useAuthModal } from '../hooks/useAuthModal.js'
+import { LoginModal, RegisterModal, SettingsModal } from './shared/LoginModal.jsx'
+import MobileBottomNav from './shared/MobileBottomNav.jsx'
+import './shared/MobileBottomNav.css'
 
 function GlobalLayout({ children }) {
   const { message } = AntApp.useApp()
@@ -38,438 +36,110 @@ function GlobalLayout({ children }) {
   const { isDarkMode, toggleTheme } = useContext(ThemeContext)
   const auth = useContext(AuthContext)
   const userInfo = auth?.userInfo
-  const authLogin = auth?.login
   const authLogout = auth?.logout
   const isMobile = useIsMobile()
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
-  const [loginForm] = Form.useForm()
-  const [loginLoading, setLoginLoading] = useState(false)
-  const [loginCheckCodeUrl, setLoginCheckCodeUrl] = useState('')
-  const [loginKey, setLoginKey] = useState('')
-  const [, setAgreed] = useState(false)
   const [sidebarVisible, setSidebarVisible] = useState(false)
-  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
-  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [loginForm] = Form.useForm()
   const [registerForm] = Form.useForm()
-  const [registerLoading, setRegisterLoading] = useState(false)
-  const [registerCheckCodeUrl, setRegisterCheckCodeUrl] = useState('')
-  const [registerKey, setRegisterKey] = useState('')
 
-  const handleLogout = async () => {
-    try {
-      await logout()
-    } catch {
-      void 0
-    } finally {
+  const authModal = useAuthModal()
+
+  const handleLogout = useCallback(async () => {
+    try { await logout() } catch { /* ignore */ }
+    finally {
       authLogout()
       message.success('退出成功')
       navigate('/')
     }
-  }
+  }, [authLogout, message, navigate])
 
-  const fetchLoginCheckCode = async () => {
-    try {
-      const response = await getLoginCheckCode()
-      const data = response?.data ?? response
-      const inner = data?.data ?? data
-      if (inner?.captchaKey && inner?.base64Image) {
-        setLoginKey(inner.captchaKey)
-        const imageSrc = inner.base64Image.startsWith('data:')
-          ? inner.base64Image
-          : `data:image/png;base64,${inner.base64Image}`
-        setLoginCheckCodeUrl(imageSrc)
-      } else {
-        message.error('获取验证码失败')
-      }
-    } catch {
-      message.error('获取验证码失败')
-    }
-  }
-
-  const showLoginModal = () => {
-    setIsLoginModalOpen(true)
-    fetchLoginCheckCode()
-  }
-
-  const handleLoginCancel = () => {
-    setIsLoginModalOpen(false)
-    loginForm.resetFields()
-    setLoginCheckCodeUrl('')
-    setLoginKey('')
-    setAgreed(false)
-  }
-
-  const showSettingsModal = () => {
-    setIsSettingsModalOpen(true)
-  }
-
-  const handleSettingsCancel = () => {
-    setIsSettingsModalOpen(false)
-  }
-
-  const handleRefreshLoginCode = () => {
-    fetchLoginCheckCode()
-    loginForm.setFieldValue('checkCode', '')
-  }
-
-  const fetchRegisterCheckCode = async () => {
-    try {
-      const response = await getRegisterCheckCode()
-      const data = response?.data ?? response
-      const inner = data?.data ?? data
-      if (inner?.captchaKey && inner?.base64Image) {
-        setRegisterKey(inner.captchaKey)
-        const imageSrc = inner.base64Image.startsWith('data:')
-          ? inner.base64Image
-          : `data:image/png;base64,${inner.base64Image}`
-        setRegisterCheckCodeUrl(imageSrc)
-      } else {
-        message.error('获取验证码失败')
-      }
-    } catch {
-      message.error('获取验证码失败')
-    }
-  }
-
-  const showRegisterModal = () => {
-    if (isMobile) {
-      navigate('/mobile/register')
-      return
-    }
-    setIsLoginModalOpen(false)
-    setIsRegisterModalOpen(true)
-    fetchRegisterCheckCode()
-  }
-
-  const showLoginFromRegister = () => {
-    if (isMobile) {
-      navigate('/mobile/login')
-      return
-    }
-    setIsRegisterModalOpen(false)
-    setIsLoginModalOpen(true)
-    fetchLoginCheckCode()
-  }
-
-  const handleRegisterCancel = () => {
-    setIsRegisterModalOpen(false)
-    registerForm.resetFields()
-    setRegisterCheckCodeUrl('')
-    setRegisterKey('')
-  }
-
-  const handleRefreshRegisterCode = () => {
-    fetchRegisterCheckCode()
-    registerForm.setFieldValue('checkCode', '')
-  }
-
-  const handleRegisterFinish = async (values) => {
-    setRegisterLoading(true)
-    try {
-      if (!registerKey) {
-        message.error('验证码已过期，请刷新验证码')
-        fetchRegisterCheckCode()
-        registerForm.setFieldValue('checkCode', '')
-        setRegisterLoading(false)
-        return
-      }
-      
-      const registerData = {
-        username: values.username,
-        password: values.password,
-        checkPassword: values.checkPassword,
-        checkCode: values.checkCode,
-        captchaKey: registerKey
-      }
-      await register(registerData)
-      message.success('注册成功，请登录')
-      handleRegisterCancel()
-      showLoginModal()
-    } catch (error) {
-      message.error(error.message || '注册失败，请重试')
-      fetchRegisterCheckCode()
-      registerForm.setFieldValue('checkCode', '')
-    } finally {
-      setRegisterLoading(false)
-    }
-  }
-
-  const handleLoginFinish = async (values) => {
-    setLoginLoading(true)
-    try {
-      if (!loginKey) {
-        message.error('验证码已过期，请刷新验证码')
-        fetchLoginCheckCode()
-        loginForm.setFieldValue('checkCode', '')
-        setLoginLoading(false)
-        return
-      }
-      
-      const loginData = {
-        ...values,
-        captchaKey: loginKey
-      }
-      const result = await login(loginData)
-      authLogin(result)
-      message.success('登录成功')
-      handleLoginCancel()
-    } catch (error) {
-      message.error(error.message || '登录失败，请重试')
-      fetchLoginCheckCode()
-      loginForm.setFieldValue('checkCode', '')
-    } finally {
-      setLoginLoading(false)
-    }
-  }
-
-  const handleLoginButtonClick = () => {
+  const handleLoginButtonClick = useCallback(() => {
     if (isMobile) {
       navigate('/mobile/login')
       return
     }
     if (location.pathname === '/') {
-      showLoginModal()
+      authModal.openLogin()
     } else {
       navigate('/')
-      setTimeout(() => {
-        showLoginModal()
-      }, 100)
+      setTimeout(() => authModal.openLogin(), 100)
     }
-  }
+  }, [isMobile, location.pathname, navigate, authModal])
 
-  const showSidebar = () => {
-    setSidebarVisible(true)
-  }
-
-  const closeSidebar = () => {
-    setSidebarVisible(false)
-  }
-
-  const handleSidebarMenuClick = (path) => {
+  const handleSidebarMenuClick = useCallback((path) => {
     navigate(path)
     setSidebarVisible(false)
-  }
+  }, [navigate])
 
   const sidebarMenuItems = useMemo(() => {
     const items = [
-      {
-        key: '/',
-        icon: <HomeOutlined />,
-        label: '首页',
-        onClick: () => handleSidebarMenuClick('/'),
-      },
-      {
-        key: '/community',
-        icon: <MessageOutlined />,
-        label: '社区广场',
-        onClick: () => handleSidebarMenuClick('/community'),
-      },
-      {
-        key: '/private-space',
-        icon: <LockFilled />,
-        label: '私人空间',
-        onClick: () => handleSidebarMenuClick('/private-space'),
-      },
-      {
-        key: '/team-space',
-        icon: <TeamOutlined />,
-        label: '团队空间',
-        onClick: () => handleSidebarMenuClick('/team-space'),
-      },
+      { key: '/', icon: <HomeOutlined />, label: '首页', onClick: () => handleSidebarMenuClick('/') },
+      { key: '/community', icon: <MessageOutlined />, label: '社区广场', onClick: () => handleSidebarMenuClick('/community') },
+      { key: '/private-space', icon: <LockFilled />, label: '私人空间', onClick: () => handleSidebarMenuClick('/private-space') },
+      { key: '/team-space', icon: <TeamOutlined />, label: '团队空间', onClick: () => handleSidebarMenuClick('/team-space') },
     ]
 
     if (userInfo) {
       items.push(
-        {
-          key: '/profile',
-          icon: <UserOutlined />,
-          label: '个人中心',
-          onClick: () => handleSidebarMenuClick('/profile'),
-        },
-        {
-          key: '/logout',
-          icon: <LogoutOutlined />,
-          label: '退出登录',
-          onClick: () => {
-            handleLogout()
-            closeSidebar()
-          },
-        }
+        { key: '/profile', icon: <UserOutlined />, label: '个人中心', onClick: () => handleSidebarMenuClick('/profile') },
+        { key: '/notifications', icon: <BellOutlined />, label: '通知', onClick: () => handleSidebarMenuClick('/notifications') },
+        { key: '/logout', icon: <LogoutOutlined />, label: '退出登录', onClick: () => { handleLogout(); setSidebarVisible(false) } },
       )
     } else {
-      items.push({
-        key: '/login',
-        icon: <LoginOutlined />,
-        label: '登录',
-        onClick: () => {
-          handleLoginButtonClick()
-          closeSidebar()
-        },
-      })
+      items.push({ key: '/login', icon: <LoginOutlined />, label: '登录', onClick: () => { handleLoginButtonClick(); setSidebarVisible(false) } })
     }
 
     if (userInfo?.role === 'admin') {
-      items.push({
-        type: 'divider',
-      })
+      items.push({ type: 'divider' })
       items.push({
         key: 'admin',
         icon: <SettingOutlined />,
         label: '管理页面',
         children: [
-          {
-            key: '/admin/users',
-            icon: <UserOutlined />,
-            label: '用户管理',
-            onClick: () => handleSidebarMenuClick('/admin/users'),
-          },
-          {
-            key: '/admin/pictures',
-            icon: <PictureOutlined />,
-            label: '图片管理',
-            onClick: () => handleSidebarMenuClick('/admin/pictures'),
-          },
-          {
-            key: '/admin/spaces',
-            icon: <AppstoreOutlined />,
-            label: '空间管理',
-            onClick: () => handleSidebarMenuClick('/admin/spaces'),
-          },
-          {
-            key: '/admin/teams',
-            icon: <TeamOutlined />,
-            label: '团队管理',
-            onClick: () => handleSidebarMenuClick('/admin/teams'),
-          },
-          {
-            key: '/admin/ai',
-            icon: <RobotOutlined />,
-            label: 'AI 管理',
-            onClick: () => handleSidebarMenuClick('/admin/ai'),
-          },
-          {
-            key: '/admin/system',
-            icon: <ToolOutlined />,
-            label: '系统管理',
-            onClick: () => handleSidebarMenuClick('/admin/system'),
-          },
+          { key: '/admin/users', icon: <UserOutlined />, label: '用户管理', onClick: () => handleSidebarMenuClick('/admin/users') },
+          { key: '/admin/pictures', icon: <PictureOutlined />, label: '图片管理', onClick: () => handleSidebarMenuClick('/admin/pictures') },
+          { key: '/admin/spaces', icon: <AppstoreOutlined />, label: '空间管理', onClick: () => handleSidebarMenuClick('/admin/spaces') },
+          { key: '/admin/teams', icon: <TeamOutlined />, label: '团队管理', onClick: () => handleSidebarMenuClick('/admin/teams') },
+          { key: '/admin/ai', icon: <RobotOutlined />, label: 'AI 管理', onClick: () => handleSidebarMenuClick('/admin/ai') },
+          { key: '/admin/system', icon: <ToolOutlined />, label: '系统管理', onClick: () => handleSidebarMenuClick('/admin/system') },
         ],
       })
     }
 
     return items
-  }, [userInfo, location.pathname])
+  }, [userInfo, handleSidebarMenuClick, handleLogout, handleLoginButtonClick])
 
-  const userMenuItems = [
-    {
-      key: 'profile',
-      icon: <UserOutlined />,
-      label: '个人中心',
-      onClick: () => navigate('/profile'),
-    },
-    {
-      key: 'logout',
-      icon: <LogoutOutlined />,
-      label: '退出登录',
-      onClick: handleLogout,
-    },
-  ]
+  const userMenuItems = useMemo(() => [
+    { key: 'profile', icon: <UserOutlined />, label: '个人中心', onClick: () => navigate('/profile') },
+    { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', onClick: handleLogout },
+  ], [navigate, handleLogout])
 
-  const systemManagementMenuItems = [
-    {
-      key: 'user-management',
-      icon: <UserOutlined />,
-      label: '用户管理',
-      onClick: () => navigate('/admin/users'),
-    },
-    {
-      key: 'picture-management',
-      icon: <PictureOutlined />,
-      label: '图片管理',
-      onClick: () => navigate('/admin/pictures'),
-    },
-      {
-          key: 'space-management',
-          icon: <AppstoreOutlined />,
-          label: '空间管理',
-          onClick: () => navigate('/admin/spaces'),
-      },
-      {
-          key: 'team-management',
-          icon: <TeamOutlined />,
-          label: '团队管理',
-          onClick: () => navigate('/admin/teams'),
-      },
-      {
-          key: 'ai-management',
-          icon: <RobotOutlined />,
-          label: 'AI 管理',
-          onClick: () => navigate('/admin/ai'),
-      },
-      {
-          key: 'system-management',
-          icon: <ToolOutlined />,
-          label: '系统管理',
-          onClick: () => navigate('/admin/system'),
-      },
-  ]
+  const adminMenuItems = useMemo(() => [
+    { key: 'user-management', icon: <UserOutlined />, label: '用户管理', onClick: () => navigate('/admin/users') },
+    { key: 'picture-management', icon: <PictureOutlined />, label: '图片管理', onClick: () => navigate('/admin/pictures') },
+    { key: 'space-management', icon: <AppstoreOutlined />, label: '空间管理', onClick: () => navigate('/admin/spaces') },
+    { key: 'team-management', icon: <TeamOutlined />, label: '团队管理', onClick: () => navigate('/admin/teams') },
+    { key: 'ai-management', icon: <RobotOutlined />, label: 'AI 管理', onClick: () => navigate('/admin/ai') },
+    { key: 'system-management', icon: <ToolOutlined />, label: '系统管理', onClick: () => navigate('/admin/system') },
+  ], [navigate])
+
+  const navActiveClass = (path) => location.pathname === path ? ' nav-btn-active' : ''
 
   return (
     <div className="app-container">
       <header className="app-header">
         <div className="header-content">
           <div className="logo-section">
-            <Button
-              type="text"
-              size="large"
-              className="mobile-menu-btn"
-              onClick={showSidebar}
-              icon={<MenuOutlined />}
-            />
+            <Button type="text" size="large" className="mobile-menu-btn" onClick={() => setSidebarVisible(true)} icon={<MenuOutlined />} />
             <h1 className="logo-text" onClick={() => navigate('/')}>FishPics</h1>
-            <Button
-              type="text"
-              size="large"
-              icon={<HomeOutlined />}
-              onClick={() => navigate('/')}
-              className={`desktop-only${location.pathname === '/' ? ' nav-btn-active' : ''}`}
-            >
-              首页
-            </Button>
-            <Button
-              type="text"
-              size="large"
-              onClick={() => navigate('/community')}
-              className={`desktop-only${location.pathname === '/community' ? ' nav-btn-active' : ''}`}
-            >
-              社区广场
-            </Button>
-            <Button
-              type="text"
-              size="large"
-              onClick={() => navigate('/private-space')}
-              className={`desktop-only${location.pathname === '/private-space' ? ' nav-btn-active' : ''}`}
-            >
-              私人空间
-            </Button>
-            <Button
-              type="text"
-              size="large"
-              onClick={() => navigate('/team-space')}
-              className={`desktop-only${location.pathname === '/team-space' ? ' nav-btn-active' : ''}`}
-            >
-              团队空间
-            </Button>
+            <Button type="text" size="large" icon={<HomeOutlined />} onClick={() => navigate('/')} className={`desktop-only${navActiveClass('/')}`}>首页</Button>
+            <Button type="text" size="large" onClick={() => navigate('/community')} className={`desktop-only${navActiveClass('/community')}`}>社区广场</Button>
+            <Button type="text" size="large" onClick={() => navigate('/private-space')} className={`desktop-only${navActiveClass('/private-space')}`}>私人空间</Button>
+            <Button type="text" size="large" onClick={() => navigate('/team-space')} className={`desktop-only${navActiveClass('/team-space')}`}>团队空间</Button>
             {userInfo?.role === 'admin' && (
-              <Dropdown menu={{ items: systemManagementMenuItems }} placement="bottomLeft" className="desktop-only">
-                <Button
-                  type="text"
-                  size="large"
-                  className="system-management-btn desktop-only"
-                >
-                  <SettingOutlined />
-                  <span>管理页面</span>
-                </Button>
+              <Dropdown menu={{ items: adminMenuItems }} placement="bottomLeft" className="desktop-only">
+                <Button type="text" size="large" className="system-management-btn desktop-only"><SettingOutlined /><span>管理页面</span></Button>
               </Dropdown>
             )}
           </div>
@@ -477,404 +147,54 @@ function GlobalLayout({ children }) {
             {userInfo ? (
               <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" className="desktop-only">
                 <div className="user-info">
-                  <Avatar 
-                    size={32} 
-                    src={userInfo.avatar}
-                    style={{ 
-                      backgroundColor: userInfo.avatar ? 'transparent' : 'var(--accent)',
-                    }}
-                  >
+                  <Avatar size={32} src={userInfo.avatar} style={{ backgroundColor: userInfo.avatar ? 'transparent' : 'var(--accent)' }}>
                     {!userInfo.avatar && (userInfo.nickname || userInfo.username)?.charAt(0)?.toUpperCase()}
                   </Avatar>
                   <span className="user-name">{userInfo.nickname || userInfo.username}</span>
                 </div>
               </Dropdown>
             ) : (
-              <Button
-                type="primary"
-                className="login-btn desktop-only"
-                onClick={handleLoginButtonClick}
-                icon={<LoginOutlined />}
-              >
-                登录
-              </Button>
+              <Button type="primary" className="login-btn desktop-only" onClick={handleLoginButtonClick} icon={<LoginOutlined />}>登录</Button>
             )}
             {userInfo && (
-              <Button
-                type="text"
-                size="large"
-                className={`notification-btn${location.pathname === '/notifications' ? ' notification-btn-active' : ''}`}
-                icon={<BellOutlined />}
-                onClick={() => navigate('/notifications')}
-              />
+              <Button type="text" size="large" className={`notification-btn${location.pathname === '/notifications' ? ' notification-btn-active' : ''}`} icon={<BellOutlined />} onClick={() => navigate('/notifications')} />
             )}
-            <Button
-              type="text"
-              size="large"
-              className="theme-toggle-btn"
-              onClick={toggleTheme}
-              icon={isDarkMode ? <SunOutlined /> : <MoonOutlined />}
-            />
-            <Button
-              type="text"
-              size="large"
-              className="settings-btn"
-              onClick={showSettingsModal}
-              icon={<ToolOutlined />}
-            />
+            <Button type="text" size="large" className="theme-toggle-btn" onClick={toggleTheme} icon={isDarkMode ? <SunOutlined /> : <MoonOutlined />} />
+            <Button type="text" size="large" className="settings-btn" onClick={() => setSettingsOpen(true)} icon={<ToolOutlined />} />
           </div>
         </div>
       </header>
 
-      <Drawer
-        title="导航菜单"
-        placement="left"
-        onClose={closeSidebar}
-        open={sidebarVisible}
-        className="mobile-sidebar"
-        closeIcon={<CloseOutlined />}
-        size={280}
-      >
-        <Menu
-          mode="vertical"
-          selectedKeys={[location.pathname]}
-          className="sidebar-menu"
-          items={sidebarMenuItems}
-          triggerSubMenuAction="click"
-        />
+      <Drawer title="导航菜单" placement="left" onClose={() => setSidebarVisible(false)} open={sidebarVisible} className="mobile-sidebar" closeIcon={<CloseOutlined />} size={280}>
+        <Menu mode="vertical" selectedKeys={[location.pathname]} className="sidebar-menu" items={sidebarMenuItems} triggerSubMenuAction="click" />
       </Drawer>
 
       {children}
 
-      <Modal
-        open={isLoginModalOpen}
-        onCancel={handleLoginCancel}
-        footer={null}
-        centered
-        className="xhs-modal"
-        destroyOnHidden
-        width={800}
-      >
-        <div className="xhs-modal-content">
-          <div className="xhs-left-panel">
-            <div className="scan-hint">登录后推荐更懂你的笔记</div>
-            <div className="qr-card">
-              <Card className="qr-code-card" variant="borderless">
-                <div className="qr-code-wrapper">
-                  <div className="qr-code-bg">
-                    <img 
-                      src="/qrcode.jpg" 
-                      alt="二维码" 
-                      className="qr-placeholder"
-                      onError={(e) => {
-                        e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQwIiBoZWlnaHQ9IjI0MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjQwIiBoZWlnaHQ9IjI0MCIgZmlsbD0iI2ZmZiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iYXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj7mlrnlnLbfkYZcL3RleHQ+PC9zdmc+';
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="scan-status">
-                  <ScanOutlined className="scan-icon" />
-                  <span>暂未实现该功能，敬请期待</span>
-                </div>
-              </Card>
-            </div>
-            <div className="scan-tips">
-              <span>可用</span>
-              <span className="app-name">FishPics</span>
-              <span>或</span>
-              <span className="app-name-wechat">微信</span>
-              <span>扫码</span>
-            </div>
-          </div>
-          
-          <div className="xhs-right-panel">
-            <div className="form-container">
-              <h2 className="form-title">账号登录</h2>
-              <Form
-                form={loginForm}
-                name="login"
-                onFinish={handleLoginFinish}
-                autoComplete="off"
-                size="large"
-                requiredMark={false}
-                layout="vertical"
-              >
-                <Form.Item
-                  name="username"
-                  rules={[
-                    { required: true, message: '请输入账号' },
-                    { min: 6, message: '账号至少 6 个字符' },
-                  ]}
-                >
-                  <Input
-                    prefix={<UserOutlined className="input-icon" />}
-                    placeholder="请输入账号"
-                    className="xhs-input"
-                  />
-                </Form.Item>
+      <LoginModal
+        open={authModal.loginVisible}
+        onCancel={() => { loginForm.resetFields(); authModal.closeLogin() }}
+        loginForm={loginForm}
+        loading={authModal.loginLoading}
+        checkCodeUrl={authModal.loginCheckCodeUrl}
+        onSubmit={(values) => authModal.handleLoginSubmit(values, loginForm)}
+        onRefreshCode={() => authModal.refreshLoginCode(loginForm)}
+        onSwitchToRegister={authModal.switchToRegister}
+      />
 
-                <Form.Item
-                  name="password"
-                  rules={[
-                    { required: true, message: '请输入密码' },
-                    { min: 8, message: '密码至少 8 个字符' },
-                  ]}
-                >
-                  <Input.Password
-                    prefix={<LockOutlined className="input-icon" />}
-                    placeholder="请输入密码"
-                    className="xhs-input"
-                  />
-                </Form.Item>
+      <RegisterModal
+        open={authModal.registerVisible}
+        onCancel={() => { registerForm.resetFields(); authModal.closeRegister() }}
+        registerForm={registerForm}
+        loading={authModal.registerLoading}
+        checkCodeUrl={authModal.registerCheckCodeUrl}
+        onSubmit={(values) => authModal.handleRegisterSubmit(values, registerForm)}
+        onRefreshCode={() => authModal.refreshRegisterCode(registerForm)}
+        onSwitchToLogin={authModal.switchToLogin}
+      />
 
-                <Form.Item
-                  name="checkCode"
-                  rules={[{ required: true, message: '请输入验证码' }]}
-                >
-                  <div className="check-code-row xhs">
-                    <Input
-                      prefix={<LockOutlined className="input-icon" />}
-                      placeholder="请输入验证码"
-                      className="xhs-input check-code-input"
-                      maxLength={5}
-                    />
-                    <Button 
-                      className="get-code-btn" 
-                      onClick={handleRefreshLoginCode}
-                      type="link"
-                    >
-                      {loginCheckCodeUrl && (
-                        <img src={loginCheckCodeUrl} alt="验证码" className="check-code-img-btn" />
-                      )}
-                    </Button>
-                  </div>
-                </Form.Item>
-
-                <Form.Item>
-                  <Button
-                    type="primary"
-                    htmlType="submit"
-                    loading={loginLoading}
-                    block
-                    className="xhs-submit-btn"
-                  >
-                    登录
-                  </Button>
-                </Form.Item>
-                <div className="form-footer">
-                  <span>还没有账号？</span>
-                  <Button type="link" onClick={showRegisterModal} className="switch-form-btn">
-                    立即注册
-                  </Button>
-                </div>
-              </Form>
-            </div>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        open={isRegisterModalOpen}
-        onCancel={handleRegisterCancel}
-        footer={null}
-        centered
-        className="xhs-modal"
-        destroyOnHidden
-        width={800}
-      >
-        <div className="xhs-modal-content">
-          <div className="xhs-left-panel">
-            <div className="scan-hint">加入我们，开始创作</div>
-            <div className="qr-card">
-              <Card className="qr-code-card" variant="borderless">
-                <div className="qr-code-wrapper">
-                  <div className="qr-code-bg">
-                    <img 
-                      src="/qrcode.jpg" 
-                      alt="二维码" 
-                      className="qr-placeholder"
-                      onError={(e) => {
-                        e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQwIiBoZWlnaHQ9IjI0MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjQwIiBoZWlnaHQ9IjI0MCIgZmlsbD0iI2ZmZiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iYXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM5OTkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj7mlrnlnLbfkYZcL3RleHQ+PC9zdmc+';
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="scan-status">
-                  <ScanOutlined className="scan-icon" />
-                  <span>暂未实现该功能，敬请期待</span>
-                </div>
-              </Card>
-            </div>
-            <div className="scan-tips">
-              <span>可用</span>
-              <span className="app-name">FishPics</span>
-              <span>或</span>
-              <span className="app-name-wechat">微信</span>
-              <span>扫码</span>
-            </div>
-          </div>
-          
-          <div className="xhs-right-panel">
-            <div className="form-container">
-              <h2 className="form-title">账号注册</h2>
-              <Form
-                form={registerForm}
-                name="register"
-                onFinish={handleRegisterFinish}
-                autoComplete="off"
-                size="large"
-                requiredMark={false}
-                layout="vertical"
-              >
-                <Form.Item
-                  name="username"
-                  rules={[
-                    { required: true, message: '请输入账号' },
-                    { min: 6, message: '账号至少 6 个字符' },
-                  ]}
-                >
-                  <Input
-                    prefix={<UserOutlined className="input-icon" />}
-                    placeholder="请输入账号"
-                    className="xhs-input"
-                  />
-                </Form.Item>
-
-                <Form.Item
-                  name="password"
-                  rules={[
-                    { required: true, message: '请输入密码' },
-                    { min: 8, message: '密码至少 8 个字符' },
-                  ]}
-                >
-                  <Input.Password
-                    prefix={<LockOutlined className="input-icon" />}
-                    placeholder="请输入密码"
-                    className="xhs-input"
-                  />
-                </Form.Item>
-
-                <Form.Item
-                  name="checkPassword"
-                  dependencies={['password']}
-                  rules={[
-                    { required: true, message: '请再次输入密码' },
-                    ({ getFieldValue }) => ({
-                      validator(_, value) {
-                        if (!value || getFieldValue('password') === value) {
-                          return Promise.resolve()
-                        }
-                        return Promise.reject(new Error('两次输入的密码不一致'))
-                      },
-                    }),
-                  ]}
-                >
-                  <Input.Password
-                    prefix={<LockOutlined className="input-icon" />}
-                    placeholder="请再次输入密码"
-                    className="xhs-input"
-                    autoComplete="new-password"
-                  />
-                </Form.Item>
-
-                <Form.Item
-                  name="checkCode"
-                  rules={[{ required: true, message: '请输入验证码' }]}
-                >
-                  <div className="check-code-row xhs">
-                    <Input
-                      prefix={<LockOutlined className="input-icon" />}
-                      placeholder="请输入验证码"
-                      className="xhs-input check-code-input"
-                      maxLength={5}
-                    />
-                    <Button 
-                      className="get-code-btn" 
-                      onClick={handleRefreshRegisterCode}
-                      type="link"
-                    >
-                      {registerCheckCodeUrl && (
-                        <img src={registerCheckCodeUrl} alt="验证码" className="check-code-img-btn" />
-                      )}
-                    </Button>
-                  </div>
-                </Form.Item>
-
-                <Form.Item>
-                  <Button
-                    type="primary"
-                    htmlType="submit"
-                    loading={registerLoading}
-                    block
-                    className="xhs-submit-btn"
-                  >
-                    注册
-                  </Button>
-                </Form.Item>
-                <div className="form-footer">
-                  <span>已有账号？</span>
-                  <Button type="link" onClick={showLoginFromRegister} className="switch-form-btn">
-                    立即登录
-                  </Button>
-                </div>
-              </Form>
-            </div>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        open={isSettingsModalOpen}
-        onCancel={handleSettingsCancel}
-        footer={null}
-        centered
-        className="settings-modal"
-        destroyOnHidden
-        width={400}
-      >
-        <div className="settings-modal-content">
-          <p className="dev-message">功能正在开发中，敬请期待 ～</p>
-          <p className="dev-by">— By Fish</p>
-          <div className="social-links">
-            <a
-              href="https://github.com/FishDuM"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="social-link-item"
-              title="GitHub"
-            >
-              <GithubOutlined />
-            </a>
-            <a
-              href="https://space.bilibili.com/386312184"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="social-link-item"
-              title="Bilibili"
-            >
-              <PlaySquareOutlined />
-            </a>
-            <a
-              href="https://qm.qq.com/q/bH26HucOhW"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="social-link-item"
-              title="QQ"
-            >
-              <QqOutlined />
-            </a>
-            <a
-              href="https://fishdum.github.io/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="social-link-item"
-              title="我的个人网站"
-            >
-              <GlobalOutlined />
-            </a>
-          </div>
-        </div>
-      </Modal>
+      <SettingsModal open={settingsOpen} onCancel={() => setSettingsOpen(false)} />
+      <MobileBottomNav />
     </div>
   )
 }

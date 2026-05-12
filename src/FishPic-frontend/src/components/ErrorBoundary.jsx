@@ -37,7 +37,7 @@ class ErrorBoundary extends React.Component {
           alignItems: 'center',
           backgroundColor: '#f5f5f5'
         }}>
-          <h1 style={{ color: '#ff4d4f', marginBottom: '16px' }}>页面出错了</h1>
+          <h1 style={{ color: '#D70015', marginBottom: '16px' }}>页面出错了</h1>
           <p style={{ color: '#666', marginBottom: '24px' }}>
             {this.state.errorMessage}
           </p>
@@ -45,7 +45,7 @@ class ErrorBoundary extends React.Component {
             onClick={this.handleReset}
             style={{
               padding: '8px 16px',
-              backgroundColor: '#1890ff',
+              backgroundColor: '#3A3A3A',
               color: 'white',
               border: 'none',
               borderRadius: '4px',

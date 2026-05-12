@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useCallback, useContext } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { App, Button, Input, Image as AntImage, Masonry, Empty, Spin } from 'antd'
-import { PlusOutlined, LikeOutlined, SearchOutlined, ReloadOutlined, UpOutlined } from '@ant-design/icons'
+import { App, Button, Image as AntImage, Masonry, Empty, Spin } from 'antd'
+import { PlusOutlined, LikeOutlined, ReloadOutlined, UpOutlined } from '@ant-design/icons'
 import api from '../api'
 import { AuthContext } from '../context/AuthContext'
 import PostDetailModal from '../components/PostDetailModal'
 import CreateEditPostModal from '../components/CreateEditPostModal'
 import { useIsMobile } from '../hooks/useIsMobile'
+import SearchBar from '../components/shared/SearchBar.jsx'
 import './CommunitySquare.css'
 
 function PostCard({ post, onClick }) {
@@ -219,6 +220,10 @@ function CommunitySquare() {
     const postId = initialPostIdRef.current
     if (!postId) return
     initialPostIdRef.current = null
+    if (isMobile) {
+      navigate(`/mobile/post/detail/${postId}`)
+      return
+    }
     ;(async () => {
       setPostDetailLoading(true)
       setDetailImageIndex(0)
@@ -316,25 +321,13 @@ function CommunitySquare() {
   return (
     <main className="community-square-container">
       <div className="community-square-header">
-        <div className="search-area">
-          <Input
-            placeholder="搜索帖子..."
-            prefix={<SearchOutlined />}
-            className="search-input"
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            onPressEnter={handleSearch}
-            allowClear
-          />
-          <Button
-            type="primary"
-            icon={<SearchOutlined />}
-            className="search-button"
-            onClick={handleSearch}
-          >
-            搜索
-          </Button>
-        </div>
+        <SearchBar
+          className="community-search"
+          placeholder="搜索帖子"
+          value={searchText}
+          onChange={setSearchText}
+          onSearch={handleSearch}
+        />
         <Button
           type="primary"
           icon={<PlusOutlined />}
@@ -411,14 +404,14 @@ function CommunitySquare() {
       />
 
       <div className="floating-buttons">
-        <button type="button" className="floating-btn" onClick={handleCreatePost} title="发帖">
+        <button type="button" className="floating-btn floating-btn-create" onClick={handleCreatePost} title="发帖">
           <PlusOutlined />
         </button>
         <button type="button" className="floating-btn" onClick={handleRefresh} title="刷新">
           <ReloadOutlined />
         </button>
         {showBackToTop && (
-          <button type="button" className="floating-btn" onClick={handleScrollToTop} title="返回顶部">
+          <button type="button" className="floating-btn floating-btn-top" onClick={handleScrollToTop} title="返回顶部">
             <UpOutlined />
           </button>
         )}

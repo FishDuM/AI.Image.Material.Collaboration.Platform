@@ -12,9 +12,9 @@
   animation: float 6s ease-in-out infinite;
   user-select: none;
   pointer-events: none;
+  will-change: transform;
 }
 
-/* 左上角区域 */
 .emoji-1 {
   top: 5%;
   left: 5%;
@@ -51,7 +51,6 @@
   animation-delay: 0.5s;
 }
 
-/* 右上角区域 */
 .emoji-7 {
   top: 8%;
   right: 5%;
@@ -88,7 +87,6 @@
   animation-delay: 2.2s;
 }
 
-/* 左下角区域 */
 .emoji-13 {
   bottom: 5%;
   left: 8%;
@@ -125,7 +123,6 @@
   animation-delay: 3.8s;
 }
 
-/* 右下角区域 */
 .emoji-19 {
   bottom: 8%;
   right: 5%;
@@ -188,7 +185,6 @@
   }
 }
 
-/* 暗色主题适配 */
 [data-theme='dark'] .floating-emoji {
   opacity: 0.08;
 }

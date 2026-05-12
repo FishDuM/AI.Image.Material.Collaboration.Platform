@@ -9,7 +9,7 @@
 }
 
 .admin-user-list-header h2 {
-  color: #1890ff;
+  color: var(--accent);
   margin-bottom: 8px;
   font-weight: 600;
 }

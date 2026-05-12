@@ -1,24 +1,39 @@
-import { useContext, useState, useEffect, useRef, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { App as AntApp, Avatar, Tabs, Empty, Skeleton, Modal, Button, Form, Input, Upload, Spin, Image as AntImage, Masonry, Tooltip, Switch } from 'antd'
-import { 
-  UserOutlined, 
-  MailOutlined, 
-  PhoneOutlined, 
+import {useCallback, useContext, useEffect, useRef, useState} from 'react'
+import {useNavigate} from 'react-router-dom'
+import {
+  App as AntApp,
+  Avatar,
+  Button,
+  Empty,
+  Form,
+  Image as AntImage,
+  Input,
+  Masonry,
+  Modal,
+  Skeleton,
+  Spin,
+  Switch,
+  Tooltip,
+  Upload
+} from 'antd'
+import {
   CalendarOutlined,
-  FileTextOutlined,
-  StarOutlined,
-  HeartOutlined,
   EditOutlined,
-  LockOutlined,
-  LoadingOutlined,
-  PlusOutlined,
+  EyeOutlined,
+  FileTextOutlined,
   HeartFilled,
-  EyeOutlined
+  HeartOutlined,
+  LoadingOutlined,
+  LockOutlined,
+  MailOutlined,
+  PhoneOutlined,
+  PlusOutlined,
+  StarOutlined,
+  UserOutlined
 } from '@ant-design/icons'
-import { getUserMyself, getUser, editUser, uploadAvatar, getMyPosts, getMyCollects, getMyLikes } from '../api'
-import api from '../api'
-import { AuthContext } from '../context/AuthContext'
+import api, {editUser, getMyCollects, getMyLikes, getMyPosts, getUser, getUserMyself, uploadAvatar} from '../api'
+import {AuthContext} from '../context/AuthContext'
+import {useIsMobile} from '../hooks/useIsMobile'
 import PostDetailModal from '../components/PostDetailModal'
 import CreateEditPostModal from '../components/CreateEditPostModal'
 import './UserProfile.css'
@@ -33,7 +48,7 @@ const PostCard = ({ post, onClick }) => (
       <div className="post-card-footer">
         <span className="post-likes">
           {post.likesNum > 0 ? (
-            <HeartFilled style={{ color: '#ff2442', marginRight: 4 }} />
+            <HeartFilled style={{ color: 'var(--error)', marginRight: 4 }} />
           ) : (
             <HeartOutlined style={{ marginRight: 4 }} />
           )}
@@ -48,6 +63,7 @@ function UserProfile() {
   const { message } = AntApp.useApp()
   const { userInfo, login: authLogin, isAuthenticated } = useContext(AuthContext)
   const navigate = useNavigate()
+  const isMobile = useIsMobile()
   const [loading, setLoading] = useState(true)
   const [userData, setUserData] = useState(null)
   const [activeTab, setActiveTab] = useState('notes')
@@ -236,6 +252,10 @@ function UserProfile() {
   }, [editModalVisible])
 
   const handlePostClick = async (post) => {
+    if (isMobile) {
+      navigate(`/mobile/post/detail/${post.id}`)
+      return
+    }
     setPostDetailLoading(true)
     setPostDetailModalOpen(true)
     setDetailImageIndex(0)
@@ -263,8 +283,7 @@ function UserProfile() {
     joinDate.setHours(0, 0, 0, 0)
     today.setHours(0, 0, 0, 0)
     const diffTime = Math.abs(today - joinDate)
-    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24))
-    return diffDays
+    return Math.round(diffTime / (1000 * 60 * 60 * 24))
   }
 
   const handleCopyUsername = async () => {
@@ -297,6 +316,10 @@ function UserProfile() {
   }
 
   const handleEditProfileClick = () => {
+    if (isMobile) {
+      navigate('/mobile/profile/edit')
+      return
+    }
     if (userData) {
       setEditModalVisible(true)
       requestAnimationFrame(() => {
@@ -454,27 +477,19 @@ function UserProfile() {
 
     return (
       <div className="profile-masonry-section">
-        <div className="profile-masonry-wrapper">
-          <div className="profile-masonry-container">
-            <div className="profile-masonry-inner">
-              <div className="profile-masonry-scroll">
-                <Masonry
-                  columns={{ xs: 2, sm: 3, md: 3 }}
-                  gutter={[12, 12]}
-                  items={masonryItems}
-                  itemRender={(item) => <PostCard post={item.data} onClick={handlePostClick} />}
-                />
-              </div>
-            </div>
-          </div>
-          {tab.hasMore ? (
-            loadingMore ? (
-              <div className="loading-more"><Spin /> 加载中...</div>
-            ) : null
-          ) : (
-            tab.items.length > 0 && <div className="no-more-posts">没有更多了</div>
-          )}
-        </div>
+        <Masonry
+          columns={isMobile ? 2 : 3}
+          gutter={[12, 12]}
+          items={masonryItems}
+          itemRender={(item) => <PostCard post={item.data} onClick={handlePostClick} />}
+        />
+        {tab.hasMore ? (
+          loadingMore ? (
+            <div className="loading-more"><Spin /> 加载中...</div>
+          ) : null
+        ) : (
+          tab.items.length > 0 && <div className="no-more-posts">没有更多了</div>
+        )}
       </div>
     )
   }
@@ -482,112 +497,107 @@ function UserProfile() {
   const renderProfileHeader = () => {
     if (loading) {
       return (
-        <div className="profile-header">
-          <div className="profile-header-content">
-            <Skeleton avatar={{ size: 100 }} paragraph={{ rows: 4 }} active />
-          </div>
-        </div>
+        <Skeleton avatar={{ size: 100 }} paragraph={{ rows: 4 }} active />
       )
     }
 
     if (!userData) {
       return (
-        <div className="profile-header">
-          <div className="profile-header-content">
-            <Empty description="暂无用户信息" />
-          </div>
-        </div>
+        <Empty description="暂无用户信息" />
       )
     }
 
     return (
       <>
-        <div className="profile-header">
-          <div className="profile-header-content">
-            <div className="profile-avatar-section">
-              <Avatar 
-                size={100} 
-                src={userData.avatar}
-                className="profile-avatar-large"
-                style={{ 
-                  backgroundColor: userData.avatar ? 'transparent' : 'var(--accent)',
-                  fontSize: 40 
-                }}
-                onClick={handleAvatarClick}
-              >
-                {!userData.avatar && (userData.nickname || userData.username)?.charAt(0)?.toUpperCase()}
-              </Avatar>
-            </div>
-            
-            <div className="profile-info-section">
-              <div className="profile-nickname-row">
-                <h1 className="profile-nickname">
-                  {userData.nickname || userData.username}
-                  {userData.role === 'admin' && (
-                    <span className="admin-badge" title="这个网站伟大的管理员">管理员</span>
-                  )}
-                </h1>
-                <span 
-                  className="profile-username"
-                  onClick={handleCopyUsername}
-                >
-                  @{userData.username}
-                </span>
-              </div>
-              
-              <div className="profile-stats-row">
-                <div className="stat-item">
-                  <span className="stat-value">{counts.notes}</span>
-                  <span className="stat-label">笔记</span>
-                </div>
-                <div className="stat-item">
-                  <span className="stat-value">{counts.favorites}</span>
-                  <span className="stat-label">收藏</span>
-                </div>
-                <div className="stat-item">
-                  <span className="stat-value">{counts.likes}</span>
-                  <span className="stat-label">点赞</span>
-                </div>
-              </div>
-              
-              <div className="profile-meta-row">
-                <Tooltip title={`你已经加入 ${calculateDaysSinceJoin(userData.createTime)} 天`}>
-                  <span>
-                    <CalendarOutlined /> 加入于 {formatDate(userData.createTime)}
-                  </span>
-                </Tooltip>
-              </div>
-              
-              {(userData.email || userData.phone) && (
-                <div className="profile-info-cards">
-                  {userData.email && (
-                    <div className="info-card-simple">
-                      <MailOutlined className="info-icon" />
-                      <span>{userData.email}</span>
-                    </div>
-                  )}
-                  {userData.phone && (
-                    <div className="info-card-simple">
-                      <PhoneOutlined className="info-icon" />
-                      <span>{userData.phone}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="profile-actions-section">
-              <Button 
-                type="primary" 
-                icon={<EditOutlined />}
-                className="edit-profile-btn"
-                onClick={handleEditProfileClick}
-              >
-                修改信息
-              </Button>
-            </div>
+        <Avatar 
+          size={100} 
+          src={userData.avatar}
+          className="profile-avatar-large"
+          style={{ 
+            backgroundColor: userData.avatar ? 'transparent' : 'var(--accent)',
+            fontSize: 40 
+          }}
+          onClick={handleAvatarClick}
+        >
+          {!userData.avatar && (userData.nickname || userData.username)?.charAt(0)?.toUpperCase()}
+        </Avatar>
+        
+        <div className="profile-nickname-row">
+          <h1 className="profile-nickname">
+            {userData.nickname || userData.username}
+            {userData.role === 'admin' && (
+              <span className="admin-badge" title="这个网站伟大的管理员">管理员</span>
+            )}
+          </h1>
+          <span 
+            className="profile-username"
+            onClick={handleCopyUsername}
+          >
+            @{userData.username}
+          </span>
+        </div>
+        
+        <div className="profile-stats-row">
+          <div className="stat-item">
+            <span className="stat-value">{counts.notes}</span>
+            <span className="stat-label">笔记</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-value">{counts.favorites}</span>
+            <span className="stat-label">收藏</span>
+          </div>
+          <div className="stat-item">
+            <span className="stat-value">{counts.likes}</span>
+            <span className="stat-label">点赞</span>
           </div>
         </div>
+        
+        <div className="profile-meta-row">
+          <Tooltip title={`你已经加入 ${calculateDaysSinceJoin(userData.createTime)} 天`}>
+            <span>
+              <CalendarOutlined /> 加入于 {formatDate(userData.createTime)}
+            </span>
+          </Tooltip>
+        </div>
+        
+        {(userData.email || userData.phone) && (
+          <div className="profile-info-cards">
+            {userData.email && (
+              <div className="info-card-simple">
+                <MailOutlined className="info-icon" />
+                <span>{userData.email}</span>
+              </div>
+            )}
+            {userData.phone && (
+              <div className="info-card-simple">
+                <PhoneOutlined className="info-icon" />
+                <span>{userData.phone}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        <Button 
+          type="primary" 
+          icon={<EditOutlined />}
+          className="edit-profile-btn"
+          onClick={handleEditProfileClick}
+        >
+          修改信息
+        </Button>
+
+        <div className="profile-tabs-container">
+          {tabItems.map(tab => (
+            <div
+              key={tab.key}
+              className={`profile-tab-item ${activeTab === tab.key ? 'profile-tab-active' : ''}`}
+              onClick={() => setActiveTab(tab.key)}
+            >
+              <span>{tab.icon} {tab.label}</span>
+            </div>
+          ))}
+        </div>
+        {renderTabContent(activeTab, tabItems.find(t => t.key === activeTab)?.emptyText || '')}
 
         <Modal
           className="avatar-modal"
@@ -740,53 +750,14 @@ function UserProfile() {
   }
 
   const tabItems = [
-    {
-      key: 'notes',
-      label: (
-        <span>
-          <FileTextOutlined />
-          图文
-        </span>
-      ),
-      children: renderTabContent('notes', '你还没有发布任何内容哦'),
-    },
-    {
-      key: 'favorites',
-      label: (
-        <span>
-          <StarOutlined />
-          收藏
-        </span>
-      ),
-      children: renderTabContent('favorites', '暂无收藏内容'),
-    },
-    {
-      key: 'likes',
-      label: (
-        <span>
-          <HeartOutlined />
-          点赞
-        </span>
-      ),
-      children: renderTabContent('likes', '暂无点赞内容'),
-    },
+    { key: 'notes', label: '图文', icon: <FileTextOutlined />, emptyText: '你还没有发布任何内容哦' },
+    { key: 'favorites', label: '收藏', icon: <StarOutlined />, emptyText: '暂无收藏内容' },
+    { key: 'likes', label: '点赞', icon: <HeartOutlined />, emptyText: '暂无点赞内容' },
   ]
 
   return (
-    <div className="user-profile-page">
-      <div className="profile-card">
-        <div className="profile-card-header">
-          {renderProfileHeader()}
-        </div>
-        <div className="profile-card-body">
-          <Tabs
-            activeKey={activeTab}
-            onChange={setActiveTab}
-            items={tabItems}
-            className="profile-tabs"
-          />
-        </div>
-      </div>
+    <>
+      {renderProfileHeader()}
 
       <PostDetailModal
         open={postDetailModalOpen}
@@ -814,7 +785,7 @@ function UserProfile() {
           fetchTabData(activeTab, 1, false)
         }}
       />
-    </div>
+    </>
   )
 }
 

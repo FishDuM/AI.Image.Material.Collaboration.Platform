@@ -6,6 +6,9 @@ import zhCN from 'antd/locale/zh_CN'
 import dayjs from 'dayjs'
 import 'dayjs/locale/zh-cn'
 import './index.css'
+import './styles/animations.css'
+import './styles/shared.css'
+import './styles/carousel.css'
 import App from './App.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 
@@ -34,7 +37,7 @@ function ThemeWrapper({ children }) {
       <ConfigProvider
         theme={{
           token: {
-            colorPrimary: isDarkMode ? '#4096ff' : '#262626',
+            colorPrimary: isDarkMode ? '#E0E0E0' : '#3A3A3A',
             borderRadius: 8,
             fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
             fontSize: 14,

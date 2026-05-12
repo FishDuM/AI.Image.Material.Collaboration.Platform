@@ -116,7 +116,7 @@ function AdminUserList() {
       dataIndex: 'role',
       key: 'role',
       render: (role) => (
-        <Tag color={role === 'admin' ? 'red' : 'blue'}>
+        <Tag color={role === 'admin' ? 'orange' : 'green'}>
           {role === 'admin' ? '管理员' : '普通用户'}
         </Tag>
       ),
