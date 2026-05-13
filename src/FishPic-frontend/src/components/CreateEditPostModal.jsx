@@ -352,7 +352,7 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
           imageId: currentImageIds,
           title: values.title,
           content: values.content,
-          index: coverIndex,
+          cover: coverIndex,
           isPrivate: values.isPrivate ? 1 : 0
         }
         await api.post('/post/post', submitData)

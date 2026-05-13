@@ -93,7 +93,7 @@ export const register = (data) => api.post('/user/register', data)
 
 export const getUserMyself = () => api.get('/user/myself')
 
-export const logout = () => api.get('/user/logout')
+export const logout = () => api.post('/user/logout', {})
 
 export const getUser = () => api.get('/user/getUser')
 
@@ -102,7 +102,6 @@ export const getAdminUser = (userId) => api.post('/user/admin/getUser', { userId
 export const editUser = (data) => api.post('/user/editUser', data)
 
 export const uploadAvatar = (formData, onProgress) => api.post('/picture/avatar', formData, {
-  headers: { 'Content-Type': 'multipart/form-data' },
   onUploadProgress: (progressEvent) => {
     if (onProgress && progressEvent.total) {
       onProgress({ percent: Math.round((progressEvent.loaded * 100) / progressEvent.total) })
@@ -124,7 +123,7 @@ export const getPictureList = (current = 1, pageSize = 20) =>
 export const getAdminPictureList = (current = 1, pageSize = 20, status = 3) =>
   api.get('/picture/admin/list', { params: { current, pageSize, status } })
 
-export const reviewPicture = (pictureId, status, selected) => api.post('/picture/admin/review', null, { params: { pictureId, status, selected } })
+export const reviewPicture = (pictureId, status, selected) => api.post('/picture/admin/review', {}, { params: { pictureId, status, selected } })
 
 export const createSpace = (data) => api.post('/space/create', data)
 
@@ -138,11 +137,13 @@ export const spaceListPicture = (data) => api.post('/space/pictureList', data)
 
 export const postPictureList = (data) => api.post('/post/pictureList', data)
 
-export const deletePicture = (ids) => api.post('/picture/delete', { ids })
+export const deletePicture = (ids) => api.delete('/picture/delete', { data: { ids } })
 
 export const updatePicture = (data) => api.put('/picture/update', data)
 
-export const likePost = (id) => api.post('/post/like', null, { params: { id } })
+export const cropPicture = (data) => api.post('/picture/crop', data)
+
+export const likePost = (id) => api.post('/post/like', {}, { params: { id } })
 
 export const getPost = (id) => api.get('/post/getPost', { params: { id } })
 

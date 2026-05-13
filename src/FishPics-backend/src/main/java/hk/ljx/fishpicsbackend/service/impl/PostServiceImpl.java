@@ -78,7 +78,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         List<Long> imageId = uploadPostRequest.getImageId();
         String title = uploadPostRequest.getTitle();
         String content = uploadPostRequest.getContent();
-        Integer cover = uploadPostRequest.getIndex();
+        Integer cover = uploadPostRequest.getCover();
         Integer isPrivate = uploadPostRequest.getIsPrivate();
 
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(imageId), "图片不能为空");

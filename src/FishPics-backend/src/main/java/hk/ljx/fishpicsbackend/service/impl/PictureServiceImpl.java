@@ -12,6 +12,7 @@ import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.dto.picture.DeleteByIdList;
+import hk.ljx.fishpicsbackend.dto.picture.PictureCropRequest;
 import hk.ljx.fishpicsbackend.dto.picture.PictureMessage;
 import hk.ljx.fishpicsbackend.dto.picture.PictureUpdateRequest;
 import hk.ljx.fishpicsbackend.entity.*;
@@ -27,6 +28,14 @@ import org.springframework.web.multipart.MultipartFile;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 
+import javax.imageio.ImageIO;
+import java.awt.geom.AffineTransform;
+import java.awt.image.AffineTransformOp;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.net.URL;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -247,8 +256,131 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         if (request.getIntroduction() != null) {
             updateWrapper.set("introduction", request.getIntroduction());
         }
+        if (request.getPictureUrl() != null) {
+            updateWrapper.set("url", request.getPictureUrl());
+        }
         if (updateWrapper.getSqlSet() != null && !updateWrapper.getSqlSet().isEmpty()) {
             pictureMapper.update(null, updateWrapper);
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public String cropPicture(PictureCropRequest request, HttpServletRequest servletRequest) {
+        Long pictureId = request.getPictureId();
+        ExcUtils.throwIfTrue(ObjUtil.isEmpty(pictureId), "图片id不能为空");
+
+        Picture picture = pictureMapper.selectById(pictureId);
+        ExcUtils.throwIfTrue(picture == null, "图片不存在");
+
+        String oldUrl = picture.getUrl();
+        ExcUtils.throwIfTrue(oldUrl == null || oldUrl.isEmpty(), "图片URL为空");
+
+        User userLogin = loginUser.getLoginUser(servletRequest);
+        ExcUtils.throwIfTrue(userLogin == null || userLogin.getId() == null, "请先登录");
+
+        try {
+            InputStream imageStream = new URL(oldUrl).openStream();
+            BufferedImage sourceImage = ImageIO.read(imageStream);
+            imageStream.close();
+            ExcUtils.throwIfTrue(sourceImage == null, "无法读取图片");
+
+            Integer rotation = request.getRotation() != null ? request.getRotation() : 0;
+            BufferedImage rotated = sourceImage;
+            if (rotation != 0) {
+                double radians = Math.toRadians(rotation);
+                double sin = Math.abs(Math.sin(radians));
+                double cos = Math.abs(Math.cos(radians));
+                int w = sourceImage.getWidth();
+                int h = sourceImage.getHeight();
+                int newW = (int) Math.floor(w * cos + h * sin);
+                int newH = (int) Math.floor(h * cos + w * sin);
+                rotated = new BufferedImage(newW, newH, sourceImage.getType());
+                AffineTransform transform = new AffineTransform();
+                transform.translate((newW - w) / 2.0, (newH - h) / 2.0);
+                transform.rotate(radians, w / 2.0, h / 2.0);
+                AffineTransformOp op = new AffineTransformOp(transform, AffineTransformOp.TYPE_BILINEAR);
+                rotated = op.filter(sourceImage, rotated);
+            }
+
+            int x = (int) Math.round(request.getX() != null ? request.getX() : 0);
+            int y = (int) Math.round(request.getY() != null ? request.getY() : 0);
+            int width = (int) Math.round(request.getWidth() != null ? request.getWidth() : rotated.getWidth());
+            int height = (int) Math.round(request.getHeight() != null ? request.getHeight() : rotated.getHeight());
+
+            x = Math.max(0, Math.min(x, rotated.getWidth() - 1));
+            y = Math.max(0, Math.min(y, rotated.getHeight() - 1));
+            width = Math.min(width, rotated.getWidth() - x);
+            height = Math.min(height, rotated.getHeight() - y);
+
+            BufferedImage cropped = rotated.getSubimage(x, y, width, height);
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ImageIO.write(cropped, "png", baos);
+            byte[] imageBytes = baos.toByteArray();
+
+            cosService.deletePictureByUrl(oldUrl);
+
+            String newKey = cosService.uploadPicture(new MultipartFile() {
+                @Override
+                public String getName() {
+                    return "file";
+                }
+
+                @Override
+                public String getOriginalFilename() {
+                    return "cropped.png";
+                }
+
+                @Override
+                public String getContentType() {
+                    return "image/png";
+                }
+
+                @Override
+                public boolean isEmpty() {
+                    return imageBytes.length == 0;
+                }
+
+                @Override
+                public long getSize() {
+                    return imageBytes.length;
+                }
+
+                @Override
+                public byte[] getBytes() {
+                    return imageBytes;
+                }
+
+                @Override
+                public InputStream getInputStream() {
+                    return new ByteArrayInputStream(imageBytes);
+                }
+
+                @Override
+                public void transferTo(java.io.File dest) throws java.io.IOException {
+                    java.nio.file.Files.write(dest.toPath(), imageBytes);
+                }
+            });
+
+            PictureMessage pictureMessage = cosService.getPictureMessage(newKey);
+            String newUrl = pictureMessage.getUrl();
+
+            UpdateWrapper<Picture> updateWrapper = new UpdateWrapper<Picture>().eq("id", pictureId);
+            updateWrapper.set("url", newUrl);
+            updateWrapper.set("width", pictureMessage.getWidth());
+            updateWrapper.set("height", pictureMessage.getHeight());
+            if (pictureMessage.getSize() != null) {
+                updateWrapper.set("size", Long.parseLong(pictureMessage.getSize()));
+            }
+            pictureMapper.update(null, updateWrapper);
+
+            return newUrl;
+        } catch (BaseException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("裁剪图片失败", e);
+            throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "裁剪图片失败：" + e.getMessage());
         }
     }
 }

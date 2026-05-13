@@ -103,7 +103,7 @@ public class UserController {
         return ResUtils.success(userService.editMyself(userEditRequest, request));
     }
 
-    @GetMapping("/logout")
+    @PostMapping("/logout")
     public Response<?> logout(HttpServletRequest request) {
         User user = loginUser.getLoginUser(request);
         HttpSession session = request.getSession(false);

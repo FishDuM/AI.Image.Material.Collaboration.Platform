@@ -49,8 +49,8 @@ export default function MobileEditProfilePage() {
       formData.append('file', file)
       formData.append('id', userData.id)
       const res = await uploadAvatar(formData)
-      const newAvatar = res?.data?.data?.avatar || res?.data?.avatar
-      if (newAvatar) {
+      const newAvatar = res?.data?.data || res
+      if (typeof newAvatar === 'string' && newAvatar.startsWith('http')) {
         setUserData(prev => ({ ...prev, avatar: newAvatar }))
         updateUserInfo(prev => ({ ...prev, avatar: newAvatar }))
         message.success('头像更新成功')

@@ -7,6 +7,7 @@ import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.dto.picture.DeleteByIdList;
+import hk.ljx.fishpicsbackend.dto.picture.PictureCropRequest;
 import hk.ljx.fishpicsbackend.dto.picture.PictureUpdateRequest;
 import hk.ljx.fishpicsbackend.entity.Picture;
 import hk.ljx.fishpicsbackend.service.PictureService;
@@ -58,7 +59,7 @@ public class PictureController {
         return ResUtils.success(pictureService.getPictureList(current, pageSize, 1));
     }
 
-    @PostMapping("/delete")
+    @DeleteMapping("/delete")
     public Response<String> deletePicture(@RequestBody DeleteByIdList deleteByIdList, HttpServletRequest request) {
         ExcUtils.throwIfTrue(ObjUtil.isEmpty(deleteByIdList), "id不能为空");
         return ResUtils.successOfMessage(pictureService.deletePicture(deleteByIdList, request));
@@ -68,6 +69,13 @@ public class PictureController {
     public Response<Boolean> updatePicture(@RequestBody PictureUpdateRequest request) {
         pictureService.updatePicture(request);
         return ResUtils.success(true);
+    }
+
+    @PostMapping("/crop")
+    public Response<String> cropPicture(@RequestBody PictureCropRequest request, HttpServletRequest servletRequest) {
+        ExcUtils.throwIfTrue(request.getPictureId() == null, "图片id不能为空");
+        String newUrl = pictureService.cropPicture(request, servletRequest);
+        return ResUtils.success(newUrl);
     }
 
     @AuthCheck(role = ADMIN)

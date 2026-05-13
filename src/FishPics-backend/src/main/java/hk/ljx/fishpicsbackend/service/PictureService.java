@@ -1,6 +1,7 @@
 package hk.ljx.fishpicsbackend.service;
 
 import hk.ljx.fishpicsbackend.dto.picture.DeleteByIdList;
+import hk.ljx.fishpicsbackend.dto.picture.PictureCropRequest;
 import hk.ljx.fishpicsbackend.dto.picture.PictureUpdateRequest;
 import hk.ljx.fishpicsbackend.entity.Picture;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -75,4 +76,12 @@ public interface PictureService extends IService<Picture> {
      * @param request 编辑请求
      */
     void updatePicture(PictureUpdateRequest request);
+
+    /**
+     * 裁剪图片（服务端下载、裁剪、重新上传）
+     * @param request 裁剪请求
+     * @param servletRequest HTTP请求
+     * @return 新的图片URL
+     */
+    String cropPicture(PictureCropRequest request, HttpServletRequest servletRequest);
 }

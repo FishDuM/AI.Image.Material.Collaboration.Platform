@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App as AntApp, Typography, Button, Modal, Form, Input, Pagination, Masonry, Image as AntImage, Spin, Empty, Popconfirm, Progress, Popover } from 'antd'
 import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowUpOutlined, CrownOutlined, CloudServerOutlined, CheckCircleFilled, EditOutlined } from '@ant-design/icons'
-import { updateSpace, listSpace, spaceListPicture, deletePicture, updatePicture } from '../api'
+import { updateSpace, listSpace, spaceListPicture, deletePicture, updatePicture, cropPicture } from '../api'
 import { useIsMobile } from '../hooks/useIsMobile'
+import ImageCropper from '../components/shared/ImageCropper'
 import './PrivateSpace.css'
 
 const { Title } = Typography
@@ -91,6 +92,7 @@ function PrivateSpace() {
   const [showEditPicture, setShowEditPicture] = useState(false)
   const [editPictureLoading, setEditPictureLoading] = useState(false)
   const [editPictureForm] = Form.useForm()
+  const [isCropping, setIsCropping] = useState(false)
 
   const fetchSpaces = useCallback(async () => {
     try {
@@ -221,14 +223,39 @@ function PrivateSpace() {
       return
     }
     editPictureForm.resetFields()
+    setIsCropping(false)
     setShowEditPicture(true)
   }
+
+  const handleEnterCrop = useCallback(() => {
+    setIsCropping(true)
+  }, [])
+
+  const handleCropCancel = useCallback(() => {
+    setIsCropping(false)
+  }, [])
+
+  const handleCropSave = useCallback(async (cropParams) => {
+    try {
+      await cropPicture({
+        pictureId: selectedIds[0],
+        ...cropParams,
+      })
+      message.success('图片编辑并保存成功')
+      setIsCropping(false)
+      if (spaces.length > 0 && spaces[0].id) {
+        await fetchPictures(spaces[0].id, picturePage, searchKeyword)
+      }
+    } catch (error) {
+      message.error(error.message || '图片编辑保存失败')
+    }
+  }, [selectedIds, spaces, fetchPictures, picturePage, searchKeyword, message])
 
   const handleEditPictureSubmit = async (values) => {
     setEditPictureLoading(true)
     try {
       await updatePicture({
-        id: selectedIds[0],
+        ids: selectedIds[0],
         pictureName: values.pictureName || undefined,
         introduction: values.introduction || undefined,
       })
@@ -602,7 +629,7 @@ function PrivateSpace() {
         className="edit-picture-modal"
         title={null}
         open={showEditPicture}
-        onCancel={() => { setShowEditPicture(false); editPictureForm.resetFields() }}
+        onCancel={() => { setShowEditPicture(false); editPictureForm.resetFields(); setIsCropping(false) }}
         width="80vw"
         style={{ maxHeight: '75vh' }}
         footer={null}
@@ -610,10 +637,21 @@ function PrivateSpace() {
       >
         <div className="edit-picture-layout">
           <div className="edit-picture-left">
-            {(() => {
-              const first = pictures.find(p => selectedIds.includes(p.id))
-              return first ? <img src={first.url} alt="" className="edit-picture-img" /> : null
-            })()}
+            {isCropping ? (
+              <ImageCropper
+                imageUrl={(() => {
+                  const first = pictures.find(p => selectedIds.includes(p.id))
+                  return first?.url
+                })()}
+                onSave={handleCropSave}
+                onCancel={handleCropCancel}
+              />
+            ) : (
+              (() => {
+                const first = pictures.find(p => selectedIds.includes(p.id))
+                return first ? <img src={first.url} alt="" className="edit-picture-img" /> : null
+              })()
+            )}
           </div>
           <div className="edit-picture-right">
             <div className="edit-picture-right-header">
@@ -628,7 +666,14 @@ function PrivateSpace() {
               </Form.Item>
             </Form>
             <div className="edit-picture-right-footer">
-              <Button onClick={() => { setShowEditPicture(false); editPictureForm.resetFields() }}>
+              <Button
+                icon={<EditOutlined />}
+                onClick={handleEnterCrop}
+                disabled={isCropping}
+              >
+                编辑图片
+              </Button>
+              <Button onClick={() => { setShowEditPicture(false); editPictureForm.resetFields(); setIsCropping(false) }}>
                 取消
               </Button>
               <Button type="primary" onClick={() => editPictureForm.submit()} loading={editPictureLoading}>

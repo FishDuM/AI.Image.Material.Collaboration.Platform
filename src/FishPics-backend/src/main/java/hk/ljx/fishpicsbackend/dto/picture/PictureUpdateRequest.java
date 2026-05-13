@@ -9,4 +9,5 @@ public class PictureUpdateRequest implements Serializable {
     private Long ids;
     private String pictureName;
     private String introduction;
+    private String pictureUrl;
 }

@@ -326,6 +326,13 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         Page<Picture> picturePage = new Page<>(current, pageSize);
         QueryWrapper<Picture> pictureQueryWrapper = new QueryWrapper<>();
         pictureQueryWrapper.eq("space_id", spaceId);
+        String keyword = spacePictureList.getKeyword();
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            pictureQueryWrapper.and(w -> w
+                .like("picture_name", keyword)
+                .or()
+                .like("introduction", keyword));
+        }
         pictureQueryWrapper.orderBy(ObjectUtil.isNotNull(sortField), sortOrder.equals("ascend"), sortField);
         Page<Picture> pictureList = pictureService.page(picturePage, pictureQueryWrapper);
         // 3. 转换为VO（仅返回id和url，不暴露完整图片元数据）
