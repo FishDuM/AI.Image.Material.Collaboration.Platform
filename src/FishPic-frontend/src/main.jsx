@@ -46,6 +46,14 @@ function ThemeWrapper({ children }) {
             Button: {
               borderRadius: 8,
               controlHeight: 40,
+              ...(isDarkMode && {
+                colorPrimary: '#D0D0D0',
+                colorPrimaryHover: '#E0E0E0',
+                colorPrimaryActive: '#BEBEBE',
+                colorTextLightSolid: '#1A1A1A',
+                defaultBorderColor: '#606060',
+                defaultColor: '#D0D0D0',
+              }),
             },
             Modal: {
               borderRadiusLG: 12,

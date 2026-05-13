@@ -106,7 +106,7 @@
   height: 28px;
   border-radius: var(--radius-full);
   background: var(--accent);
-  color: #fff;
+  color: var(--text-inverse);
   display: flex;
   align-items: center;
   justify-content: center;

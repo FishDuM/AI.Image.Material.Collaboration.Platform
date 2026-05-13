@@ -166,13 +166,13 @@
 .modal-submit-button.ant-btn-primary {
   background: var(--accent) !important;
   border-color: var(--accent) !important;
-  color: #fff !important;
+  color: var(--text-inverse) !important;
 }
 
 .modal-submit-button.ant-btn-primary:hover {
   background: var(--accent-hover) !important;
   border-color: var(--accent-hover) !important;
-  color: #fff !important;
+  color: var(--text-inverse) !important;
 }
 
 .space-picker-modal .ant-modal-body {
@@ -584,7 +584,7 @@
   height: 24px;
   border-radius: var(--radius-full);
   background: var(--accent);
-  color: #fff;
+  color: var(--text-inverse);
   font-size: var(--text-sm);
   font-weight: 600;
   line-height: 1;

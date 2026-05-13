@@ -420,7 +420,7 @@
 
 .xhs-left-panel {
   width: 350px;
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   display: flex;
   flex-direction: column;
   align-items: center;

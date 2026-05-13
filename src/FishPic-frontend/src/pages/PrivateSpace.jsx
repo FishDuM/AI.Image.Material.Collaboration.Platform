@@ -228,7 +228,7 @@ function PrivateSpace() {
     setEditPictureLoading(true)
     try {
       await updatePicture({
-        ids: selectedIds,
+        id: selectedIds[0],
         pictureName: values.pictureName || undefined,
         introduction: values.introduction || undefined,
       })
@@ -607,7 +607,6 @@ function PrivateSpace() {
         style={{ maxHeight: '75vh' }}
         footer={null}
         closable={false}
-        destroyOnHidden
       >
         <div className="edit-picture-layout">
           <div className="edit-picture-left">

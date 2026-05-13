@@ -22,7 +22,7 @@ export default function MobileEditPicturePage() {
     setLoading(true)
     try {
       await updatePicture({
-        ids: [pictureId],
+        id: pictureId,
         pictureName: values.pictureName || undefined,
         introduction: values.introduction || undefined,
       })
