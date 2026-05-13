@@ -494,6 +494,30 @@
 +------------------------------------------+
 ```
 
+##### PictureUpdateRequest
+
+```
++------------------------------------------+
+|         PictureUpdateRequest             |
++------------------------------------------+
+| - id: Long (图片ID)                      |
+| - pictureName: String (图片名称)         |
+| - introduction: String (图片简介)        |
++------------------------------------------+
+```
+
+##### GetPictureBySpaceRequest
+
+```
++------------------------------------------+
+|       GetPictureBySpaceRequest           |
++------------------------------------------+
+| - spaceId: Long (空间ID)                 |
+| - current: long (当前页)                 |
+| - pageSize: long (每页大小)              |
++------------------------------------------+
+```
+
 ##### SpacePictureList
 
 ```
@@ -731,6 +755,7 @@
 | + POST /post/editPost (编辑帖子)         |
 | + POST /post/postList (获取帖子列表)     |
 | + POST /post/like (点赞帖子)             |
+| + POST /post/pictureList (编辑帖子图片列表)|
 | + POST /post/myPosts (我的帖子列表)      |
 | + POST /post/myCollects (我的收藏列表)   |
 | + POST /post/myLikes (我的点赞列表)      |
@@ -746,11 +771,12 @@
 | - pictureService: PictureService         |
 +------------------------------------------+
 | + POST /picture/avatar (上传头像)        |
-| + POST /picture/post (上传帖子图片)      |
+| + POST /picture/upload (上传图片)        |
 | + GET  /picture/list (公开图片列表)      |
 | + GET  /picture/admin/list (管理员图片列表)|
 | + POST /picture/admin/review (审核图片)  |
 | + POST /picture/delete (删除图片)        |
+| + PUT  /picture/update (更新图片信息)    |
 +------------------------------------------+
 ```
 
@@ -764,6 +790,7 @@
 +------------------------------------------+
 | + POST /space/create (创建空间)          |
 | + GET  /space/list (获取空间列表)        |
+| + GET  /space/getSpace (获取空间详情)    |
 | + POST /space/update (更新空间)          |
 | + POST /space/pictureList (空间图片列表) |
 +------------------------------------------+
@@ -836,12 +863,12 @@
 | extends IService<Picture>                |
 +------------------------------------------+
 | + uploadAvatar(file, id, request)        |
-| + uploadPicture4Post(file, request)      |
-| + setPicturePostId(imageIds, postId)     |
+| + uploadPicture(file, request)           |
 | + getPictureList(current, pageSize)      |
 | + getAdminPictureList(current, pageSize, status)|
 | + reviewPicture(pictureId, status, selected)|
-| + deletePicture(ids)                     |
+| + deletePicture(ids, request)            |
+| + updatePicture(pictureUpdateRequest)    |
 +------------------------------------------+
 ```
 
@@ -1120,38 +1147,43 @@ LoginUser --> UserService: 返回User对象
 
 ```
 用户 -> 前端: 填写帖子内容并上传图片
-前端 -> 后端(PictureController): POST /picture/post (MultipartFile)
-PictureController: 校验文件大小(<=5MB)
-PictureController -> PictureService: uploadPicture4Post(file, request)
+前端 -> 后端(PictureController): POST /picture/upload (MultipartFile)
+PictureController: 校验文件非空
+PictureController -> PictureService: uploadPicture(file, request)
 PictureService -> LoginUser: getLoginUser(request) [获取当前用户]
 LoginUser -> HttpSession: getAttribute(TOKEN_KEY)
 HttpSession --> LoginUser: 返回userId
 LoginUser -> Redis: get(USER_ID:{userId})
 Redis --> LoginUser: 返回UserJSON
 LoginUser --> PictureService: 返回User对象
+PictureService: 根据用户等级限制文件大小(普通3MB/VIP 5MB/SVIP 20MB)
 PictureService -> CosService: 上传文件到腾讯云COS
 CosService --> PictureService: 返回图片URL
-PictureService -> PictureMapper: INSERT INTO picture (userId, url, width, height, size)
+PictureService -> PictureService: 获取图片元信息(宽高)
+PictureService -> SpaceMapper: 查询用户私人空间
+SpaceMapper -> MySQL: SELECT * FROM space WHERE user_id=? AND type=0
+MySQL --> SpaceMapper: 返回私人空间
+PictureService: 检查私人空间存储是否充足
+PictureService -> PictureMapper: INSERT INTO picture (userId, url, width, height, size, spaceId, status)
+  [管理员] status=1(直接通过)
+  [普通用户] status=2(待审核)
 PictureMapper -> MySQL: 插入图片记录
 MySQL --> PictureMapper: 返回插入结果(含pictureId)
+PictureService -> SpaceMapper: UPDATE space SET size=size+fileSize
 PictureService --> 前端: Response<PicturePostVO> (url + pictureId)
 
 用户 -> 前端: 提交帖子(含图片ID列表)
 前端 -> 后端(PostController): POST /post/post (UploadPostRequest)
 PostController -> PostService: uploadPost(uploadPostRequest, request)
 PostService -> LoginUser: getLoginUser(request) [获取当前用户]
-LoginUser -> HttpSession: getAttribute(TOKEN_KEY)
-HttpSession --> LoginUser: 返回userId
-LoginUser -> Redis: get(USER_ID:{userId})
-Redis --> LoginUser: 返回UserJSON
 LoginUser --> PostService: 返回User对象
+PostService: 校验图片(最多15张)、标题、内容、封面
+PostService -> PostService: isMyPicture(userId, imageIds) [验证图片归属]
 PostService -> PostMapper: INSERT INTO post (userId, title, content, cover, isPrivate)
 PostMapper -> MySQL: 插入帖子记录
 MySQL --> PostMapper: 返回插入结果(含postId)
-PostService -> PictureService: setPicturePostId(imageIds, postId)
-PictureService -> PictureMapper: UPDATE picture SET post_id=? WHERE id IN (?)
-PictureMapper -> MySQL: 更新图片postId
-MySQL --> PictureMapper: 更新成功
+PostService -> PictureChildMapper: INSERT batch INTO picture_child (pictureId, postId, sortNum)
+PostService -> PictureMapper: UPDATE picture SET post_id=? WHERE id IN (?)
 PostService --> 后端: Response<Boolean>
 后端 --> 前端: 发布成功
 前端 --> 用户: 显示成功并跳转
@@ -1212,14 +1244,20 @@ HttpSession --> LoginUser: 返回userId
 LoginUser -> Redis: get(USER_ID:{userId})
 Redis --> LoginUser: 返回UserJSON
 LoginUser --> PostService: 返回User对象
+PostService -> Redisson: getLock(LIKE_POST + postId) [获取分布式锁]
+Redisson --> PostService: 返回RLock对象
+PostService -> RLock: tryLock(10秒超时) [尝试获取锁]
+  [获取失败] -> PostService --> 后端: 提示操作频繁，请稍后再试
+  [获取成功] ->
 PostService -> UserPostLikesMapper: selectOne(userId, postId)
 UserPostLikesMapper -> MySQL: 查询是否已点赞
 MySQL --> UserPostLikesMapper: 返回查询结果
 PostService -> 判断点赞状态:
   [未点赞] -> UserPostLikesMapper: INSERT (userId, postId)
-            -> PostMapper: UPDATE post SET likes_num = likes_num + 1
+            -> PostMapper: UPDATE post SET likes_num = likes_num + 1 (乐观更新)
   [已点赞] -> UserPostLikesMapper: DELETE (userId, postId)
-            -> PostMapper: UPDATE post SET likes_num = likes_num - 1
+            -> PostMapper: UPDATE post SET likes_num = likes_num - 1 (乐观更新)
+PostService -> RLock: unlock() [释放分布式锁]
 MySQL --> PostService: 操作成功
 PostService --> 后端: Response<Boolean>
 后端 --> 前端: 点赞/取消成功
@@ -1416,25 +1454,27 @@ PicSystemService --> 后端: Response<Boolean>
 前端 --> 管理员: 显示成功并刷新列表
 ```
 
-### 3.17 管理员创建空间流程
+### 3.17 创建空间流程
 
 ```
-管理员 -> 前端: 填写空间信息并提交
+用户 -> 前端: 填写空间信息并提交
 前端 -> 后端(SpaceController): POST /space/create (CreateSpace)
-后端 -> AuthInterceptor: @AuthCheck(role=ADMIN) [权限校验]
+后端 -> AuthInterceptor: @AuthCheck [权限校验(私人空间需登录, 团队空间需管理员)]
 AuthInterceptor -> LoginUser: getLoginUser(request)
 LoginUser -> AuthInterceptor: 返回User对象
 AuthInterceptor -> 后端: 权限通过
-SpaceController -> SpaceService: createSpace(createSpace, request)
-SpaceService -> LoginUser: getLoginUser(request)
-LoginUser -> SpaceService: 返回User对象
-SpaceService: 根据type设置默认存储大小 (PRIVATE:512MB / TEAM:5GB)
+SpaceController -> SpaceService: createSpace(createSpace, user)
+SpaceService -> 判断空间类型:
+  [私人空间(0)] -> SpaceService: 检查是否已有私人空间(每人限1个)
+                   SpaceService: 根据用户等级设置存储大小(普通512MB/VIP 5GB/SVIP 10GB)
+  [团队空间(1)] -> SpaceService: 检查团队空间数量限制(普通1个/VIP 5个/SVIP 10个)
+                   SpaceService: 根据用户等级设置存储大小(VIP 30GB/SVIP 50GB)
 SpaceService -> SpaceMapper: INSERT INTO space (name, introduction, type, userId, storageSize, level)
 SpaceMapper -> MySQL: 插入空间记录
 MySQL --> SpaceMapper: 返回插入结果
 SpaceService --> 后端: Response<Boolean>
 后端 --> 前端: 创建成功
-前端 --> 管理员: 显示成功并刷新列表
+前端 --> 用户: 显示成功并刷新列表
 ```
 
 ### 3.18 获取公开图片列表流程
@@ -1512,7 +1552,26 @@ PictureService --> 后端: Response<Boolean>
 [仅自己可见(1)] --(用户修改为公开)--> [公开(0)]
 ```
 
-### 4.5 图片首页展示状态图
+### 4.5 用户等级状态图
+
+```
+[普通用户(0)] --(购买VIP)--> [VIP(1)]
+[VIP(1)] --(购买SVIP)--> [SVIP(2)]
+[SVIP(2)] --(降级)--> [VIP(1)]
+[VIP(1)] --(降级)--> [普通用户(0)]
+[普通/VIP/SVIP] --(管理员编辑)--> [任意等级]
+```
+
+### 4.6 图片审核状态图
+
+```
+[待审核(2)] --(管理员通过)--> [正常(1)]
+[待审核(2)] --(管理员拒绝)--> [禁用(0)]
+[正常(1)] --(管理员标记精选)--> [精选(selected=1)]
+[管理员上传] --(自动通过)--> [正常(1)]
+```
+
+### 4.7 图片首页展示状态图
 
 ```
 [公开到首页(1)] --(用户修改为不公开)--> [不公开(0)]
@@ -1541,6 +1600,7 @@ PictureService --> 后端: Response<Boolean>
 - **CommunitySquare.jsx**: 社区广场 (帖子瀑布流展示，滚动100px后显示返回顶部按钮)
 - **PrivateSpace.jsx**: 个人空间
 - **TeamSpace.jsx**: 团队空间
+- **TeamSpaceDetail.jsx**: 团队空间详情（空间信息展示、图片瀑布流管理、批量操作、图片编辑）
 - **Notifications.jsx**: 通知消息
 - **UserProfile.jsx**: 用户资料
 - **UserManagement.jsx**: 用户管理
@@ -1551,17 +1611,53 @@ PictureService --> 后端: Response<Boolean>
 - **SpaceManagement.jsx**: 空间管理（开发中）
 - **AIManagement.jsx**: AI管理（开发中）
 - **NotFound.jsx**: 404页面
+- **MobileLoginPage.jsx**: 移动端独立登录页
+- **MobileRegisterPage.jsx**: 移动端独立注册页
+- **MobilePostCreatePage.jsx**: 移动端帖子创建页（复用CreateEditPostModal）
+- **MobilePostDetailPage.jsx**: 移动端帖子详情页（复用PostDetailModal）
+- **MobileEditProfilePage.jsx**: 移动端编辑资料页（含头像上传）
+- **MobileEditPicturePage.jsx**: 移动端图片编辑页
 
 #### 通用组件
 
 - **GlobalLayout.jsx**: 全局布局组件
+- **MobilePageWrapper.jsx**: 移动端页面包裹组件（统一顶部导航栏和返回按钮）
 - **ProtectedRoute.jsx**: 路由保护组件
 - **ErrorBoundary.jsx**: 错误边界组件
 - **FunnyBackground.jsx**: 趣味背景动画
-- **PostDetailModal.jsx**: 帖子详情弹窗
-- **CreateEditPostModal.jsx**: 帖子发布/编辑弹窗
-- **api/index.js**: API请求封装 (Axios配置、拦截器、所有接口方法)
+- **PostDetailModal.jsx**: 帖子详情弹窗（支持mode="modal"/"page"双模式）
+- **CreateEditPostModal.jsx**: 帖子发布/编辑弹窗（支持mode="modal"/"page"双模式）
+
+#### 共享组件 (components/shared/)
+
+- **LoginModal.jsx**: 桌面端登录弹窗（左右双栏布局）
+- **RegisterModal.jsx**: 桌面端注册弹窗
+- **SettingsModal.jsx**: 设置弹窗（含社交链接）
+- **FloatingActions.jsx**: 浮动操作按钮组（发帖、刷新、回到顶部）
+- **BulkActionBar.jsx**: 批量操作底部栏
+- **StorageCard.jsx**: 存储空间卡片（圆形进度条）
+- **UpgradePanel.jsx**: VIP/SVIP升级方案面板
+- **SpacePickerModal.jsx**: 空间图片选择器弹窗
+- **ImageEditModal.jsx**: 图片编辑表单弹窗
+- **PageHeader.jsx**: 统一页面标题头
+- **EmptyState.jsx**: 统一空数据展示
+- **SearchBar.jsx**: 自定义搜索栏
+- **ProfileHeader.jsx**: 用户个人资料头
+- **PostCard.jsx**: 社区帖子卡片
+- **MobileBottomNav.jsx**: 移动端底部Tab导航栏
+
+#### 自定义Hooks (hooks/)
+
+- **useIsMobile.js**: 响应式移动端检测Hook（断点768px）
+- **useAuthModal.js**: 认证弹窗管理Hook（封装登录/注册弹窗状态与逻辑）
+
+#### 工具与配置
+
+- **api/index.js**: API请求封装 (Axios配置、拦截器、请求去重、所有接口方法)
 - **utils/storage.js**: localStorage操作工具
+- **styles/animations.css**: 动画样式
+- **styles/carousel.css**: 轮播样式
+- **styles/shared.css**: 共享样式
 
 ### 5.2 后端组件 (FishPics-backend)
 
@@ -1580,18 +1676,18 @@ PictureService --> 后端: Response<Boolean>
 
 #### Controller 层
 
-- **UserController**: 用户相关接口 (11个接口)
-- **PostController**: 帖子相关接口 (5个接口)
-- **PictureController**: 图片相关接口 (6个接口)
-- **SpaceController**: 空间相关接口 (4个接口)
+- **UserController**: 用户相关接口 (12个接口)
+- **PostController**: 帖子相关接口 (9个接口)
+- **PictureController**: 图片相关接口 (7个接口)
+- **SpaceController**: 空间相关接口 (5个接口)
 - **SystemController**: 系统相关接口 (6个接口)
 
 #### Service 层
 
 - **UserService/Impl**: 用户业务逻辑 (11个方法)
-- **PostService/Impl**: 帖子业务逻辑 (9个方法，含myPosts/myCollects/myLikes)
-- **PictureService/Impl**: 图片业务逻辑 (7个方法，含list/admin/review/delete)
-- **SpaceService/Impl**: 空间业务逻辑 (5个方法)
+- **PostService/Impl**: 帖子业务逻辑 (11个方法，含myPosts/myCollects/myLikes/pictureList/likePost)
+- **PictureService/Impl**: 图片业务逻辑 (8个方法，含upload/review/delete/update)
+- **SpaceService/Impl**: 空间业务逻辑 (6个方法，含create/list/getSpace/update/pictureList)
 - **PicSystemService/Impl**: 系统配置业务逻辑 (6个方法，标签+跑马灯)
 - **CommentService/Impl**: 评论业务逻辑
 - **UserPostCollectService/Impl**: 帖子收藏业务

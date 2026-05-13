@@ -14,7 +14,7 @@ FishPics（FishPics Image Collaboration Platform）是一个基于前后端分�
 ### 1.2 技术栈
 
 - **前端**: React 19 + Vite 8 + Ant Design 6 + React Router v7 + Context API + Axios + dayjs
-- **后端**: Spring Boot 2.7.6 + MyBatis-Plus 3.5.15 + MySQL 8 + Redis + Redisson + Knife4j + Hutool + Lombok + 腾讯云 COS
+- **后端**: Spring Boot 3.2.5 + MyBatis-Plus 3.5.14 + MySQL 8 + Redis + Redisson 3.27.0 + Knife4j 4.4.0 + Hutool 5.8.38 + Lombok + 腾讯云 COS
 - **认证**: HTTP Session + Cookie（Spring Session + Redis机制，依赖CORS allowCredentials）
 - **密码安全**: MD5 + 盐值"fish"
 
@@ -37,10 +37,11 @@ FishPics（FishPics Image Collaboration Platform）是一个基于前后端分�
 
 #### 2.1.1 用户认证模块
 
-- **用户注册**
+- **注册**
   - 输入：用户名（6-11字符）、密码（8-20字符）、确认密码、图形验证码
   - 校验：用户名唯一性、密码一致性、验证码正确性
   - 默认值：昵称"小鱼籽\_+随机字符串"、角色"user"
+  - 注册成功后自动创建默认私人空间（512MB）
 - **用户登录**
   - 输入：用户名、密码、图形验证码
   - 流程：验证码校验 → 用户查询 → 密码比对（MD5+Salt） → 将用户ID存入HTTP Session → 将用户信息缓存到Redis → 返回用户信息
@@ -81,9 +82,11 @@ FishPics（FishPics Image Collaboration Platform）是一个基于前后端分�
   - 功能：用户头像上传，文件大小限制5MB
   - 参数：file（图片文件）、id（用户ID）
 - **帖子图片上传**
-  - 接口：POST /api/picture/post
-  - 功能：帖子相关图片上传，文件大小限制5MB
+  - 接口：POST /api/picture/upload
+  - 功能：帖子相关图片上传，根据用户等级限制文件大小（普通3MB/VIP 5MB/SVIP 20MB）
   - 参数：file（图片文件）
+  - 检查私人空间存储是否充足，空间不足时删除已上传文件并提示
+  - 管理员上传的图片自动通过审核（status=1），普通用户需审核（status=2）
   - 返回：PicturePostVO（图片URL、ID等信息）
 - **图片信息管理**
   - 图片名称、URL、尺寸（宽、高）、大小
@@ -139,6 +142,8 @@ FishPics（FishPics Image Collaboration Platform）是一个基于前后端分�
   - 接口：POST /api/post/myCollects（获取本人收藏的帖子列表）
 - **点赞功能**
   - 点赞帖子（user_post_likes表：userId、postId）
+  - 使用Redisson分布式锁（10秒超时）防止并发点赞
+  - 乐观更新点赞数（likes_num +1/-1）
   - 点赞列表管理
   - 接口：POST /api/post/like?id={id}
   - 接口：POST /api/post/myLikes（获取本人点赞的帖子列表）
@@ -187,24 +192,36 @@ FishPics（FishPics Image Collaboration Platform）是一个基于前后端分�
 - **空间列表查询**
   - 接口：GET /api/space/list?type={type}
   - 功能：按类型获取用户的空间列表（0-私人空间，1-团队空间）
+  - 批量查询图片数量、创建人信息、团队成员信息（团队空间最多显示10个成员）
+- **空间详情查询**
+  - 接口：GET /api/space/getSpace?id={id}
+  - 功能：获取单个空间详情
+  - 权限校验：仅创建者或团队成员可访问
 - **空间信息更新**
   - 接口：POST /api/space/update
   - 功能：更新空间名称和介绍
   - 参数：id（空间ID）、name、introduction
+  - 权限校验：仅创建者或管理员可操作
 - **空间图片列表**
   - 接口：POST /api/space/pictureList
   - 功能：获取指定空间下的图片列表（分页）
   - 参数：spaceId（空间ID）、current、pageSize
+  - 权限校验：仅创建者或团队成员可访问
 
 #### 2.1.11 图片管理扩展模块
 
 - **图片列表查询（公开）**
   - 接口：GET /api/picture/list?current={current}&pageSize={pageSize}
   - 功能：分页获取公开图片列表
+- **图片信息更新**
+  - 接口：PUT /api/picture/update
+  - 功能：更新图片名称和介绍
+  - 参数：id（图片ID）、pictureName、introduction
 - **图片删除**
   - 接口：POST /api/picture/delete
-  - 功能：删除图片（支持批量删除）
-  - 参数：ids（图片ID列表）
+  - 功能：删除图片（支持批量删除），帖子封面图禁止删除
+  - 权限校验：图片主人或管理员可操作
+  - 参数：idList（图片ID列表）
 - **管理员图片管理**
   - 获取图片列表：GET /api/picture/admin/list?current={current}&pageSize={pageSize}&status={status}
   - 审核图片：POST /api/picture/admin/review?pictureId={pictureId}&status={status}&selected={selected}
@@ -221,6 +238,13 @@ FishPics（FishPics Image Collaboration Platform）是一个基于前后端分�
 - **本人点赞列表**
   - 接口：POST /api/post/myLikes
   - 功能：获取当前登录用户点赞的帖子列表（分页）
+- **编辑帖子时获取图片列表**
+  - 接口：POST /api/post/pictureList
+  - 功能：编辑帖子时获取空间内可选图片列表，标记已选图片的flag状态
+  - 参数：spaceId、current、pageSize
+- **帖子热度排序**
+  - 热度公式：likes * 0.3 + collects * 0.3 + comments * 0.2 + clicks * 0.2
+  - 社区广场支持按热度优先排序（hotPost=true）
 
 #### 2.1.13 前端页面模块
 
@@ -228,6 +252,7 @@ FishPics（FishPics Image Collaboration Platform）是一个基于前后端分�
 - **社区广场**（CommunitySquare）：社区内容展示，瀑布流布局，支持分类标签筛选、搜索、发帖、编辑、帖子详情弹窗、返回顶部按钮（向下滚动100px后显示，平滑滚动）
 - **私人空间**（PrivateSpace）：用户个人私密内容管理
 - **团队空间**（TeamSpace）：团队协作内容管理
+- **团队空间详情**（TeamSpaceDetail）：查看和管理团队空间，包含空间信息展示和图片瀑布流管理，支持图片搜索、批量操作、图片编辑
 - **通知中心**（Notifications）：用户通知消息（评论互动、赞和收藏、新增关注、系统通知、私信五个分类）
 - **用户资料**（UserProfile）：个人资料查看与编辑
 - **用户管理**（UserManagement）：管理员查看和编辑用户信息
@@ -237,6 +262,12 @@ FishPics（FishPics Image Collaboration Platform）是一个基于前后端分�
 - **空间管理**（SpaceManagement）：空间配置管理（开发中）
 - **AI管理**（AIManagement）：AI相关功能管理（开发中）
 - **系统管理**（SystemManagement）：帖子分类标签管理、首页跑马灯图片管理
+- **移动端登录页**（MobileLoginPage）：独立的移动端登录页面，支持验证码
+- **移动端注册页**（MobileRegisterPage）：独立的移动端注册页面，含确认密码
+- **移动端帖子创建页**（MobilePostCreatePage）：移动端发帖页面，复用CreateEditPostModal
+- **移动端帖子详情页**（MobilePostDetailPage）：移动端帖子详情查看与编辑
+- **移动端编辑资料页**（MobileEditProfilePage）：移动端个人资料编辑，支持头像上传
+- **移动端图片编辑页**（MobileEditPicturePage）：移动端图片信息编辑
 - **404页面**（NotFound）：未找到页面
 
 #### 2.1.14 前端通用组件
@@ -245,12 +276,33 @@ FishPics（FishPics Image Collaboration Platform）是一个基于前后端分�
 - **ProtectedRoute**：路由权限保护（支持requireAdmin属性）
 - **ErrorBoundary**：错误边界处理
 - **FunnyBackground**：趣味背景动画（浮动emoji）
-- **PostDetailModal**：帖子详情弹窗（小红书风格，左右分栏，左侧图片轮播，右侧内容与互动数据）
-- **CreateEditPostModal**：帖子发布/编辑弹窗（左右分栏布局，支持多图片上传、封面选择、隐私设置）
+- **PostDetailModal**：帖子详情弹窗（小红书风格，左右分栏，左侧图片轮播，右侧内容与互动数据，支持mode="page"模式用于移动端）
+- **CreateEditPostModal**：帖子发布/编辑弹窗（左右分栏布局，支持多图片上传、封面选择、隐私设置，支持mode="page"模式用于移动端）
+- **MobilePageWrapper**：移动端页面包裹组件，提供统一的顶部导航栏和返回按钮
+- **LoginModal**：桌面端登录弹窗（左右双栏布局，左侧二维码区+右侧登录表单）
+- **RegisterModal**：桌面端注册弹窗（支持用户协议勾选）
+- **SettingsModal**：设置弹窗（含社交链接）
+- **FloatingActions**：浮动操作按钮组（发帖、刷新、回到顶部）
+- **BulkActionBar**：批量操作底部栏（全选、取消全选、删除）
+- **StorageCard**：存储空间卡片（圆形进度条展示使用率，超过90%红色警示）
+- **UpgradePanel**：VIP/SVIP升级方案面板（含增量包购买选项）
+- **SpacePickerModal**：空间图片选择器弹窗（从私人空间选取图片，支持去重和数量限制）
+- **ImageEditModal**：图片编辑表单弹窗（编辑图片名称和介绍）
+- **PageHeader**：统一页面标题头组件
+- **EmptyState**：统一空数据展示组件
+- **SearchBar**：自定义搜索栏组件（支持Enter搜索和清除）
+- **ProfileHeader**：用户个人资料头组件（头像、昵称、统计数据、头像预览）
+- **PostCard**：社区帖子卡片组件（瀑布流风格，显示封面、标题、用户信息、点赞收藏数）
+- **MobileBottomNav**：移动端底部Tab导航栏（首页、社区、私人空间、团队空间、我的）
 - **AuthContext**：认证状态管理（登录、登出、用户信息）
 - **ThemeContext**：主题状态管理（明暗主题切换）
-- **API封装**：Axios请求配置（请求/响应拦截器，统一错误处理）
+- **API封装**：Axios请求配置（请求/响应拦截器，统一错误处理，请求去重机制）
 - **Storage工具**：本地存储管理（用户信息）
+
+#### 2.1.15 前端自定义Hooks
+
+- **useIsMobile**：响应式检测Hook，监听窗口resize事件，断点768px判断移动端
+- **useAuthModal**：认证弹窗管理Hook，封装登录/注册弹窗的全部状态管理与业务逻辑（验证码获取、登录/注册提交、错误处理、表单重置）
 
 ---
 
@@ -462,6 +514,7 @@ User (1) ───< (N) UserPostLikes
 - **基础路径**: `/api`
 - **请求格式**: JSON (application/json) 或 multipart/form-data（文件上传）
 - **认证方式**: HTTP Session（Spring Session机制，通过Cookie自动传输Session ID）
+- **请求去重**: Axios拦截器实现自动请求去重，相同请求自动取消前一个（通过AbortController），支持noDedup配置跳过去重
 - **响应格式**: 统一 Response<T> 结构 { code, message, data }
   - code: 1-成功，其他-失败
   - message: 响应信息
@@ -940,7 +993,7 @@ User (1) ───< (N) UserPostLikes
 
 ### 8.1 环境要求
 
-- **Java**: JDK 11+
+- **Java**: JDK 21+
 - **MySQL**: 8.0+
 - **Redis**: 5.0+
 - **Node.js**: 18+

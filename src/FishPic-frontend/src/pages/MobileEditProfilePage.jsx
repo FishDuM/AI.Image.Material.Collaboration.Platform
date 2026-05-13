@@ -11,7 +11,7 @@ export default function MobileEditProfilePage() {
   const navigate = useNavigate()
   const { message } = App.useApp()
   const [form] = Form.useForm()
-  const { setUserInfo } = useContext(AuthContext)
+  const { updateUserInfo } = useContext(AuthContext)
   const [loading, setLoading] = useState(false)
   const [userData, setUserData] = useState(null)
   const [avatarLoading, setAvatarLoading] = useState(false)
@@ -45,11 +45,14 @@ export default function MobileEditProfilePage() {
     }
     setAvatarLoading(true)
     try {
-      const res = await uploadAvatar(file)
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('id', userData.id)
+      const res = await uploadAvatar(formData)
       const newAvatar = res?.data?.data?.avatar || res?.data?.avatar
       if (newAvatar) {
         setUserData(prev => ({ ...prev, avatar: newAvatar }))
-        setUserInfo(prev => ({ ...prev, avatar: newAvatar }))
+        updateUserInfo(prev => ({ ...prev, avatar: newAvatar }))
         message.success('头像更新成功')
       }
     } catch {
@@ -68,7 +71,7 @@ export default function MobileEditProfilePage() {
         email: values.email,
         phone: values.phone,
       })
-      setUserInfo(prev => ({
+      updateUserInfo(prev => ({
         ...prev,
         nickname: values.nickname,
         email: values.email,

@@ -19,14 +19,14 @@ spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/FishPics
-    username: root
-    password: 123456
+    username: # 数据库账号
+    password: # 数据库密码
   data:
     redis:
-      host: 192.168.163.101
+      host: # redis 地址
       database: 0
       port: 6379
-  profiles:
+  profiles: # 使用本地环境配置文件
     active: local
 knife4j:
   enable: true
@@ -50,7 +50,6 @@ knife4j:
 #  bucket:
 #  public: true  # 开发true 生产false
 #  url: # 阿里云图片 url 前缀
-
 logging:
   level:
     root: info

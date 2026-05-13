@@ -49,8 +49,16 @@ export function AuthProvider({ children }) {
     setIsAuthenticated(false)
   }
 
+  const updateUserInfo = (updater) => {
+    setUserInfo(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater
+      if (next) saveUserInfo(next)
+      return next
+    })
+  }
+
   return (
-    <AuthContext.Provider value={{ userInfo, isAuthenticated, login, logout }}>
+    <AuthContext.Provider value={{ userInfo, isAuthenticated, login, logout, updateUserInfo }}>
       {children}
     </AuthContext.Provider>
   )
