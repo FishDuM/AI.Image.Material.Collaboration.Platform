@@ -8,7 +8,7 @@ spring:
   session:
     store-type: redis
     # 86400 秒 = 1天
-    timeout: 86400
+    timeout: 86400s
   servlet:
     multipart:
       # 单个文件最大大小
@@ -21,10 +21,11 @@ spring:
     url: jdbc:mysql://localhost:3306/FishPics
     username: root
     password: 123456
-  redis:
-    host: 192.168.163.101
-    database: 0
-    port: 6379
+  data:
+    redis:
+      host: 192.168.163.101
+      database: 0
+      port: 6379
   profiles:
     active: local
 knife4j:

@@ -8,8 +8,8 @@ import hk.ljx.fishpicsbackend.entity.User;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.Resource;
-import javax.servlet.http.HttpServletRequest;
+import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletRequest;
 
 import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.TOKEN_KEY;
 import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.getUserIdKey;

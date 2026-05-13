@@ -16,8 +16,8 @@ import hk.ljx.fishpicsbackend.vo.space.SpaceVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
-import javax.annotation.Resource;
-import javax.servlet.http.HttpServletRequest;
+import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 
 /**
@@ -52,7 +52,7 @@ public class SpaceController {
      * @return 空间列表
      */
     @GetMapping("/list")
-    public Response<List<SpaceVO>> listSpace(@RequestParam Integer type,HttpServletRequest request) {
+    public Response<List<SpaceVO>> listSpace(@RequestParam("type") Integer type, HttpServletRequest request) {
         ExcUtils.throwIfTrue(type == null , ExceptionCode.PARAMETER_ERROR, "空间类型不能为空");
         return ResUtils.success(spaceService.listSpace(type, request));
     }
@@ -64,7 +64,7 @@ public class SpaceController {
      * @return 空间详情
      */
     @GetMapping("/getSpace")
-    public Response<SpaceVO> getSpace(@RequestParam Long id, HttpServletRequest request) {
+    public Response<SpaceVO> getSpace(@RequestParam("id") Long id, HttpServletRequest request) {
         ExcUtils.throwIfTrue(id == null, ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
         return ResUtils.success(spaceService.getSpace(id, request));
     }

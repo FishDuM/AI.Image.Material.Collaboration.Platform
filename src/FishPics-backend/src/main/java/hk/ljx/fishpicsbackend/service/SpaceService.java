@@ -11,7 +11,7 @@ import hk.ljx.fishpicsbackend.entity.User;
 import hk.ljx.fishpicsbackend.vo.picture.PicturePageVO;
 import hk.ljx.fishpicsbackend.vo.space.SpaceVO;
 
-import javax.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 
 /**

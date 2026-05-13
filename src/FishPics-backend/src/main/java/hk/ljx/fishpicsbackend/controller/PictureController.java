@@ -17,8 +17,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import javax.annotation.Resource;
-import javax.servlet.http.HttpServletRequest;
+import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletRequest;
 
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
@@ -31,11 +31,12 @@ public class PictureController {
     private PictureService pictureService;
 
     @PostMapping("/avatar")
-    public Response<String> uploadAvatar(@RequestParam("file") MultipartFile file,@RequestParam Long id , HttpServletRequest request) {
+    public Response<String> uploadAvatar(@RequestParam("file") MultipartFile file, @RequestParam("id") Long id,
+            HttpServletRequest request) {
         ExcUtils.throwIfTrue(file.isEmpty(), "文件不能为空");
         ExcUtils.throwIfTrue(file.getSize() > 1024 * 1024 * 5, "文件大小不能超过5MB");
         ExcUtils.throwIfTrue(id == null, "用户id不能为空");
-        return ResUtils.success(pictureService.uploadAvatar(file,id,request));
+        return ResUtils.success(pictureService.uploadAvatar(file, id, request));
     }
 
     @PostMapping("/upload")
@@ -74,8 +75,7 @@ public class PictureController {
     public Response<IPage<PictureAdminVO>> getPictureListAdmin(
             @RequestParam(value = "current", defaultValue = "1") int current,
             @RequestParam(value = "pageSize", defaultValue = "20") int pageSize,
-            @RequestParam(value = "status") int status
-    ) {
+            @RequestParam(value = "status") int status) {
         ExcUtils.throwIfTrue(current < 1, "页码不能小于1");
         ExcUtils.throwIfTrue(pageSize < 1 || pageSize > 100, "每页数量应在1-100之间");
         return ResUtils.success(pictureService.getAdminPictureList(current, pageSize, status));
@@ -84,10 +84,9 @@ public class PictureController {
     @AuthCheck(role = ADMIN)
     @PostMapping("/admin/review")
     public Response<Boolean> reviewPicture(
-            @RequestParam Long pictureId,
-            @RequestParam Integer status,
-            @RequestParam Integer selected
-    ) {
+            @RequestParam("pictureId") Long pictureId,
+            @RequestParam("status") Integer status,
+            @RequestParam("selected") Integer selected) {
         pictureService.reviewPicture(pictureId, status, selected);
         return ResUtils.success(true);
     }
