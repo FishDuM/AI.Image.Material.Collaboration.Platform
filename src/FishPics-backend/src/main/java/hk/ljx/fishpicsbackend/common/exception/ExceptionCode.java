@@ -16,7 +16,6 @@ public enum ExceptionCode {
     DATABASE_ERROR(50003, "数据库错误"),
     SERVICE_UNAVAILABLE(50001, "服务不可用");
 
-
     private Integer code;
     private String message;
 

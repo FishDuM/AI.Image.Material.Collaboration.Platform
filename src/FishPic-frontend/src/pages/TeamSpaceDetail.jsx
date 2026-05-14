@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useContext } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { App as AntApp, Typography, Button, Modal, Form, Input, Pagination, Masonry, Image as AntImage, Spin, Empty, Popconfirm, Progress, Popover, Avatar, Tooltip, Tag } from 'antd'
-import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowLeftOutlined, TeamOutlined, UserOutlined, EditOutlined } from '@ant-design/icons'
-import { getSpace, updateSpace, spaceListPicture, deletePicture, updatePicture, cropPicture } from '../api'
+import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowLeftOutlined, TeamOutlined, UserOutlined, EditOutlined, CloudUploadOutlined, FontSizeOutlined } from '@ant-design/icons'
+import { getSpace, updateSpace, spaceListPicture, deletePicture, updatePicture, cropPicture, watermarkPicture } from '../api'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { ThemeContext } from '../context/ThemeContext'
 import ImageCropper from '../components/shared/ImageCropper'
+import ImageUploadModal from '../components/shared/ImageUploadModal'
 import './TeamSpaceDetail.css'
 
 const { Title } = Typography
@@ -67,6 +68,10 @@ function TeamSpaceDetail() {
   const [editPictureLoading, setEditPictureLoading] = useState(false)
   const [editPictureForm] = Form.useForm()
   const [isCropping, setIsCropping] = useState(false)
+  const [showUploadModal, setShowUploadModal] = useState(false)
+  const [showWatermarkInput, setShowWatermarkInput] = useState(false)
+  const [watermarkText, setWatermarkText] = useState('')
+  const [watermarkLoading, setWatermarkLoading] = useState(false)
 
   const [showEdit, setShowEdit] = useState(false)
   const [updateLoading, setUpdateLoading] = useState(false)
@@ -216,6 +221,49 @@ function TeamSpaceDetail() {
       message.error(error.message || '图片编辑保存失败')
     }
   }, [selectedIds, spaceInfo?.id, fetchPictures, picturePage, searchKeyword, fetchSpace, message])
+
+  const handleWatermarkOpen = useCallback(() => {
+    setWatermarkText('')
+    setShowWatermarkInput(true)
+  }, [])
+
+  const handleWatermarkCancel = useCallback(() => {
+    setShowWatermarkInput(false)
+    setWatermarkText('')
+  }, [])
+
+  const handleWatermarkSubmit = useCallback(async () => {
+    if (!watermarkText.trim()) {
+      message.warning('请输入水印文字')
+      return
+    }
+    setWatermarkLoading(true)
+    try {
+      await watermarkPicture({
+        pictureId: selectedIds[0],
+        text: watermarkText.trim(),
+      })
+      message.success('水印添加成功')
+      setShowWatermarkInput(false)
+      setWatermarkText('')
+      if (spaceInfo?.id) {
+        fetchPictures(spaceInfo.id, picturePage, searchKeyword)
+        fetchSpace()
+      }
+    } catch (error) {
+      message.error(error.message || '添加水印失败')
+    } finally {
+      setWatermarkLoading(false)
+    }
+  }, [watermarkText, selectedIds, spaceInfo?.id, fetchPictures, picturePage, searchKeyword, fetchSpace, message])
+
+  const handleUploadSuccess = useCallback(() => {
+    setShowUploadModal(false)
+    if (spaceInfo?.id) {
+      fetchPictures(spaceInfo.id, 1, searchKeyword)
+      fetchSpace()
+    }
+  }, [spaceInfo?.id, fetchPictures, searchKeyword, fetchSpace])
 
   const handleEditPictureSubmit = async (values) => {
     setEditPictureLoading(true)
@@ -376,7 +424,14 @@ function TeamSpaceDetail() {
           type={batchMode ? 'primary' : 'default'}
           danger={batchMode}
         >
-          {batchMode ? '退出批量' : '批量选择'}
+          {batchMode ? '退出选择' : '选择图片'}
+        </Button>
+        <Button
+          icon={<CloudUploadOutlined />}
+          onClick={() => setShowUploadModal(true)}
+          disabled={batchMode}
+        >
+          上传图片
         </Button>
       </div>
 
@@ -425,7 +480,7 @@ function TeamSpaceDetail() {
                 onClick={handleEditPictureOpen}
                 disabled={selectedIds.length === 0}
               >
-                编辑图片
+                编辑图片信息
               </Button>
               <Popconfirm
                 title="确认删除"
@@ -487,7 +542,7 @@ function TeamSpaceDetail() {
         className="edit-picture-modal"
         title={null}
         open={showEditPicture}
-        onCancel={() => { setShowEditPicture(false); editPictureForm.resetFields(); setIsCropping(false) }}
+        onCancel={() => { setShowEditPicture(false); editPictureForm.resetFields(); setIsCropping(false); setShowWatermarkInput(false) }}
         width="80vw"
         style={{ maxHeight: '75vh' }}
         footer={null}
@@ -525,22 +580,56 @@ function TeamSpaceDetail() {
             </Form>
             <div className="edit-picture-right-footer">
               <Button
+                icon={<FontSizeOutlined />}
+                onClick={handleWatermarkOpen}
+                disabled={isCropping || showWatermarkInput}
+              >
+                添加水印
+              </Button>
+              <Button
                 icon={<EditOutlined />}
                 onClick={handleEnterCrop}
                 disabled={isCropping}
               >
                 编辑图片
               </Button>
-              <Button onClick={() => { setShowEditPicture(false); editPictureForm.resetFields(); setIsCropping(false) }}>
+              <Button onClick={() => { setShowEditPicture(false); editPictureForm.resetFields(); setIsCropping(false); setShowWatermarkInput(false) }}>
                 取消
               </Button>
               <Button type="primary" onClick={() => editPictureForm.submit()} loading={editPictureLoading}>
                 保存
               </Button>
             </div>
+            {showWatermarkInput && (
+              <div className="edit-picture-watermark-input">
+                <Input
+                  placeholder="请输入水印文字"
+                  value={watermarkText}
+                  onChange={(e) => setWatermarkText(e.target.value)}
+                  maxLength={50}
+                  onPressEnter={handleWatermarkSubmit}
+                  autoFocus
+                />
+                <div className="edit-picture-watermark-actions">
+                  <Button size="small" onClick={handleWatermarkCancel} disabled={watermarkLoading}>
+                    取消
+                  </Button>
+                  <Button size="small" type="primary" onClick={handleWatermarkSubmit} loading={watermarkLoading}>
+                    确定
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </Modal>
+
+      <ImageUploadModal
+        open={showUploadModal}
+        onClose={() => setShowUploadModal(false)}
+        onSuccess={handleUploadSuccess}
+        spaceId={Number(id)}
+      />
     </main>
   )
 }

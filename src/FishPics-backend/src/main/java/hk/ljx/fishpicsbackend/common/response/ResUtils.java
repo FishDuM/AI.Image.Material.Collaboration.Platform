@@ -7,7 +7,7 @@ import java.io.Serializable;
 
 public class ResUtils implements Serializable {
 
-    public static Response success(){
+    public static Response success() {
         return new Response(ExceptionCode.SUCCESS.getCode(), ExceptionCode.SUCCESS.getMessage(), null);
     }
 
@@ -18,7 +18,6 @@ public class ResUtils implements Serializable {
     public static <T> Response<T> successOfMessage(String message) {
         return new Response(ExceptionCode.SUCCESS.getCode(), message, null);
     }
-
 
     public static Response fail(BaseException be) {
         return new Response(be.getCode(), be.getMessage(), null);

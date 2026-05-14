@@ -16,7 +16,7 @@ import hk.ljx.fishpicsbackend.entity.Picture;
 import hk.ljx.fishpicsbackend.entity.Space;
 import hk.ljx.fishpicsbackend.entity.User;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
-import hk.ljx.fishpicsbackend.service.LoginUser;
+import hk.ljx.fishpicsbackend.common.utils.LoginUser;
 import hk.ljx.fishpicsbackend.service.PictureService;
 import hk.ljx.fishpicsbackend.service.SpaceService;
 import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
@@ -39,7 +39,7 @@ import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 /** 空间服务实现类 */
 @Service
 public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
-    implements SpaceService{
+        implements SpaceService {
 
     @Resource
     private SpaceMapper spaceMapper;
@@ -55,13 +55,14 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
 
     /**
      * 创建空间，根据用户等级和空间类型分配存储配额
+     * 
      * @param createSpace 创建空间请求参数
-     * @param user 当前登录用户
+     * @param user        当前登录用户
      * @return 创建成功返回true
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Boolean createSpace(CreateSpace createSpace,User user) {
+    public Boolean createSpace(CreateSpace createSpace, User user) {
         String name = createSpace.getName();
         String introduction = createSpace.getIntroduction();
         Integer type = createSpace.getType();
@@ -71,7 +72,8 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         ExcUtils.throwIfTrue(user == null || user.getId() == null, "用户不存在");
         // 判断空间类型并校验数量限制
         // 私人空间每人只能有一个，团队空间根据等级有不同上限
-        List<Space> spaceList = spaceMapper.selectList(new QueryWrapper<Space>().eq("user_id", user.getId()).eq("type", type));
+        List<Space> spaceList = spaceMapper
+                .selectList(new QueryWrapper<Space>().eq("user_id", user.getId()).eq("type", type));
         if (type == 0) {
             // 私人空间：每人限一个
             ExcUtils.throwIfTrue(!spaceList.isEmpty(), "私人空间已存在");
@@ -128,7 +130,8 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
 
     /**
      * 获取当前用户的空间列表
-     * @param type 空间类型：0-私人空间，1-团队空间
+     * 
+     * @param type    空间类型：0-私人空间，1-团队空间
      * @param request HTTP请求
      * @return 空间VO列表（含图片数量、创建人、成员信息）
      */
@@ -163,8 +166,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
                 new QueryWrapper<Picture>()
                         .select("space_id", "COUNT(*) as cnt")
                         .in("space_id", spaceIds)
-                        .groupBy("space_id")
-        );
+                        .groupBy("space_id"));
         for (Map<String, Object> row : countResult) {
             Long sid = ((Number) row.get("space_id")).longValue();
             Long cnt = ((Number) row.get("cnt")).longValue();
@@ -197,7 +199,8 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
 
     /**
      * 获取单个空间详情
-     * @param id 空间ID
+     * 
+     * @param id      空间ID
      * @param request HTTP请求
      * @return 空间VO（含图片数量、创建人、成员信息）
      */
@@ -221,7 +224,8 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         SpaceVO vo = new SpaceVO(space);
 
         Set<Long> userIds = new HashSet<>();
-        if (space.getUserId() != null) userIds.add(space.getUserId());
+        if (space.getUserId() != null)
+            userIds.add(space.getUserId());
         parseTeamUserIds(space.getTeamUsersId()).forEach(userIds::add);
         Map<Long, User> userMap = new HashMap<>();
         if (!userIds.isEmpty()) {
@@ -238,8 +242,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         List<Map<String, Object>> countResult = pictureService.listMaps(
                 new QueryWrapper<Picture>()
                         .select("COUNT(*) as cnt")
-                        .eq("space_id", id)
-        );
+                        .eq("space_id", id));
         long picCount = 0;
         if (!countResult.isEmpty() && countResult.get(0).get("cnt") != null) {
             picCount = ((Number) countResult.get(0).get("cnt")).longValue();
@@ -273,8 +276,9 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
 
     /**
      * 更新空间信息
+     * 
      * @param updateSpace 更新请求参数
-     * @param request HTTP请求
+     * @param request     HTTP请求
      * @return 更新成功返回true
      */
     @Override
@@ -291,7 +295,8 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         Space space = spaceMapper.selectById(id);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
         // 2. 权限校验：仅空间创建者或管理员可修改
-        ExcUtils.throwIfFalse(space.getUserId().equals(userId) || user.getRole().equals(ADMIN), ExceptionCode.PARAMETER_ERROR, "无权限修改空间信息");
+        ExcUtils.throwIfFalse(space.getUserId().equals(userId) || user.getRole().equals(ADMIN),
+                ExceptionCode.PARAMETER_ERROR, "无权限修改空间信息");
         // 3. 更新空间信息
         space.setName(name);
         space.setIntroduction(introduction);
@@ -302,8 +307,9 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
 
     /**
      * 获取空间图片列表（分页）
+     * 
      * @param spacePictureList 查询参数
-     * @param request HTTP请求
+     * @param request          HTTP请求
      * @return 图片分页结果
      */
     @Override
@@ -329,9 +335,9 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         String keyword = spacePictureList.getKeyword();
         if (keyword != null && !keyword.trim().isEmpty()) {
             pictureQueryWrapper.and(w -> w
-                .like("picture_name", keyword)
-                .or()
-                .like("introduction", keyword));
+                    .like("picture_name", keyword)
+                    .or()
+                    .like("introduction", keyword));
         }
         pictureQueryWrapper.orderBy(ObjectUtil.isNotNull(sortField), sortOrder.equals("ascend"), sortField);
         Page<Picture> pictureList = pictureService.page(picturePage, pictureQueryWrapper);
@@ -348,6 +354,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
 
     /**
      * 构建空间查询条件包装器
+     * 
      * @param spaceQueryWrapper 查询条件包装器
      * @return QueryWrapper对象
      */
@@ -377,7 +384,3 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         return queryWrapper;
     }
 }
-
-
-
-

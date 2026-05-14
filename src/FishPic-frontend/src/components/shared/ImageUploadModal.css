@@ -1,0 +1,20 @@
+.image-upload-modal-body {
+  padding: var(--space-2) 0;
+}
+
+.image-upload-dragger {
+  width: 100%;
+}
+
+.image-upload-dragger .ant-upload-drag {
+  border-color: var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.image-upload-dragger .ant-upload-drag:hover {
+  border-color: var(--primary-color);
+}
+
+.image-upload-dragger .ant-upload-drag-icon {
+  margin-bottom: var(--space-3);
+}

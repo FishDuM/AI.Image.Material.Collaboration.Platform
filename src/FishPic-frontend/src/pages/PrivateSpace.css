@@ -494,6 +494,19 @@
   border-top: 1px solid var(--border-color);
 }
 
+.edit-picture-watermark-input {
+  margin-top: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.edit-picture-watermark-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
 @media (max-width: 768px) {
   .private-space-batch-bar {
     gap: var(--space-3);

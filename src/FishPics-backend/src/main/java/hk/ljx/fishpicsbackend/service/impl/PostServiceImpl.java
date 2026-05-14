@@ -12,6 +12,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
+import hk.ljx.fishpicsbackend.common.utils.LoginUser;
 import hk.ljx.fishpicsbackend.dto.base.PageRequest;
 import hk.ljx.fishpicsbackend.dto.post.*;
 import hk.ljx.fishpicsbackend.dto.space.SpacePictureList;
@@ -93,7 +94,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         List<Picture> pictures = isMyPicture(userId, imageId);
 
         // 保存帖子
-        Post post = Post.builder().userId(userId).title(title).content(content).cover(imageId.get(cover)).isPrivate(isPrivate)
+        Post post = Post.builder().userId(userId).title(title).content(content).cover(imageId.get(cover))
+                .isPrivate(isPrivate)
                 .build();
         int insert = postMapper.insert(post);
         ExcUtils.throwIfTrue(insert != 1, ExceptionCode.INTERNAL_SERVER_ERROR, "保存失败，数据库错误");
@@ -110,7 +112,10 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         PostDetailVO postDetailVO = new PostDetailVO();
         BeanUtil.copyProperties(post, postDetailVO);
         // 获取子图片列表
-        List<Long> pictureIds = pictureChildService.list(new LambdaQueryWrapper<PictureChild>().eq(PictureChild::getPostId, id).orderByAsc(PictureChild::getSortNum)).stream().map(PictureChild::getPictureId).collect(Collectors.toList());
+        List<Long> pictureIds = pictureChildService
+                .list(new LambdaQueryWrapper<PictureChild>().eq(PictureChild::getPostId, id)
+                        .orderByAsc(PictureChild::getSortNum))
+                .stream().map(PictureChild::getPictureId).collect(Collectors.toList());
 
         // todo: 后续根据用户等级判断可上传的图片数
 
@@ -147,7 +152,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         String content = editPostRequest.getContent();
         Integer isPrivate = editPostRequest.getIsPrivate();
 
-        ExcUtils.throwIfTrue(ObjectUtil.isAllEmpty(title, content, isPrivate), ExceptionCode.PARAMETER_ERROR, "标题、内容、是否私密不能为空");
+        ExcUtils.throwIfTrue(ObjectUtil.isAllEmpty(title, content, isPrivate), ExceptionCode.PARAMETER_ERROR,
+                "标题、内容、是否私密不能为空");
         ExcUtils.throwIfTrue(id == null, ExceptionCode.PARAMETER_ERROR, "帖子ID不能为空");
         ExcUtils.throwIfTrue(imageId == null || imageId.isEmpty(), ExceptionCode.PARAMETER_ERROR, "图片不能为空");
         ExcUtils.throwIfTrue(imageId.size() > 15, ExceptionCode.PARAMETER_ERROR, "图片数量不能超过15张");
@@ -166,13 +172,15 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         // 判断是不是自己的图片并返回原图id
         List<Picture> pictures = isMyPicture(userId, imageId);
         // 批量删除旧图片
-        boolean remove = pictureChildService.remove(new LambdaQueryWrapper<PictureChild>().eq(PictureChild::getPostId, id));
+        boolean remove = pictureChildService
+                .remove(new LambdaQueryWrapper<PictureChild>().eq(PictureChild::getPostId, id));
         ExcUtils.throwIfFalse(remove, ExceptionCode.DATABASE_ERROR, "旧图片删除失败");
         // 批量插入新图片
         savePictureChildBatch(pictures, id);
 
         // 更新帖子
-        post = Post.builder().id(id).userId(post.getUserId()).title(title).content(content).cover(imageId.get(cover)).isPrivate(isPrivate)
+        post = Post.builder().id(id).userId(post.getUserId()).title(title).content(content).cover(imageId.get(cover))
+                .isPrivate(isPrivate)
                 .build();
         int insert = postMapper.updateById(post);
         ExcUtils.throwIfTrue(insert != 1, ExceptionCode.INTERNAL_SERVER_ERROR, "保存失败，数据库错误");
@@ -189,7 +197,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
     public List<Picture> isMyPicture(Long userId, List<Long> imageId) {
         QueryWrapper<Space> spaceQueryWrapper = new QueryWrapper<>();
         spaceQueryWrapper.eq("user_id", userId).or().eq("type", 1).like("team_users_id", userId);
-        List<Long> spaceIds = spaceService.list(spaceQueryWrapper).stream().map(Space::getId).collect(Collectors.toList());
+        List<Long> spaceIds = spaceService.list(spaceQueryWrapper).stream().map(Space::getId)
+                .collect(Collectors.toList());
         // 校验图片是否存在
         LambdaQueryWrapper<Picture> pictureQueryWrapper = new LambdaQueryWrapper<>();
         pictureQueryWrapper.in(Picture::getId, imageId).in(Picture::getSpaceId, spaceIds);
@@ -348,7 +357,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
         // 第一步：查询用户的收藏帖子ID列表
         List<Long> collectPostIds = userPostCollectService.list(
-                        new QueryWrapper<UserPostCollect>().eq("user_id", userId)).stream()
+                new QueryWrapper<UserPostCollect>().eq("user_id", userId)).stream()
                 .map(UserPostCollect::getPostId)
                 .collect(Collectors.toList());
 
@@ -375,7 +384,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
         // 第一步：查询用户的点赞帖子ID列表
         List<Long> likePostIds = userPostLikesService.list(
-                        new QueryWrapper<UserPostLikes>().eq("user_id", userId)).stream()
+                new QueryWrapper<UserPostLikes>().eq("user_id", userId)).stream()
                 .map(UserPostLikes::getPostId)
                 .collect(Collectors.toList());
 
@@ -395,7 +404,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
     @Override
     public List<PictureListByEditPostVO> getPictureList(GetPictureBySpaceRequest getPictureBySpaceRequest,
-                                                        HttpServletRequest request) {
+            HttpServletRequest request) {
         Long spaceId = getPictureBySpaceRequest.getSpaceId();
         int current = getPictureBySpaceRequest.getCurrent();
         int pageSize = getPictureBySpaceRequest.getPageSize();
@@ -424,7 +433,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
             PictureListByEditPostVO editPostVO = new PictureListByEditPostVO();
             editPostVO.setId(pictureListVO.getId());
             editPostVO.setUrl(pictureListVO.getUrl());
-            if (picIds.contains(pictureListVO.getId())){
+            if (picIds.contains(pictureListVO.getId())) {
                 editPostVO.setFlag(false);
             } else {
                 editPostVO.setFlag(true);

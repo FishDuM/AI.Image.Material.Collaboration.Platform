@@ -9,7 +9,7 @@ import hk.ljx.fishpicsbackend.dto.space.CreateSpace;
 import hk.ljx.fishpicsbackend.dto.space.SpacePictureList;
 import hk.ljx.fishpicsbackend.dto.space.UpdateSpace;
 import hk.ljx.fishpicsbackend.entity.User;
-import hk.ljx.fishpicsbackend.service.LoginUser;
+import hk.ljx.fishpicsbackend.common.utils.LoginUser;
 import hk.ljx.fishpicsbackend.service.SpaceService;
 import hk.ljx.fishpicsbackend.vo.picture.PicturePageVO;
 import hk.ljx.fishpicsbackend.vo.space.SpaceVO;

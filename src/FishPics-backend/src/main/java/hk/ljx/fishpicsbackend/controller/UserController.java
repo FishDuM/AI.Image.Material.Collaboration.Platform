@@ -13,7 +13,7 @@ import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.dto.user.*;
 import hk.ljx.fishpicsbackend.entity.User;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
-import hk.ljx.fishpicsbackend.service.LoginUser;
+import hk.ljx.fishpicsbackend.common.utils.LoginUser;
 import hk.ljx.fishpicsbackend.service.UserService;
 import hk.ljx.fishpicsbackend.vo.user.CheckCodeVO;
 import hk.ljx.fishpicsbackend.vo.user.UserLoginVO;
@@ -25,7 +25,6 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 
 import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.USER_ID_KEY;

@@ -33,7 +33,8 @@ import {
 } from '@ant-design/icons'
 import api, {editUser, getMyCollects, getMyLikes, getMyPosts, getUser, getUserMyself, uploadAvatar} from '../api'
 import {AuthContext} from '../context/AuthContext'
-import {useIsMobile} from '../hooks/useIsMobile'
+import { useIsMobile } from '../hooks/useIsMobile'
+import { isAllowedImageFile, getMaxUploadSize, formatMaxUploadSize } from '../utils/uploadConstraints'
 import PostDetailModal from '../components/PostDetailModal'
 import CreateEditPostModal from '../components/CreateEditPostModal'
 import './UserProfile.css'
@@ -380,25 +381,18 @@ function UserProfile() {
     })
   }
 
-  const ALLOWED_IMAGE_TYPES = [
-    'image/jpeg',
-    'image/png',
-    'image/jpg',
-    'image/gif',
-    'image/webp',
-    'image/heic',
-  ]
-
   const beforeUpload = (file) => {
-    const isAllowedImage = ALLOWED_IMAGE_TYPES.includes(file.type)
+    const maxSize = getMaxUploadSize()
+    const maxSizeText = formatMaxUploadSize()
+    const isAllowedImage = isAllowedImageFile(file)
     if (!isAllowedImage) {
       message.error('只能上传图片文件（JPEG、PNG、JPG、GIF、WebP、HEIC）！')
     }
-    const isLt5M = file.size / 1024 / 1024 < 5
-    if (!isLt5M) {
-      message.error('图片大小不能超过5MB！')
+    const isLtSize = file.size <= maxSize
+    if (!isLtSize) {
+      message.error(`图片大小不能超过${maxSizeText}！`)
     }
-    return isAllowedImage && isLt5M
+    return isAllowedImage && isLtSize
   }
 
   const handleAvatarChange = async (info) => {
@@ -637,6 +631,7 @@ function UserProfile() {
                 listType="picture-circle"
                 className="avatar-uploader"
                 showUploadList={false}
+                accept=".jpeg,.png,.jpg,.gif,.webp,.heic"
                 customRequest={handleAvatarUpload}
                 beforeUpload={beforeUpload}
                 onChange={handleAvatarChange}

@@ -1,4 +1,4 @@
-package hk.ljx.fishpicsbackend.service;
+package hk.ljx.fishpicsbackend.common.utils;
 
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.lang.UUID;
@@ -6,14 +6,16 @@ import cn.hutool.json.JSONUtil;
 import com.qcloud.cos.COSClient;
 import com.qcloud.cos.model.*;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
-import hk.ljx.fishpicsbackend.common.utils.LimitedInputStream;
 import hk.ljx.fishpicsbackend.dto.picture.PictureMessage;
+import hk.ljx.fishpicsbackend.entity.User;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.annotation.Resource;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
@@ -41,11 +43,24 @@ public class CosService {
     @Value("${cos.url}")
     private String url;
 
+    @Resource
+    private LoginUser loginUser;
+
     // ====================== 配置常量 ======================
     /**
-     * 最大文件大小 5MB
+     * 普通最大文件大小 5MB
      */
-    private static final long MAX_SIZE = 5 * 1024 * 1024L;
+    private static final long PT_MAX_SIZE = 5 * 1024 * 1024L;
+
+    /**
+     * VIP 最大单文件大小 10MB
+     */
+    private static final long VIP_MAX_SIZE = 10 * 1024 * 1024L;
+
+    /**
+     * SVIP 最大单文件大小 50MB
+     */
+    private static final long SVIP_MAX_SIZE = 50 * 1024 * 1024L;
 
     /**
      * 允许上传的图片类型
@@ -56,8 +71,22 @@ public class CosService {
             "image/jpg",
             "image/gif",
             "image/webp",
-            "image/heic"
-    );
+            "image/heic",
+            "image/heif");
+
+    /**
+     * 文件扩展名 → MIME类型映射，用于浏览器未正确上报contentType时的兜底校验
+     */
+    private static final Map<String, String> EXT_TO_MIME = new java.util.HashMap<>();
+    static {
+        EXT_TO_MIME.put(".jpg", "image/jpeg");
+        EXT_TO_MIME.put(".jpeg", "image/jpeg");
+        EXT_TO_MIME.put(".png", "image/png");
+        EXT_TO_MIME.put(".gif", "image/gif");
+        EXT_TO_MIME.put(".webp", "image/webp");
+        EXT_TO_MIME.put(".heic", "image/heic");
+        EXT_TO_MIME.put(".heif", "image/heif");
+    }
 
     // 临时URL有效期：10分钟（生产环境私有读写用）
     private static final long URL_EXPIRE_SECONDS = 10 * 60L;
@@ -67,7 +96,6 @@ public class CosService {
      */
     private static final String UPLOAD_PREFIX = "picture/";
 
-
     // ====================== 核心上传方法 ======================
     /**
      * 上传图片到腾讯云COS（流式上传，不落地本地磁盘）
@@ -75,14 +103,21 @@ public class CosService {
      * @param file 前端上传的文件
      * @return cos文件唯一key
      */
-    public String uploadPicture(MultipartFile file) {
+    public String uploadPicture(MultipartFile file, HttpServletRequest request) {
         // 1. 校验文件不能为空
         ExcUtils.throwIfTrue(file.isEmpty(), "上传文件不能为空");
 
-        // 2. 校验是否为图片类型
+        // 2. 校验是否为图片类型（优先用浏览器上报的MIME，不可用时从扩展名反推）
         String contentType = file.getContentType();
-        ExcUtils.throwIfTrue(!ALLOWED_IMG_TYPES.contains(contentType),
-                "只能上传 JPG、PNG、GIF、WEBP 格式的图片");
+        if (contentType == null || !ALLOWED_IMG_TYPES.contains(contentType)) {
+            String originalFilename = file.getOriginalFilename();
+            if (originalFilename != null && originalFilename.contains(".")) {
+                String ext = originalFilename.substring(originalFilename.lastIndexOf(".")).toLowerCase();
+                contentType = EXT_TO_MIME.get(ext);
+            }
+        }
+        ExcUtils.throwIfTrue(contentType == null || !ALLOWED_IMG_TYPES.contains(contentType),
+                "只能上传 JPG、PNG、GIF、WEBP、HEIC 格式的图片");
 
         // 3. 校验文件名合法性
         String originalFilename = file.getOriginalFilename();
@@ -94,12 +129,27 @@ public class CosService {
         String uuidFileName = UUID.randomUUID().toString(true) + suffix;
         String key = UPLOAD_PREFIX + System.currentTimeMillis() + "_" + uuidFileName;
 
+        // 获取用户的等级对应上传大小
+        User user = loginUser.getLoginUser(request);
+        Integer level = user.getLevel();
+        long size;
+        switch (level) {
+            case 1:
+                size = VIP_MAX_SIZE;
+                break;
+            case 2:
+                size = SVIP_MAX_SIZE;
+                break;
+            default:
+                size = PT_MAX_SIZE;
+        }
+
         // 5. 流式上传COS（自动大小限制，不落地）
         try (InputStream inputStream = file.getInputStream();
-             LimitedInputStream limitedInputStream = new LimitedInputStream(inputStream, MAX_SIZE)) {
+                LimitedInputStream limitedInputStream = new LimitedInputStream(inputStream, size)) {
 
-            PutObjectRequest request = new PutObjectRequest(bucket, key, limitedInputStream, null);
-            cosClient.putObject(request);
+            PutObjectRequest req = new PutObjectRequest(bucket, key, limitedInputStream, null);
+            cosClient.putObject(req);
 
         } catch (IOException e) {
             throw new RuntimeException("图片上传失败：" + e.getMessage());
@@ -133,16 +183,39 @@ public class CosService {
 
     /**
      * 上传图片并返回 url
+     * 
      * @param file 图片文件
      * @return 图片 url
      */
-    public String uploadAndGetImageUrl(MultipartFile file) {
-        String key = uploadPicture(file);
+    public String uploadAndGetImageUrl(MultipartFile file, HttpServletRequest request) {
+        String key = uploadPicture(file, request);
         return getImageUrl(key);
     }
 
     /**
+     * 直接上传图片字节数组到COS（用于服务端图片处理后上传）
+     * 
+     * @param imageBytes 图片字节数组
+     * @param suffix     文件后缀，如 ".png" ".jpg" ".webp"
+     * @return cos文件key
+     */
+    public String uploadBytes(byte[] imageBytes, String suffix) {
+        ExcUtils.throwIfTrue(imageBytes == null || imageBytes.length == 0, "图片字节不能为空");
+        ExcUtils.throwIfTrue(suffix == null || !suffix.startsWith("."), "文件后缀不合法");
+        String uuidFileName = UUID.randomUUID().toString(true) + suffix;
+        String key = UPLOAD_PREFIX + System.currentTimeMillis() + "_" + uuidFileName;
+        try (ByteArrayInputStream inputStream = new ByteArrayInputStream(imageBytes)) {
+            PutObjectRequest request = new PutObjectRequest(bucket, key, inputStream, null);
+            cosClient.putObject(request);
+        } catch (IOException e) {
+            throw new RuntimeException("图片上传失败：" + e.getMessage());
+        }
+        return key;
+    }
+
+    /**
      * 根据 COS 的文件 key 删除文件
+     * 
      * @param key 文件唯一标识
      */
     public void deletePicture(String key) {
@@ -156,6 +229,7 @@ public class CosService {
 
     /**
      * 根据 COS 的文件 key 删除文件
+     * 
      * @param allUrl 文件唯一标识
      */
     public void deletePictureByUrl(String allUrl) {
@@ -171,6 +245,7 @@ public class CosService {
 
     /**
      * 根据 key 获取图片信息
+     * 
      * @param key 文件唯一标识
      * @return 图片信息
      */
@@ -193,11 +268,9 @@ public class CosService {
             // 4. 转成 Map/对象，方便拿宽、高、格式
             Map<String, Object> imageInfo = JSONUtil.parseObj(imageInfoJson);
 
-            String width = (String) imageInfo.get("width");      // 宽
-            String height = (String) imageInfo.get("height");    // 高
-            String size = (String) imageInfo.get("size");        // 文件大小 byte
-//            String format = (String) imageInfo.get("format");    // 格式 jpg/png
-//            String md5 = (String) imageInfo.get("md5");          // md5
+            String width = String.valueOf(imageInfo.get("width")); // 宽
+            String height = String.valueOf(imageInfo.get("height")); // 高
+            String size = String.valueOf(imageInfo.get("size")); // 文件大小 byte
 
             pictureMessage.setWidth(width);
             pictureMessage.setHeight(height);

@@ -1,4 +1,4 @@
-package hk.ljx.fishpicsbackend.service;
+package hk.ljx.fishpicsbackend.common.utils;
 
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.json.JSONUtil;

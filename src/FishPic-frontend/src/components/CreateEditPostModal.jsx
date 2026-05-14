@@ -4,18 +4,10 @@ import { PlusOutlined, DeleteOutlined, LeftOutlined, RightOutlined, SendOutlined
 import api, { listSpace, postPictureList } from '../api'
 import MobilePageWrapper from './MobilePageWrapper'
 import SpacePickerModal from './shared/SpacePickerModal'
+import { isAllowedImageFile, getMaxUploadSize, formatMaxUploadSize } from '../utils/uploadConstraints'
 import './CreateEditPostModal.css'
 
 const CHINESE_NUMS = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二', '十三', '十四', '十五']
-
-const ALLOWED_IMAGE_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/jpg',
-  'image/gif',
-  'image/webp',
-  'image/heic',
-]
 
 const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 'modal' }) => {
   const { message } = App.useApp()
@@ -38,6 +30,9 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
   const [spaceId, setSpaceId] = useState(null)
   const [uploadTabKey, setUploadTabKey] = useState('manual')
   const [spacePickerOpen, setSpacePickerOpen] = useState(false)
+
+  const maxSize = getMaxUploadSize()
+  const maxSizeText = formatMaxUploadSize()
 
   const uploadedImagesRef = useRef(uploadedImages)
   uploadedImagesRef.current = uploadedImages
@@ -196,15 +191,15 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
   }, [uploadedImages.length, form])
 
   const beforeUpload = (file) => {
-    const isAllowedImage = ALLOWED_IMAGE_TYPES.includes(file.type)
+    const isAllowedImage = isAllowedImageFile(file)
     if (!isAllowedImage) {
       message.error('只能上传图片文件（JPEG、PNG、JPG、GIF、WebP、HEIC）！')
     }
-    const isLt5M = file.size / 1024 / 1024 < 5
-    if (!isLt5M) {
-      message.error('图片大小不能超过5MB！')
+    const isLtSize = file.size <= maxSize
+    if (!isLtSize) {
+      message.error(`图片大小不能超过${maxSizeText}！`)
     }
-    return isAllowedImage && isLt5M
+    return isAllowedImage && isLtSize
   }
 
   const handleImageUpload = async ({ file, onSuccess: onUploadSuccess, onError }) => {
@@ -422,7 +417,7 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
                       <div className="upload-step-content">
                         <PlusOutlined className="upload-step-icon" />
                         <div className="upload-step-title">点击或拖拽图片到此区域上传</div>
-                        <div className="upload-step-desc">支持 JPG、PNG、GIF 格式，单张图片不超过 5MB，最多15张</div>
+                        <div className="upload-step-desc">支持 JPG、PNG、GIF、WebP、HEIC 格式，单张图片不超过 {maxSizeText}，最多15张</div>
                       </div>
                     </Upload>
                   </div>

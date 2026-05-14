@@ -72,7 +72,7 @@ api.interceptors.response.use(
       }
     }
     if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
-      return new Promise(() => {})
+      return new Promise(() => { })
     }
     const message = error.response?.data?.message || error.message || '请求失败，请重试'
     return Promise.reject(new Error(message))
@@ -142,6 +142,10 @@ export const deletePicture = (ids) => api.delete('/picture/delete', { data: { id
 export const updatePicture = (data) => api.put('/picture/update', data)
 
 export const cropPicture = (data) => api.post('/picture/crop', data)
+
+export const scalePicture = (data) => api.post('/picture/scale', data)
+
+export const watermarkPicture = (data) => api.post('/picture/watermark', data)
 
 export const likePost = (id) => api.post('/post/like', {}, { params: { id } })
 

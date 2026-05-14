@@ -8,12 +8,13 @@ import hk.ljx.fishpicsbackend.common.response.Response;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.dto.picture.DeleteByIdList;
 import hk.ljx.fishpicsbackend.dto.picture.PictureCropRequest;
+import hk.ljx.fishpicsbackend.dto.picture.PictureScaleRequest;
 import hk.ljx.fishpicsbackend.dto.picture.PictureUpdateRequest;
+import hk.ljx.fishpicsbackend.dto.picture.PictureWatermarkRequest;
 import hk.ljx.fishpicsbackend.entity.Picture;
 import hk.ljx.fishpicsbackend.service.PictureService;
 import hk.ljx.fishpicsbackend.vo.picture.PictureAdminVO;
 import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
-import hk.ljx.fishpicsbackend.vo.picture.PicturePostVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -40,10 +41,21 @@ public class PictureController {
         return ResUtils.success(pictureService.uploadAvatar(file, id, request));
     }
 
+    /**
+     * 上传图片
+     * 支持指定目标空间ID（targetSpaceId），未传入时默认上传至私人空间
+     *
+     * @param file          上传的图片文件
+     * @param targetSpaceId 目标空间ID，为null时默认上传至私人空间
+     * @param request       HTTP请求
+     * @return 图片基本信息(id/url)
+     */
     @PostMapping("/upload")
-    public Response<PictureListVO> uploadPicture(@RequestParam("file") MultipartFile file, HttpServletRequest request) {
+    public Response<PictureListVO> uploadPicture(@RequestParam("file") MultipartFile file,
+            @RequestParam(value = "targetSpaceId", required = false) Long targetSpaceId,
+            HttpServletRequest request) {
         ExcUtils.throwIfTrue(file.isEmpty(), "文件不能为空");
-        Picture picture = pictureService.uploadPicture(file, request);
+        Picture picture = pictureService.uploadPicture(file, targetSpaceId, request);
         PictureListVO pictureListVO = new PictureListVO();
         pictureListVO.setId(picture.getId());
         pictureListVO.setUrl(picture.getUrl());
@@ -71,10 +83,52 @@ public class PictureController {
         return ResUtils.success(true);
     }
 
+    /**
+     * 裁剪图片
+     * 从COS下载原图，按前端传入的原始图像坐标先裁剪、再旋转（如有），
+     * 最后重新上传至COS并更新数据库，返回新的图片URL
+     *
+     * @param request        裁剪请求，含图片id、裁剪区域坐标(x/y/width/height)、旋转角度、输出格式
+     * @param servletRequest HTTP请求，用于获取登录用户信息进行权限校验
+     * @return 裁剪后新图片的COS访问URL
+     */
     @PostMapping("/crop")
     public Response<String> cropPicture(@RequestBody PictureCropRequest request, HttpServletRequest servletRequest) {
         ExcUtils.throwIfTrue(request.getPictureId() == null, "图片id不能为空");
         String newUrl = pictureService.cropPicture(request, servletRequest);
+        return ResUtils.success(newUrl);
+    }
+
+    /**
+     * 缩放图片
+     * 支持按比例缩放或按目标宽度等比缩放，处理完成后重新上传至COS并更新数据库
+     *
+     * @param request        缩放请求，含图片id、缩放比例(scale)或目标宽度(targetWidth)、输出格式
+     * @param servletRequest HTTP请求，用于获取登录用户信息进行权限校验
+     * @return 缩放后新图片的COS访问URL
+     */
+    @PostMapping("/scale")
+    public Response<String> scalePicture(@RequestBody PictureScaleRequest request, HttpServletRequest servletRequest) {
+        ExcUtils.throwIfTrue(request.getPictureId() == null, "图片id不能为空");
+        ExcUtils.throwIfTrue(request.getScale() == null && request.getTargetWidth() == null, "缩放比例或目标宽度不能同时为空");
+        String newUrl = pictureService.scalePicture(request, servletRequest);
+        return ResUtils.success(newUrl);
+    }
+
+    /**
+     * 添加文字水印
+     * 在图片中央叠加半透明白色文字水印，处理完成后重新上传至COS并更新数据库
+     *
+     * @param request        水印请求，含图片id、水印文字、输出格式
+     * @param servletRequest HTTP请求，用于获取登录用户信息进行权限校验
+     * @return 添加水印后新图片的COS访问URL
+     */
+    @PostMapping("/watermark")
+    public Response<String> watermarkPicture(@RequestBody PictureWatermarkRequest request,
+            HttpServletRequest servletRequest) {
+        ExcUtils.throwIfTrue(request.getPictureId() == null, "图片id不能为空");
+        ExcUtils.throwIfTrue(request.getText() == null || request.getText().isEmpty(), "水印文字不能为空");
+        String newUrl = pictureService.watermarkPicture(request, servletRequest);
         return ResUtils.success(newUrl);
     }
 

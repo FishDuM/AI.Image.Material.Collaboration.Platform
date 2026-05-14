@@ -23,7 +23,7 @@ import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.dto.space.CreateSpace;
 import hk.ljx.fishpicsbackend.dto.user.*;
 import hk.ljx.fishpicsbackend.entity.User;
-import hk.ljx.fishpicsbackend.service.LoginUser;
+import hk.ljx.fishpicsbackend.common.utils.LoginUser;
 import hk.ljx.fishpicsbackend.service.SpaceService;
 import hk.ljx.fishpicsbackend.service.UserService;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
@@ -144,7 +144,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         ExcUtils.throwIfTrue(insert != 1, ExceptionCode.DATABASE_ERROR, "注册失败");
         stringRedisTemplate.delete(checkCodeKeyByRegister);
         // 创建默认私人空间
-        Boolean spaceRequest = spaceService.createSpace(new CreateSpace(user.getNickname() + "的私人空间", "你的专属私密存储空间", 0), user);
+        Boolean spaceRequest = spaceService.createSpace(new CreateSpace(user.getNickname() + "的私人空间", "你的专属私密存储空间", 0),
+                user);
         ExcUtils.throwIfTrue(!spaceRequest, ExceptionCode.DATABASE_ERROR, "创建私人空间失败");
         return ResUtils.success(true);
     }
@@ -172,7 +173,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         User user = userMapper.selectOne(new QueryWrapper<User>().eq("username", username).eq("password", password));
         ExcUtils.throwIfTrue(user == null, ExceptionCode.PARAMETER_ERROR, "账号或密码错误");
 
-        ExcUtils.throwIfTrue(user.getStatus() == null || user.getStatus() != 1, ExceptionCode.PARAMETER_ERROR, "账号已被禁用");
+        ExcUtils.throwIfTrue(user.getStatus() == null || user.getStatus() != 1, ExceptionCode.PARAMETER_ERROR,
+                "账号已被禁用");
 
         // 查询到则存入 session
         Long id = user.getId();
@@ -296,15 +298,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         User user = this.getById(id);
         ExcUtils.throwIfTrue(ObjectUtil.isNull(user), ExceptionCode.DATABASE_ERROR, "用户不存在");
 
+        String oldHashedPassword = user.getPassword();
+
         // 更新用户信息
         BeanUtil.copyProperties(userEditRequest, user, CopyOptions.create().ignoreNullValue());
         if (StrUtil.isNotBlank(password)) {
             // 校验原始密码
             String originalPassword = userEditRequest.getOriginalPassword();
             ExcUtils.throwIfTrue(StrUtil.isEmpty(originalPassword), ExceptionCode.PARAMETER_ERROR, "请输入初始密码");
-            user = userMapper.selectById(userLogin.getId());
-            String oldPassword = user.getPassword();
-            ExcUtils.throwIfTrue(!DigestUtil.md5Hex(originalPassword + SALT).equals(oldPassword), ExceptionCode.PARAMETER_ERROR, "初始密码错误");
+            ExcUtils.throwIfTrue(!DigestUtil.md5Hex(originalPassword + SALT).equals(oldHashedPassword),
+                    ExceptionCode.PARAMETER_ERROR, "初始密码错误");
             // 密码加盐
             password = DigestUtil.md5Hex(password + SALT);
             user.setPassword(password);

@@ -4,6 +4,7 @@ import { App as AntApp, Table, Tag, Space, Button, Card, Typography, Avatar, Pop
 import { UserOutlined, EditOutlined, SearchOutlined, ReloadOutlined, LockOutlined, UnlockOutlined, PlusOutlined, LoadingOutlined } from '@ant-design/icons'
 import { AuthContext } from '../context/AuthContext.jsx'
 import api, { getAdminUser } from '../api'
+import { isAllowedImageFile, getMaxUploadSize, formatMaxUploadSize } from '../utils/uploadConstraints'
 import './UserManagement.css'
 
 const { Title } = Typography
@@ -188,25 +189,18 @@ function UserManagement() {
     })
   }
 
-  const ALLOWED_IMAGE_TYPES = [
-    'image/jpeg',
-    'image/png',
-    'image/jpg',
-    'image/gif',
-    'image/webp',
-    'image/heic',
-  ]
-
   const beforeUpload = (file) => {
-    const isAllowedImage = ALLOWED_IMAGE_TYPES.includes(file.type)
+    const maxSize = getMaxUploadSize()
+    const maxSizeText = formatMaxUploadSize()
+    const isAllowedImage = isAllowedImageFile(file)
     if (!isAllowedImage) {
       message.error('只能上传图片文件（JPEG、PNG、JPG、GIF、WebP、HEIC）！')
     }
-    const isLt5M = file.size / 1024 / 1024 < 5
-    if (!isLt5M) {
-      message.error('图片大小不能超过5MB！')
+    const isLtSize = file.size <= maxSize
+    if (!isLtSize) {
+      message.error(`图片大小不能超过${maxSizeText}！`)
     }
-    return isAllowedImage && isLt5M
+    return isAllowedImage && isLtSize
   }
 
   const handleAvatarChange = async (info) => {
@@ -525,6 +519,7 @@ function UserManagement() {
                     listType="picture-circle"
                     className="avatar-uploader"
                     showUploadList={false}
+                    accept=".jpeg,.png,.jpg,.gif,.webp,.heic"
                     customRequest={handleAvatarUpload}
                     beforeUpload={beforeUpload}
                     onChange={handleAvatarChange}
