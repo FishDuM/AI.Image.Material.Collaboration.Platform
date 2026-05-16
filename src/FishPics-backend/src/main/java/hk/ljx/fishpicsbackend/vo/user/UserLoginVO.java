@@ -50,4 +50,9 @@ public class UserLoginVO implements Serializable {
      * 昵称（展示用）
      */
     private String nickname;
+
+    /**
+     * token
+     */
+    private String token;
 }

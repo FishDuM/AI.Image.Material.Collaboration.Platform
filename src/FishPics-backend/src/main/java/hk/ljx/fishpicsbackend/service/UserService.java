@@ -34,7 +34,7 @@ public interface UserService extends IService<User> {
      * @param userRequestRequest 用户注册请求
      * @return 注册结果
      */
-    Response<Boolean> userRegister(UserRequestRequest userRequestRequest, HttpServletRequest request);
+    Response<Boolean> userRegister(UserRequestRequest userRequestRequest);
 
     /**
      * 用户登录
@@ -42,7 +42,7 @@ public interface UserService extends IService<User> {
      * @param userLoginRequest 用户登录请求
      * @return 用户 VO
      */
-    Response<UserLoginVO> userLogin(UserLoginRequest userLoginRequest, HttpServletRequest request);
+    Response<UserLoginVO> userLogin(UserLoginRequest userLoginRequest);
 
     /**
      * 构造查询用户条件
@@ -77,10 +77,9 @@ public interface UserService extends IService<User> {
 
     /**
      * 获取自己的主页信息
-     * @param request 登录token
      * @return 用户信息
      */
-    UserMessageVO getMyselfMessage(HttpServletRequest request);
+    UserMessageVO getMyselfMessage();
 
     /**
      * 用户编辑自己信息
@@ -88,13 +87,12 @@ public interface UserService extends IService<User> {
      * @param userEditRequest 用户信息
      * @return 编辑结果
      */
-    Boolean editMyself(UserEditRequest userEditRequest, HttpServletRequest request);
+    Boolean editMyself(UserEditRequest userEditRequest);
 
     /**
      * 判断是否是自己的信息
      * @param id 用户id
-     * @param request 登录token
      * @return 是否是自己的信息
      */
-    Boolean isMe(Long id, HttpServletRequest request);
+    Boolean isMe(Long id);
 }

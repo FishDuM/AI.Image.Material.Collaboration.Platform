@@ -5,6 +5,7 @@ import cn.hutool.captcha.CircleCaptcha;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.codec.Base64;
+import cn.hutool.core.lang.UUID;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
@@ -20,10 +21,10 @@ import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
+import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.dto.space.CreateSpace;
 import hk.ljx.fishpicsbackend.dto.user.*;
 import hk.ljx.fishpicsbackend.entity.User;
-import hk.ljx.fishpicsbackend.common.utils.LoginUser;
 import hk.ljx.fishpicsbackend.service.SpaceService;
 import hk.ljx.fishpicsbackend.service.UserService;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
@@ -64,9 +65,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     @Resource
     private SpaceService spaceService;
 
-    @Resource
-    private LoginUser loginUser;
-
     @Override
     public String getCheckCode(String str, Integer len, Integer minute) {
 
@@ -102,7 +100,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Response<Boolean> userRegister(UserRequestRequest userRequestRequest, HttpServletRequest request) {
+    public Response<Boolean> userRegister(UserRequestRequest userRequestRequest) {
         // 基础参数校验
         String username = userRequestRequest.getUsername();
         String password = userRequestRequest.getPassword();
@@ -151,8 +149,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     }
 
     @Override
-    public Response<UserLoginVO> userLogin(UserLoginRequest userLoginRequest,
-            HttpServletRequest request) {
+    public Response<UserLoginVO> userLogin(UserLoginRequest userLoginRequest) {
         String username = userLoginRequest.getUsername();
         String password = userLoginRequest.getPassword();
         String checkCode = userLoginRequest.getCheckCode();
@@ -173,16 +170,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         User user = userMapper.selectOne(new QueryWrapper<User>().eq("username", username).eq("password", password));
         ExcUtils.throwIfTrue(user == null, ExceptionCode.PARAMETER_ERROR, "账号或密码错误");
 
-        ExcUtils.throwIfTrue(user.getStatus() == null || user.getStatus() != 1, ExceptionCode.PARAMETER_ERROR,
-                "账号已被禁用");
+        ExcUtils.throwIfTrue(user.getStatus() == null || user.getStatus() != 1, ExceptionCode.PARAMETER_ERROR, "账号已被禁用");
 
-        // 查询到则存入 session
-        Long id = user.getId();
-        request.getSession().setAttribute(TOKEN_KEY, id);
-        stringRedisTemplate.opsForValue().set(getUserIdKey(id), JSONUtil.toJsonStr(user), 1, TimeUnit.DAYS);
+        // 查询到则存入 redis
+        String token = UUID.randomUUID().toString(true);
+        stringRedisTemplate.opsForValue().set(RedisConstants.getUserIdKey(token), user.getId().toString(), 1, TimeUnit.DAYS);
+        stringRedisTemplate.opsForValue().set(RedisConstants.getUserInfoKey(user.getId()), JSONUtil.toJsonStr(user), 1, TimeUnit.DAYS);
 
         // 查到用户数据返回封装类
         UserLoginVO userLoginVO = BeanUtil.copyProperties(user, UserLoginVO.class);
+        userLoginVO.setToken(token);
         return ResUtils.success(userLoginVO);
     }
 
@@ -226,7 +223,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         ExcUtils.throwIfTrue(ObjectUtil.isNull(user), ExceptionCode.NOT_FOUND, "未找到该用户");
         user.setStatus(user.getStatus() == 1 ? 0 : 1);
         int i = userMapper.updateById(user);
-        stringRedisTemplate.opsForValue().set(getUserIdKey(userId), JSONUtil.toJsonStr(user), 1, TimeUnit.DAYS);
+        // 更新redis
+        stringRedisTemplate.opsForValue().set(RedisConstants.getUserInfoKey(userId), JSONUtil.toJsonStr(user));
         return i > 0;
     }
 
@@ -252,27 +250,23 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
         // 5. 更新
         int rows = userMapper.updateById(user);
-        stringRedisTemplate.opsForValue().set(getUserIdKey(id), JSONUtil.toJsonStr(user), 1, TimeUnit.DAYS);
+        stringRedisTemplate.opsForValue().set(RedisConstants.getUserInfoKey(id), JSONUtil.toJsonStr(user), 1, TimeUnit.DAYS);
         ExcUtils.throwIfTrue(rows != 1, ExceptionCode.DATABASE_ERROR, "更新用户失败");
 
         return true;
     }
 
     @Override
-    public UserMessageVO getMyselfMessage(HttpServletRequest request) {
-        User user = loginUser.getLoginUser(request);
-        ExcUtils.throwIfTrue(user == null || user.getId() == null,
-                ExceptionCode.NOT_FOUND, "未登录");
+    public UserMessageVO getMyselfMessage() {
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         UserMessageVO vo = new UserMessageVO();
         BeanUtil.copyProperties(user, vo);
         return vo;
     }
 
     @Override
-    public Boolean editMyself(UserEditRequest userEditRequest, HttpServletRequest request) {
-        // 获得当前登录用户信息
-        User userLogin = loginUser.getLoginUser(request);
-        ExcUtils.throwIfTrue(ObjectUtil.isAllEmpty(userLogin, userLogin.getId()), ExceptionCode.NOT_LOGIN);
+    public Boolean editMyself(UserEditRequest userEditRequest) {
         // 参数校验
         Long id = userEditRequest.getId();
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), ExceptionCode.PARAMETER_ERROR);
@@ -293,7 +287,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         }
 
         // 校验是否是自己的信息
-        ExcUtils.throwIfTrue(!this.isMe(id, request), ExceptionCode.UNAUTHORIZED, "只可修改自己的信息");
+        ExcUtils.throwIfTrue(!this.isMe(id), ExceptionCode.UNAUTHORIZED, "只可修改自己的信息");
         // 查询用户信息
         User user = this.getById(id);
         ExcUtils.throwIfTrue(ObjectUtil.isNull(user), ExceptionCode.DATABASE_ERROR, "用户不存在");
@@ -315,13 +309,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         boolean result = this.updateById(user);
         ExcUtils.throwIfTrue(!result, ExceptionCode.DATABASE_ERROR, "更新失败");
         // 更新 redis 缓存
-        stringRedisTemplate.opsForValue().set(getUserIdKey(id), JSONUtil.toJsonStr(user), 1, TimeUnit.DAYS);
+        stringRedisTemplate.opsForValue().set(RedisConstants.getUserInfoKey(id), JSONUtil.toJsonStr(user), 1, TimeUnit.DAYS);
         return true;
     }
 
     @Override
-    public Boolean isMe(Long id, HttpServletRequest request) {
-        User user = loginUser.getLoginUser(request);
+    public Boolean isMe(Long id) {
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         return user.getId().equals(id);
     }
 }

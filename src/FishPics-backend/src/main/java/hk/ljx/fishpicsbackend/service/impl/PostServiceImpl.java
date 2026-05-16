@@ -12,7 +12,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
-import hk.ljx.fishpicsbackend.common.utils.LoginUser;
+import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.dto.base.PageRequest;
 import hk.ljx.fishpicsbackend.dto.post.*;
 import hk.ljx.fishpicsbackend.dto.space.SpacePictureList;
@@ -23,12 +23,12 @@ import hk.ljx.fishpicsbackend.vo.picture.PictureListByEditPostVO;
 import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
 import hk.ljx.fishpicsbackend.vo.post.PostDetailVO;
 import hk.ljx.fishpicsbackend.vo.post.PostListVO;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.annotation.Resource;
-import jakarta.servlet.http.HttpServletRequest;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -67,14 +67,11 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
     private UserPostCollectService userPostCollectService;
 
     @Resource
-    private LoginUser loginUser;
-
-    @Resource
     private SpaceService spaceService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void uploadPost(UploadPostRequest uploadPostRequest, HttpServletRequest request) {
+    public void uploadPost(UploadPostRequest uploadPostRequest) {
         // 校验参数
         List<Long> imageId = uploadPostRequest.getImageId();
         String title = uploadPostRequest.getTitle();
@@ -87,7 +84,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         ExcUtils.throwIfTrue(ObjectUtil.isAllEmpty(title, content, cover, isPrivate), "参数不能为空");
         ExcUtils.throwIfTrue(imageId.size() < cover + 1 || imageId.get(cover) == null, "封面图片不存在");
         // 获取用户信息
-        User user = loginUser.getLoginUser(request);
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         Long userId = user.getId();
 
         // 判断是否为自己的图片并返回原图
@@ -144,7 +142,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void editPost(EditPostRequest editPostRequest, HttpServletRequest request) {
+    public void editPost(EditPostRequest editPostRequest) {
         Long id = editPostRequest.getId();
         List<Long> imageId = editPostRequest.getImageId();
         Integer cover = editPostRequest.getCover();
@@ -160,7 +158,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         ExcUtils.throwIfTrue(imageId.size() < cover + 1 || imageId.get(cover) == null, "封面图片不存在");
 
         // 判断是否是自己的帖子 || 是否为管理员
-        User user = loginUser.getLoginUser(request);
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         Long userId = user.getId();
 
         // 查找该帖子
@@ -275,13 +274,13 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void likePost(Long id, HttpServletRequest request) {
+    public void likePost(Long id) {
         // 获取帖子 id
         Post post = postMapper.selectById(id);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(post) || id == null, ExceptionCode.DATABASE_ERROR, "帖子不存在");
 
         // 获取用户
-        User user = loginUser.getLoginUser(request);
+        User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user) || user.getId() == null, "用户不存在");
         Long userId = user.getId();
         Long postId = post.getId();
@@ -336,8 +335,9 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
      * 用户可以查看自己发布的所有帖子，与社区广场查询逻辑保持一致
      */
     @Override
-    public IPage<PostListVO> getMyPosts(PageRequest pageRequest, HttpServletRequest request) {
-        User user = loginUser.getLoginUser(request);
+    public IPage<PostListVO> getMyPosts(PageRequest pageRequest) {
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         Long userId = user.getId();
 
         Page<Post> page = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
@@ -351,8 +351,9 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
     // getMyCollects方法修改
     @Override
-    public IPage<PostListVO> getMyCollects(PageRequest pageRequest, HttpServletRequest request) {
-        User user = loginUser.getLoginUser(request);
+    public IPage<PostListVO> getMyCollects(PageRequest pageRequest) {
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         Long userId = user.getId();
 
         // 第一步：查询用户的收藏帖子ID列表
@@ -378,8 +379,9 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
     // getMyLikes方法同理
     @Override
-    public IPage<PostListVO> getMyLikes(PageRequest pageRequest, HttpServletRequest request) {
-        User user = loginUser.getLoginUser(request);
+    public IPage<PostListVO> getMyLikes(PageRequest pageRequest) {
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         Long userId = user.getId();
 
         // 第一步：查询用户的点赞帖子ID列表
@@ -403,8 +405,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
     }
 
     @Override
-    public List<PictureListByEditPostVO> getPictureList(GetPictureBySpaceRequest getPictureBySpaceRequest,
-            HttpServletRequest request) {
+    public List<PictureListByEditPostVO> getPictureList(GetPictureBySpaceRequest getPictureBySpaceRequest) {
         Long spaceId = getPictureBySpaceRequest.getSpaceId();
         int current = getPictureBySpaceRequest.getCurrent();
         int pageSize = getPictureBySpaceRequest.getPageSize();
@@ -423,7 +424,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         spacePictures.setPageSize(pageSize);
         spacePictures.setSortField(sortField);
         spacePictures.setSortOrder(sortOrder);
-        List<PictureListVO> spacePictureList = spaceService.pictureList(spacePictures, request)
+        List<PictureListVO> spacePictureList = spaceService.pictureList(spacePictures)
                 .getRecords();
 
         // 2. 已选的图片则返回 false

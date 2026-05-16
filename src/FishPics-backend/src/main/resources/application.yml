@@ -5,10 +5,6 @@ server:
 spring:
   application:
     name: FishPic-backend
-  session:
-    store-type: redis
-    # 86400 秒 = 1天
-    timeout: 86400s
   servlet:
     multipart:
       # 单个文件最大大小

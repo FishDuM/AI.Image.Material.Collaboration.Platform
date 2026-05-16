@@ -28,20 +28,18 @@ public interface PictureService extends IService<Picture> {
      *
      * @param file    图片
      * @param id      用户id
-     * @param request token
      * @return 头像地址
      */
-    String uploadAvatar(MultipartFile file, Long id, HttpServletRequest request);
+    String uploadAvatar(MultipartFile file, Long id);
 
     /**
      * 用户上传图片
      *
      * @param file          图片
      * @param targetSpaceId 目标空间ID，为null时默认上传至私人空间
-     * @param request       token
      * @return 图片
      */
-    Picture uploadPicture(MultipartFile file, Long targetSpaceId, HttpServletRequest request);
+    Picture uploadPicture(MultipartFile file, Long targetSpaceId);
 
     /**
      * 首页获取图片列表（分页）
@@ -73,10 +71,9 @@ public interface PictureService extends IService<Picture> {
      * 删除图片
      * 
      * @param deleteByIdList 图片id list
-     * @param request        请求
      * @return 返回的 message
      */
-    String deletePicture(DeleteByIdList deleteByIdList, HttpServletRequest request);
+    String deletePicture(DeleteByIdList deleteByIdList);
 
     /**
      * 批量编辑图片信息
@@ -90,28 +87,25 @@ public interface PictureService extends IService<Picture> {
      * 先按原始图像坐标裁剪，再旋转（如有），最后上传至COS并更新数据库
      *
      * @param request        裁剪请求，含图片id、裁剪区域坐标(x/y/width/height)、旋转角度、输出格式
-     * @param servletRequest HTTP请求，用于权限校验
      * @return 裁剪后新图片的COS访问URL
      */
-    String cropPicture(PictureCropRequest request, HttpServletRequest servletRequest);
+    String cropPicture(PictureCropRequest request);
 
     /**
      * 缩放图片
      * 支持按比例(scale)或按目标宽度(targetWidth)等比缩放，处理完成后上传至COS并更新数据库
      *
      * @param request        缩放请求，含图片id、缩放比例或目标宽度、输出格式
-     * @param servletRequest HTTP请求，用于权限校验
      * @return 缩放后新图片的COS访问URL
      */
-    String scalePicture(PictureScaleRequest request, HttpServletRequest servletRequest);
+    String scalePicture(PictureScaleRequest request);
 
     /**
      * 添加文字水印
      * 在图片中央叠加半透明白色文字，处理完成后上传至COS并更新数据库
      *
      * @param request        水印请求，含图片id、水印文字、输出格式
-     * @param servletRequest HTTP请求，用于权限校验
      * @return 添加水印后新图片的COS访问URL
      */
-    String watermarkPicture(PictureWatermarkRequest request, HttpServletRequest servletRequest);
+    String watermarkPicture(PictureWatermarkRequest request);
 }

@@ -33,12 +33,11 @@ public class PictureController {
     private PictureService pictureService;
 
     @PostMapping("/avatar")
-    public Response<String> uploadAvatar(@RequestParam("file") MultipartFile file, @RequestParam("id") Long id,
-            HttpServletRequest request) {
+    public Response<String> uploadAvatar(@RequestParam("file") MultipartFile file, @RequestParam("id") Long id) {
         ExcUtils.throwIfTrue(file.isEmpty(), "文件不能为空");
         ExcUtils.throwIfTrue(file.getSize() > 1024 * 1024 * 5, "文件大小不能超过5MB");
         ExcUtils.throwIfTrue(id == null, "用户id不能为空");
-        return ResUtils.success(pictureService.uploadAvatar(file, id, request));
+        return ResUtils.success(pictureService.uploadAvatar(file, id));
     }
 
     /**
@@ -47,15 +46,13 @@ public class PictureController {
      *
      * @param file          上传的图片文件
      * @param targetSpaceId 目标空间ID，为null时默认上传至私人空间
-     * @param request       HTTP请求
      * @return 图片基本信息(id/url)
      */
     @PostMapping("/upload")
     public Response<PictureListVO> uploadPicture(@RequestParam("file") MultipartFile file,
-            @RequestParam(value = "targetSpaceId", required = false) Long targetSpaceId,
-            HttpServletRequest request) {
+            @RequestParam(value = "targetSpaceId", required = false) Long targetSpaceId) {
         ExcUtils.throwIfTrue(file.isEmpty(), "文件不能为空");
-        Picture picture = pictureService.uploadPicture(file, targetSpaceId, request);
+        Picture picture = pictureService.uploadPicture(file, targetSpaceId);
         PictureListVO pictureListVO = new PictureListVO();
         pictureListVO.setId(picture.getId());
         pictureListVO.setUrl(picture.getUrl());
@@ -72,9 +69,9 @@ public class PictureController {
     }
 
     @DeleteMapping("/delete")
-    public Response<String> deletePicture(@RequestBody DeleteByIdList deleteByIdList, HttpServletRequest request) {
+    public Response<String> deletePicture(@RequestBody DeleteByIdList deleteByIdList) {
         ExcUtils.throwIfTrue(ObjUtil.isEmpty(deleteByIdList), "id不能为空");
-        return ResUtils.successOfMessage(pictureService.deletePicture(deleteByIdList, request));
+        return ResUtils.successOfMessage(pictureService.deletePicture(deleteByIdList));
     }
 
     @PutMapping("/update")
@@ -89,13 +86,12 @@ public class PictureController {
      * 最后重新上传至COS并更新数据库，返回新的图片URL
      *
      * @param request        裁剪请求，含图片id、裁剪区域坐标(x/y/width/height)、旋转角度、输出格式
-     * @param servletRequest HTTP请求，用于获取登录用户信息进行权限校验
      * @return 裁剪后新图片的COS访问URL
      */
     @PostMapping("/crop")
-    public Response<String> cropPicture(@RequestBody PictureCropRequest request, HttpServletRequest servletRequest) {
+    public Response<String> cropPicture(@RequestBody PictureCropRequest request) {
         ExcUtils.throwIfTrue(request.getPictureId() == null, "图片id不能为空");
-        String newUrl = pictureService.cropPicture(request, servletRequest);
+        String newUrl = pictureService.cropPicture(request);
         return ResUtils.success(newUrl);
     }
 
@@ -104,14 +100,13 @@ public class PictureController {
      * 支持按比例缩放或按目标宽度等比缩放，处理完成后重新上传至COS并更新数据库
      *
      * @param request        缩放请求，含图片id、缩放比例(scale)或目标宽度(targetWidth)、输出格式
-     * @param servletRequest HTTP请求，用于获取登录用户信息进行权限校验
      * @return 缩放后新图片的COS访问URL
      */
     @PostMapping("/scale")
-    public Response<String> scalePicture(@RequestBody PictureScaleRequest request, HttpServletRequest servletRequest) {
+    public Response<String> scalePicture(@RequestBody PictureScaleRequest request) {
         ExcUtils.throwIfTrue(request.getPictureId() == null, "图片id不能为空");
         ExcUtils.throwIfTrue(request.getScale() == null && request.getTargetWidth() == null, "缩放比例或目标宽度不能同时为空");
-        String newUrl = pictureService.scalePicture(request, servletRequest);
+        String newUrl = pictureService.scalePicture(request);
         return ResUtils.success(newUrl);
     }
 
@@ -120,15 +115,13 @@ public class PictureController {
      * 在图片中央叠加半透明白色文字水印，处理完成后重新上传至COS并更新数据库
      *
      * @param request        水印请求，含图片id、水印文字、输出格式
-     * @param servletRequest HTTP请求，用于获取登录用户信息进行权限校验
      * @return 添加水印后新图片的COS访问URL
      */
     @PostMapping("/watermark")
-    public Response<String> watermarkPicture(@RequestBody PictureWatermarkRequest request,
-            HttpServletRequest servletRequest) {
+    public Response<String> watermarkPicture(@RequestBody PictureWatermarkRequest request) {
         ExcUtils.throwIfTrue(request.getPictureId() == null, "图片id不能为空");
         ExcUtils.throwIfTrue(request.getText() == null || request.getText().isEmpty(), "水印文字不能为空");
-        String newUrl = pictureService.watermarkPicture(request, servletRequest);
+        String newUrl = pictureService.watermarkPicture(request);
         return ResUtils.success(newUrl);
     }
 

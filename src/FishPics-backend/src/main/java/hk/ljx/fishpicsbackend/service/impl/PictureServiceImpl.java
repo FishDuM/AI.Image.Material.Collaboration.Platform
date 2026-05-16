@@ -13,7 +13,7 @@ import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.utils.CosService;
-import hk.ljx.fishpicsbackend.common.utils.LoginUser;
+import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.dto.picture.DeleteByIdList;
 import hk.ljx.fishpicsbackend.dto.picture.PictureCropRequest;
 import hk.ljx.fishpicsbackend.dto.picture.PictureMessage;
@@ -70,9 +70,6 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     @Resource
     private SpaceService spaceService;
 
-    @Resource
-    private LoginUser loginUser;
-
     @Lazy
     @Resource
     private UserService userService;
@@ -82,9 +79,9 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     private PostService postService;
 
     @Override
-    public String uploadAvatar(MultipartFile file, Long id, HttpServletRequest request) {
-        User userLogin = loginUser.getLoginUser(request);
-        ExcUtils.throwIfTrue(userLogin == null || userLogin.getId() == null, "请先登录");
+    public String uploadAvatar(MultipartFile file, Long id) {
+        User userLogin = UserHolder.getUser();
+        ExcUtils.throwIfTrue(ObjUtil.isEmpty(userLogin), ExceptionCode.NOT_LOGIN);
         // 只有自己或管理员可以修改头像
         ExcUtils.throwIfTrue(!userLogin.getId().equals(id) && !userLogin.getRole().equals(ADMIN), "没有权限");
         User user;
@@ -99,7 +96,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         if (user.getAvatar() != null) {
             cosService.deletePictureByUrl(user.getAvatar());
         }
-        String url = cosService.uploadAndGetImageUrl(file, request);
+        String url = cosService.uploadAndGetImageUrl(file);
         user.setAvatar(url);
         ExcUtils.throwIfFalse(userService.updateById(user), ExceptionCode.DATABASE_ERROR, "上传失败，数据库错误");
         return url;
@@ -107,8 +104,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Picture uploadPicture(MultipartFile file, Long targetSpaceId, HttpServletRequest request) {
-        User userLogin = loginUser.getLoginUser(request);
+    public Picture uploadPicture(MultipartFile file, Long targetSpaceId) {
+        User userLogin = UserHolder.getUser();
         Long userId = userLogin.getId();
         Integer level = userLogin.getLevel();
         ExcUtils.throwIfTrue(ObjUtil.isEmpty(userLogin) || userId == null, "请先登录");
@@ -123,7 +120,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         }
 
         // 上传图片
-        String key = cosService.uploadPicture(file, request);
+        String key = cosService.uploadPicture(file);
         // 获取图片信息
         PictureMessage pictureMessage = cosService.getPictureMessage(key);
         Picture picture = new Picture();
@@ -141,7 +138,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             space = spaceService.getById(targetSpaceId);
             ExcUtils.throwIfTrue(space == null, "目标空间不存在");
         } else {
-            List<? extends Space> spaceList = spaceService.listSpace(0, request);
+            List<? extends Space> spaceList = spaceService.listSpace(0);
             ExcUtils.throwIfTrue(spaceList == null || spaceList.isEmpty(), "私人空间不存在，请联系管理员");
             space = spaceList.get(0);
         }
@@ -224,11 +221,11 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     }
 
     @Override
-    public String deletePicture(DeleteByIdList deleteByIdList, HttpServletRequest request) {
+    public String deletePicture(DeleteByIdList deleteByIdList) {
         List<Long> ids = deleteByIdList.getIds();
         ExcUtils.throwIfTrue(CollUtil.isEmpty(ids), "图片id不能为空");
-
-        User user = loginUser.getLoginUser(request);
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(ObjUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         String role = user.getRole();
         // 帖子封面图禁止删除
         List<Post> posts = postService.list(new QueryWrapper<Post>().in("cover", ids));
@@ -289,17 +286,16 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
      * 注意：裁剪坐标使用原始图像坐标系（未经旋转），因此必须先裁剪再旋转，
      * 以保证裁剪区域与前端用户选择一致。旋转角度仅支持90的倍数（0/90/180/270）。
      *
-     * @param request        裁剪请求，含图片id、裁剪区域(x/y/width/height均为原始图像像素坐标)、
-     *                       旋转角度(rotation，90的倍数)、输出格式(format，默认png)
-     * @param servletRequest HTTP请求
+     * @param request 裁剪请求，含图片id、裁剪区域(x/y/width/height均为原始图像像素坐标)、
+     *                旋转角度(rotation，90的倍数)、输出格式(format，默认png)
      * @return 裁剪后新图片的COS访问URL
      * @throws BaseException 图片不存在、无法读取图片、未登录时抛出
      */
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public String cropPicture(PictureCropRequest request, HttpServletRequest servletRequest) {
-        Picture picture = validateAndGetPicture(request.getPictureId(), servletRequest);
+    public String cropPicture(PictureCropRequest request) {
+        Picture picture = validateAndGetPicture(request.getPictureId());
         String oldUrl = picture.getUrl();
         try {
             BufferedImage sourceImage = ImgUtil.read(new URL(oldUrl));
@@ -333,16 +329,15 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
      * 支持两种缩放方式：按比例(scale参数)或按目标宽度(targetWidth参数)等比缩放
      * 当同时传入时优先使用scale。缩放比例限制在(0, 10]区间内
      *
-     * @param request        缩放请求，含图片id、缩放比例(scale)或目标宽度(targetWidth)、输出格式(format)
-     * @param servletRequest HTTP请求
+     * @param request 缩放请求，含图片id、缩放比例(scale)或目标宽度(targetWidth)、输出格式(format)
      * @return 缩放后新图片的COS访问URL
      * @throws BaseException 图片不存在、比例不合法、未登录时抛出
      */
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public String scalePicture(PictureScaleRequest request, HttpServletRequest servletRequest) {
-        Picture picture = validateAndGetPicture(request.getPictureId(), servletRequest);
+    public String scalePicture(PictureScaleRequest request) {
+        Picture picture = validateAndGetPicture(request.getPictureId());
         String oldUrl = picture.getUrl();
         try {
             BufferedImage sourceImage = ImgUtil.read(new URL(oldUrl));
@@ -371,15 +366,14 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
      * 字号 = min(图片短边 / 30, 80px, ≥14px)，兼顾高清原图与小图的视觉协调性。
      * 透明度50%，支持中英文。中文字体按优先级尝试系统可用字体，兜底使用SANS_SERIF
      *
-     * @param request        水印请求，含图片id、水印文字(text)、输出格式(format)
-     * @param servletRequest HTTP请求
+     * @param request 水印请求，含图片id、水印文字(text)、输出格式(format)
      * @return 添加水印后新图片的COS访问URL
      * @throws BaseException 图片不存在、水印文字为空、未登录时抛出
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public String watermarkPicture(PictureWatermarkRequest request, HttpServletRequest servletRequest) {
-        Picture picture = validateAndGetPicture(request.getPictureId(), servletRequest);
+    public String watermarkPicture(PictureWatermarkRequest request) {
+        Picture picture = validateAndGetPicture(request.getPictureId());
         String oldUrl = picture.getUrl();
         ExcUtils.throwIfTrue(request.getText() == null || request.getText().isEmpty(), "水印文字不能为空");
         try {
@@ -423,19 +417,18 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
      * 校验图片存在性与用户登录状态
      * 依次校验：图片id非空 → 图片存在 → 图片URL有效 → 用户已登录
      *
-     * @param pictureId      图片id
-     * @param servletRequest HTTP请求，用于获取登录用户
+     * @param pictureId 图片id
      * @return 图片实体对象
      * @throws BaseException 图片id为空、图片不存在、图片URL为空、未登录时抛出
      */
-    private Picture validateAndGetPicture(Long pictureId, HttpServletRequest servletRequest) {
+    private Picture validateAndGetPicture(Long pictureId) {
         ExcUtils.throwIfTrue(ObjUtil.isEmpty(pictureId), "图片id不能为空");
         Picture picture = pictureMapper.selectById(pictureId);
         ExcUtils.throwIfTrue(picture == null, "图片不存在");
         String url = picture.getUrl();
         ExcUtils.throwIfTrue(url == null || url.isEmpty(), "图片URL为空");
-        User userLogin = loginUser.getLoginUser(servletRequest);
-        ExcUtils.throwIfTrue(userLogin == null || userLogin.getId() == null, "请先登录");
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(ObjUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         return picture;
     }
 

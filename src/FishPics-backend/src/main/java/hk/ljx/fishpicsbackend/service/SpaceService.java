@@ -30,34 +30,30 @@ public interface SpaceService extends IService<Space> {
     /**
      * 获取当前用户的空间列表
      * @param type 空间类型：0-私人空间，1-团队空间
-     * @param request HTTP请求
      * @return 空间VO列表（含图片数量、创建人、成员信息）
      */
-    List<SpaceVO> listSpace(Integer type, HttpServletRequest request);
+    List<SpaceVO> listSpace(Integer type);
 
     /**
      * 获取单个空间详情
      * @param id 空间ID
-     * @param request HTTP请求
      * @return 空间VO
      */
-    SpaceVO getSpace(Long id, HttpServletRequest request);
+    SpaceVO getSpace(Long id);
 
     /**
      * 更新空间信息
      * @param updateSpace 更新请求参数
-     * @param request HTTP请求
      * @return 更新成功返回true
      */
-    Boolean updateSpace(UpdateSpace updateSpace, HttpServletRequest request);
+    Boolean updateSpace(UpdateSpace updateSpace);
 
     /**
      * 获取空间图片列表（分页）
      * @param spacePictureList 查询参数
-     * @param request HTTP请求
      * @return 图片分页结果
      */
-    PicturePageVO pictureList(SpacePictureList spacePictureList, HttpServletRequest request);
+    PicturePageVO pictureList(SpacePictureList spacePictureList);
 
     /**
      * 构建空间查询条件

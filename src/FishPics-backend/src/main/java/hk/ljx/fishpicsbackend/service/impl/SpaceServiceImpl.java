@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
+import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.dto.space.CreateSpace;
 import hk.ljx.fishpicsbackend.dto.space.SpacePictureList;
 import hk.ljx.fishpicsbackend.dto.space.SpaceQueryWrapper;
@@ -16,7 +17,6 @@ import hk.ljx.fishpicsbackend.entity.Picture;
 import hk.ljx.fishpicsbackend.entity.Space;
 import hk.ljx.fishpicsbackend.entity.User;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
-import hk.ljx.fishpicsbackend.common.utils.LoginUser;
 import hk.ljx.fishpicsbackend.service.PictureService;
 import hk.ljx.fishpicsbackend.service.SpaceService;
 import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
@@ -28,7 +28,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.annotation.Resource;
-import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -46,9 +45,6 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
 
     @Resource
     private PictureService pictureService;
-
-    @Resource
-    private LoginUser loginUser;
 
     @Resource
     private UserMapper userMapper;
@@ -131,13 +127,13 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
     /**
      * 获取当前用户的空间列表
      * 
-     * @param type    空间类型：0-私人空间，1-团队空间
-     * @param request HTTP请求
+     * @param type 空间类型：0-私人空间，1-团队空间
      * @return 空间VO列表（含图片数量、创建人、成员信息）
      */
     @Override
-    public List<SpaceVO> listSpace(Integer type, HttpServletRequest request) {
-        User user = loginUser.getLoginUser(request);
+    public List<SpaceVO> listSpace(Integer type) {
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         Long userId = user.getId();
 
         QueryWrapper<Space> queryWrapper = new QueryWrapper<>();
@@ -200,14 +196,14 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
     /**
      * 获取单个空间详情
      * 
-     * @param id      空间ID
-     * @param request HTTP请求
+     * @param id 空间ID
      * @return 空间VO（含图片数量、创建人、成员信息）
      */
     @Override
-    public SpaceVO getSpace(Long id, HttpServletRequest request) {
+    public SpaceVO getSpace(Long id) {
         ExcUtils.throwIfTrue(id == null, ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
-        User user = loginUser.getLoginUser(request);
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         Long userId = user.getId();
 
         Space space = spaceMapper.selectById(id);
@@ -278,18 +274,18 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
      * 更新空间信息
      * 
      * @param updateSpace 更新请求参数
-     * @param request     HTTP请求
      * @return 更新成功返回true
      */
     @Override
-    public Boolean updateSpace(UpdateSpace updateSpace, HttpServletRequest request) {
+    public Boolean updateSpace(UpdateSpace updateSpace) {
         Long id = updateSpace.getId();
         String name = updateSpace.getName();
         String introduction = updateSpace.getIntroduction();
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(name), ExceptionCode.PARAMETER_ERROR, "空间名称不能为空");
 
-        User user = loginUser.getLoginUser(request);
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         Long userId = user.getId();
         // 1. 查询空间是否存在
         Space space = spaceMapper.selectById(id);
@@ -309,11 +305,10 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
      * 获取空间图片列表（分页）
      * 
      * @param spacePictureList 查询参数
-     * @param request          HTTP请求
      * @return 图片分页结果
      */
     @Override
-    public PicturePageVO pictureList(SpacePictureList spacePictureList, HttpServletRequest request) {
+    public PicturePageVO pictureList(SpacePictureList spacePictureList) {
         Long spaceId = spacePictureList.getSpaceId();
         int current = spacePictureList.getCurrent();
         int pageSize = spacePictureList.getPageSize();
@@ -321,7 +316,8 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         String sortOrder = spacePictureList.getSortOrder();
 
         ExcUtils.throwIfTrue(spaceId == null, ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
-        User user = loginUser.getLoginUser(request);
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         Long userId = user.getId();
         Space space = spaceMapper.selectById(spaceId);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在或无权限");

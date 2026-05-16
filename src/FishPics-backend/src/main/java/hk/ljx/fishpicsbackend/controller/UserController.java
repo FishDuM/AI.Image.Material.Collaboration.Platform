@@ -3,6 +3,7 @@ package hk.ljx.fishpicsbackend.controller;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.RandomUtil;
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
 import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
@@ -10,24 +11,20 @@ import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
+import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.dto.user.*;
 import hk.ljx.fishpicsbackend.entity.User;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
-import hk.ljx.fishpicsbackend.common.utils.LoginUser;
 import hk.ljx.fishpicsbackend.service.UserService;
 import hk.ljx.fishpicsbackend.vo.user.CheckCodeVO;
 import hk.ljx.fishpicsbackend.vo.user.UserLoginVO;
 import hk.ljx.fishpicsbackend.vo.user.UserMessageVO;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpSession;
-
-import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.USER_ID_KEY;
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
 @RestController
@@ -42,22 +39,18 @@ public class UserController {
     private UserMapper userMapper;
 
     @Resource
-    private LoginUser loginUser;
-    @Autowired
     private StringRedisTemplate stringRedisTemplate;
 
     @PostMapping("/login")
-    public Response<UserLoginVO> userLogin(@RequestBody UserLoginRequest userLoginRequest,
-            HttpServletRequest request) {
+    public Response<UserLoginVO> userLogin(@RequestBody UserLoginRequest userLoginRequest) {
         ExcUtils.throwIfTrue(userLoginRequest == null, ExceptionCode.PARAMETER_ERROR, "参数错误");
-        return userService.userLogin(userLoginRequest, request);
+        return userService.userLogin(userLoginRequest);
     }
 
     @PostMapping("/register")
-    public Response<Boolean> userRegister(@RequestBody UserRequestRequest userRequestRequest,
-            HttpServletRequest request) {
+    public Response<Boolean> userRegister(@RequestBody UserRequestRequest userRequestRequest) {
         ExcUtils.throwIfTrue(userRequestRequest == null, "参数不能为空");
-        return userService.userRegister(userRequestRequest, request);
+        return userService.userRegister(userRequestRequest);
     }
 
     @GetMapping("/checkCode/register")
@@ -83,33 +76,33 @@ public class UserController {
     }
 
     @GetMapping("/myself")
-    public Response<UserMessageVO> getMyself(HttpServletRequest request) {
-        UserMessageVO userMessageVO = userService.getMyselfMessage(request);
+    public Response<UserMessageVO> getMyself() {
+        UserMessageVO userMessageVO = userService.getMyselfMessage();
         return ResUtils.success(userMessageVO);
     }
 
     @GetMapping("/getUser")
     public Response<UserLoginVO> getUser(HttpServletRequest request) {
-        User user = loginUser.getLoginUser(request);
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         UserLoginVO userLoginVO = new UserLoginVO();
         BeanUtil.copyProperties(user, userLoginVO);
         return ResUtils.success(userLoginVO);
     }
 
     @PostMapping("/editUser")
-    public Response<Boolean> editMyself(@RequestBody UserEditRequest userEditRequest, HttpServletRequest request) {
+    public Response<Boolean> editMyself(@RequestBody UserEditRequest userEditRequest) {
         ExcUtils.throwIfTrue(ObjectUtil.isNull(userEditRequest), ExceptionCode.PARAMETER_ERROR);
-        return ResUtils.success(userService.editMyself(userEditRequest, request));
+        return ResUtils.success(userService.editMyself(userEditRequest));
     }
 
     @PostMapping("/logout")
     public Response<?> logout(HttpServletRequest request) {
-        User user = loginUser.getLoginUser(request);
-        HttpSession session = request.getSession(false);
-        if (session != null) {
-            session.invalidate();
+        UserHolder.removeUser();
+        String token = request.getHeader("Authorization");
+        if (StrUtil.isNotBlank(token)) {
+            stringRedisTemplate.delete(RedisConstants.getUserIdKey(token));
         }
-        stringRedisTemplate.delete(USER_ID_KEY + user.getId());
         return ResUtils.success();
     }
 
@@ -119,7 +112,7 @@ public class UserController {
         Long userId = userIdRequest.getUserId();
         ExcUtils.throwIfTrue(ObjectUtil.isNull(userId), ExceptionCode.PARAMETER_ERROR);
         User user = userMapper.selectById(userId);
-        ExcUtils.throwIfTrue(user.getId() == null, ExceptionCode.DATABASE_ERROR);
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user) || user.getId() == null, ExceptionCode.DATABASE_ERROR);
         return ResUtils.success(user);
     }
 

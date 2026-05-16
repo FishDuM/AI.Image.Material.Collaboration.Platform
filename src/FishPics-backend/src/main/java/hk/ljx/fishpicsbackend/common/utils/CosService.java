@@ -2,13 +2,14 @@ package hk.ljx.fishpicsbackend.common.utils;
 
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.lang.UUID;
+import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.json.JSONUtil;
 import com.qcloud.cos.COSClient;
 import com.qcloud.cos.model.*;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
+import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.dto.picture.PictureMessage;
 import hk.ljx.fishpicsbackend.entity.User;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -42,9 +43,6 @@ public class CosService {
 
     @Value("${cos.url}")
     private String url;
-
-    @Resource
-    private LoginUser loginUser;
 
     // ====================== 配置常量 ======================
     /**
@@ -103,7 +101,7 @@ public class CosService {
      * @param file 前端上传的文件
      * @return cos文件唯一key
      */
-    public String uploadPicture(MultipartFile file, HttpServletRequest request) {
+    public String uploadPicture(MultipartFile file) {
         // 1. 校验文件不能为空
         ExcUtils.throwIfTrue(file.isEmpty(), "上传文件不能为空");
 
@@ -130,7 +128,8 @@ public class CosService {
         String key = UPLOAD_PREFIX + System.currentTimeMillis() + "_" + uuidFileName;
 
         // 获取用户的等级对应上传大小
-        User user = loginUser.getLoginUser(request);
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         Integer level = user.getLevel();
         long size;
         switch (level) {
@@ -187,8 +186,8 @@ public class CosService {
      * @param file 图片文件
      * @return 图片 url
      */
-    public String uploadAndGetImageUrl(MultipartFile file, HttpServletRequest request) {
-        String key = uploadPicture(file, request);
+    public String uploadAndGetImageUrl(MultipartFile file) {
+        String key = uploadPicture(file);
         return getImageUrl(key);
     }
 

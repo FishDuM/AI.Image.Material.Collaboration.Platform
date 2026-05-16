@@ -9,8 +9,8 @@ public interface RedisConstants {
     // token类
     String LOGIN_CODE_KEY = "LOGIN_CODE";
     String REGISTER_CODE_KEY = "REGISTER_CODE";
-    String TOKEN_KEY = "TOKEN";
     String USER_ID_KEY = "USER_ID:";
+    String USER_MESSAGE_KEY = "USER_MESSAGE:";
 
     // 点赞类
     String LIKE_POST_KEY = "LIKE_POST";
@@ -25,8 +25,13 @@ public interface RedisConstants {
         return LOGIN_CODE_KEY + str;
     }
 
-    // 获取用户 id key
-    static String getUserIdKey(Long str) {
-        return USER_ID_KEY + str;
+    // 根据token获得用户id
+    static String getUserIdKey(String token) {
+        return USER_ID_KEY + token;
+    }
+
+    // 根据用户id获得用户信息
+    static String getUserInfoKey(Long userId) {
+        return USER_MESSAGE_KEY + userId;
     }
 }

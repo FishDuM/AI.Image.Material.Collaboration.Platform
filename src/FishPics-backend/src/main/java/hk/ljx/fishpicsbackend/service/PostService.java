@@ -11,7 +11,6 @@ import hk.ljx.fishpicsbackend.vo.picture.PictureListByEditPostVO;
 import hk.ljx.fishpicsbackend.vo.post.PostDetailVO;
 import hk.ljx.fishpicsbackend.vo.post.PostListVO;
 
-import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 
 /**
@@ -26,7 +25,7 @@ public interface PostService extends IService<Post> {
      *
      * @param uploadPostRequest 帖子内容
      */
-    void uploadPost(UploadPostRequest uploadPostRequest, HttpServletRequest request);
+    void uploadPost(UploadPostRequest uploadPostRequest);
 
     /**
      * 获取帖子详情
@@ -40,9 +39,8 @@ public interface PostService extends IService<Post> {
      * 编辑帖子
      *
      * @param editPostRequest 帖子内容
-     * @param request         request
      */
-    void editPost(EditPostRequest editPostRequest, HttpServletRequest request);
+    void editPost(EditPostRequest editPostRequest);
 
     /**
      * 判断是否是自己的图片并返回原图
@@ -81,36 +79,32 @@ public interface PostService extends IService<Post> {
      * 点赞帖子
      *
      * @param id      帖子id
-     * @param request request
      */
-    void likePost(Long id, HttpServletRequest request);
+    void likePost(Long id);
 
     /**
      * 获取本人发布的帖子列表（分页）
      *
      * @param pageRequest 分页参数
-     * @param request     request
      * @return 帖子列表
      */
-    IPage<PostListVO> getMyPosts(PageRequest pageRequest, HttpServletRequest request);
+    IPage<PostListVO> getMyPosts(PageRequest pageRequest);
 
     /**
      * 获取本人收藏的帖子列表（分页）
      *
      * @param pageRequest 分页参数
-     * @param request     request
      * @return 帖子列表
      */
-    IPage<PostListVO> getMyCollects(PageRequest pageRequest, HttpServletRequest request);
+    IPage<PostListVO> getMyCollects(PageRequest pageRequest);
 
     /**
      * 获取本人点赞的帖子列表（分页）
      *
      * @param pageRequest 分页参数
-     * @param request     request
      * @return 帖子列表
      */
-    IPage<PostListVO> getMyLikes(PageRequest pageRequest, HttpServletRequest request);
+    IPage<PostListVO> getMyLikes(PageRequest pageRequest);
 
     /**
      * 获取空间图片（去除帖子已有图片）
@@ -118,5 +112,5 @@ public interface PostService extends IService<Post> {
      * @param getPictureBySpaceRequest request
      * @return 图片列表
      */
-    List<PictureListByEditPostVO> getPictureList(GetPictureBySpaceRequest getPictureBySpaceRequest, HttpServletRequest request);
+    List<PictureListByEditPostVO> getPictureList(GetPictureBySpaceRequest getPictureBySpaceRequest);
 }
