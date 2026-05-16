@@ -4,6 +4,7 @@ import { AuthProvider } from './context/AuthContext.jsx'
 import GlobalLayout from './components/GlobalLayout'
 import ProtectedRoute from './components/ProtectedRoute'
 import { Spin } from 'antd'
+import './App.css'
 
 const HomePage = lazy(() => import('./pages/HomePage'))
 const NotFound = lazy(() => import('./pages/NotFound'))

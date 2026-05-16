@@ -7,7 +7,6 @@ import { AuthContext } from '../context/AuthContext.jsx'
 import { useAuthModal } from '../hooks/useAuthModal.js'
 import { LoginModal, RegisterModal } from '../components/shared/LoginModal.jsx'
 import SearchBar from '../components/shared/SearchBar.jsx'
-import '../App.css'
 
 function HomePage() {
   const { message } = AntApp.useApp()

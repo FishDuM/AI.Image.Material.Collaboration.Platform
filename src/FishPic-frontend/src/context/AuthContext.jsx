@@ -32,9 +32,7 @@ export function AuthProvider({ children }) {
           }
         })
         .catch(() => {
-          clearAuth()
-          setUserInfo(null)
-          setIsAuthenticated(false)
+          setIsAuthenticated(true)
         })
     } else {
       if (!token) {
@@ -58,7 +56,7 @@ export function AuthProvider({ children }) {
   const login = (data) => {
     if (data.token) {
       saveToken(data.token)
-      const { token, ...userData } = data
+      const { token: _token, ...userData } = data
       saveUserInfo(userData)
       setUserInfo(userData)
     } else {

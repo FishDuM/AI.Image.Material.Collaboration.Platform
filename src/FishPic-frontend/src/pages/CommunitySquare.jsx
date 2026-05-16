@@ -241,10 +241,10 @@ function CommunitySquare() {
 
   useEffect(() => {
     let lastScrollY = window.scrollY
+    const header = document.querySelector('.app-header')
     const handleScroll = () => {
       const currentScrollY = window.scrollY
       setShowBackToTop(currentScrollY > 100)
-      const header = document.querySelector('.app-header')
       if (!header) { lastScrollY = currentScrollY; return }
       if (currentScrollY > lastScrollY && currentScrollY > 80) {
         header.classList.add('header-hidden')
@@ -254,7 +254,12 @@ function CommunitySquare() {
       lastScrollY = currentScrollY
     }
     window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => window.removeEventListener('scroll', handleScroll)
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+      if (header) {
+        header.classList.remove('header-hidden')
+      }
+    }
   }, [])
 
   const handleSearch = () => {
