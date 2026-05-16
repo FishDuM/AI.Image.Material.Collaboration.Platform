@@ -34,15 +34,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.bind.annotation.RequestBody;
 
 import jakarta.annotation.Resource;
-import jakarta.servlet.http.HttpServletRequest;
+
 import java.io.ByteArrayOutputStream;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
 
-import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.*;
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.DEFAULT_NICK_NAME;
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.SALT;
 
@@ -229,7 +227,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     }
 
     @Override
-    public Boolean editUser(@RequestBody UserEditByAdminRequest userEditByAdminRequest) {
+    public Boolean editUser(UserEditByAdminRequest userEditByAdminRequest) {
         // 1. 必传校验
         Long id = userEditByAdminRequest.getId();
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), ExceptionCode.PARAMETER_ERROR, "用户ID不能为空");

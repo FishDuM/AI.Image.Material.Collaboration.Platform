@@ -9,9 +9,6 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import hk.ljx.fishpicsbackend.vo.user.UserLoginVO;
 import hk.ljx.fishpicsbackend.vo.user.UserMessageVO;
 
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-
 /**
 * @author 30574
 * 针对表【user(用户表)】的数据库操作Service

@@ -9,18 +9,12 @@ import hk.ljx.fishpicsbackend.enums.UserRoleEnum;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
-
-import jakarta.annotation.Resource;
 
 
 @Aspect
 @Component
 public class AuthInterceptor {
-
-    @Resource
-    private StringRedisTemplate stringRedisTemplate;
 
     /**
      * 执行拦截

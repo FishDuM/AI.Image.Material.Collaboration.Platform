@@ -16,6 +16,7 @@ import hk.ljx.fishpicsbackend.dto.user.*;
 import hk.ljx.fishpicsbackend.entity.User;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
 import hk.ljx.fishpicsbackend.service.UserService;
+import hk.ljx.fishpicsbackend.vo.user.AdminGetUserVO;
 import hk.ljx.fishpicsbackend.vo.user.CheckCodeVO;
 import hk.ljx.fishpicsbackend.vo.user.UserLoginVO;
 import hk.ljx.fishpicsbackend.vo.user.UserMessageVO;
@@ -82,7 +83,7 @@ public class UserController {
     }
 
     @GetMapping("/getUser")
-    public Response<UserLoginVO> getUser(HttpServletRequest request) {
+    public Response<UserLoginVO> getUser() {
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         UserLoginVO userLoginVO = new UserLoginVO();
@@ -108,12 +109,13 @@ public class UserController {
 
     @AuthCheck(role = ADMIN)
     @PostMapping("/admin/getUser")
-    public Response<User> adminGetUser(@RequestBody UserIdRequest userIdRequest) {
+    public Response<AdminGetUserVO> adminGetUser(@RequestBody UserIdRequest userIdRequest) {
         Long userId = userIdRequest.getUserId();
         ExcUtils.throwIfTrue(ObjectUtil.isNull(userId), ExceptionCode.PARAMETER_ERROR);
         User user = userMapper.selectById(userId);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user) || user.getId() == null, ExceptionCode.DATABASE_ERROR);
-        return ResUtils.success(user);
+        AdminGetUserVO adminGetUserVO = BeanUtil.copyProperties(user, AdminGetUserVO.class);
+        return ResUtils.success(adminGetUserVO);
     }
 
     @AuthCheck(role = ADMIN)
