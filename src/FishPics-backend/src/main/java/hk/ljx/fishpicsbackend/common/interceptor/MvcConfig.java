@@ -25,8 +25,12 @@ public class MvcConfig implements WebMvcConfigurer {
                         "/post/postList",
                         "/picture/list",
                         "/system/list",
-                        "/system/marquee"
-                ).order(1);
+                        "/system/marquee",
+                        "/doc.html",
+                        "/webjars/**",
+                        "/v3/api-docs/**",
+                        "/favicon.ico")
+                .order(1);
         // 刷新token有效期
         registry.addInterceptor(new RefreshTokenInterceptor(stringRedisTemplate)).order(0);
     }

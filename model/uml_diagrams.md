@@ -16,7 +16,7 @@
 #### 普通用户用例
 
 - 注册账户（图形验证码验证，账号6-11位，密码8-20位，确认密码一致）
-- 登录系统（图形验证码验证，Session认证）
+- 登录系统（图形验证码验证，Token认证）
 - 获取个人主页信息（查看我的发布/收藏/点赞）
 - 获取当前登录用户信息
 - 编辑个人信息（昵称5-11位，账号6-11位，密码8-20位）
@@ -76,12 +76,14 @@
 ### 1.4 权限控制
 
 - 管理员接口使用 `@AuthCheck(role = ADMIN)` 注解
-- 通过 `AuthInterceptor` 切面拦截进行权限校验
-- 基于 Spring Session + Redis 的用户认证机制
-- 用户登录后将userId通过 `request.getSession().setAttribute(TOKEN_KEY, userId)` 存储到Session中
-- 将User对象JSON序列化缓存到Redis（KEY: USER_ID:{userId}），Spring Session自动将会话数据持久化到Redis
-- `LoginUser` 工具类从Session获取userId，再从Redis读取User对象JSON并反序列化
-- 私有接口通过 `request.getSession().getAttribute(TOKEN_KEY)` 从Session中获取userId进行身份验证
+- 通过 `AuthInterceptor` AOP切面拦截进行权限校验
+- 基于 Token + Redis 的用户认证机制
+- 用户登录后生成UUID作为Token存入Redis（KEY: USER_ID:{token}，VALUE: userId）
+- 将User对象JSON序列化缓存到Redis（KEY: USER_ID:{userId}）
+- `RefreshTokenInterceptor`（order=0）从Authorization请求头读取Token，从Redis获取userId和User对象，存入UserHolder（ThreadLocal）
+- `LoginInterceptor`（order=1）从UserHolder获取User，校验是否为空
+- `UserHolder` 工具类基于ThreadLocal，跨层传递当前用户信息
+- AuthInterceptor通过 `UserHolder.getUser()` 获取用户进行角色校验
 
 ---
 
@@ -579,6 +581,7 @@
 | - email: String                          |
 | - phone: String                          |
 | - role: String                           |
+| - token: String (UUID登录凭证)           |
 +------------------------------------------+
 ```
 
@@ -823,7 +826,6 @@
 | extends IService<User>                   |
 +------------------------------------------+
 | + getCheckCode(redisKey, len, minute)    |
-| + getLoginUser(request)                  |
 | + userRegister(request, request)         |
 | + userLogin(request, request)            |
 | + newQueryWrapper(userQueryWrapper)      |
@@ -911,16 +913,50 @@
 +------------------------------------------+
 ```
 
-#### LoginUser 工具类
+#### UserHolder 工具类
 
 ```
 +------------------------------------------+
-|              LoginUser                   |
+|              UserHolder                  |
++------------------------------------------+
+| - USER_THREAD_LOCAL: ThreadLocal<User>   |
++------------------------------------------+
+| + setUser(User user): void               |
+| + getUser(): User                        |
+|   [从当前线程的ThreadLocal获取用户]      |
+| + remove(): void                         |
+|   [清除当前线程的ThreadLocal]            |
++------------------------------------------+
+```
+
+#### 拦截器类
+
+```
++------------------------------------------+
+|       RefreshTokenInterceptor            |
 +------------------------------------------+
 | - stringRedisTemplate: StringRedisTemplate|
 +------------------------------------------+
-| + getLoginUser(request): User            |
-|   [从Session获取userId，从Redis读取User] |
+| + preHandle(request, response): boolean  |
+|   [order=0，从Authorization头读取Token]  |
+|   [从Redis获取userId和User对象]          |
+|   [将User存入UserHolder，刷新Token有效期]|
++------------------------------------------+
+
++------------------------------------------+
+|         LoginInterceptor                 |
++------------------------------------------+
+| + preHandle(request, response): boolean  |
+|   [order=1，从UserHolder获取User]        |
+|   [为空则返回401未登录，不为空则放行]    |
++------------------------------------------+
+
++------------------------------------------+
+|            MvcConfig                     |
+|   implements WebMvcConfigurer            |
++------------------------------------------+
+| + addInterceptors(registry): void        |
+|   [注册两个拦截器并设置排除路径]         |
 +------------------------------------------+
 ```
 
@@ -990,14 +1026,14 @@
 - UserServiceImpl → UserPostCollectMapper (服务实现依赖收藏数据访问)
 - UserServiceImpl → UserPostLikesMapper (服务实现依赖点赞数据访问)
 - UserServiceImpl → StringRedisTemplate (服务实现依赖Redis)
-- UserServiceImpl → LoginUser (服务实现依赖登录用户工具)
+- UserServiceImpl → UserHolder (服务实现依赖ThreadLocal工具获取当前用户)
 - PostServiceImpl → PictureService (帖子服务依赖图片服务)
 - PostServiceImpl → PictureChildService (帖子服务依赖子图片关联服务)
 - PostServiceImpl → UserPostLikesService (帖子服务依赖点赞服务)
 - PictureServiceImpl → CosService (图片服务依赖COS存储)
 - PictureServiceImpl → SpaceMapper (图片服务依赖空间数据访问)
-- AuthInterceptor → HttpSession (拦截器依赖Session获取用户信息)
-- LoginUser → StringRedisTemplate (登录用户工具依赖Redis读取用户信息)
+- AuthInterceptor → UserHolder (拦截器通过UserHolder获取用户信息)
+- RefreshTokenInterceptor → StringRedisTemplate (Token拦截器依赖Redis读取用户信息)
 
 #### 实现关系 (Realization)
 
@@ -1080,12 +1116,13 @@ UserService -> Hutool DigestUtil: MD5加密密码(加盐: fish)
 UserService -> UserMapper: selectOne(username, password)
 UserMapper -> MySQL: SELECT * FROM user WHERE username=? AND password=?
 MySQL --> UserMapper: 返回用户数据
-UserService -> HttpSession: setAttribute(TOKEN_KEY, userId)
+UserService -> UserService: 生成UUID Token
+UserService -> Redis: set(USER_ID:{token}, userId)
 UserService -> Redis: set(USER_ID:{userId}, UserJSON)
 UserService -> BeanUtil: copyProperties(user, UserLoginVO)
-UserService --> 后端: Response<UserLoginVO>
-后端 --> 前端: Response<UserLoginVO>
-前端 -> localStorage: 保存用户信息
+UserService --> 后端: Response<UserLoginVO> (含token字段)
+后端 --> 前端: Response<UserLoginVO> (含token字段)
+前端 -> localStorage: 保存Token和用户信息
 前端 --> 用户: 显示登录成功并跳转
 ```
 
@@ -1094,15 +1131,10 @@ UserService --> 后端: Response<UserLoginVO>
 ```
 用户 -> 前端: 访问个人主页
 前端 -> 后端(UserController): GET /user/myself
+[RefreshTokenInterceptor已从Authorization头读取Token，从Redis获取User并存入UserHolder]
 后端 -> UserService: getMyselfMessage(request)
-UserService -> LoginUser: getLoginUser(request) [从Session获取userId，从Redis获取User]
-LoginUser -> HttpSession: getAttribute(TOKEN_KEY)
-HttpSession --> LoginUser: 返回userId
-LoginUser -> Redis: get(USER_ID:{userId})
-Redis --> LoginUser: 返回UserJSON
-LoginUser -> JSONUtil: toBean(UserJSON, User.class)
-JSONUtil --> LoginUser: 返回User对象
-LoginUser --> UserService: 返回User对象
+UserService -> UserHolder: getUser() [从ThreadLocal获取当前用户]
+UserHolder --> UserService: 返回User对象
 UserService -> PostMapper: selectList(user_id=userId) [获取我的发布]
 PostMapper -> MySQL: SELECT * FROM post WHERE user_id=?
 MySQL --> PostMapper: 返回帖子列表
@@ -1118,7 +1150,7 @@ MySQL --> UserPostLikesMapper: 返回点赞记录
 UserService -> PostMapper: selectList(id IN likeIds) [获取点赞帖子]
 PostMapper -> MySQL: SELECT * FROM post WHERE id IN (?)
 MySQL --> PostMapper: 返回点赞帖子列表
-UserService -> BeanUtil: copyProperties(loginUser, UserMessageVO)
+UserService -> BeanUtil: copyProperties(user, UserMessageVO)
 UserService --> 后端: UserMessageVO (含帖子列表/收藏列表/点赞列表)
 后端 --> 前端: Response<UserMessageVO>
 前端 --> 用户: 渲染个人主页
@@ -1129,15 +1161,9 @@ UserService --> 后端: UserMessageVO (含帖子列表/收藏列表/点赞列表
 ```
 用户 -> 前端: 请求当前用户信息
 前端 -> 后端(UserController): GET /user/getUser
-后端 -> UserService: getLoginUser(request)
-UserService -> LoginUser: getLoginUser(request)
-LoginUser -> HttpSession: getAttribute(TOKEN_KEY)
-HttpSession --> LoginUser: 返回userId
-LoginUser -> Redis: get(USER_ID:{userId})
-Redis --> LoginUser: 返回UserJSON (命中)
-LoginUser -> JSONUtil: toBean(UserJSON, User.class)
-JSONUtil --> LoginUser: 返回User对象
-LoginUser --> UserService: 返回User对象
+[RefreshTokenInterceptor已从Authorization头读取Token，从Redis获取User并存入UserHolder]
+后端 -> UserHolder: getUser()
+UserHolder --> 后端: 返回User对象
 后端 -> BeanUtil: copyProperties(user, UserLoginVO)
 后端 --> 前端: Response<UserLoginVO>
 前端 --> 用户: 显示用户信息
@@ -1149,13 +1175,10 @@ LoginUser --> UserService: 返回User对象
 用户 -> 前端: 填写帖子内容并上传图片
 前端 -> 后端(PictureController): POST /picture/upload (MultipartFile)
 PictureController: 校验文件非空
+[RefreshTokenInterceptor已从Authorization头读取Token，从Redis获取User并存入UserHolder]
 PictureController -> PictureService: uploadPicture(file, request)
-PictureService -> LoginUser: getLoginUser(request) [获取当前用户]
-LoginUser -> HttpSession: getAttribute(TOKEN_KEY)
-HttpSession --> LoginUser: 返回userId
-LoginUser -> Redis: get(USER_ID:{userId})
-Redis --> LoginUser: 返回UserJSON
-LoginUser --> PictureService: 返回User对象
+PictureService -> UserHolder: getUser() [获取当前用户]
+UserHolder --> PictureService: 返回User对象
 PictureService: 根据用户等级限制文件大小(普通3MB/VIP 5MB/SVIP 20MB)
 PictureService -> CosService: 上传文件到腾讯云COS
 CosService --> PictureService: 返回图片URL
@@ -1175,8 +1198,8 @@ PictureService --> 前端: Response<PicturePostVO> (url + pictureId)
 用户 -> 前端: 提交帖子(含图片ID列表)
 前端 -> 后端(PostController): POST /post/post (UploadPostRequest)
 PostController -> PostService: uploadPost(uploadPostRequest, request)
-PostService -> LoginUser: getLoginUser(request) [获取当前用户]
-LoginUser --> PostService: 返回User对象
+PostService -> UserHolder: getUser() [获取当前用户]
+UserHolder --> PostService: 返回User对象
 PostService: 校验图片(最多15张)、标题、内容、封面
 PostService -> PostService: isMyPicture(userId, imageIds) [验证图片归属]
 PostService -> PostMapper: INSERT INTO post (userId, title, content, cover, isPrivate)
@@ -1237,13 +1260,10 @@ PostService --> 后端: Response<PostDetailVO>
 ```
 用户 -> 前端: 点击点赞按钮
 前端 -> 后端(PostController): POST /post/like?id=xxx
+[RefreshTokenInterceptor已从Authorization头读取Token，从Redis获取User并存入UserHolder]
 PostController -> PostService: likePost(id, request)
-PostService -> LoginUser: getLoginUser(request) [获取当前用户]
-LoginUser -> HttpSession: getAttribute(TOKEN_KEY)
-HttpSession --> LoginUser: 返回userId
-LoginUser -> Redis: get(USER_ID:{userId})
-Redis --> LoginUser: 返回UserJSON
-LoginUser --> PostService: 返回User对象
+PostService -> UserHolder: getUser() [获取当前用户]
+UserHolder --> PostService: 返回User对象
 PostService -> Redisson: getLock(LIKE_POST + postId) [获取分布式锁]
 Redisson --> PostService: 返回RLock对象
 PostService -> RLock: tryLock(10秒超时) [尝试获取锁]
@@ -1270,13 +1290,10 @@ PostService --> 后端: Response<Boolean>
 用户 -> 前端: 选择图片作为头像
 前端 -> 后端(PictureController): POST /picture/avatar (MultipartFile + id)
 PictureController: 校验文件非空、文件大小(<=5MB)、用户ID非空
+[RefreshTokenInterceptor已从Authorization头读取Token，从Redis获取User并存入UserHolder]
 PictureController -> PictureService: uploadAvatar(file, id, request)
-PictureService -> LoginUser: getLoginUser(request) [权限校验]
-LoginUser -> HttpSession: getAttribute(TOKEN_KEY)
-HttpSession --> LoginUser: 返回userId
-LoginUser -> Redis: get(USER_ID:{userId})
-Redis --> LoginUser: 返回UserJSON
-LoginUser --> PictureService: 返回User对象
+PictureService -> UserHolder: getUser() [权限校验]
+UserHolder --> PictureService: 返回User对象
 PictureService -> UserService: isMe(id, request) [只能修改自己头像, 管理员除外]
 PictureService -> CosService: 上传文件到腾讯云COS
 CosService --> PictureService: 返回图片URL
@@ -1293,13 +1310,10 @@ PictureService --> 后端: Response<String> (新头像URL)
 ```
 用户 -> 前端: 填写编辑表单
 前端 -> 后端(UserController): POST /user/editUser (UserEditRequest)
+[RefreshTokenInterceptor已从Authorization头读取Token，从Redis获取User并存入UserHolder]
 后端 -> UserService: editMyself(userEditRequest, request)
-UserService -> LoginUser: getLoginUser(request) [获取登录用户]
-LoginUser -> HttpSession: getAttribute(TOKEN_KEY)
-HttpSession --> LoginUser: 返回userId
-LoginUser -> Redis: get(USER_ID:{userId})
-Redis --> LoginUser: 返回UserJSON
-LoginUser --> UserService: 返回User对象
+UserService -> UserHolder: getUser() [获取登录用户]
+UserHolder --> UserService: 返回User对象
 UserService -> UserService: isMe(id, request) [校验是否是自己的信息]
 UserService -> UserService: 校验昵称长度(5-11位)
 UserService -> UserService: 校验账号长度(6-11位)
@@ -1322,13 +1336,11 @@ UserService --> 后端: Response<Boolean>
 ```
 管理员 -> 前端: 访问用户管理页面
 前端 -> 后端(UserController): POST /user/admin/userList (UserQueryWrapper)
+[RefreshTokenInterceptor已从Authorization头读取Token，从Redis获取User并存入UserHolder]
+[LoginInterceptor已校验UserHolder不为空]
 后端 -> AuthInterceptor: @AuthCheck(role=ADMIN) [权限校验]
-AuthInterceptor -> LoginUser: getLoginUser(request)
-LoginUser -> HttpSession: getAttribute(TOKEN_KEY)
-HttpSession --> LoginUser: 返回userId
-LoginUser -> Redis: get(USER_ID:{userId})
-Redis --> LoginUser: 返回UserJSON
-LoginUser --> AuthInterceptor: 返回User对象
+AuthInterceptor -> UserHolder: getUser()
+UserHolder --> AuthInterceptor: 返回User对象
 AuthInterceptor -> AuthInterceptor: 校验用户角色是否为admin
 AuthInterceptor -> 后端: 权限通过
 后端 -> UserService: getUserList(userQueryWrapper, current, pageSize)
@@ -1347,13 +1359,11 @@ UserService --> 后端: 返回分页结果
 ```
 管理员 -> 前端: 点击封禁/解封按钮
 前端 -> 后端(UserController): POST /user/admin/setStatus (UserIdRequest)
+[RefreshTokenInterceptor已从Authorization头读取Token，从Redis获取User并存入UserHolder]
+[LoginInterceptor已校验UserHolder不为空]
 后端 -> AuthInterceptor: @AuthCheck(role=ADMIN) [权限校验]
-AuthInterceptor -> LoginUser: getLoginUser(request)
-LoginUser -> HttpSession: getAttribute(TOKEN_KEY)
-HttpSession --> LoginUser: 返回userId
-LoginUser -> Redis: get(USER_ID:{userId})
-Redis --> LoginUser: 返回UserJSON
-LoginUser --> AuthInterceptor: 返回User对象
+AuthInterceptor -> UserHolder: getUser()
+UserHolder --> AuthInterceptor: 返回User对象
 AuthInterceptor -> AuthInterceptor: 校验用户角色是否为admin
 AuthInterceptor -> 后端: 权限通过
 后端 -> UserService: setStatus(userId)
@@ -1376,13 +1386,11 @@ UserService --> 后端: Response<Boolean>
 ```
 管理员 -> 前端: 填写编辑表单
 前端 -> 后端(UserController): POST /user/admin/editUser (UserEditByAdminRequest)
+[RefreshTokenInterceptor已从Authorization头读取Token，从Redis获取User并存入UserHolder]
+[LoginInterceptor已校验UserHolder不为空]
 后端 -> AuthInterceptor: @AuthCheck(role=ADMIN) [权限校验]
-AuthInterceptor -> LoginUser: getLoginUser(request)
-LoginUser -> HttpSession: getAttribute(TOKEN_KEY)
-HttpSession --> LoginUser: 返回userId
-LoginUser -> Redis: get(USER_ID:{userId})
-Redis --> LoginUser: 返回UserJSON
-LoginUser --> AuthInterceptor: 返回User对象
+AuthInterceptor -> UserHolder: getUser()
+UserHolder --> AuthInterceptor: 返回User对象
 AuthInterceptor -> AuthInterceptor: 校验用户角色是否为admin
 AuthInterceptor -> 后端: 权限通过
 后端 -> UserService: editUser(userEditByAdminRequest)
@@ -1438,9 +1446,11 @@ PicSystemService --> 后端: Response<List<String>>
 ```
 管理员 -> 前端: 输入新标签并提交
 前端 -> 后端(SystemController): POST /system/addList (AddSysPicType)
+[RefreshTokenInterceptor已从Authorization头读取Token，从Redis获取User并存入UserHolder]
+[LoginInterceptor已校验UserHolder不为空]
 后端 -> AuthInterceptor: @AuthCheck(role=ADMIN) [权限校验]
-AuthInterceptor -> LoginUser: getLoginUser(request)
-LoginUser -> AuthInterceptor: 返回User对象
+AuthInterceptor -> UserHolder: getUser()
+UserHolder --> AuthInterceptor: 返回User对象
 AuthInterceptor -> 后端: 权限通过
 SystemController -> PicSystemService: addTypeList(addSysPicType)
 PicSystemService -> Redis: get(type_list_key)
@@ -1459,9 +1469,10 @@ PicSystemService --> 后端: Response<Boolean>
 ```
 用户 -> 前端: 填写空间信息并提交
 前端 -> 后端(SpaceController): POST /space/create (CreateSpace)
+[RefreshTokenInterceptor已从Authorization头读取Token，从Redis获取User并存入UserHolder]
 后端 -> AuthInterceptor: @AuthCheck [权限校验(私人空间需登录, 团队空间需管理员)]
-AuthInterceptor -> LoginUser: getLoginUser(request)
-LoginUser -> AuthInterceptor: 返回User对象
+AuthInterceptor -> UserHolder: getUser()
+UserHolder --> AuthInterceptor: 返回User对象
 AuthInterceptor -> 后端: 权限通过
 SpaceController -> SpaceService: createSpace(createSpace, user)
 SpaceService -> 判断空间类型:
@@ -1497,9 +1508,11 @@ PictureService --> 后端: Response<IPage<PictureListVO>>
 ```
 管理员 -> 前端: 选择图片并操作（通过/拒绝/精选）
 前端 -> 后端(PictureController): POST /picture/admin/review?pictureId=xxx&status=1&selected=false
+[RefreshTokenInterceptor已从Authorization头读取Token，从Redis获取User并存入UserHolder]
+[LoginInterceptor已校验UserHolder不为空]
 后端 -> AuthInterceptor: @AuthCheck(role=ADMIN) [权限校验]
-AuthInterceptor -> LoginUser: getLoginUser(request)
-LoginUser -> AuthInterceptor: 返回User对象
+AuthInterceptor -> UserHolder: getUser()
+UserHolder --> AuthInterceptor: 返回User对象
 AuthInterceptor -> 后端: 权限通过
 PictureController -> PictureService: reviewPicture(pictureId, status, selected)
 PictureService -> PictureMapper: selectById(pictureId)
@@ -1536,13 +1549,13 @@ PictureService --> 后端: Response<Boolean>
 [正常/禁用/待审核] --(删除操作)--> [逻辑删除(isDelete=1)]
 ```
 
-### 4.3 Spring Session状态图
+### 4.3 Token认证状态图
 
 ```
-[未登录] --(登录成功)--> [已登录(Spring Session存储用户, Redis持久化)]
-[已登录] --(Spring Session过期)--> [需重新登录]
-[已登录] --(退出登录, 使Session失效)--> [未登录]
-[已登录] --(Session失效)--> [未登录]
+[未登录] --(登录成功, 后端生成UUID Token存入Redis, 前端存储Token)--> [已登录(Token有效)]
+[已登录] --(Token过期, Redis中Token被清除)--> [需重新登录]
+[已登录] --(退出登录, 前端清除Token, 后端删除Redis Token)--> [未登录]
+[已登录] --(Token失效, 前端主动清除Token)--> [未登录]
 ```
 
 ### 4.4 帖子隐私状态图
@@ -1666,8 +1679,8 @@ PictureService --> 后端: Response<Boolean>
 - **Spring Boot 2.7.6**: Web框架
 - **MyBatis-Plus 3.5.15**: ORM框架 + 分页插件
 - **MySQL 8+**: 关系型数据库
-- **Redis**: 缓存服务 (验证码、Session存储、用户信息缓存、系统配置缓存)
-- **Spring Session + Redis**: Session管理（Session中仅存userId，User缓存在Redis）
+- **Redis**: 缓存服务 (验证码、Token存储、用户信息缓存、系统配置缓存)
+- **Token + Redis 认证**: RefreshTokenInterceptor + LoginInterceptor 双拦截器链，UserHolder ThreadLocal工具
 - **Redisson 3.24.3**: Redis分布式锁
 - **腾讯云COS 5.6.227**: 对象存储服务 (图片存储)
 - **Hutool 5.8.38**: 工具库 (加密、验证码、JSON、Bean拷贝)
@@ -1693,7 +1706,6 @@ PictureService --> 后端: Response<Boolean>
 - **UserPostCollectService/Impl**: 帖子收藏业务
 - **UserPostLikesService/Impl**: 帖子点赞业务
 - **UserFansService/Impl**: 粉丝业务逻辑
-- **LoginUser**: 登录用户获取工具（Session + Redis）
 - **CosService**: 腾讯云COS对象存储服务
 
 #### Mapper 层
@@ -1739,12 +1751,13 @@ PictureService --> 后端: Response<Boolean>
 #### 公共组件
 
 - **common/annotation**: AuthCheck (权限校验注解)
-- **common/aop**: AuthInterceptor (权限拦截器)
-- **common/config**: COSConfig, CorsConfig, JsonConfig, MybatisPlusConfig, SessionRedisConfig
+- **common/aop**: AuthInterceptor (权限拦截器，通过UserHolder获取用户)
+- **common/interceptor**: RefreshTokenInterceptor (Token刷新拦截器), LoginInterceptor (登录拦截器), MvcConfig (MVC配置)
+- **common/config**: COSConfig, CorsConfig, JsonConfig, MybatisPlusConfig
 - **common/constants**: RedisConstants, SpaceConstants, SysConstants, UserConstants
 - **common/exception**: BaseException, ExceptionCode, ExcUtils, GlobalExceptionHandler
 - **common/response**: Response, ResUtils
-- **common/utils**: LimitedInputStream (受限输入流)
+- **common/utils**: LimitedInputStream (受限输入流), UserHolder (ThreadLocal用户持有工具)
 
 #### 枚举类
 
@@ -1754,22 +1767,26 @@ PictureService --> 后端: Response<Boolean>
 
 ```
 前端(React 19 + Ant Design 6)
-  ↓ HTTP请求 (Axios, 携带Cookie/Session)
+  ↓ HTTP请求 (Axios, 携带Authorization Token请求头)
 Vite Dev Server (开发模式)
   ↓ 代理配置 (/api)
 Spring Boot (FishPics-backend)
   ├── 控制器层 (UserController, PostController, PictureController, SpaceController, SystemController)
   │     ↓ 依赖
+  ├── 拦截器链 (RefreshTokenInterceptor[order=0] → LoginInterceptor[order=1])
+  │     ├── 从Authorization头读取Token
+  │     ├── 从Redis获取userId和User对象
+  │     └── 将User存入UserHolder (ThreadLocal)
   ├── 服务层 (UserService/Impl, PostService/Impl, PictureService/Impl, SpaceService/Impl, PicSystemService/Impl等)
-  │     ├── 依赖 Redis (验证码/Session存储/用户信息缓存/系统配置缓存)
-  │     ├── 依赖 LoginUser (从Session获取userId，从Redis获取User)
+  │     ├── 依赖 Redis (验证码/Token存储/用户信息缓存/系统配置缓存)
+  │     ├── 依赖 UserHolder (ThreadLocal获取当前用户)
   │     ├── 依赖 Hutool (工具类)
   │     ├── 依赖 CosService (图片存储)
   │     └── 依赖
   ├── 数据访问层 (MyBatis-Plus Mapper)
   │     ↓ 依赖
   ├── MySQL数据库 (FishPics, 10张表)
-  ├── Redis缓存服务器 (192.168.163.101:6379, Session存储+业务缓存)
+  ├── Redis缓存服务器 (192.168.163.101:6379, Token存储+业务缓存)
   ├── Redisson (分布式锁)
   └── 腾讯云COS (对象存储服务)
 ```
@@ -1787,20 +1804,20 @@ Spring Boot (FishPics-backend)
 | **后端API服务**    | Spring Boot 2.7.6            | localhost:8080       |
 | **API上下文路径**  | 接口路径前缀                 | /api                 |
 | **数据库服务器**   | MySQL 8+                     | localhost:3306       |
-| **缓存服务器**     | Redis (Session存储+业务缓存) | 192.168.163.101:6379 |
+| **缓存服务器**     | Redis (Token存储+业务缓存) | 192.168.163.101:6379 |
 | **对象存储**       | 腾讯云COS                    | 云端服务             |
 
 ### 6.2 网络连接
 
 ```
 客户端 (浏览器)
-  ↓ HTTP/HTTPS (携带Spring Session Cookie: SESSION)
+  ↓ HTTP/HTTPS (携带Authorization Token请求头)
 Vite Dev Server (localhost:5173)
   ↓ 代理配置 /api -> localhost:8080/api
 Spring Boot (localhost:8080/api)
   ├── ↓ JDBC (MySQL协议)
   │   MySQL (localhost:3306 / FishPics数据库)
-  ├── ↓ Redis协议 (Spring Session存储/验证码/业务缓存)
+  ├── ↓ Redis协议 (Token存储/验证码/业务缓存)
   │   Redis (192.168.163.101:6379)
   └── ↓ HTTPS (腾讯云COS SDK)
       腾讯云COS (云端对象存储)
@@ -1813,7 +1830,7 @@ Spring Boot (localhost:8080/api)
 | 前端开发服务器 | 5173      | HTTP                              |
 | 后端API服务    | 8080      | HTTP                              |
 | MySQL          | 3306      | TCP (JDBC)                        |
-| Redis          | 6379      | TCP (Redis Protocol, Session存储) |
+| Redis          | 6379      | TCP (Redis Protocol, Token存储) |
 | 腾讯云COS      | 云端HTTPS | HTTPS                             |
 
 ---
@@ -1885,15 +1902,17 @@ POST /user/login
   ↓
 查询用户表(MySQL: username+password)
   ↓ [找到匹配记录]
-将userId存储到HttpSession
+生成UUID Token
+  ↓
+将Token存入Redis (KEY: USER_ID:{token})
   ↓
 将User JSON存储到Redis (KEY: USER_ID:{userId})
   ↓
-封装UserLoginVO(不含token)
+封装UserLoginVO(含token字段)
   ↓
 返回登录成功
   ↓
-前端保存用户信息到localStorage
+前端保存Token和用户信息到localStorage
   ↓
 登录成功
   ↓
@@ -1909,11 +1928,13 @@ POST /user/login
   ↓
 GET /user/myself
   ↓
-从HttpSession获取userId (TOKEN_KEY)
+RefreshTokenInterceptor从Authorization头读取Token
   ↓
-根据userId从Redis获取User JSON (KEY: USER_ID:{userId})
+从Redis获取userId (KEY: USER_ID:{token})
+  ↓
+从Redis获取User JSON (KEY: USER_ID:{userId})
   ↓ [Redis命中]
-反序列化为User对象
+反序列化为User对象存入UserHolder (ThreadLocal)
   ↓ [找到用户]
 查询我的帖子列表(MySQL: user_id)
   ↓
@@ -1952,7 +1973,7 @@ POST /picture/post (multipart/form-data)
   ↓
 后端校验文件非空、大小(<=5MB)
   ↓ [通过]
-从HttpSession获取userId，再从Redis获取User对象 (LoginUser)
+RefreshTokenInterceptor从Authorization头读取Token，从Redis获取User对象存入UserHolder
   ↓
 上传图片到腾讯云COS
   ↓ [成功]
@@ -1969,7 +1990,7 @@ POST /post/post (UploadPostRequest)
   ↓
 后端校验参数非空
   ↓ [通过]
-从HttpSession获取userId，再从Redis获取User对象 (LoginUser)
+从UserHolder获取User对象 (通过ThreadLocal)
   ↓
 插入帖子记录到MySQL(userId, title, content, cover, isPrivate)
   ↓
@@ -2022,7 +2043,7 @@ POST /post/postList (PostQueryRequest)
   ↓
 POST /post/like?id=xxx
   ↓
-从HttpSession获取userId，再从Redis获取User对象 (LoginUser)
+从UserHolder获取User对象 (通过ThreadLocal)
   ↓
 查询是否已点赞(userId + postId)
   ↓
@@ -2049,9 +2070,9 @@ POST /post/like?id=xxx
   ↓
 验证管理员权限(role=admin)
   ↓ [通过 @AuthCheck]
-AuthInterceptor从HttpSession获取userId，从Redis获取User对象 (LoginUser)
-  ↓
-校验用户角色是否为admin
+RefreshTokenInterceptor从Authorization头读取Token → Redis获取User → 存入UserHolder
+LoginInterceptor从UserHolder获取User校验不为空
+AuthInterceptor从UserHolder获取User校验角色是否为admin
   ↓ [通过]
 加载用户管理页面
   ↓
@@ -2108,13 +2129,16 @@ hk.ljx.fishpicsbackend
 │   ├── annotation (注解)
 │   │   └── AuthCheck.java (权限校验注解, role属性)
 │   ├── aop (切面)
-│   │   └── AuthInterceptor.java (权限拦截器, 从Session获取userId + 从Redis获取User + 校验角色)
+│   │   └── AuthInterceptor.java (权限拦截器, 通过UserHolder获取User + 校验角色)
 │   ├── config (配置)
 │   │   ├── COSConfig.java (腾讯云COS配置)
-│   │   ├── CorsConfig.java (跨域配置, 允许前端请求)
+│   │   ├── CorsConfig.java (跨域配置)
 │   │   ├── JsonConfig.java (JSON序列化配置)
-│   │   ├── MybatisPlusConfig.java (MyBatis分页插件配置)
-│   │   └── SessionRedisConfig.java (Session存储到Redis配置)
+│   │   └── MybatisPlusConfig.java (MyBatis分页插件配置)
+│   ├── interceptor (Token认证拦截器)
+│   │   ├── MvcConfig.java (Web MVC配置，注册拦截器并设置排除路径)
+│   │   ├── RefreshTokenInterceptor.java (Token刷新拦截器，order=0)
+│   │   └── LoginInterceptor.java (登录拦截器，order=1)
 │   ├── constants (常量)
 │   │   ├── RedisConstants.java (Redis键常量: LOGIN_CODE_KEY, REGISTER_CODE_KEY, TOKEN_KEY, USER_ID, LIKE_POST)
 │   │   ├── SpaceConstants.java (空间常量: PRIVATE_SIZE=512MB, TEAM_SIZE=5GB, PRIVATE/TEAM级别)
@@ -2129,7 +2153,8 @@ hk.ljx.fishpicsbackend
 │   │   ├── ResUtils.java (响应工具类: success/error等)
 │   │   └── Response.java (响应封装类: code, message, data)
 │   └── utils (工具类)
-│       └── LimitedInputStream.java (限制输入流)
+│       ├── LimitedInputStream.java (限制输入流)
+│       └── UserHolder.java (ThreadLocal用户持有工具)
 ├── controller (控制器)
 │   ├── UserController.java (用户控制器, 11个接口)
 │   ├── PostController.java (帖子控制器, 5个接口)
@@ -2190,7 +2215,6 @@ hk.ljx.fishpicsbackend
 ├── service (业务逻辑层)
 │   ├── CommentService.java
 │   ├── CosService.java
-│   ├── LoginUser.java (登录用户获取工具)
 │   ├── PictureService.java
 │   ├── PictureChildService.java
 │   ├── PostService.java
@@ -2306,7 +2330,9 @@ src/
   ├── mapper → entity (数据访问使用实体类)
   │     └── mapper → database (MyBatis映射)
   ├── common/aop → controller (切面拦截控制器)
-  │     └── aop → HttpSession (从Session获取用户信息)
+  │     └── aop → UserHolder (通过ThreadLocal获取用户信息)
+  ├── common/interceptor → controller (拦截器链预处理器控制器请求)
+  │     └── interceptor → Redis (从Redis读取Token和用户信息)
   └── common/exception → 全局 (异常处理)
 ```
 
@@ -2591,7 +2617,7 @@ PicSystem (独立配置表, syskey=sysvalue 存储系统配置)
 | **Strategy模式**                | QueryWrapper动态查询    | 根据不同条件构建不同查询                   |
 | **Builder模式**                 | DTO/VO对象              | Lombok @Builder注解                        |
 | **Template模式**                | 帖子发布流程            | 先上传图片，再提交帖子，最后关联图片与帖子 |
-| **Facade模式**                  | LoginUser工具类         | 封装Session+Redis获取当前用户的复杂过程    |
+| **Facade模式**                  | UserHolder工具类         | 封装通过ThreadLocal获取当前用户的复杂过程    |
 | **Cache-Aside模式**             | 系统配置缓存(Redis)     | 先查Redis缓存，未命中再查数据库并更新缓存  |
 
 ### 11.2 模式优势
@@ -2617,7 +2643,7 @@ PicSystem (独立配置表, syskey=sysvalue 存储系统配置)
 | **数据库索引**        | userId、username、nickname、title、space_id等建立索引       | 加速查询和唯一性校验                      |
 | **按需加载**          | 前端按需渲染组件                                            | 提升首屏加载速度                          |
 | **响应式设计**        | Ant Design移动端适配                                        | 多设备兼容                                |
-| **Session+Redis认证** | Session存储userId + Redis存储User JSON                      | 仅需一次Redis查询获取用户，支持分布式部署 |
+| **Token+Redis认证** | Token存储userId + Redis存储User JSON | 通过Authorization请求头传递Token，支持分布式部署 |
 | **对象存储(COS)**     | 腾讯云COS存储图片，CDN加速访问                              | 降低服务器压力，提高图片加载速度          |
 | **瀑布流布局**        | Ant Design Masonry组件                                      | 优化帖子展示性能，懒加载                  |
 | **分布式锁**          | Redisson分布式锁                                            | 防止并发操作冲突                          |
@@ -2629,10 +2655,10 @@ PicSystem (独立配置表, syskey=sysvalue 存储系统配置)
 | **输入验证**     | 前后端双重参数校验                    | 防止非法输入                         |
 | **SQL注入防护**  | MyBatis-Plus参数化查询                | 防止SQL注入攻击                      |
 | **XSS防护**      | React自动转义                         | 防止跨站脚本攻击                     |
-| **CSRF防护**     | 跨域CORS配置 + Session认证            | 防止跨站请求伪造                     |
+| **CSRF防护**     | 跨域CORS配置 + Token认证            | 防止跨站请求伪造                     |
 | **密码加密**     | MD5 + 盐值(fish)                      | 防止密码明文泄露                     |
 | **验证码防护**   | 图形验证码(Hutool CircleCaptcha)      | 防暴力破解和机器注册                 |
-| **Session认证**  | Spring Session + Redis存储            | 有状态认证，支持分布式部署，易于失效 |
+| **Token认证**    | UUID Token + Redis存储                | 无状态认证，支持分布式部署，易于失效 |
 | **权限控制**     | @AuthCheck注解 + AuthInterceptor AOP  | 基于角色的访问控制                   |
 | **逻辑删除**     | @TableLogic注解                       | 数据安全保护，可恢复                 |
 | **CORS配置**     | CorsConfig允许跨域                    | 前后端分离安全通信                   |
@@ -2649,8 +2675,8 @@ PicSystem (独立配置表, syskey=sysvalue 存储系统配置)
 | ----------------- | ------------------------- | ----------------- |
 | LOGIN_CODE_KEY    | 登录验证码                | 5分钟             |
 | REGISTER_CODE_KEY | 注册验证码                | 5分钟             |
-| TOKEN_KEY         | Session中存储userId的键   | 由Session配置决定 |
-| USER_ID           | Redis中存储User对象的前缀 | 由Session配置决定 |
+| TOKEN_KEY         | Authorization头中Token的键名 | -                 |
+| USER_ID           | Redis中存储User对象和Token的前缀 | -                 |
 | LIKE_POST         | 帖子点赞状态缓存前缀      | 临时缓存          |
 
 #### 用户常量 (UserConstants)
@@ -2716,17 +2742,17 @@ PicSystem (独立配置表, syskey=sysvalue 存储系统配置)
 - 管理员可以修改任意用户头像
 - 头像上传到腾讯云COS存储
 
-#### Session认证规则 (Spring Session + Redis + LoginUser)
+#### Token认证规则 (Token + Redis + UserHolder)
 
-- 登录成功后通过 `request.getSession().setAttribute(TOKEN_KEY, userId)` 将userId存储到Session中
-- 同时通过 `Redis.set(USER_ID:{userId}, userJson)` 将User对象缓存到Redis中
-- Spring Session自动将会话数据持久化到Redis (配置: `spring.session.store-type=redis`)
-- 通过 `LoginUser.getLoginUser(request)` 工具类获取当前用户：先从Session取userId，再从Redis取User对象
-- Spring Session由框架管理生命周期，过期后需重新登录
-- 退出登录时清除Session中的userId和Redis中的User缓存
-- 客户端自动携带Spring Session的Cookie (默认Cookie名称: `SESSION`)
-- Spring Session支持分布式部署，会话数据在Redis中共享
-- 用户信息更新后需同步更新Redis缓存中的User对象
+- 登录成功后生成UUID作为Token
+- 将Token存入Redis（KEY: USER_ID:{token}，VALUE: userId）
+- 同时将User对象缓存到Redis中（KEY: USER_ID:{userId}）
+- 前端将Token存入localStorage，后续请求通过Authorization请求头传递
+- RefreshTokenInterceptor（order=0）从Authorization头读取Token → Redis获取userId → Redis获取User JSON → 反序列化后存入UserHolder（ThreadLocal）
+- LoginInterceptor（order=1）从UserHolder获取User，为空则返回401
+- 退出登录时从Authorization头读取Token，删除Redis中的Token记录
+- 前端清除localStorage中的Token和用户信息
+- Token在Redis中设置过期时间（默认7天）
 
 #### 图片审核规则
 

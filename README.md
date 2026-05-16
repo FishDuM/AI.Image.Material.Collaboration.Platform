@@ -8,28 +8,20 @@
 
 </div>
 
-**FishPics** 是一个基于 React 19 + Spring Boot 的图片分享与互动社区平台，采用前后端分离架构，提供图片管理、社区互动、团队协作、AI 素材管理等核心功能。平台支持用户注册登录、图片浏览管理、帖子发布与编辑、评论互动、分类标签浏览、团队空间协作、后台审核管理等能力，社区广场采用瀑布流布局与小红书风格的帖子详情弹窗，致力于打造简洁高效、安全可靠的图片内容生态。
+**FishPics** 是基于 React 19 + Spring Boot 3.2.5 的前后端分离图片分享与互动社区平台。支持用户注册登录、图片上传管理、帖子发布编辑、评论互动、分类标签浏览、团队空间协作、后台审核管理等，社区广场采用瀑布流布局与小红书风格帖子详情弹窗。
 
 ***
 
 ## 项目特色
 
-- 美观流畅的前端界面，支持 PC / 移动端自适应
-- 完整的移动端适配：独立登录/注册页、帖子创建/详情页、个人资料编辑、底部Tab导航栏
-- 完整的图片生态：上传、查看、收藏、评论、点赞、关注
-- 安全可靠的用户体系：登录注册、权限控制、图形验证码防护
-- 高性能架构：Session + Redis 会话管理、用户信息缓存、系统配置缓存、MyBatis-Plus 分页查询、请求去重
-- 明暗主题切换，个性化用户体验
-- 多空间管理：个人空间、团队空间、社区广场、图片关联空间
-- 社区广场：瀑布流布局、分类标签筛选、帖子发布与编辑、小红书风格详情弹窗、图片轮播、滚动隐藏导航栏
-- 图片管理：分级上传限制、图片上传审核、管理员批量审核、公开图片列表、图片关联空间
-- 系统管理：分类标签管理（Redis 缓存）、跑马灯图片管理（Redis 缓存）
-- 管理员后台：用户管理、图片管理、系统管理、空间管理、团队管理、AI 管理、权限控制
-- VIP/SVIP 会员体系：分级存储配额、升级方案展示、增量包购买
-- 腾讯云 COS 对象存储服务，支持海量图片存储
-- Redisson 分布式锁，点赞操作并发安全
-- 共享组件库：LoginModal、RegisterModal、StorageCard、UpgradePanel 等可复用组件
-- 自定义 Hooks：useIsMobile（移动端检测）、useAuthModal（认证弹窗管理）
+- PC / 移动端自适应，独立移动端登录、注册、帖子、编辑页面
+- Token + Redis 认证，AOP 注解式权限控制，图形验证码防护
+- 瀑布流社区广场，分类标签筛选，小红书风格帖子详情弹窗
+- 图片上传至腾讯云 COS，支持批量审核、分级上传限制、空间关联
+- 个人空间 + 团队空间，分级存储配额（普通 512MB / VIP 5GB / SVIP 10GB）
+- 管理员后台：用户管理、图片审核、系统配置、空间与团队管理
+- Redisson 分布式锁保障点赞并发安全
+- 明暗主题切换，系统配置 Redis 缓存
 
 ***
 
@@ -37,25 +29,22 @@
 
 ### 前端 (FishPic-frontend)
 
-- **React 19** + **Vite 8** + **Ant Design 6 组件库**
+- **React 19** + **Vite 8** + **Ant Design 6**
 - **React Router v7** 路由管理与路由守卫
-- **Context API** 状态管理 (AuthContext、ThemeContext)
+- **Context API** 状态管理（AuthContext、ThemeContext）
+- **Axios** 请求封装（拦截器、统一错误处理、请求去重）
 - **dayjs** 日期处理
-- **Axios** 请求封装（拦截器、统一错误处理、请求去重机制）
-- 响应式布局 / 美观 UI / 移动端适配
-- 自定义 Hooks (useIsMobile、useAuthModal)
-- 共享组件库 (LoginModal、RegisterModal、StorageCard、UpgradePanel 等)
 - ESLint 代码规范检查
 
 ### 后端 (FishPics-backend)
 
 - **Spring Boot 3.2.5**
 - **Java 21**
-- **Spring Session + Redis** 会话管理（Session 存储 userId，Redis 缓存 User 信息）
+- **Token + Redis 认证**（UUID Token 通过 Authorization 请求头传递，Redis 缓存 User 信息）
 - **Redisson 3.27.0** 分布式锁
 - **MyBatis-Plus 3.5.14** ORM框架 + 分页插件（mybatis-plus-spring-boot3-starter）
 - **MySQL 8+** 关系型数据库
-- **Redis** 验证码存储、会话管理、用户信息缓存、系统配置缓存
+- **Redis** 验证码存储、Token 管理、用户信息缓存、系统配置缓存
 - **Knife4j 4.4.0** API文档生成（OpenAPI3 Jakarta 版）
 - **Hutool 5.8.38** 工具库
 - **Lombok** 简化代码
@@ -67,12 +56,19 @@
 ## 效果预览
 
 - **首页**：登录/注册界面，带图形验证码
-  ![首页](doc/picture/p1.gif)
+  ![首页](doc/picture/1.gif)
 - **用户管理**：管理员后台，支持查询、编辑、封禁/解封用户
-  ![用户管理](doc/picture/p2.gif)
+  ![用户管理](doc/picture/2.gif)
+- **社区广场**：帖子瀑布流展示，支持分类筛选与关键词搜索,图文内容展示，支持点赞、收藏、评论互动
+  ![社区广场](doc/picture/3.gif)
+- **移动端页面**：适配手机端的登录，明暗主题适配
+  ![移动端页面](doc/picture/4.gif)
+- **空间管理**：支持私人空间与团队空间，满足不同协作场景
+  ![空间管理](doc/picture/5.gif)
+- **系统配置**：管理员后台跑马灯、分类标签管理
+  ![系统配置](doc/picture/6.gif)
 - **API 文档**：Knife4j 自动生成的接口文档
-  ![API 文档](doc/picture/p3.gif)
-
+  ![API 文档](doc/picture/7.gif)
 ***
 
 ## 核心功能
@@ -83,7 +79,7 @@
 - 用户信息管理，支持修改头像、昵称、邮箱、手机号
 - 隐私设置：关注列表、粉丝列表、点赞/收藏列表可见性控制
 - 权限控制，区分普通用户和管理员角色
-- 退出登录，安全清除会话状态
+- 退出登录，安全清除 Token 与用户状态
 
 ### 图片管理模块
 
@@ -129,7 +125,7 @@
 
 - 帖子收藏，支持用户收藏感兴趣的帖子
 - 帖子点赞，支持用户为帖子点赞
-- 状态管理，支持取消收藏和取消点赞
+- 状态管理，支持取消\收藏和取消点赞
 
 ### 社交互动模块
 
@@ -166,7 +162,7 @@
 - 图片管理，支持查看、审核（通过/拒绝/精选）、删除图片
 - 空间管理，后台统一管理所有空间
 - 团队管理，后台统一管理所有团队（开发中）
-- AI 素材管理，后台管理 AI 相关素材（开发中）
+- AI 素\材管理，后台管理 AI 相关素材（开发中）
 - 权限控制，基于 AOP 注解实现管理员权限拦截
 
 ***
@@ -193,7 +189,7 @@
 - 帖子表：用户 ID、标题索引、内容前缀索引、状态索引
 - 评论表：用户 ID 和帖子 ID 索引
 - 空间表：用户 ID 索引、类型索引
-- 系统配置表：syskey 唯一索引
+- 系统配置表：sys_key 唯一索引
 - 粉丝表：用户 ID 和粉丝 ID 联合索引
 
 ***
@@ -207,21 +203,15 @@ src/
 ├── api/               # API 请求封装（含请求去重机制）
 ├── assets/            # 前端静态资源
 ├── components/        # 公共组件
-│   ├── shared/        # 共享组件 (LoginModal, RegisterModal, SettingsModal, FloatingActions, BulkActionBar,
-│   │                  #   StorageCard, UpgradePanel, SpacePickerModal, ImageEditModal, PageHeader, EmptyState,
-│   │                  #   SearchBar, ProfileHeader, PostCard, MobileBottomNav)
-│   ├── ErrorBoundary, FunnyBackground, GlobalLayout, MobilePageWrapper,
-│   │   ProtectedRoute, PostDetailModal, CreateEditPostModal
-├── context/           # 状态管理 (AuthContext, ThemeContext)
-├── hooks/             # 自定义 Hooks (useIsMobile, useAuthModal)
+│   ├── shared/        # 共享组件（弹窗、卡片、导航栏等可复用 UI 组件）
+│   └── 错误边界、全局布局、路由守卫、帖子弹窗等
+├── context/           # 状态管理（认证上下文、主题上下文）
+├── hooks/             # 自定义 Hooks（移动端检测、认证弹窗管理）
 ├── pages/             # 页面组件
-│   ├── 桌面端页面: HomePage, UserProfile, CommunitySquare, PrivateSpace, TeamSpace,
-│   │   TeamSpaceDetail, Notifications, AdminUserList, AdminPictureManagement,
-│   │   SystemManagement, UserManagement, NotFound 等
-│   └── 移动端页面: MobileLoginPage, MobileRegisterPage, MobilePostCreatePage,
-│       MobilePostDetailPage, MobileEditProfilePage, MobileEditPicturePage
-├── styles/            # 全局样式 (animations.css, carousel.css, shared.css)
-├── utils/             # 工具函数 (storage.js)
+│   ├── 桌面端页面（首页、社区、空间、管理后台等）
+│   └── 移动端页面（登录、注册、帖子、编辑等独立页面）
+├── styles/            # 全局样式（动画、轮播、共享样式）
+├── utils/             # 工具函数（本地存储、上传约束）
 ├── App.jsx            # 路由配置（含移动端独立路由）
 └── main.jsx           # 应用入口
 ```
@@ -231,31 +221,32 @@ src/
 ```
 hk.ljx.fishpicsbackend/
 ├── common/
-│   ├── annotation/    # 权限检查注解 (AuthCheck)
-│   ├── aop/           # 权限拦截器 (AuthInterceptor)
-│   ├── config/        # 跨域、COS、JSON、MyBatis Plus、Session Redis 等配置类
-│   ├── constants/     # Redis、用户、空间、系统配置相关常量定义
-│   ├── exception/     # 自定义异常、异常码、全局异常处理器
-│   ├── response/      # 统一响应封装工具
-│   └── utils/         # 工具类（受限输入流）
-├── controller/        # 控制器（用户、帖子、图片、空间、系统接口）
+│   ├── annotation/        # 权限检查注解
+│   ├── aop/               # 权限拦截切面
+│   ├── config/            # 跨域、COS、JSON、MyBatis Plus 等配置类
+│   ├── constants/         # Redis、用户、空间、系统配置相关常量定义
+│   ├── exception/         # 自定义异常、异常码、全局异常处理器
+│   ├── interceptor/       # Token 认证拦截器（刷新令牌拦截器、登录拦截器、MVC 配置）
+│   ├── response/          # 统一响应封装工具
+│   └── utils/             # 工具类（受限输入流、COS 服务、用户持有工具）
+├── controller/            # 控制器（用户、帖子、图片、空间、系统接口）
 ├── dto/
-│   ├── base/          # 基础请求参数（删除、分页）
-│   ├── picture/       # 图片消息、批量删除数据传输对象
-│   ├── post/          # 帖子编辑、查询、上传请求参数
-│   ├── space/         # 空间创建、更新、查询、图片列表请求参数
-│   ├── system/        # 系统标签、跑马灯添加请求参数
-│   └── user/          # 用户编辑、登录、查询请求参数
-├── entity/            # 数据库实体类（评论、图片、子图片关联、帖子、用户、空间、系统配置、粉丝、收藏、点赞）
-├── enums/             # 用户角色枚举
-├── mapper/            # MyBatis Plus 数据访问层接口（含 SpaceMapper、PicSystemMapper）
+│   ├── base/              # 基础请求参数（删除、分页）
+│   ├── picture/           # 图片相关数据传输对象
+│   ├── post/              # 帖子相关请求参数
+│   ├── space/             # 空间相关请求参数
+│   ├── system/            # 系统标签、跑马灯添加请求参数
+│   └── user/              # 用户编辑、登录、查询请求参数
+├── entity/                # 数据库实体类
+├── enums/                 # 用户角色枚举
+├── mapper/                # MyBatis Plus 数据访问层接口
 ├── service/
-│   ├── impl/          # 业务逻辑接口实现类
-│   └── LoginUser.java # 登录用户获取工具（Session + Redis）
+│   └── impl/              # 业务逻辑接口实现类
 └── vo/
-    ├── picture/       # 图片视图对象（上传响应、管理员视图、列表、分页）
-    ├── post/          # 帖子详情和列表视图对象
-    └── user/          # 验证码、登录、用户信息视图对象
+    ├── picture/           # 图片视图对象
+    ├── post/              # 帖子详情和列表视图对象
+    ├── space/             # 空间视图对象
+    └── user/              # 验证码、登录、用户信息视图对象
 ```
 
 ***
@@ -297,40 +288,28 @@ npm run dev
 
 ## 技术亮点
 
-- **前后端分离架构**，职责清晰，易于维护
-- **Session + Redis 认证**，Session 存储 userId，Redis 缓存 User JSON，支持分布式部署
-- **AOP 注解式权限拦截**，基于 @AuthCheck 注解的细粒度权限控制
-- **统一响应格式**，规范的 API 返回 (Response\<T>)，全局异常处理
-- **分页查询优化**，MyBatis-Plus 分页插件，大数据量处理高效
-- **腾讯云 COS 对象存储**，海量图片存储
-- **DTO/VO 分层设计**，数据传输与视图分离
-- **隐私控制机制**，用户可自定义个人数据可见性
-- **图片审核机制**，上传后默认待审核，管理员可批量审核通过/拒绝/标记精选
-- **瀑布流布局**，Ant Design Masonry 组件实现响应式多列卡片展示
-- **小红书风格弹窗**，左右分栏帖子详情/发帖弹窗，支持图片轮播与触摸滑动
-- **明暗主题切换**，ThemeContext 状态管理，支持深色/浅色模式
-- **Redisson 分布式锁**，点赞操作使用分布式锁防止并发冲突
-- **移动端适配**，useIsMobile Hook + MobilePageWrapper + MobileBottomNav 完整移动端体验
-- **请求去重机制**，Axios 拦截器实现自动请求去重，通过 AbortController 防止重复请求
-- **分级上传限制**，根据用户等级（普通/VIP/SVIP）动态调整文件大小限制
-- **团队空间详情管理**，支持空间信息编辑、图片瀑布流浏览、批量操作、图片编辑
-- **VIP/SVIP 会员体系**，存储空间分级配额、团队空间数量限制、升级方案展示
+- **前后端分离架构**，职责清晰，易于维护扩展
+- **Token + Redis 认证**，UUID Token 通过 Authorization 头传递，支持分布式部署
+- **RefreshTokenInterceptor + LoginInterceptor 双拦截器链**，请求级用户上下文注入
+- **AOP 注解式权限拦截**，@AuthCheck 注解细粒度控制 admin/user 角色
+- **统一响应格式** `Response<T>`，全局异常处理，规范错误码
+- **MyBatis-Plus 分页插件**，大数据量高效分页
+- **DTO/VO 分层设计**，数据传输与视图分离，避免实体暴露
+- **Redisson 分布式锁**，点赞等并发操作安全
+- **Axios 请求去重**，AbortController 自动取消重复请求
 
 ***
 
 ## 安全设计
 
-- **Session + Redis 认证**：Session 存储 userId，Redis 缓存 User 信息，支持分布式部署
-- **LoginUser 工具类**：统一封装从 Session 和 Redis 获取当前用户的逻辑
-- **图形验证码**：防止机器暴力破解
-- **Redis 存储验证码**：验证码过期自动清理
-- **AOP 权限拦截**：基于 @AuthCheck 注解的细粒度权限控制
-- **逻辑删除**：数据安全，支持恢复
-- **状态管理**：用户/内容状态控制，支持封禁/审核
-- **图片审核**：上传后默认待审核，管理员审核后才公开
-- **隐私控制**：用户可自定义个人数据可见性
-- **文件上传限制**：受限输入流（LimitedInputStream）限制文件大小
-- **Redisson 分布式锁**：防止并发操作冲突
+- **Token + Redis 认证**：UUID Token 通过 Authorization 头传递，Redis 存储 Token，RefreshTokenInterceptor + LoginInterceptor 双拦截器链校验
+- **UserHolder**：ThreadLocal 请求上下文，跨层传递用户信息
+- **密码加密**：MD5 + 盐值
+- **图形验证码**：Hutool CircleCaptcha，5 分钟有效，防暴力破解
+- **AOP 权限拦截**：@AuthCheck 注解控制 admin/user 角色
+- **逻辑删除**：数据可恢复
+- **文件上传限制**：LimitedInputStream 限制文件大小
+- **Redisson 分布式锁**：防并发冲突
 
 ***
 
@@ -343,8 +322,7 @@ npm run dev
 - 路由保护：基于角色的路由守卫 (ProtectedRoute)
 - 状态管理：AuthContext + ThemeContext 集中管理状态
 - 权限控制：基于 AOP 注解的管理员权限拦截
-- 认证：LoginUser 工具类统一封装 Session + Redis 获取用户逻辑
+- 认证：Token + Redis 认证，RefreshTokenInterceptor + LoginInterceptor 拦截器链 + UserHolder ThreadLocal 工具类
 - 缓存：系统配置优先从 Redis 读取，未命中时查数据库并回写缓存
 
 ***
-

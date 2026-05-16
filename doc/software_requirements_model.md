@@ -15,7 +15,7 @@ FishPics（FishPics Image Collaboration Platform）是一个基于前后端分�
 
 - **前端**: React 19 + Vite 8 + Ant Design 6 + React Router v7 + Context API + Axios + dayjs
 - **后端**: Spring Boot 3.2.5 + MyBatis-Plus 3.5.14 + MySQL 8 + Redis + Redisson 3.27.0 + Knife4j 4.4.0 + Hutool 5.8.38 + Lombok + 腾讯云 COS
-- **认证**: HTTP Session + Cookie（Spring Session + Redis机制，依赖CORS allowCredentials）
+- **认证**: Token + Redis（UUID Token 通过 Authorization 请求头传递，Redis 存储 Token 与用户信息）
 - **密码安全**: MD5 + 盐值"fish"
 
 ### 1.3 系统架构
@@ -25,7 +25,7 @@ FishPics（FishPics Image Collaboration Platform）是一个基于前后端分�
 - 前端单页应用（SPA），默认端口：5173
 - 后端服务端口：8080
 - MySQL数据库：FishPics
-- Redis缓存：6379端口（用于Session管理、验证码存储、用户信息缓存、分类标签缓存、跑马灯配置缓存）
+- Redis缓存：6379端口（用于Token管理、验证码存储、用户信息缓存、分类标签缓存、跑马灯配置缓存）
 - 腾讯云COS对象存储：海量图片资源存储
 - Vite代理：开发环境通过`/api`代理转发请求至后端
 
@@ -44,11 +44,12 @@ FishPics（FishPics Image Collaboration Platform）是一个基于前后端分�
   - 注册成功后自动创建默认私人空间（512MB）
 - **用户登录**
   - 输入：用户名、密码、图形验证码
-  - 流程：验证码校验 → 用户查询 → 密码比对（MD5+Salt） → 将用户ID存入HTTP Session → 将用户信息缓存到Redis → 返回用户信息
-  - Session机制：Spring Session + Redis管理Session ID通过Cookie传输
-  - Redis缓存：登录用户信息以JSON格式存储在Redis中（KEY: USER_ID:{userId}），后续请求通过Session获取userId后从Redis读取用户信息
+  - 流程：验证码校验 → 用户查询 → 密码比对（MD5+Salt） → 生成UUID Token → 将Token存入Redis（KEY: USER_ID:{token}，VALUE: userId）→ 将用户信息缓存到Redis → 返回带Token的用户信息
+  - Token机制：后端生成UUID作为Token，通过UserLoginVO返回给前端，前端存入localStorage，后续请求通过Authorization请求头携带Token
+  - Redis缓存：登录用户信息以JSON格式存储在Redis中（KEY: USER_ID:{userId}），后续请求通过RefreshTokenInterceptor从Authorization头读取Token后从Redis获取userId
 - **退出登录**
-  - 清除本地localStorage中的用户信息
+  - 前端清除localStorage中的Token和用户信息
+  - 后端从Authorization请求头读取Token并在Redis中删除对应记录
   - 前端状态重置为未登录
 - **验证码生成**
   - 类型：圆圈图形验证码（Hutool CircleCaptcha）
@@ -61,7 +62,7 @@ FishPics（FishPics Image Collaboration Platform）是一个基于前后端分�
 
 - **查看个人信息**
   - 获取：用户基本信息 + 发布帖子列表 + 收藏帖子列表 + 点赞帖子列表
-  - 权限：仅本人可访问（Session验证）
+  - 权限：仅本人可访问（Token验证）
 - **编辑个人信息**
   - 可修改：头像、邮箱、手机号、昵称、密码
   - 权限：仅本人可修改（isMe校验）
@@ -294,10 +295,10 @@ FishPics（FishPics Image Collaboration Platform）是一个基于前后端分�
 - **ProfileHeader**：用户个人资料头组件（头像、昵称、统计数据、头像预览）
 - **PostCard**：社区帖子卡片组件（瀑布流风格，显示封面、标题、用户信息、点赞收藏数）
 - **MobileBottomNav**：移动端底部Tab导航栏（首页、社区、私人空间、团队空间、我的）
-- **AuthContext**：认证状态管理（登录、登出、用户信息）
+- **AuthContext**：认证状态管理（登录/登出、Token管理、用户信息管理、auth:expired事件监听）
 - **ThemeContext**：主题状态管理（明暗主题切换）
 - **API封装**：Axios请求配置（请求/响应拦截器，统一错误处理，请求去重机制）
-- **Storage工具**：本地存储管理（用户信息）
+- **Storage工具**：本地存储管理（Token、用户信息）
 
 #### 2.1.15 前端自定义Hooks
 
@@ -513,7 +514,7 @@ User (1) ───< (N) UserPostLikes
 
 - **基础路径**: `/api`
 - **请求格式**: JSON (application/json) 或 multipart/form-data（文件上传）
-- **认证方式**: HTTP Session（Spring Session机制，通过Cookie自动传输Session ID）
+- **认证方式**: Token（通过 Authorization 请求头携带 Bearer Token，后端通过 RefreshTokenInterceptor + LoginInterceptor 双拦截器链从 Redis 获取用户信息）
 - **请求去重**: Axios拦截器实现自动请求去重，相同请求自动取消前一个（通过AbortController），支持noDedup配置跳过去重
 - **响应格式**: 统一 Response<T> 结构 { code, message, data }
   - code: 1-成功，其他-失败
@@ -537,7 +538,7 @@ User (1) ───< (N) UserPostLikes
 #### 4.2.3 用户登录
 
 - **接口**: `POST /api/user/login`
-- **描述**: 用户登录，登录成功后服务端自动创建Session并通过Cookie返回Session ID
+- **描述**: 用户登录，登录成功后服务端生成UUID Token并存入Redis，通过UserLoginVO返回给前端
 - **请求体**: UserLoginRequest
   - username: 用户名
   - password: 密码
@@ -551,6 +552,7 @@ User (1) ───< (N) UserPostLikes
   - phone: 手机号
   - role: 角色
   - nickname: 昵称
+  - token: 登录凭证（UUID Token，前端存储到localStorage，后续请求通过Authorization头携带）
 
 #### 4.2.4 用户注册
 
@@ -570,13 +572,13 @@ User (1) ───< (N) UserPostLikes
 - **描述**: 获取系统预设的分类列表
 - **返回**: List<String> ["推荐", "穿搭", "美食", "旅行", "宠物", "运动"]
 
-### 4.3 用户私有接口（需要登录，依赖Session）
+### 4.3 用户私有接口（需要登录，依赖Token认证）
 
 #### 4.3.1 获取个人信息
 
 - **接口**: `GET /api/user/myself`
 - **描述**: 获取当前登录用户的完整信息（基本信息+帖子列表+收藏列表+点赞列表）
-- **认证**: HTTP Session（服务端从request.getSession()获取用户信息）
+- **认证**: Token认证（后端通过RefreshTokenInterceptor从Authorization头读取Token，从Redis获取userId和User对象存入UserHolder）
 - **返回**: UserMessageVO
   - id, username, avatar, email, phone, nickname, role, createTime
   - postList: 我的发布帖子列表
@@ -587,14 +589,14 @@ User (1) ───< (N) UserPostLikes
 
 - **接口**: `GET /api/user/getUser`
 - **描述**: 获取当前登录用户的基本信息
-- **认证**: HTTP Session
+- **认证**: Token认证（通过UserHolder获取当前用户）
 - **返回**: UserLoginVO
 
 #### 4.3.3 编辑个人信息
 
 - **接口**: `POST /api/user/editUser`
 - **描述**: 编辑当前登录用户的信息
-- **认证**: HTTP Session + isMe校验（仅可修改自己的信息）
+- **认证**: Token认证 + isMe校验（仅可修改自己的信息）
 - **请求体**: UserEditRequest
   - id: 用户ID
   - username: 用户名
@@ -609,7 +611,7 @@ User (1) ───< (N) UserPostLikes
 
 - **接口**: `POST /api/picture/avatar`
 - **描述**: 用户上传头像或管理员修改用户头像
-- **认证**: HTTP Session
+- **认证**: Token认证
 - **请求类型**: multipart/form-data
 - **请求参数**:
   - file: 图片文件（最大5MB）
@@ -620,7 +622,7 @@ User (1) ───< (N) UserPostLikes
 
 - **接口**: `POST /api/picture/post`
 - **描述**: 用户上传帖子相关图片
-- **认证**: HTTP Session
+- **认证**: Token认证
 - **请求类型**: multipart/form-data
 - **请求参数**:
   - file: 图片文件（最大5MB）
@@ -630,7 +632,7 @@ User (1) ───< (N) UserPostLikes
 
 - **接口**: `POST /api/post/post`
 - **描述**: 创建新帖子
-- **认证**: HTTP Session
+- **认证**: Token认证
 - **请求体**: UploadPostRequest
   - title: 标题
   - content: 内容
@@ -661,7 +663,7 @@ User (1) ───< (N) UserPostLikes
 
 - **接口**: `POST /api/post/editPost`
 - **描述**: 编辑帖子内容
-- **认证**: HTTP Session（仅作者可编辑）
+- **认证**: Token认证（仅作者可编辑）
 - **请求体**: EditPostRequest
 - **返回**: Boolean (成功/失败)
 
@@ -669,7 +671,7 @@ User (1) ───< (N) UserPostLikes
 
 - **接口**: `POST /api/post/like?id={id}`
 - **描述**: 点赞指定帖子
-- **认证**: HTTP Session
+- **认证**: Token认证
 - **请求参数**: id (帖子ID)
 - **返回**: Boolean (成功/失败)
 
@@ -677,7 +679,7 @@ User (1) ───< (N) UserPostLikes
 
 - **接口**: `POST /api/post/myPosts`
 - **描述**: 获取当前登录用户发布的帖子列表（分页）
-- **认证**: HTTP Session
+- **认证**: Token认证
 - **请求体**: PageRequest (current, pageSize)
 - **返回**: IPage<PostListVO>
 
@@ -685,7 +687,7 @@ User (1) ───< (N) UserPostLikes
 
 - **接口**: `POST /api/post/myCollects`
 - **描述**: 获取当前登录用户收藏的帖子列表（分页）
-- **认证**: HTTP Session
+- **认证**: Token认证
 - **请求体**: PageRequest (current, pageSize)
 - **返回**: IPage<PostListVO>
 
@@ -693,15 +695,15 @@ User (1) ───< (N) UserPostLikes
 
 - **接口**: `POST /api/post/myLikes`
 - **描述**: 获取当前登录用户点赞的帖子列表（分页）
-- **认证**: HTTP Session
+- **认证**: Token认证
 - **请求体**: PageRequest (current, pageSize)
 - **返回**: IPage<PostListVO>
 
 #### 4.3.13 退出登录
 
 - **接口**: `GET /api/user/logout`
-- **描述**: 退出登录，清除Session
-- **认证**: HTTP Session
+- **描述**: 退出登录，清除Redis中的Token
+- **认证**: Token认证
 - **返回**: Boolean (成功/失败)
 
 ### 4.4 公共查询接口
@@ -830,21 +832,21 @@ User (1) ───< (N) UserPostLikes
 - **图片上传**: 支持文件上传（≤5MB），请求总大小≤100MB
 - **缓存策略**:
   - 验证码缓存：5分钟（Redis）
-  - 用户信息缓存：登录后缓存到Redis（KEY: USER_ID:{userId}），Session中仅存储userId
+  - 用户信息缓存：登录后缓存到Redis（KEY: USER_ID:{userId}）
+  - Token管理：登录时生成UUID Token存入Redis（KEY: USER_ID:{token}，VALUE: userId）
   - 分类标签缓存：Redis（KEY: type_list_key）
   - 跑马灯配置缓存：Redis（KEY: marquees_key）
-  - Session管理：Spring Session + Redis自动管理
 
 ### 5.2 安全需求
 
 - **密码安全**: MD5 + 盐值"fish"加密存储
-- **认证机制**: HTTP Session + Redis认证（Session存储userId，Redis存储用户信息JSON，Cookie自动传输Session ID）
+- **认证机制**: Token + Redis认证（Token通过Authorization请求头传递，Redis存储Token与用户信息JSON，RefreshTokenInterceptor + LoginInterceptor双拦截器链进行认证）
 - **权限控制**:
   - @AuthCheck注解标记接口权限
   - AuthInterceptor AOP拦截器进行权限校验
   - 基于角色（admin/user）的访问控制
 - **防暴力破解**: 图形验证码（圆圈验证码）
-- **跨域安全**: CORS配置（allowCredentials=true，allowedOriginPatterns("\*")支持Cookie/Session）
+- **跨域安全**: CORS配置（allowedOriginPatterns("*")支持Token跨域传递）
 - **逻辑删除**: @TableLogic防止数据误删
 - **统一异常处理**: GlobalExceptionHandler统一异常处理，避免敏感信息泄露
 - **受限输入流**: LimitedInputStream限制文件上传大小
@@ -871,7 +873,7 @@ User (1) ───< (N) UserPostLikes
 ### 6.1 外部系统接口
 
 - **MySQL数据库**: 持久化存储，localhost:3306/FishPics
-- **Redis缓存**: Session管理、验证码存储、用户信息缓存、系统配置缓存，192.168.163.101:6379
+- **Redis缓存**: Token管理、验证码存储、用户信息缓存、系统配置缓存，192.168.163.101:6379
 - **腾讯云COS对象存储**: 图片资源存储，通过COSConfig配置
 - **文件存储服务**: 图片上传存储（腾讯云COS）
 
@@ -886,38 +888,42 @@ User (1) ───< (N) UserPostLikes
 
 ```
 前端发起请求
-→ Axios拦截器处理请求
-→ 后端接收请求（Cookie自动携带Session ID）
-→ AuthInterceptor校验权限（需要登录的接口，从request.getSession()获取用户）
+→ Axios拦截器处理请求（添加Authorization请求头，携带Token）
+→ 后端拦截器链处理：
+   RefreshTokenInterceptor（优先级0）：从Authorization头读取Token → 查Redis获取userId → 查Redis获取User对象 → 存入UserHolder
+   LoginInterceptor（优先级1）：从UserHolder获取用户 → 为空则返回401未登录
+→ AuthInterceptor AOP校验权限（需要管理员权限的接口）
 → Controller处理请求
-→ Service执行业务逻辑
+→ Service执行业务逻辑（通过UserHolder.getUser()获取当前用户）
 → Mapper操作数据库
 → 返回Response<T> (code=1表示成功)
 → Axios响应拦截器处理（检查code=1，提取data）
 → 前端更新状态
 ```
 
-### 6.4 Session认证流程
+### 6.4 Token认证流程
 
 ```
 1. 用户登录：
    前端POST /api/user/login
    → 后端校验验证码（Redis比对） + 用户名密码（MD5+Salt比对）
-   → 校验通过，将userId存入request.getSession().setAttribute(TOKEN_KEY, userId)
+   → 校验通过，生成UUID作为Token
+   → 将Token存入Redis（KEY: USER_ID:{token}，VALUE: userId）
    → 将User对象JSON序列化存入Redis（KEY: USER_ID:{userId}）
-   → Spring Session自动通过Set-Cookie响应头返回Session ID（JSESSIONID）
-   → 前端localStorage保存用户基本信息用于展示
+   → 封装UserLoginVO（含token字段）返回前端
+   → 前端将Token存入localStorage，用户信息存入localStorage用于展示
 
 2. 后续请求：
-   浏览器自动在请求头Cookie中携带JSESSIONID
-   → 后端通过request.getSession().getAttribute(TOKEN_KEY)获取userId
-   → LoginUser组件从Redis读取用户信息JSON并反序列化为User对象
-   → AuthInterceptor从Session获取用户进行权限校验
+   前端从localStorage读取Token，通过Axios拦截器自动添加到Authorization请求头
+   → RefreshTokenInterceptor（order=0）：从Authorization头读取Token → 从Redis获取userId → 从Redis获取User对象JSON并反序列化 → 存入UserHolder
+   → LoginInterceptor（order=1）：从UserHolder获取用户 → 为空则返回401 → 不为空则放行
+   → AuthInterceptor（AOP）：从UserHolder获取用户进行权限校验（@AuthCheck注解标记的接口）
 
 3. 退出登录：
-   前端清除localStorage中的用户信息
+   前端从localStorage读取Token，通过Authorization头传递
+   → 后端从Authorization头读取Token → 在Redis中删除对应Token记录
+   → 前端清除localStorage中的Token和用户信息
    → 前端状态重置为未登录
-   → 后端Session通过session.invalidate()失效
 ```
 
 ---
@@ -948,7 +954,7 @@ User (1) ───< (N) UserPostLikes
 - **管理员**: 可以管理所有用户和内容
 - **接口权限**: 通过@AuthCheck注解控制
 - **权限校验**: AuthInterceptor AOP拦截器统一处理
-- **Session管理**: 用户登录后userId存储在Session中，用户信息缓存在Redis中，Cookie自动传输Session ID
+- **Token管理**: 用户登录后生成UUID Token存入Redis，前端通过Authorization请求头携带Token，后端通过RefreshTokenInterceptor + LoginInterceptor双拦截器链进行认证
 
 ### 7.4 验证码规则
 
@@ -1009,7 +1015,7 @@ User (1) ───< (N) UserPostLikes
 - **Redis Host**: 192.168.163.101
 - **Redis Port**: 6379
 - **Redis Database**: 0
-- **Spring Session**: store-type=redis, timeout=86400s（1天）
+- **Token有效期**: Redis键过期时间，默认7天
 - **文件上传**: 单文件最大10MB，请求总大小100MB
 - **腾讯云COS**: 需配置cos.secretId、cos.secretKey、cos.region、cos.bucket（application.yml）
 - **API文档**: Knife4j（http://localhost:8080/api/doc.html）
@@ -1021,7 +1027,7 @@ User (1) ───< (N) UserPostLikes
 ┌─────────────┐
 │   用户浏览器  │
 └──────┬──────┘
-       │ HTTP/HTTPS (自动携带Cookie/Session ID)
+       │ HTTP/HTTPS (Authorization请求头携带Token)
 ┌──────▼──────┐
 │  前端(Nginx) │  ← React SPA (端口5173)
 └──────┬──────┘
@@ -1038,7 +1044,7 @@ User (1) ───< (N) UserPostLikes
 
 ### 8.4 可扩展性
 
-- **负载均衡**: 多实例部署（需配置Session共享）
+- **负载均衡**: 多实例部署（需配置Redis Token共享）
 - **数据库**: 主从复制（可选）
 - **缓存**: Redis集群（可选）
 - **CDN**: 静态资源加速（可选）
@@ -1125,18 +1131,19 @@ FishPic-frontend/src/
 
 - **认证状态**: AuthContext（Context API）
   - userInfo: 当前用户信息（存储于localStorage用于前端展示）
+  - token: 当前用户Token（存储于localStorage，用于API请求认证）
   - isAuthenticated: 是否已登录
-  - login: 登录函数（保存用户信息到localStorage）
-  - logout: 登出函数（清除localStorage中的用户信息）
+  - login: 登录函数（保存Token和用户信息到localStorage）
+  - logout: 登出函数（调用后端logout接口清除Token，清除localStorage中的Token和用户信息）
 - **主题状态**: ThemeContext（明暗主题切换）
   - isDarkMode: 是否为暗色模式
   - toggleTheme: 切换主题函数
-- **本地存储**: localStorage（用户信息持久化用于前端展示）
+- **本地存储**: localStorage（Token和用户信息持久化用于前端展示和API认证）
 
 ### 9.4 API请求封装
 
 - **Axios实例**: 统一配置baseURL='/api'、timeout=10000
-- **请求拦截器**: 处理请求配置（Cookie由浏览器自动携带）
+- **请求拦截器**: 处理请求配置（自动从localStorage读取Token添加到Authorization请求头）
 - **响应拦截器**:
   - 检查响应格式（必须有code字段）
   - code=1表示成功，提取data返回
@@ -1182,28 +1189,32 @@ FishPics-backend/src/main/java/hk/ljx/fishpicsbackend/
 │   ├── annotation/
 │   │   └── AuthCheck.java      # 权限校验注解
 │   ├── aop/
-│   │   └── AuthInterceptor.java# 权限校验拦截器（从Session获取用户）
+│   │   └── AuthInterceptor.java# 权限校验拦截器（AOP切面，通过UserHolder获取用户进行角色校验）
 │   ├── config/
 │   │   ├── COSConfig.java      # 腾讯云COS客户端配置
-│   │   ├── CorsConfig.java     # 跨域配置（allowCredentials=true）
+│   │   ├── CorsConfig.java     # 跨域配置
 │   │   ├── JsonConfig.java     # JSON配置
-│   │   ├── MybatisPlusConfig.java # MyBatis-Plus配置（分页插件）
-│   │   └── SessionRedisConfig.java # Spring Session Redis序列化配置
+│   │   └── MybatisPlusConfig.java # MyBatis-Plus配置（分页插件）
 │   ├── constants/
 │   │   ├── RedisConstants.java # Redis键常量（LOGIN_CODE, REGISTER_CODE, TOKEN, USER_ID, LIKE_POST）
 │   │   ├── SpaceConstants.java # 空间存储大小常量（512MB/5GB/10GB）
 │   │   ├── SysConstants.java   # 系统常量（type_list_key, marquees_key）
-│   │   └── UserConstants.java  # 用户常量（角色、盐值、默认昵称）
+│   │   └── UserConstants.java  # 用户常量（角色、盐值、默认昵称、CHECK_CODE前缀）
 │   ├── exception/
 │   │   ├── BaseException.java  # 基础异常
 │   │   ├── ExceptionCode.java  # 异常编码
 │   │   ├── ExcUtils.java       # 异常工具
 │   │   └── GlobalExceptionHandler.java # 全局异常处理器
+│   ├── interceptor/            # Token认证拦截器
+│   │   ├── MvcConfig.java      # Web MVC配置（注册拦截器，设置排除路径）
+│   │   ├── RefreshTokenInterceptor.java # Token刷新拦截器（order=0，从Authorization头读取Token，查Redis获取用户存入UserHolder）
+│   │   └── LoginInterceptor.java       # 登录拦截器（order=1，校验UserHolder是否为空，返回401）
 │   ├── response/
 │   │   ├── Response.java       # 统一响应 {code, message, data}
 │   │   └── ResUtils.java       # 响应工具
 │   └── utils/
-│       └── LimitedInputStream.java # 受限输入流（文件大小限制）
+│       ├── LimitedInputStream.java # 受限输入流（文件大小限制）
+│       └── UserHolder.java         # 用户持有工具类（基于ThreadLocal，跨层传递当前用户信息）
 ├── controller/                 # 控制器层
 │   ├── UserController.java     # 用户控制器（登录/注册/验证码/退出登录/管理）
 │   ├── PostController.java     # 帖子控制器（发布/编辑/列表/点赞/我的帖子/收藏/点赞列表）
@@ -1275,7 +1286,6 @@ FishPics-backend/src/main/java/hk/ljx/fishpicsbackend/
 │   │   └── UserServiceImpl.java
 │   ├── CommentService.java     # 评论服务接口
 │   ├── CosService.java         # 腾讯云COS对象存储服务
-│   ├── LoginUser.java          # 登录用户获取工具（Session + Redis）
 │   ├── PicSystemService.java   # 系统配置服务（标签/跑马灯）
 │   ├── PictureService.java     # 图片服务接口
 │   ├── PictureChildService.java # 子图片关联服务接口
@@ -1294,9 +1304,9 @@ FishPics-backend/src/main/java/hk/ljx/fishpicsbackend/
 │   ├── post/
 │   │   ├── PostDetailVO.java   # 帖子详情VO（含pictureUrl/pictureIds同步过滤、cover）
 │   │   └── PostListVO.java     # 帖子列表VO
-│   └── user/
+│   ├── user/
 │       ├── CheckCodeVO.java    # 验证码VO（captchaKey, base64Image）
-│       ├── UserLoginVO.java    # 用户登录VO
+│       ├── UserLoginVO.java    # 用户登录VO（含token字段）
 │       └── UserMessageVO.java  # 用户信息VO（含帖子/收藏/点赞列表）
 └── FishPicsBackendApplication.java # 启动类
 ```
@@ -1313,11 +1323,12 @@ FishPics-backend/src/main/java/hk/ljx/fishpicsbackend/
 ### 10.3 权限控制机制
 
 - **注解**: @AuthCheck(role = "admin/user")
-- **拦截器**: AuthInterceptor（Spring AOP @Around）
+- **AOP拦截器**: AuthInterceptor（Spring AOP @Around）
+- **认证拦截器链**: RefreshTokenInterceptor（order=0）+ LoginInterceptor（order=1）
 - **校验流程**:
-  1. 获取request.getSession().getAttribute(TOKEN_KEY)
-  2. 校验Session中用户信息是否为空（为空则为未登录或登录过期）
-  3. 校验用户角色是否匹配@AuthCheck注解要求的角色
+  1. RefreshTokenInterceptor从Authorization请求头读取Token，从Redis获取userId，从Redis获取User对象，存入UserHolder ThreadLocal
+  2. LoginInterceptor从UserHolder获取User，校验是否为null（为空则为未登录或Token过期）
+  3. AuthInterceptor AOP拦截器校验用户角色是否匹配@AuthCheck注解要求的角色
   4. 通过/拒绝请求
 
 ### 10.4 异常处理机制
@@ -1334,7 +1345,7 @@ FishPics-backend/src/main/java/hk/ljx/fishpicsbackend/
 
 - getCheckCode(): 获取图形验证码（CircleCaptcha，5位，5分钟有效期，存入Redis）
 - userRegister(): 用户注册（MD5+Salt加密密码，随机昵称）
-- userLogin(): 用户登录（校验验证码→查用户→比对密码→Session存储userId→Redis缓存用户信息）
+- userLogin(): 用户登录（校验验证码→查用户→比对密码→生成UUID Token→Token存入Redis→Redis缓存用户信息→返回带Token的UserLoginVO）
 - isMe(): 判断是否是自己的信息
 - getMyselfMessage(): 获取个人主页信息（用户信息+帖子列表+收藏列表+点赞列表）
 - editMyself(): 编辑个人信息
@@ -1416,12 +1427,13 @@ FishPics-backend/src/main/java/hk/ljx/fishpicsbackend/
 - **Redis缓存**:
   - 验证码缓存（5分钟）
   - 用户信息缓存（登录后缓存User JSON到Redis，减少数据库查询）
+  - Token管理（UUID Token存入Redis，KEY: USER_ID:{token}）
   - 分类标签缓存（从Redis读取，避免频繁查询数据库）
   - 跑马灯配置缓存（从Redis读取）
-  - Session存储：仅存userId，减少Session序列化开销
-- **Session管理**:
-  - Spring Session + Redis自动管理
-  - Session中仅存储userId，User对象由LoginUser按需从Redis读取
+- **Token认证**:
+  - 前端通过Authorization请求头传递Token
+  - RefreshTokenInterceptor + LoginInterceptor双拦截器链
+  - UserHolder（ThreadLocal）跨层传递用户信息
 - **分页查询**: MyBatis-Plus分页插件
 - **索引优化**: 关键字段建立索引（username, nickname, user_id, post_id）
 - **逻辑删除**: @TableLogic避免物理删除性能损耗
@@ -1431,8 +1443,8 @@ FishPics-backend/src/main/java/hk/ljx/fishpicsbackend/
 ### 12.2 安全措施
 
 - **密码加密**: MD5 + 盐值"fish"
-- **Session认证**: Spring Session + Redis，Session中仅存userId，User对象缓存在Redis
-- **CORS配置**: allowCredentials=true，allowedOriginPatterns("\*")支持Cookie/Session跨域传输
+- **Token认证**: UUID Token + Redis，前端通过Authorization请求头传递Token，后端RefreshTokenInterceptor + LoginInterceptor双拦截器链认证，UserHolder（ThreadLocal）跨层传递用户信息，用户信息缓存在Redis
+- **CORS配置**: allowedOriginPatterns("*")支持Token跨域传递
 - **权限控制**: @AuthCheck + AuthInterceptor
 - **验证码防护**: 图形验证码（CircleCaptcha）防暴力破解
 - **SQL防护**: MyBatis-Plus预编译语句
@@ -1460,7 +1472,7 @@ FishPics-backend/src/main/java/hk/ljx/fishpicsbackend/
 - **密码**: 8-20字符
 - **昵称**: 5-11字符，唯一，默认"小鱼籽\_+随机字符串"
 - **验证码**: 5位，5分钟有效
-- **Session**: Spring Session + Redis管理，Session中仅存userId
+- **Token**: UUID格式，登录时生成，存储在Redis（KEY: USER_ID:{token}），前端通过Authorization请求头传递
 - **权限**: admin/user两级
 - **状态**: 1-正常, 0-禁用, 2-待审核
 - **隐私**: 0-公开, 1-私密
