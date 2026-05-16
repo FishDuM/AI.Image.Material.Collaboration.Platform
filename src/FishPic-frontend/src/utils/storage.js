@@ -1,8 +1,9 @@
-const STORAGE_KEY = 'fishpics_user_info'
+const USER_KEY = 'fishpics_user_info'
+const TOKEN_KEY = 'fishpics_auth_token'
 
 export const saveUserInfo = (userInfo) => {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(userInfo))
+    localStorage.setItem(USER_KEY, JSON.stringify(userInfo))
   } catch (error) {
     console.error('保存用户信息失败', error)
   }
@@ -10,7 +11,7 @@ export const saveUserInfo = (userInfo) => {
 
 export const getUserInfo = () => {
   try {
-    const data = localStorage.getItem(STORAGE_KEY)
+    const data = localStorage.getItem(USER_KEY)
     return data ? JSON.parse(data) : null
   } catch (error) {
     console.error('读取用户信息失败', error)
@@ -20,8 +21,38 @@ export const getUserInfo = () => {
 
 export const removeUserInfo = () => {
   try {
-    localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(USER_KEY)
   } catch (error) {
     console.error('清除用户信息失败', error)
   }
+}
+
+export const saveToken = (token) => {
+  try {
+    localStorage.setItem(TOKEN_KEY, token)
+  } catch (error) {
+    console.error('保存Token失败', error)
+  }
+}
+
+export const getToken = () => {
+  try {
+    return localStorage.getItem(TOKEN_KEY)
+  } catch (error) {
+    console.error('读取Token失败', error)
+    return null
+  }
+}
+
+export const removeToken = () => {
+  try {
+    localStorage.removeItem(TOKEN_KEY)
+  } catch (error) {
+    console.error('清除Token失败', error)
+  }
+}
+
+export const clearAuth = () => {
+  removeUserInfo()
+  removeToken()
 }

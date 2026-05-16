@@ -1,18 +1,24 @@
 import { createContext, useState, useEffect } from 'react'
-import { getUserInfo, saveUserInfo, removeUserInfo } from '../utils/storage'
+import { getUserInfo, saveUserInfo, removeUserInfo, saveToken, getToken, clearAuth } from '../utils/storage'
 import { getUser } from '../api'
 
-// eslint-disable-next-line react-refresh/only-export-components
 export const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
-  const [userInfo, setUserInfo] = useState(() => getUserInfo())
-  const [isAuthenticated, setIsAuthenticated] = useState(!!getUserInfo())
+  const [userInfo, setUserInfo] = useState(() => {
+    const token = getToken()
+    return token ? getUserInfo() : null
+  })
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    const token = getToken()
+    return !!(token && getUserInfo())
+  })
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
+    const token = getToken()
     const user = getUserInfo()
-    if (user) {
+    if (token && user) {
       getUser()
         .then((freshUser) => {
           if (freshUser) {
@@ -20,31 +26,50 @@ export function AuthProvider({ children }) {
             setUserInfo(freshUser)
             setIsAuthenticated(true)
           } else {
-            removeUserInfo()
+            clearAuth()
             setUserInfo(null)
             setIsAuthenticated(false)
           }
         })
         .catch(() => {
-          removeUserInfo()
+          clearAuth()
           setUserInfo(null)
           setIsAuthenticated(false)
         })
     } else {
+      if (!token) {
+        removeUserInfo()
+      }
       setUserInfo(null)
       setIsAuthenticated(false)
     }
   }, [])
   /* eslint-enable react-hooks/set-state-in-effect */
 
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      setUserInfo(null)
+      setIsAuthenticated(false)
+    }
+    window.addEventListener('auth:expired', handleAuthExpired)
+    return () => window.removeEventListener('auth:expired', handleAuthExpired)
+  }, [])
+
   const login = (data) => {
-    saveUserInfo(data)
-    setUserInfo(data)
+    if (data.token) {
+      saveToken(data.token)
+      const { token, ...userData } = data
+      saveUserInfo(userData)
+      setUserInfo(userData)
+    } else {
+      saveUserInfo(data)
+      setUserInfo(data)
+    }
     setIsAuthenticated(true)
   }
 
   const logout = () => {
-    removeUserInfo()
+    clearAuth()
     setUserInfo(null)
     setIsAuthenticated(false)
   }
@@ -52,7 +77,12 @@ export function AuthProvider({ children }) {
   const updateUserInfo = (updater) => {
     setUserInfo(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater
-      if (next) saveUserInfo(next)
+      if (next) {
+        saveUserInfo(next)
+        if (next.token) {
+          saveToken(next.token)
+        }
+      }
       return next
     })
   }

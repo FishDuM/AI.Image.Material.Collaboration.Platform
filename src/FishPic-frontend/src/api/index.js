@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { getToken, clearAuth } from '../utils/storage'
 
 const api = axios.create({
   baseURL: '/api',
@@ -19,6 +20,10 @@ function getRequestKey(config) {
 
 api.interceptors.request.use(
   (config) => {
+    const token = getToken()
+    if (token) {
+      config.headers.Authorization = token
+    }
     if (config.noDedup) {
       return config
     }
@@ -40,6 +45,11 @@ api.interceptors.request.use(
   }
 )
 
+function handleAuthExpired() {
+  clearAuth()
+  window.dispatchEvent(new CustomEvent('auth:expired'))
+}
+
 api.interceptors.response.use(
   (response) => {
     if (!response || !response.config) return response
@@ -59,6 +69,9 @@ api.interceptors.response.use(
       return Promise.reject(new Error('响应格式异常'))
     }
     if (responseData.code !== 1) {
+      if (responseData.code === 40005 || responseData.code === 40002) {
+        handleAuthExpired()
+      }
       return Promise.reject(new Error(responseData.message || '请求失败'))
     }
     return responseData.data ?? responseData
@@ -73,6 +86,10 @@ api.interceptors.response.use(
     }
     if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
       return new Promise(() => { })
+    }
+    if (error.response?.status === 401) {
+      handleAuthExpired()
+      return Promise.reject(new Error('登录已过期，请重新登录'))
     }
     const message = error.response?.data?.message || error.message || '请求失败，请重试'
     return Promise.reject(new Error(message))

@@ -62,7 +62,6 @@ function CommunitySquare() {
   const [selectedCategory, setSelectedCategory] = useState('热门')
   const [searchText, setSearchText] = useState('')
   const [currentHotPost, setCurrentHotPost] = useState(true)
-  const [, setCurrentPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [createEditModalOpen, setCreateEditModalOpen] = useState(false)
@@ -118,7 +117,6 @@ function CommunitySquare() {
           setMasonryItems(newItems)
         }
         const totalPages = result.pages || Math.ceil((result.total || 0) / pageSize)
-        setCurrentPage(page)
         currentPageRef.current = page
         setHasMore(page < totalPages)
       }
@@ -175,7 +173,6 @@ function CommunitySquare() {
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    setCurrentPage(1)
     currentPageRef.current = 1
     setHasMore(true)
     fetchPostList({ text: searchText, hotPost: currentHotPost, page: 1, append: false })
@@ -262,7 +259,6 @@ function CommunitySquare() {
 
   const handleSearch = () => {
     setCurrentHotPost(false)
-    setCurrentPage(1)
     currentPageRef.current = 1
     setHasMore(true)
     fetchPostList({ text: searchText, hotPost: false, page: 1, append: false })
@@ -272,13 +268,11 @@ function CommunitySquare() {
     if (selectedCategory === cat) {
       setSelectedCategory(null)
       setCurrentHotPost(false)
-      setCurrentPage(1)
       currentPageRef.current = 1
       setHasMore(true)
       fetchPostList({ text: searchText, hotPost: false, page: 1, append: false })
     } else {
       setSelectedCategory(cat)
-      setCurrentPage(1)
       currentPageRef.current = 1
       setHasMore(true)
       if (cat === '热门') {
@@ -301,7 +295,6 @@ function CommunitySquare() {
   }
 
   const handleRefresh = () => {
-    setCurrentPage(1)
     currentPageRef.current = 1
     setHasMore(true)
     fetchPostList({ text: searchText, hotPost: currentHotPost, page: 1, append: false })
@@ -312,7 +305,6 @@ function CommunitySquare() {
   }
 
   const handleCreateEditSuccess = () => {
-    setCurrentPage(1)
     currentPageRef.current = 1
     setHasMore(true)
     fetchPostList({ text: searchText, hotPost: currentHotPost, page: 1, append: false })

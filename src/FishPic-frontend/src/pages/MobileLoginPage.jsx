@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useContext } from 'react'
 import { Form, Input, Button, App } from 'antd'
 import { UserOutlined, LockOutlined, SafetyCertificateOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
-import { getLoginCheckCode, login, getUserMyself } from '../api'
+import { getLoginCheckCode, login } from '../api'
 import { AuthContext } from '../context/AuthContext'
 import MobilePageWrapper from '../components/MobilePageWrapper'
 import './MobileLoginRegister.css'
@@ -60,10 +60,9 @@ export default function MobileLoginPage() {
         ...values,
         captchaKey,
       }
-      await login(loginData)
+      const result = await login(loginData)
       message.success('登录成功')
-      const userData = await getUserMyself()
-      authLogin(userData)
+      authLogin(result)
       form.resetFields()
       navigate('/', { replace: true })
     } catch (err) {

@@ -92,6 +92,7 @@ export function useAuthModal(onLoginSuccess) {
       const result = await login({ ...values, captchaKey: loginKey })
       authLogin(result)
       message.success('登录成功')
+      loginForm?.resetFields()
       closeLogin()
       onLoginSuccess?.()
     } catch (error) {
@@ -121,6 +122,7 @@ export function useAuthModal(onLoginSuccess) {
         captchaKey: registerKey,
       })
       message.success('注册成功，请登录')
+      registerForm?.resetFields()
       closeRegister()
       openLogin()
     } catch (error) {
