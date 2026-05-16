@@ -21,13 +21,7 @@ export default function MobileRegisterPage() {
       const inner = data?.data ?? data
       if (inner?.captchaKey && inner?.base64Image) {
         setCaptchaKey(inner.captchaKey)
-        const img = inner.base64Image.startsWith('data:')
-          ? inner.base64Image
-          : `data:image/png;base64,${inner.base64Image}`
-        setCaptchaImage(img)
-      } else if (inner?.captchaKey && inner?.captchaImage) {
-        setCaptchaKey(inner.captchaKey)
-        setCaptchaImage(inner.captchaImage)
+        setCaptchaImage(inner.base64Image)
       }
     } catch {
       void 0
@@ -48,7 +42,6 @@ export default function MobileRegisterPage() {
     try {
       if (!captchaKey) {
         message.error('验证码已过期，请刷新验证码')
-        fetchCaptcha()
         form.setFieldValue('checkCode', '')
         setLoading(false)
         return
@@ -67,7 +60,6 @@ export default function MobileRegisterPage() {
       navigate('/mobile/login', { replace: true })
     } catch (err) {
       message.error(err.message || '注册失败，请重试')
-      fetchCaptcha()
       form.setFieldValue('checkCode', '')
     } finally {
       setLoading(false)

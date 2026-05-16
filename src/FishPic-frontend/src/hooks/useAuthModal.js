@@ -24,10 +24,7 @@ export function useAuthModal(onLoginSuccess) {
       const inner = data?.data ?? data
       if (inner?.captchaKey && inner?.base64Image) {
         setLoginKey(inner.captchaKey)
-        const imageSrc = inner.base64Image.startsWith('data:')
-          ? inner.base64Image
-          : `data:image/png;base64,${inner.base64Image}`
-        setLoginCheckCodeUrl(imageSrc)
+        setLoginCheckCodeUrl(inner.base64Image)
       } else {
         message.error('获取验证码失败')
       }
@@ -43,10 +40,7 @@ export function useAuthModal(onLoginSuccess) {
       const inner = data?.data ?? data
       if (inner?.captchaKey && inner?.base64Image) {
         setRegisterKey(inner.captchaKey)
-        const imageSrc = inner.base64Image.startsWith('data:')
-          ? inner.base64Image
-          : `data:image/png;base64,${inner.base64Image}`
-        setRegisterCheckCodeUrl(imageSrc)
+        setRegisterCheckCodeUrl(inner.base64Image)
       } else {
         message.error('获取验证码失败')
       }
@@ -97,19 +91,17 @@ export function useAuthModal(onLoginSuccess) {
       onLoginSuccess?.()
     } catch (error) {
       message.error(error.message || '登录失败，请重试')
-      fetchLoginCheckCode()
       loginForm?.setFieldValue('checkCode', '')
     } finally {
       setLoginLoading(false)
     }
-  }, [loginKey, authLogin, message, closeLogin, fetchLoginCheckCode, onLoginSuccess])
+  }, [loginKey, authLogin, message, closeLogin, onLoginSuccess])
 
   const handleRegisterSubmit = useCallback(async (values, registerForm) => {
     setRegisterLoading(true)
     try {
       if (!registerKey) {
         message.error('验证码已过期，请刷新验证码')
-        fetchRegisterCheckCode()
         registerForm?.setFieldValue('checkCode', '')
         setRegisterLoading(false)
         return
@@ -127,12 +119,11 @@ export function useAuthModal(onLoginSuccess) {
       openLogin()
     } catch (error) {
       message.error(error.message || '注册失败，请重试')
-      fetchRegisterCheckCode()
       registerForm?.setFieldValue('checkCode', '')
     } finally {
       setRegisterLoading(false)
     }
-  }, [registerKey, message, closeRegister, fetchRegisterCheckCode, openLogin])
+  }, [registerKey, message, closeRegister, openLogin])
 
   const refreshLoginCode = useCallback((loginForm) => {
     fetchLoginCheckCode()

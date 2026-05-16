@@ -1,12 +1,14 @@
 package hk.ljx.fishpicsbackend.controller;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.lang.UUID;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
 import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
+import hk.ljx.fishpicsbackend.common.constants.UserConstants;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
@@ -56,12 +58,12 @@ public class UserController {
 
     @GetMapping("/checkCode/register")
     public Response<CheckCodeVO> checkCodeRegister() {
-        String register = RandomUtil.randomString(10);
+        String register = UUID.randomUUID().toString(true);
         String redisKey = RedisConstants.getRegisterCodeKey(register);
         String base64Image = userService.getCheckCode(redisKey, 5, 5);
         return ResUtils.success(CheckCodeVO.builder()
                 .captchaKey(register)
-                .base64Image(base64Image)
+                .base64Image(UserConstants.getCheckCode(base64Image))
                 .build());
     }
 
@@ -72,7 +74,7 @@ public class UserController {
         String base64Image = userService.getCheckCode(redisKey, 5, 5);
         return ResUtils.success(CheckCodeVO.builder()
                 .captchaKey(login)
-                .base64Image(base64Image)
+                .base64Image(UserConstants.getCheckCode(base64Image))
                 .build());
     }
 

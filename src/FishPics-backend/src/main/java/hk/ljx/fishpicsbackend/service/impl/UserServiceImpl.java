@@ -37,6 +37,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.annotation.Resource;
 
+import java.awt.*;
 import java.io.ByteArrayOutputStream;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
@@ -70,30 +71,20 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         if (len == null) {
             len = 4;
         }
-
         if (minute == null) {
             minute = 5;
         }
 
-        // 1. 创建圆圈验证码
+        // 1. 创建圆圈验证码和设置字体
         CircleCaptcha captcha = CaptchaUtil.createCircleCaptcha(200, 100, len, 20);
+        captcha.setFont(new Font("Monospaced", Font.BOLD, 80));
 
         // 2. 验证码 code 存到 redis
         String code = captcha.getCode();
         stringRedisTemplate.opsForValue().set(str, code, minute, TimeUnit.MINUTES);
 
         // 3. 将图片转为 base64
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        try {
-            captcha.write(outputStream);
-        } catch (Exception e) {
-            log.error("验证码转 base64 失败", e);
-            throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "验证码生成失败");
-        }
-
-        byte[] imageBytes = outputStream.toByteArray();
-
-        return Base64.encode(imageBytes);
+        return captcha.getImageBase64();
     }
 
     @Override
@@ -143,6 +134,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         Boolean spaceRequest = spaceService.createSpace(new CreateSpace(user.getNickname() + "的私人空间", "你的专属私密存储空间", 0),
                 user);
         ExcUtils.throwIfTrue(!spaceRequest, ExceptionCode.DATABASE_ERROR, "创建私人空间失败");
+        // 删除已注册的验证码
+        stringRedisTemplate.delete(checkCodeKeyByRegister);
         return ResUtils.success(true);
     }
 
@@ -174,6 +167,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         String token = UUID.randomUUID().toString(true);
         stringRedisTemplate.opsForValue().set(RedisConstants.getUserIdKey(token), user.getId().toString(), 1, TimeUnit.DAYS);
         stringRedisTemplate.opsForValue().set(RedisConstants.getUserInfoKey(user.getId()), JSONUtil.toJsonStr(user), 1, TimeUnit.DAYS);
+
+        // 删除已登陆的验证码
+        stringRedisTemplate.delete(checkCodeKeyByLogin);
 
         // 查到用户数据返回封装类
         UserLoginVO userLoginVO = BeanUtil.copyProperties(user, UserLoginVO.class);
