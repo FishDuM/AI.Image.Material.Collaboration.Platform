@@ -56,7 +56,7 @@ function SpacePickerModal({ open, onClose, onConfirm, currentImageCount, existin
       const result = await postPictureList({ spaceId: sid, pictureIds: ids, current: p, pageSize: 20 })
       const list = Array.isArray(result) ? result : []
       setImages(list)
-      setTotal(list.length)
+      setTotal(result?.total ?? result?.pages * 20 ?? list.length)
     } catch {
       setImages([])
     } finally {

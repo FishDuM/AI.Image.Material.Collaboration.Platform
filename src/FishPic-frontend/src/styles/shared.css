@@ -553,32 +553,141 @@
   flex-direction: column;
   gap: var(--space-3);
   z-index: 50;
+  animation: float-actions-fade-in 0.25s var(--ease-out);
+}
+
+@keyframes float-actions-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .float-action-btn {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-full);
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
+  width: 48px !important;
+  height: 48px !important;
+  min-width: 48px !important;
+  min-height: 48px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  background: var(--bg-secondary) !important;
+  border: 1.5px solid var(--border-color) !important;
+  color: var(--text-primary) !important;
+  font-size: 18px !important;
   cursor: pointer;
-  transition: all var(--duration-normal) var(--ease-out);
-  box-shadow: var(--shadow-lg);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(8px);
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
 .float-action-btn:hover {
-  background: var(--accent-hover);
-  transform: scale(1.08);
-  box-shadow: var(--shadow-xl);
+  background: var(--bg-tertiary) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+  box-shadow: 0 4px 20px rgba(var(--accent-rgb), 0.15), 0 2px 6px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
 }
 
 .float-action-btn:active {
-  transform: scale(0.95);
+  transform: translateY(0) scale(0.94);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  transition-duration: 0.1s;
+}
+
+[data-theme='dark'] .float-action-btn {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme='dark'] .float-action-btn:hover {
+  background: rgba(255, 255, 255, 0.18) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+  box-shadow: 0 4px 20px rgba(var(--accent-rgb), 0.25), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.float-action-btn .ant-btn-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.float-back-top {
+  order: 1;
+}
+
+.float-create-post {
+  order: 2;
+}
+
+.float-refresh {
+  order: 3;
+}
+
+.upgrade-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.upgrade-content {
+  background: var(--bg-primary);
+  border-radius: var(--radius-xl);
+  padding: var(--space-4) var(--space-5) var(--space-3);
+  max-width: 700px;
+  width: 92%;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+}
+
+.upgrade-header {
+  margin-bottom: var(--space-5);
+}
+
+.upgrade-title {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 var(--space-1);
+  letter-spacing: -0.01em;
+}
+
+.upgrade-subtitle {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.upgrade-section {
+  margin-bottom: var(--space-5);
+}
+
+.upgrade-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.upgrade-section-icon {
+  color: var(--accent);
+  font-size: var(--text-lg);
 }
 
 .upgrade-plan-grid {
@@ -627,6 +736,22 @@
   font-weight: 700;
   color: var(--text-primary);
   margin-bottom: var(--space-2);
+}
+
+.level-vip .upgrade-plan-name {
+  color: #E53935;
+}
+
+.level-svip .upgrade-plan-name {
+  color: #D4A017;
+}
+
+[data-theme='dark'] .level-vip .upgrade-plan-name {
+  color: #FF5252;
+}
+
+[data-theme='dark'] .level-svip .upgrade-plan-name {
+  color: #FFD54F;
 }
 
 .upgrade-plan-price {
@@ -820,13 +945,19 @@
 
   .float-actions {
     right: var(--space-4);
-    bottom: 72px;
+    bottom: calc(var(--bottom-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + var(--space-3));
   }
 
   .float-action-btn {
-    width: 44px;
-    height: 44px;
-    font-size: 18px;
+    width: 44px !important;
+    height: 44px !important;
+    min-width: 44px !important;
+    min-height: 44px !important;
+    font-size: 17px !important;
+  }
+
+  .float-action-btn .ant-btn-icon {
+    font-size: 17px !important;
   }
 
   .post-card-footer {

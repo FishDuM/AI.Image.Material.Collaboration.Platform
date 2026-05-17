@@ -6,7 +6,6 @@ import {
   Button,
   Empty,
   Form,
-  Image as AntImage,
   Input,
   Masonry,
   Modal,
@@ -21,7 +20,6 @@ import {
   EditOutlined,
   EyeOutlined,
   FileTextOutlined,
-  HeartFilled,
   HeartOutlined,
   LoadingOutlined,
   LockOutlined,
@@ -37,28 +35,8 @@ import { useIsMobile } from '../hooks/useIsMobile'
 import { isAllowedImageFile, getMaxUploadSize, formatMaxUploadSize } from '../utils/uploadConstraints'
 import PostDetailModal from '../components/PostDetailModal'
 import CreateEditPostModal from '../components/CreateEditPostModal'
+import PostCard from '../components/shared/PostCard'
 import './UserProfile.css'
-
-const PostCard = ({ post, onClick }) => (
-  <div className="post-card" onClick={() => onClick(post)}>
-    <div className="post-cover-wrapper">
-      <AntImage src={post.url} alt={post.title} preview={false} />
-    </div>
-    <div className="post-card-body">
-      <h3 className="post-card-title">{post.title}</h3>
-      <div className="post-card-footer">
-        <span className="post-likes">
-          {post.likesNum > 0 ? (
-            <HeartFilled style={{ color: 'var(--error)', marginRight: 4 }} />
-          ) : (
-            <HeartOutlined style={{ marginRight: 4 }} />
-          )}
-          {post.likesNum || 0}
-        </span>
-      </div>
-    </div>
-  </div>
-)
 
 function UserProfile() {
   const { message } = AntApp.useApp()
@@ -475,7 +453,7 @@ function UserProfile() {
           columns={isMobile ? 2 : 3}
           gutter={[12, 12]}
           items={masonryItems}
-          itemRender={(item) => <PostCard post={item.data} onClick={handlePostClick} />}
+          itemRender={(item) => <PostCard post={item.data} onClick={handlePostClick} variant="profile" />}
         />
         {tab.hasMore ? (
           loadingMore ? (

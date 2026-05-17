@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { App, Modal, Form, Input, Button, Upload, Select, Switch, Image as AntImage, Tabs, Pagination, Spin, Empty } from 'antd'
-import { PlusOutlined, DeleteOutlined, LeftOutlined, RightOutlined, SendOutlined, CheckOutlined, CloudOutlined } from '@ant-design/icons'
+import { PlusOutlined, DeleteOutlined, LeftOutlined, RightOutlined, SendOutlined, CheckOutlined, CloudOutlined, TeamOutlined } from '@ant-design/icons'
 import api, { listSpace, postPictureList } from '../api'
 import MobilePageWrapper from './MobilePageWrapper'
 import SpacePickerModal from './shared/SpacePickerModal'
@@ -30,6 +30,15 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
   const [spaceId, setSpaceId] = useState(null)
   const [uploadTabKey, setUploadTabKey] = useState('manual')
   const [spacePickerOpen, setSpacePickerOpen] = useState(false)
+  const [teamSpaces, setTeamSpaces] = useState([])
+  const [teamSpacesLoading, setTeamSpacesLoading] = useState(false)
+  const [teamSpaceId, setTeamSpaceId] = useState(null)
+  const [teamSpaceImages, setTeamSpaceImages] = useState([])
+  const [teamSpaceImageTotal, setTeamSpaceImageTotal] = useState(0)
+  const [teamSpaceImagePage, setTeamSpaceImagePage] = useState(1)
+  const [teamSpaceImageLoading, setTeamSpaceImageLoading] = useState(false)
+  const [selectedTeamSpaceImageIds, setSelectedTeamSpaceImageIds] = useState([])
+  const [teamSpaceView, setTeamSpaceView] = useState('list')
 
   const maxSize = getMaxUploadSize()
   const maxSizeText = formatMaxUploadSize()
@@ -87,6 +96,14 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
       setSpaceImageTotal(0)
       setSpaceId(null)
       setUploadTabKey('manual')
+      setTeamSpaces([])
+      setTeamSpacesLoading(false)
+      setTeamSpaceId(null)
+      setTeamSpaceImages([])
+      setTeamSpaceImageTotal(0)
+      setTeamSpaceImagePage(1)
+      setSelectedTeamSpaceImageIds([])
+      setTeamSpaceView('list')
       form.resetFields()
       setTimeout(() => {
         form.setFieldsValue({ coverIndex: 0 })
@@ -101,13 +118,103 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
       const result = await postPictureList({ spaceId, pictureIds: ids, current: page, pageSize: 20 })
       const list = Array.isArray(result) ? result : []
       setSpaceImages(list)
-      setSpaceImageTotal(list.length)
+      setSpaceImageTotal(result?.total ?? result?.pages * 20 ?? list.length)
     } catch {
       setSpaceImages([])
     } finally {
       setSpaceImageLoading(false)
     }
   }, [spaceId])
+
+  const fetchTeamSpaces = useCallback(async () => {
+    setTeamSpacesLoading(true)
+    try {
+      const result = await listSpace(1)
+      const list = Array.isArray(result) ? result : []
+      setTeamSpaces(list)
+      if (list.length > 0 && !teamSpaceId) {
+        setTeamSpaceId(list[0].id)
+      }
+    } catch {
+      setTeamSpaces([])
+    } finally {
+      setTeamSpacesLoading(false)
+    }
+  }, [])
+
+  const fetchTeamSpaceImages = useCallback(async (page, ids) => {
+    if (!teamSpaceId) return
+    setTeamSpaceImageLoading(true)
+    try {
+      const result = await postPictureList({ spaceId: teamSpaceId, pictureIds: ids, current: page, pageSize: 20 })
+      const list = Array.isArray(result) ? result : []
+      setTeamSpaceImages(list)
+      setTeamSpaceImageTotal(result?.total ?? result?.pages * 20 ?? list.length)
+    } catch {
+      setTeamSpaceImages([])
+    } finally {
+      setTeamSpaceImageLoading(false)
+    }
+  }, [teamSpaceId])
+
+  const handleTeamSpaceSelect = useCallback((id) => {
+    setTeamSpaceId(id)
+    setTeamSpaceImagePage(1)
+    setSelectedTeamSpaceImageIds([])
+    setTeamSpaceView('images')
+  }, [])
+
+  const handleTeamSpaceBack = useCallback(() => {
+    setTeamSpaceView('list')
+    setTeamSpaceId(null)
+    setTeamSpaceImages([])
+    setTeamSpaceImageTotal(0)
+    setTeamSpaceImagePage(1)
+    setSelectedTeamSpaceImageIds([])
+  }, [])
+
+  const handleTeamSpaceImageToggle = useCallback((img) => {
+    if (selectedTeamSpaceImageIds.includes(img.id)) {
+      setSelectedTeamSpaceImageIds(prev => prev.filter(id => id !== img.id))
+      return
+    }
+    if (img.flag === false) {
+      message.warning('该图片已添加，请勿重复选择')
+      return
+    }
+    if (imageId.length + selectedTeamSpaceImageIds.length >= 15) {
+      message.warning('最多只能选择15张图片')
+      return
+    }
+    setSelectedTeamSpaceImageIds(prev => [...prev, img.id])
+  }, [imageId, selectedTeamSpaceImageIds])
+
+  const handleTeamSpaceConfirm = useCallback(() => {
+    if (selectedTeamSpaceImageIds.length === 0) {
+      message.warning('请先选择图片')
+      return
+    }
+    const spaceImageMap = new Map(teamSpaceImages.map(img => [img.id, img]))
+    const selected = selectedTeamSpaceImageIds.map(id => spaceImageMap.get(id)).filter(Boolean)
+    const newImages = selected.map((img) => ({
+      uid: `team-space-${img.id}`,
+      name: `team-space-image-${img.id}`,
+      status: 'done',
+      url: img.url,
+      pictureId: img.id,
+    }))
+    setCurrentImageIndex(uploadedImages.length + newImages.length - 1)
+    setShowUploadSlide(false)
+    setUploadedImages(prev => [...prev, ...newImages])
+    setImageId(prev => [...prev, ...selected.map(img => img.id)])
+    setModalStep(2)
+    setSelectedTeamSpaceImageIds([])
+    setTeamSpaceImagePage(1)
+    const currentCover = form.getFieldValue('coverIndex')
+    if (currentCover == null) {
+      form.setFieldsValue({ coverIndex: 0 })
+    }
+  }, [selectedTeamSpaceImageIds, teamSpaceImages, uploadedImages.length, form])
 
   useEffect(() => {
     const loadSpace = async () => {
@@ -127,6 +234,14 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
   useEffect(() => {
     if (spaceId) fetchSpaceImages(spaceImagePage, imageId)
   }, [spaceId, spaceImagePage, fetchSpaceImages, imageId])
+
+  useEffect(() => {
+    if (teamSpaceId) fetchTeamSpaceImages(teamSpaceImagePage, imageId)
+  }, [teamSpaceId, teamSpaceImagePage, fetchTeamSpaceImages, imageId])
+
+  useEffect(() => {
+    if (open && !editPostDetail && uploadTabKey === 'team') fetchTeamSpaces()
+  }, [open, editPostDetail, uploadTabKey])
 
   const toggleSpaceImage = useCallback((img) => {
     if (selectedSpaceImageIds.includes(img.id)) {
@@ -172,6 +287,10 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
   }, [selectedSpaceImageIds, spaceImages, uploadedImages.length, form])
 
   const handleSpacePickerConfirm = useCallback((selected) => {
+    if (uploadedImagesRef.current.length + selected.length > 15) {
+      message.warning('最多只能选择15张图片')
+      return
+    }
     const newImages = selected.map((img) => ({
       uid: `space-pick-${img.id}`,
       name: `space-image-${img.id}`,
@@ -395,6 +514,11 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
               if (key === 'space' && spaceId) {
                 setSpaceImagePage(1)
               }
+              if (key === 'team') {
+                setTeamSpaceImagePage(1)
+                setSelectedTeamSpaceImageIds([])
+                fetchTeamSpaces()
+              }
             }}
             items={[
               {
@@ -483,6 +607,108 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
                         </div>
                       </>
                     )}
+                  </div>
+                ),
+              },
+              {
+                key: 'team',
+                label: '从团队空间选择',
+                children: (
+                  <div className="upload-tab-content space-select-tab">
+                    <Spin spinning={teamSpacesLoading}>
+                      {teamSpaces.length === 0 ? (
+                        <Empty description="暂未加入团队空间" style={{ padding: '60px 0' }} />
+                      ) : teamSpaceView === 'list' ? (
+                        <div className="team-space-list-view">
+                          {teamSpaces.map((sp) => (
+                            <div
+                              key={sp.id}
+                              className="team-space-list-card"
+                              onClick={() => handleTeamSpaceSelect(sp.id)}
+                            >
+                              <TeamOutlined className="team-space-card-icon" />
+                              <div className="team-space-card-info">
+                                <span className="team-space-card-name">{sp.name}</span>
+                                {sp.introduction && (
+                                  <span className="team-space-card-intro" title={sp.introduction}>{sp.introduction}</span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <>
+                          <div className="team-space-image-header">
+                            <Button
+                              type="link"
+                              icon={<LeftOutlined />}
+                              onClick={handleTeamSpaceBack}
+                              className="team-space-back-btn"
+                            >
+                              返回空间列表
+                            </Button>
+                            <span className="team-space-image-title">
+                              {teamSpaces.find(s => s.id === teamSpaceId)?.name || '团队空间'}
+                            </span>
+                          </div>
+                          {!teamSpaceId ? (
+                            <Empty description="请选择一个团队空间" style={{ padding: '60px 0' }} />
+                          ) : (
+                            <>
+                              <Spin spinning={teamSpaceImageLoading}>
+                                <div className="space-image-grid">
+                                  {teamSpaceImages.map((img) => {
+                                    const orderIndex = selectedTeamSpaceImageIds.indexOf(img.id)
+                                    const isSelected = orderIndex !== -1
+                                    const isInCarousel = img.flag === false
+                                    return (
+                                      <div
+                                        key={img.id}
+                                        className={`space-image-item ${isSelected ? 'space-image-selected' : ''} ${isInCarousel ? 'space-image-in-carousel' : ''}`}
+                                        onClick={() => handleTeamSpaceImageToggle(img)}
+                                      >
+                                        <img src={img.url} alt="" className="space-image-thumb" />
+                                        <div className="space-image-check">
+                                          {isSelected ? (
+                                            <span className="space-order-badge">{orderIndex + 1}</span>
+                                          ) : isInCarousel ? (
+                                            <span className="space-order-exists">已有</span>
+                                          ) : (
+                                            <span className="space-order-empty" />
+                                          )}
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </Spin>
+                              {teamSpaceImages.length === 0 && !teamSpaceImageLoading && (
+                                <Empty description="暂无图片" style={{ padding: '40px 0' }} />
+                              )}
+                              <div className="space-image-footer">
+                                <Pagination
+                                  current={teamSpaceImagePage}
+                                  total={teamSpaceImageTotal}
+                                  pageSize={20}
+                                  size="small"
+                                  showSizeChanger={false}
+                                  showTotal={(total) => `共 ${total} 张`}
+                                  onChange={(page) => setTeamSpaceImagePage(page)}
+                                />
+                                <Button
+                                  type="primary"
+                                  icon={<CheckOutlined />}
+                                  disabled={selectedTeamSpaceImageIds.length === 0}
+                                  onClick={handleTeamSpaceConfirm}
+                                >
+                                  确认选择 ({selectedTeamSpaceImageIds.length})
+                                </Button>
+                              </div>
+                            </>
+                          )}
+                        </>
+                      )}
+                    </Spin>
                   </div>
                 ),
               },

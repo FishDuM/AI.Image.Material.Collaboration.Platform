@@ -1,75 +1,16 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App as AntApp, Typography, Button, Modal, Form, Input, Pagination, Masonry, Image as AntImage, Spin, Empty, Popconfirm, Progress, Popover } from 'antd'
-import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowUpOutlined, CrownOutlined, CloudServerOutlined, CheckCircleFilled, EditOutlined, CloudUploadOutlined, FontSizeOutlined } from '@ant-design/icons'
+import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowUpOutlined, EditOutlined, CloudUploadOutlined, FontSizeOutlined, DatabaseOutlined, HddOutlined, UploadOutlined, ApartmentOutlined } from '@ant-design/icons'
 import { updateSpace, listSpace, spaceListPicture, deletePicture, updatePicture, cropPicture, watermarkPicture } from '../api'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { PAGINATION_LOCALE, PAGE_SIZE, LEVEL_MAP, storageStrokeColor, formatStorage } from '../utils/constants'
 import ImageCropper from '../components/shared/ImageCropper'
 import ImageUploadModal from '../components/shared/ImageUploadModal'
+import UpgradeModal from '../components/shared/UpgradeModal'
 import './PrivateSpace.css'
 
 const { Title } = Typography
-
-const PAGE_SIZE = 20
-
-const PAGINATION_LOCALE = {
-  items_per_page: '条/页',
-  jump_to: '跳至',
-  jump_to_confirm: '确定',
-  page: '页',
-  prev_page: '上一页',
-  next_page: '下一页',
-  prev_5: '向前 5 页',
-  next_5: '向后 5 页',
-  prev_3: '向前 3 页',
-  next_3: '向后 3 页',
-  page_size: '页码',
-}
-
-const storageStrokeColor = {
-  '0%': '#5A5A5A',
-  '100%': '#87d068',
-}
-
-const formatStorage = (bytes) => {
-  if (!bytes || bytes === 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  const val = bytes / Math.pow(1024, i)
-  return `${val.toFixed(i > 2 ? 1 : (i > 1 ? 2 : 0))} ${units[i]}`
-}
-
-const LEVEL_MAP = {
-  0: { label: '普通', className: 'level-normal', cardClass: 'storage-card-normal' },
-  1: { label: 'VIP', className: 'level-vip', cardClass: 'storage-card-vip' },
-  2: { label: 'SVIP', className: 'level-svip', cardClass: 'storage-card-svip' },
-}
-
-const UPGRADE_PLANS = [
-  {
-    key: 'vip',
-    name: 'VIP',
-    price: '¥9.9',
-    period: '/月',
-    level: 1,
-    features: ['5 GB 专属存储空间', '支持上传单张 5 MB 图片', '优先审核通过', '专属客服通道'],
-  },
-  {
-    key: 'svip',
-    name: 'SVIP',
-    price: '¥19.9',
-    period: '/月',
-    level: 2,
-    hot: true,
-    features: ['10 GB 专属存储空间', '支持上传单张 5 MB 图片', '极速审核通过', '专属客服通道', '优先体验新功能'],
-  },
-]
-
-const ADDON_PLANS = [
-  { key: 'addon-1g', name: '+1 GB', size: '1 GB', price: '¥1.0', period: '/月' },
-  { key: 'addon-5g', name: '+5 GB', size: '5 GB', price: '¥3.9', period: '/月' },
-  { key: 'addon-10g', name: '+10 GB', size: '10 GB', price: '¥6.9', period: '/月' },
-]
 
 function PrivateSpace() {
   const navigate = useNavigate()
@@ -89,7 +30,6 @@ function PrivateSpace() {
   const [batchMode, setBatchMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState([])
   const [showUpgrade, setShowUpgrade] = useState(false)
-  const [selectedPlan, setSelectedPlan] = useState(null)
   const [showEditPicture, setShowEditPicture] = useState(false)
   const [editPictureLoading, setEditPictureLoading] = useState(false)
   const [editPictureForm] = Form.useForm()
@@ -157,6 +97,8 @@ function PrivateSpace() {
   }, [spaces])
 
   const handlePageChange = useCallback((page) => {
+    setSelectedIds([])
+    setBatchMode(false)
     if (spaces.length > 0 && spaces[0].id) {
       fetchPictures(spaces[0].id, page, searchKeyword)
     }
@@ -200,6 +142,7 @@ function PrivateSpace() {
       setBatchMode(false)
       if (spaces.length > 0 && spaces[0].id) {
         await fetchPictures(spaces[0].id, picturePage, searchKeyword)
+        fetchSpaces()
       }
     } catch (error) {
       message.error(error.message || '批量删除失败')
@@ -253,6 +196,7 @@ function PrivateSpace() {
       }
     } catch (error) {
       message.error(error.message || '图片编辑保存失败')
+      setIsCropping(false)
     }
   }, [selectedIds, spaces, fetchPictures, picturePage, searchKeyword, message])
 
@@ -353,7 +297,7 @@ function PrivateSpace() {
     <main className="private-space-container">
       <div className="private-space-header">
         <div className="private-space-header-left">
-          <Title level={2}>
+          <Title level={2} className="private-space-title">
             私人空间{spaces.length > 0 && ` - ${spaces[0].name}`}
           </Title>
           <p className="header-subtitle">
@@ -365,22 +309,39 @@ function PrivateSpace() {
             <Popover
               content={
                 <div className={`storage-card ${LEVEL_MAP[spaceInfo.level]?.cardClass || ''}`}>
-                  <div className="storage-card-title">空间详情</div>
-                  <div className="storage-card-row">
-                    <span className="storage-card-label">空间等级</span>
-                    <span className={`storage-card-value ${LEVEL_MAP[spaceInfo.level]?.className || ''}`}>{LEVEL_MAP[spaceInfo.level]?.label || '-'}</span>
+                  <div className="storage-card-header">
+                    <DatabaseOutlined className="storage-card-header-icon" />
+                    <span className="storage-card-header-text">空间详情</span>
                   </div>
-                  <div className="storage-card-row">
-                    <span className="storage-card-label">占用比例</span>
-                    <span className="storage-card-value">{spaceInfo.percent}%</span>
-                  </div>
-                  <div className="storage-card-row">
-                    <span className="storage-card-label">已占用空间</span>
-                    <span className="storage-card-value">{spaceInfo.usedText}</span>
-                  </div>
-                  <div className="storage-card-row">
-                    <span className="storage-card-label">总空间</span>
-                    <span className="storage-card-value">{spaceInfo.totalText}</span>
+                  <div className="storage-card-grid">
+                    <div className="storage-card-item">
+                      <ApartmentOutlined className="storage-card-item-icon" />
+                      <div className="storage-card-item-content">
+                        <span className="storage-card-item-label">等级</span>
+                        <span className={`storage-card-item-value ${LEVEL_MAP[spaceInfo.level]?.className || ''}`}>{LEVEL_MAP[spaceInfo.level]?.label || '-'}</span>
+                      </div>
+                    </div>
+                    <div className="storage-card-item">
+                      <HddOutlined className="storage-card-item-icon" />
+                      <div className="storage-card-item-content">
+                        <span className="storage-card-item-label">已用</span>
+                        <span className="storage-card-item-value">{spaceInfo.usedText}</span>
+                      </div>
+                    </div>
+                    <div className="storage-card-item">
+                      <DatabaseOutlined className="storage-card-item-icon" />
+                      <div className="storage-card-item-content">
+                        <span className="storage-card-item-label">总容量</span>
+                        <span className="storage-card-item-value">{spaceInfo.totalText}</span>
+                      </div>
+                    </div>
+                    <div className="storage-card-item">
+                      <UploadOutlined className="storage-card-item-icon" />
+                      <div className="storage-card-item-content">
+                        <span className="storage-card-item-label">占用率</span>
+                        <span className="storage-card-item-value">{spaceInfo.percent}%</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               }
@@ -405,6 +366,9 @@ function PrivateSpace() {
             </Popover>
             <Button onClick={handleEditOpen}>
               修改空间
+            </Button>
+            <Button icon={<ArrowUpOutlined />} className="private-space-upgrade-btn" onClick={() => isMobile ? navigate('/mobile/upgrade') : setShowUpgrade(true)}>
+              升级空间
             </Button>
           </div>
         )}
@@ -445,9 +409,6 @@ function PrivateSpace() {
             disabled={batchMode}
           >
             上传图片
-          </Button>
-          <Button icon={<ArrowUpOutlined />} className="private-space-upgrade-btn" onClick={() => setShowUpgrade(true)}>
-            升级空间
           </Button>
         </div>
       )}
@@ -590,93 +551,14 @@ function PrivateSpace() {
       </Modal>
 
       {showUpgrade && (
-      <div className="upgrade-overlay" onClick={() => { setShowUpgrade(false); setSelectedPlan(null) }}>
-      <div className="upgrade-content" onClick={(e) => e.stopPropagation()}>
-          <div className="upgrade-header">
-            <h2 className="upgrade-title">升级空间</h2>
-            <p className="upgrade-subtitle">解锁更多存储，享受专属特权</p>
-          </div>
-
-          <div className="upgrade-section">
-            <div className="upgrade-section-title">
-              <CrownOutlined className="upgrade-section-icon" />
-              <span>会员套餐</span>
-            </div>
-            <div className="upgrade-plan-grid">
-              {UPGRADE_PLANS.map((plan) => (
-                <div
-                  key={plan.key}
-                  className={`upgrade-plan-card ${plan.hot ? 'upgrade-plan-hot' : ''} ${selectedPlan === plan.key ? 'upgrade-plan-selected' : ''} level-${plan.key}`}
-                  onClick={() => setSelectedPlan(plan.key)}
-                >
-                  {plan.hot && <div className="upgrade-hot-badge">推荐</div>}
-                  <div className="upgrade-plan-name">{plan.name}</div>
-                  <div className="upgrade-plan-price">
-                    <span className="upgrade-price-amount">{plan.price}</span>
-                    <span className="upgrade-price-period">{plan.period}</span>
-                  </div>
-                  <div className="upgrade-plan-features">
-                    {plan.features.map((f, i) => (
-                      <div key={i} className="upgrade-feature-item">
-                        <CheckCircleFilled className="upgrade-feature-check" />
-                        <span>{f}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <Button
-                    type={selectedPlan === plan.key ? 'primary' : 'default'}
-                    block
-                    className="upgrade-plan-btn"
-                  >
-                    {selectedPlan === plan.key ? '已选择' : '选择套餐'}
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="upgrade-section">
-            <div className="upgrade-section-title">
-              <CloudServerOutlined className="upgrade-section-icon" />
-              <span>空间增量包</span>
-            </div>
-            <div className="upgrade-addon-grid">
-              {ADDON_PLANS.map((addon) => (
-                <div
-                  key={addon.key}
-                  className={`upgrade-addon-card ${selectedPlan === addon.key ? 'upgrade-addon-selected' : ''}`}
-                  onClick={() => setSelectedPlan(addon.key)}
-                >
-                  <div className="upgrade-addon-name">{addon.name}</div>
-                  <div className="upgrade-addon-size">{addon.size}</div>
-                  <div className="upgrade-addon-price">
-                    <span className="upgrade-price-amount">{addon.price}</span>
-                    <span className="upgrade-price-period">{addon.period}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="upgrade-footer">
-            <Button size="large" onClick={() => { setShowUpgrade(false); setSelectedPlan(null) }}>
-              取消
-            </Button>
-            <Button
-              type="primary"
-              size="large"
-              disabled={!selectedPlan}
-              onClick={() => {
-                message.success('升级申请已提交，等待审核')
-                setShowUpgrade(false)
-                setSelectedPlan(null)
-              }}
-            >
-              确认升级
-            </Button>
-          </div>
-        </div>
-      </div>
+        <UpgradeModal
+          open={showUpgrade}
+          onClose={() => setShowUpgrade(false)}
+          onConfirm={() => {
+            message.success('升级申请已提交，等待审核')
+            setShowUpgrade(false)
+          }}
+        />
       )}
 
       <Modal

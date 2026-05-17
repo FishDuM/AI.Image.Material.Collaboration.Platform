@@ -38,13 +38,15 @@ function PostDetailModal({
   mode = 'modal',
 }) {
   const { message } = App.useApp()
-  if (!open) return null
+  if (mode !== 'page' && !open) return null
 
   if (postDetail != null && typeof postDetail !== 'object') {
     return null
   }
 
-  const currentUrl = window.location.href
+  const currentUrl = postDetail?.id
+    ? `${window.location.origin}/post/${postDetail.id}`
+    : window.location.href
 
   const handleCopyLink = async () => {
     try {

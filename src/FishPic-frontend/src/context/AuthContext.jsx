@@ -32,7 +32,9 @@ export function AuthProvider({ children }) {
           }
         })
         .catch(() => {
-          setIsAuthenticated(true)
+          clearAuth()
+          setUserInfo(null)
+          setIsAuthenticated(false)
         })
     } else {
       if (!token) {

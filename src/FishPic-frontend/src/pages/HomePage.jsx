@@ -1,15 +1,15 @@
 import { useState, useEffect, useContext, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { App as AntApp, Carousel, Masonry, Image as AntImage, Spin, Form } from 'antd'
+import { Carousel, Masonry, Image as AntImage, Spin, Form } from 'antd'
 import { getMarquee, getPictureList } from '../api'
 import api from '../api'
 import { AuthContext } from '../context/AuthContext.jsx'
 import { useAuthModal } from '../hooks/useAuthModal.js'
-import { LoginModal, RegisterModal } from '../components/shared/LoginModal.jsx'
+import AuthModals from '../components/shared/AuthModals.jsx'
 import SearchBar from '../components/shared/SearchBar.jsx'
+import CategoryBar from '../components/shared/CategoryBar.jsx'
 
 function HomePage() {
-  const { message } = AntApp.useApp()
   const { isAuthenticated } = useContext(AuthContext)
   const navigate = useNavigate()
   const location = useLocation()
@@ -30,7 +30,7 @@ function HomePage() {
   const PAGE_SIZE = 20
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 1025px)').matches)
   const [coverflowIndex, setCoverflowIndex] = useState(0)
-  const coverflowTimerRef = useRef(null)
+  const [coverflowTick, setCoverflowTick] = useState(0)
   const carouselWrapperRef = useRef(null)
   const touchStartXRef = useRef(null)
 
@@ -77,13 +77,17 @@ function HomePage() {
     if (!hasMore || pictureLoading) return
     const observer = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting && hasMore && !pictureLoading) {
-        setPicturePage(prev => { const next = prev + 1; loadPictures(next); return next })
+        setPicturePage(prev => prev + 1)
       }
     }, { threshold: 0.1 })
     const el = loadMoreRef.current
     if (el) observer.observe(el)
-    return () => { if (el) observer.unobserve(el) }
-  }, [hasMore, pictureLoading, picturePage, loadPictures])
+    return () => observer.disconnect()
+  }, [hasMore, pictureLoading])
+
+  useEffect(() => {
+    if (picturePage > 1) loadPictures(picturePage)
+  }, [picturePage, loadPictures])
 
   const useCoverflow = isDesktop && marqueeImages.length >= 3
 
@@ -96,23 +100,23 @@ function HomePage() {
 
   useEffect(() => {
     if (!useCoverflow) return
-    coverflowTimerRef.current = setInterval(() => setCoverflowIndex(prev => (prev + 1) % marqueeImages.length), 4500)
-    return () => clearInterval(coverflowTimerRef.current)
-  }, [useCoverflow, marqueeImages.length])
+    const id = setInterval(() => setCoverflowIndex(prev => (prev + 1) % marqueeImages.length), 4500)
+    return () => clearInterval(id)
+  }, [useCoverflow, marqueeImages.length, coverflowTick])
 
   const handleCoverflowPrev = useCallback(() => {
-    clearInterval(coverflowTimerRef.current)
     setCoverflowIndex(prev => (prev - 1 + marqueeImages.length) % marqueeImages.length)
+    setCoverflowTick(t => t + 1)
   }, [marqueeImages.length])
 
   const handleCoverflowNext = useCallback(() => {
-    clearInterval(coverflowTimerRef.current)
     setCoverflowIndex(prev => (prev + 1) % marqueeImages.length)
+    setCoverflowTick(t => t + 1)
   }, [marqueeImages.length])
 
   const handleCoverflowDot = useCallback((idx) => {
-    clearInterval(coverflowTimerRef.current)
     setCoverflowIndex(idx)
+    setCoverflowTick(t => t + 1)
   }, [])
 
   const handleDragStart = useCallback((clientX) => {
@@ -120,9 +124,10 @@ function HomePage() {
   }, [])
 
   const handleDragEnd = useCallback((clientX) => {
-    if (touchStartXRef.current === null) return
-    const deltaX = clientX - touchStartXRef.current
+    const startX = touchStartXRef.current
     touchStartXRef.current = null
+    if (startX === null) return
+    const deltaX = clientX - startX
     if (Math.abs(deltaX) < 50) return
     if (useCoverflow) {
       if (deltaX < 0) handleCoverflowNext(); else handleCoverflowPrev()
@@ -137,14 +142,6 @@ function HomePage() {
   const handleMouseUp = useCallback((e) => handleDragEnd(e.clientX), [handleDragEnd])
 
   const masonryItems = useMemo(() => pictureList.map(pic => ({ key: `pic-${pic.id}`, data: pic })), [pictureList])
-
-  const handleShowLogin = useCallback(() => {
-    if (isAuthenticated) {
-      navigate('/community')
-    } else {
-      authModal.openLogin()
-    }
-  }, [isAuthenticated, navigate, authModal])
 
   return (
     <>
@@ -229,18 +226,14 @@ function HomePage() {
 
       {categoryList.length > 0 && (
         <div className="home-category-section">
-          <div className="home-category-bar">
-            {categoryList.map((cat) => (
-              <span key={cat} className={`home-category-tag ${selectedCategory === cat ? 'home-category-tag-active' : ''}`} onClick={() => setSelectedCategory(cat)}>{cat}</span>
-            ))}
-          </div>
+          <CategoryBar items={categoryList} selected={selectedCategory} onSelect={setSelectedCategory} className="home-category-bar" />
         </div>
       )}
 
       <div className="home-masonry-section">
         {masonryItems.length > 0 && (
           <Masonry columns={{ xs: 2, sm: 3, md: 4, lg: 5 }} gutter={[12, 12]} fresh items={masonryItems} itemRender={(item) => (
-            <div className="home-masonry-item"><AntImage src={item.data.url} alt="" className="home-masonry-image" /></div>
+            <div className="home-masonry-item"><AntImage src={item.data.url} alt="" className="home-masonry-image" fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzJhMmEyYSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iYXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM2NjYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj7lm77niYfliqDovb3lpLHotKU8L3RleHQ+PC9zdmc+" /></div>
           )} />
         )}
         {hasMore && <div ref={loadMoreRef} className="home-load-more" />}
@@ -248,28 +241,7 @@ function HomePage() {
         {!hasMore && masonryItems.length > 0 && <div className="home-no-more">已加载全部图片</div>}
       </div>
 
-      <LoginModal
-        open={authModal.loginVisible}
-        onCancel={() => { loginForm.resetFields(); authModal.closeLogin() }}
-        loginForm={loginForm}
-        loading={authModal.loginLoading}
-        checkCodeUrl={authModal.loginCheckCodeUrl}
-        onSubmit={(values) => authModal.handleLoginSubmit(values, loginForm)}
-        onRefreshCode={() => authModal.refreshLoginCode(loginForm)}
-        onSwitchToRegister={authModal.switchToRegister}
-      />
-
-      <RegisterModal
-        open={authModal.registerVisible}
-        onCancel={() => { registerForm.resetFields(); authModal.closeRegister() }}
-        registerForm={registerForm}
-        loading={authModal.registerLoading}
-        checkCodeUrl={authModal.registerCheckCodeUrl}
-        onSubmit={(values) => authModal.handleRegisterSubmit(values, registerForm)}
-        onRefreshCode={() => authModal.refreshRegisterCode(registerForm)}
-        onSwitchToLogin={authModal.switchToLogin}
-        showAgreement
-      />
+      <AuthModals authModal={authModal} loginForm={loginForm} registerForm={registerForm} showAgreement />
     </>
   )
 }

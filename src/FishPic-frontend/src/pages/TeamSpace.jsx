@@ -4,15 +4,10 @@ import { App as AntApp, Typography, Button, Empty, Modal, Form, Input, Spin, Ava
 import { TeamOutlined, EditOutlined, PlusOutlined, PictureOutlined, CloudServerOutlined, UserOutlined } from '@ant-design/icons'
 import { createSpace, updateSpace, listSpace } from '../api'
 import { ThemeContext } from '../context/ThemeContext'
+import { LEVEL_MAP } from '../utils/constants'
 import './TeamSpace.css'
 
 const { Title, Text } = Typography
-
-const LEVEL_MAP = {
-  0: { color: 'green', label: '普通' },
-  1: { color: 'gold', label: 'VIP' },
-  2: { color: 'orange', label: 'SVIP' },
-}
 
 const formatSize = (bytes) => {
   if (!bytes || bytes <= 0) return '0 B'
@@ -85,18 +80,14 @@ function TeamSpace() {
     const container = listRef.current
     if (!container) return
     const handler = (e) => {
-      const el = e.currentTarget
-      if (el.scrollWidth > el.clientWidth) {
-        e.preventDefault()
-        el.scrollLeft += e.deltaY
-      }
+      const item = e.target.closest('.ts-list-item')
+      if (!item || item.scrollWidth <= item.clientWidth) return
+      e.preventDefault()
+      item.scrollLeft += e.deltaY
     }
-    const items = container.querySelectorAll('.ts-list-item')
-    items.forEach((el) => el.addEventListener('wheel', handler, { passive: false }))
-    return () => {
-      items.forEach((el) => el.removeEventListener('wheel', handler))
-    }
-  }, [spaces])
+    container.addEventListener('wheel', handler, { passive: false })
+    return () => container.removeEventListener('wheel', handler)
+  }, [])
 
   const handleUpdate = async (values) => {
     setUpdateLoading(true)
@@ -119,8 +110,10 @@ function TeamSpace() {
   }
 
   const renderSpaceRow = (space) => {
-    const usedPercent = space.storageSize > 0
-      ? Math.min(((space.size || 0) / space.storageSize) * 100, 100).toFixed(1)
+    const sizeNum = Number(space.size) || 0
+    const storageNum = Number(space.storageSize) || 0
+    const usedPercent = storageNum > 0
+      ? Math.min((sizeNum / storageNum) * 100, 100).toFixed(1)
       : 0
     const levelInfo = LEVEL_MAP[space.level] || LEVEL_MAP[0]
     const members = space.teamMembers || []

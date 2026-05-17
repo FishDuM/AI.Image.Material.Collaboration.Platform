@@ -1,50 +1,18 @@
-import { useState, useEffect, useCallback, useContext } from 'react'
+import { useState, useEffect, useCallback, useContext, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { App as AntApp, Typography, Button, Modal, Form, Input, Pagination, Masonry, Image as AntImage, Spin, Empty, Popconfirm, Progress, Popover, Avatar, Tooltip, Tag } from 'antd'
-import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowLeftOutlined, TeamOutlined, UserOutlined, EditOutlined, CloudUploadOutlined, FontSizeOutlined } from '@ant-design/icons'
+import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowLeftOutlined, TeamOutlined, UserOutlined, EditOutlined, CloudUploadOutlined, FontSizeOutlined, ArrowUpOutlined } from '@ant-design/icons'
 import { getSpace, updateSpace, spaceListPicture, deletePicture, updatePicture, cropPicture, watermarkPicture } from '../api'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { ThemeContext } from '../context/ThemeContext'
+import { PAGINATION_LOCALE, PAGE_SIZE, LEVEL_MAP, storageStrokeColor, formatStorage } from '../utils/constants'
 import ImageCropper from '../components/shared/ImageCropper'
 import ImageUploadModal from '../components/shared/ImageUploadModal'
+import UpgradeModal from '../components/shared/UpgradeModal'
 import './TeamSpaceDetail.css'
+import './PrivateSpace.css'
 
 const { Title } = Typography
-
-const PAGE_SIZE = 20
-
-const PAGINATION_LOCALE = {
-  items_per_page: '条/页',
-  jump_to: '跳至',
-  jump_to_confirm: '确定',
-  page: '页',
-  prev_page: '上一页',
-  next_page: '下一页',
-  prev_5: '向前 5 页',
-  next_5: '向后 5 页',
-  prev_3: '向前 3 页',
-  next_3: '向后 3 页',
-  page_size: '页码',
-}
-
-const LEVEL_MAP = {
-  0: { label: '普通', color: 'green', className: 'level-normal', cardClass: 'storage-card-normal' },
-  1: { label: 'VIP', color: 'gold', className: 'level-vip', cardClass: 'storage-card-vip' },
-  2: { label: 'SVIP', color: 'orange', className: 'level-svip', cardClass: 'storage-card-svip' },
-}
-
-const storageStrokeColor = {
-  '0%': '#5A5A5A',
-  '100%': '#87d068',
-}
-
-const formatStorage = (bytes) => {
-  if (!bytes || bytes === 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  const val = bytes / Math.pow(1024, i)
-  return `${val.toFixed(i > 2 ? 1 : (i > 1 ? 2 : 0))} ${units[i]}`
-}
 
 function TeamSpaceDetail() {
   const { id } = useParams()
@@ -76,6 +44,7 @@ function TeamSpaceDetail() {
   const [showEdit, setShowEdit] = useState(false)
   const [updateLoading, setUpdateLoading] = useState(false)
   const [editForm] = Form.useForm()
+  const [showUpgrade, setShowUpgrade] = useState(false)
 
   const fetchSpace = useCallback(async () => {
     setLoading(true)
@@ -129,6 +98,8 @@ function TeamSpaceDetail() {
   }, [spaceInfo?.id, fetchPictures])
 
   const handlePageChange = useCallback((page) => {
+    setSelectedIds([])
+    setBatchMode(false)
     if (spaceInfo?.id) fetchPictures(spaceInfo.id, page, searchKeyword)
   }, [spaceInfo?.id, fetchPictures, searchKeyword])
 
@@ -219,6 +190,7 @@ function TeamSpaceDetail() {
       }
     } catch (error) {
       message.error(error.message || '图片编辑保存失败')
+      setIsCropping(false)
     }
   }, [selectedIds, spaceInfo?.id, fetchPictures, picturePage, searchKeyword, fetchSpace, message])
 
@@ -309,7 +281,7 @@ function TeamSpaceDetail() {
     }
   }
 
-  const masonryItems = pictures.map((pic) => ({ key: `pic-${pic.id}`, data: pic }))
+  const masonryItems = useMemo(() => pictures.map((pic) => ({ key: `pic-${pic.id}`, data: pic })), [pictures])
   const levelInfo = LEVEL_MAP[spaceInfo?.level] || LEVEL_MAP[0]
   const members = spaceInfo?.teamMembers || []
 
@@ -327,32 +299,36 @@ function TeamSpaceDetail() {
     <main className="tsd-container">
       <div className="tsd-header">
         <div className="tsd-header-left">
-          <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate('/team-space')} className="tsd-back-btn">
-            返回空间列表
-          </Button>
-          <div className="tsd-title-row">
-            <Title level={2} style={{ margin: 0 }}>{spaceInfo.name}</Title>
-            <Tag color={levelInfo.color} variant="filled">{levelInfo.label}</Tag>
+          <div className="tsd-back-btn-wrapper">
+            <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate('/team-space')} className="tsd-back-btn">
+              返回空间列表
+            </Button>
           </div>
-          <p className="tsd-subtitle">
-            {spaceInfo.introduction || '团队协作图片空间'}
-          </p>
-          {members.length > 0 && (
-            <div className="tsd-members-row">
-              <TeamOutlined className="tsd-members-icon" />
-              <Avatar.Group
-                max={{ count: 10, style: { backgroundColor: isDarkMode ? '#434343' : '#f0f0f0', color: isDarkMode ? 'rgba(255,255,255,0.65)' : '#999' } }}
-                size={28}
-              >
-                {members.map((m) => (
-                  <Tooltip title={m.nickname || '成员'} key={m.id}>
-                    <Avatar size={28} src={m.avatar} icon={<UserOutlined />} />
-                  </Tooltip>
-                ))}
-              </Avatar.Group>
-              <span className="tsd-members-count">{members.length} 位成员</span>
+          <div className="tsd-content-area">
+            <div className="tsd-title-row">
+              <Title level={2} className="tsd-title">{spaceInfo.name}</Title>
+              <Tag color={levelInfo.color} variant="filled">{levelInfo.label}</Tag>
             </div>
-          )}
+            <p className="tsd-subtitle">
+              {spaceInfo.introduction || '团队协作图片空间'}
+            </p>
+            {members.length > 0 && (
+              <div className="tsd-members-row">
+                <TeamOutlined className="tsd-members-icon" />
+                <Avatar.Group
+                  max={{ count: 10, style: { backgroundColor: isDarkMode ? '#434343' : '#f0f0f0', color: isDarkMode ? 'rgba(255,255,255,0.65)' : '#999' } }}
+                  size={28}
+                >
+                  {members.map((m) => (
+                    <Tooltip title={m.nickname || '成员'} key={m.id}>
+                      <Avatar size={28} src={m.avatar} icon={<UserOutlined />} />
+                    </Tooltip>
+                  ))}
+                </Avatar.Group>
+                <span className="tsd-members-count">{members.length} 位成员</span>
+              </div>
+            )}
+          </div>
         </div>
         <div className="tsd-header-right">
           <Popover
@@ -403,6 +379,9 @@ function TeamSpaceDetail() {
             />
           </Popover>
           <Button onClick={handleEditOpen}>修改空间</Button>
+          <Button icon={<ArrowUpOutlined />} className="tsd-upgrade-btn" onClick={() => isMobile ? navigate('/mobile/upgrade') : setShowUpgrade(true)}>
+            升级空间
+          </Button>
         </div>
       </div>
 
@@ -537,6 +516,17 @@ function TeamSpaceDetail() {
           </Form.Item>
         </Form>
       </Modal>
+
+      {showUpgrade && (
+        <UpgradeModal
+          open={showUpgrade}
+          onClose={() => setShowUpgrade(false)}
+          onConfirm={() => {
+            message.success('升级申请已提交，等待审核')
+            setShowUpgrade(false)
+          }}
+        />
+      )}
 
       <Modal
         className="edit-picture-modal"

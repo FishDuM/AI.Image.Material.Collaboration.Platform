@@ -1,24 +1,13 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useContext } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { App as AntApp, Table, Card, Typography, Button, Image, Tag, Space, Select, Popconfirm } from 'antd'
 import { PictureOutlined, EyeOutlined, EyeInvisibleOutlined, ReloadOutlined, CheckOutlined, CloseOutlined, StarOutlined, StarFilled } from '@ant-design/icons'
 import { getAdminPictureList, reviewPicture } from '../api'
+import { AuthContext } from '../context/AuthContext.jsx'
+import { PAGINATION_LOCALE } from '../utils/constants'
 import './AdminPictureManagement.css'
 
 const { Title } = Typography
-
-const PAGINATION_LOCALE = {
-  items_per_page: '条/页',
-  jump_to: '跳至',
-  jump_to_confirm: '确定',
-  page: '页',
-  prev_page: '上一页',
-  next_page: '下一页',
-  prev_5: '向前 5 页',
-  next_5: '向后 5 页',
-  prev_3: '向前 3 页',
-  next_3: '向后 3 页',
-  page_size: '页码',
-}
 
 const STATUS_OPTIONS = [
   { value: 3, label: '全部' },
@@ -36,6 +25,8 @@ const STATUS_MAP = {
 
 function AdminPictureManagement() {
   const { message, modal } = AntApp.useApp()
+  const navigate = useNavigate()
+  const { userInfo } = useContext(AuthContext)
   const [loading, setLoading] = useState(false)
   const [pictures, setPictures] = useState([])
   const [selectedRowKeys, setSelectedRowKeys] = useState([])
@@ -51,13 +42,14 @@ function AdminPictureManagement() {
     setLoading(true)
     try {
       const result = await getAdminPictureList(current, pageSize, status)
-      const { records, total } = result
-      setPictures(records || [])
+      const records = Array.isArray(result) ? result : (result?.records || [])
+      const total = result?.total || (Array.isArray(result) ? result.length : 0)
+      setPictures(records)
       setPagination(prev => ({
         ...prev,
         current,
         pageSize,
-        total: total || 0,
+        total,
       }))
       setSelectedRowKeys([])
     } catch (error) {
@@ -68,10 +60,17 @@ function AdminPictureManagement() {
   }, [message])
 
   useEffect(() => {
+    if (!userInfo || userInfo.role !== 'admin') {
+      message.error('无权访问，正在跳转到 404 页面...')
+      setTimeout(() => {
+        navigate('/404', { replace: true })
+      }, 500)
+      return
+    }
     if (hasFetchedRef.current) return
     hasFetchedRef.current = true
     fetchPictureList(1, 20, statusFilter)
-  }, [fetchPictureList, statusFilter])
+  }, [fetchPictureList, statusFilter, userInfo, navigate, message])
 
   const handleTableChange = (pag) => {
     fetchPictureList(pag.current, pag.pageSize, statusFilter)

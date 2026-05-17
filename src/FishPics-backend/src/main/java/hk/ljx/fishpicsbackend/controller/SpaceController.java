@@ -13,7 +13,6 @@ import hk.ljx.fishpicsbackend.entity.User;
 import hk.ljx.fishpicsbackend.service.SpaceService;
 import hk.ljx.fishpicsbackend.vo.picture.PicturePageVO;
 import hk.ljx.fishpicsbackend.vo.space.SpaceVO;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;
@@ -32,12 +31,12 @@ public class SpaceController {
 
     /**
      * 创建空间
+     * 
      * @param createSpace 创建空间请求体
-     * @param request HTTP请求
      * @return 创建成功返回true
      */
     @PostMapping("/create")
-    public Response<Boolean> createSpace(@RequestBody CreateSpace createSpace, HttpServletRequest request) {
+    public Response<Boolean> createSpace(@RequestBody CreateSpace createSpace) {
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(createSpace), ExceptionCode.PARAMETER_ERROR, "创建空间参数不能为空");
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
@@ -46,17 +45,19 @@ public class SpaceController {
 
     /**
      * 获取当前用户的空间列表
+     * 
      * @param type 空间类型（0-私人空间，1-团队空间）
      * @return 空间列表
      */
     @GetMapping("/list")
     public Response<List<SpaceVO>> listSpace(@RequestParam("type") Integer type) {
-        ExcUtils.throwIfTrue(type == null , ExceptionCode.PARAMETER_ERROR, "空间类型不能为空");
+        ExcUtils.throwIfTrue(type == null, ExceptionCode.PARAMETER_ERROR, "空间类型不能为空");
         return ResUtils.success(spaceService.listSpace(type));
     }
 
     /**
      * 获取单个空间详情
+     * 
      * @param id 空间ID
      * @return 空间详情
      */
@@ -68,6 +69,7 @@ public class SpaceController {
 
     /**
      * 更新空间信息
+     * 
      * @param updateSpace 更新请求体
      * @return 更新成功返回true
      */
@@ -79,6 +81,7 @@ public class SpaceController {
 
     /**
      * 获取空间图片列表（分页）
+     * 
      * @param spacePictureList 查询请求体
      * @return 图片分页结果
      */

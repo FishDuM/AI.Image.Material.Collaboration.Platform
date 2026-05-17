@@ -5,26 +5,13 @@ import { UserOutlined, EditOutlined, SearchOutlined, ReloadOutlined, LockOutline
 import { AuthContext } from '../context/AuthContext.jsx'
 import api, { getAdminUser } from '../api'
 import { isAllowedImageFile, getMaxUploadSize, formatMaxUploadSize } from '../utils/uploadConstraints'
+import { PAGINATION_LOCALE } from '../utils/constants'
 import './UserManagement.css'
 
 const { Title } = Typography
 
-const PAGINATION_LOCALE = {
-  items_per_page: '条/页',
-  jump_to: '跳至',
-  jump_to_confirm: '确定',
-  page: '页',
-  prev_page: '上一页',
-  next_page: '下一页',
-  prev_5: '向前 5 页',
-  next_5: '向后 5 页',
-  prev_3: '向前 3 页',
-  next_3: '向后 3 页',
-  page_size: '页码',
-}
-
 function UserManagement() {
-  const { message } = AntApp.useApp()
+  const { message, modal } = AntApp.useApp()
   const navigate = useNavigate()
   const { userInfo } = useContext(AuthContext)
   const [loading, setLoading] = useState(false)
@@ -93,13 +80,19 @@ function UserManagement() {
       return
     }
 
-    try {
-      await api.post('/user/admin/setStatus', { userId })
-      message.success('操作成功')
-      fetchUserList(pagination.current, pagination.pageSize)
-    } catch (error) {
-      message.error('操作失败：' + error.message)
-    }
+    modal.confirm({
+      title: '确认操作',
+      content: '确定要对该用户执行封禁/解封操作吗？',
+      onOk: async () => {
+        try {
+          await api.post('/user/admin/setStatus', { userId })
+          message.success('操作成功')
+          fetchUserList(pagination.current, pagination.pageSize)
+        } catch (error) {
+          message.error('操作失败：' + error.message)
+        }
+      },
+    })
   }
 
   const handleTableChange = (pag) => {

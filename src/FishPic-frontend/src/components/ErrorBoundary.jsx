@@ -16,12 +16,17 @@ class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    void errorInfo
+    console.error('ErrorBoundary caught an error:', error)
+    console.error('Component stack:', errorInfo.componentStack)
   }
 
   handleReset = () => {
     this.setState({ hasError: false, errorMessage: '' })
-    window.location.href = '/'
+    if (this.props.onReset) {
+      this.props.onReset()
+    } else {
+      window.location.href = '/'
+    }
   }
 
   render() {
@@ -35,17 +40,17 @@ class ErrorBoundary extends React.Component {
           flexDirection: 'column',
           justifyContent: 'center',
           alignItems: 'center',
-          backgroundColor: '#f5f5f5'
+          backgroundColor: 'var(--bg-primary, #f5f5f5)'
         }}>
-          <h1 style={{ color: '#D70015', marginBottom: '16px' }}>页面出错了</h1>
-          <p style={{ color: '#666', marginBottom: '24px' }}>
+          <h1 style={{ color: 'var(--accent, #D70015)', marginBottom: '16px' }}>页面出错了</h1>
+          <p style={{ color: 'var(--text-secondary, #666)', marginBottom: '24px' }}>
             {this.state.errorMessage}
           </p>
           <button
             onClick={this.handleReset}
             style={{
               padding: '8px 16px',
-              backgroundColor: '#3A3A3A',
+              backgroundColor: 'var(--accent, #3A3A3A)',
               color: 'white',
               border: 'none',
               borderRadius: '4px',

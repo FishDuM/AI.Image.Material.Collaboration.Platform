@@ -1,55 +1,23 @@
 import { useState, useEffect, useRef, useCallback, useContext } from 'react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
-import { App, Button, Image as AntImage, Masonry, Empty, Spin } from 'antd'
-import { PlusOutlined, LikeOutlined, ReloadOutlined, UpOutlined } from '@ant-design/icons'
+import { useSearchParams, useNavigate, useLocation } from 'react-router-dom'
+import { App, Button, Masonry, Empty, Spin } from 'antd'
+import { PlusOutlined } from '@ant-design/icons'
 import api from '../api'
 import { AuthContext } from '../context/AuthContext'
 import PostDetailModal from '../components/PostDetailModal'
 import CreateEditPostModal from '../components/CreateEditPostModal'
 import { useIsMobile } from '../hooks/useIsMobile'
 import SearchBar from '../components/shared/SearchBar.jsx'
+import PostCard from '../components/shared/PostCard.jsx'
+import CategoryBar from '../components/shared/CategoryBar.jsx'
 import './CommunitySquare.css'
-
-function PostCard({ post, onClick }) {
-  return (
-    <div className="post-card" onClick={() => onClick(post)}>
-      {post.url ? (
-        <AntImage 
-          src={post.url} 
-          alt={post.title} 
-          className="post-card-image" 
-          preview={false}
-          style={{ objectFit: 'cover', borderRadius: '12px 12px 0 0', overflow: 'hidden' }}
-        />
-      ) : (
-        <div className="post-card-image-placeholder" />
-      )}
-      <div className="post-card-content">
-        <div className="post-card-title">{post.title}</div>
-        <div className="post-card-footer">
-          <div className="post-card-author">
-            {post.avatar ? (
-              <img src={post.avatar} alt={post.username} className="post-card-avatar" />
-            ) : (
-              <div className="post-card-avatar post-card-avatar-default">{post.username?.charAt(0)?.toUpperCase()}</div>
-            )}
-            <span className="post-card-username">{post.username}</span>
-          </div>
-          <div className="post-card-likes">
-            <LikeOutlined />
-            <span>{post.likesNum || 0}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 function CommunitySquare() {
   const { message } = App.useApp()
   const { userInfo } = useContext(AuthContext)
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const isMobile = useIsMobile()
   const [loading, setLoading] = useState(false)
   const [postList, setPostList] = useState([])
@@ -65,7 +33,6 @@ function CommunitySquare() {
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [createEditModalOpen, setCreateEditModalOpen] = useState(false)
-  const [showBackToTop, setShowBackToTop] = useState(false)
   const [editingPostDetail, setEditingPostDetail] = useState(null)
   const pageSize = 20
   const loadMoreRef = useRef(null)
@@ -73,6 +40,7 @@ function CommunitySquare() {
   const loadingMoreRef = useRef(false)
   const keyCounter = useRef(0)
   const initialPostIdRef = useRef(searchParams.get('id'))
+  const committedSearchRef = useRef({ text: '', hotPost: true })
 
   const fetchPostList = useCallback(async ({ text, hotPost, page = 1, append = false } = {}) => {
     if (append) {
@@ -116,7 +84,7 @@ function CommunitySquare() {
           setPostList(newRecords)
           setMasonryItems(newItems)
         }
-        const totalPages = result.pages || Math.ceil((result.total || 0) / pageSize)
+        const totalPages = result.pages ?? Math.ceil((result.total || 0) / pageSize)
         currentPageRef.current = page
         setHasMore(page < totalPages)
       }
@@ -171,13 +139,13 @@ function CommunitySquare() {
     setCreateEditModalOpen(true)
   }
 
-  /* eslint-disable react-hooks/set-state-in-effect */
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     currentPageRef.current = 1
     setHasMore(true)
     fetchPostList({ text: searchText, hotPost: currentHotPost, page: 1, append: false })
   }, [fetchPostList])
-  /* eslint-enable react-hooks/set-state-in-effect */
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   useEffect(() => {
     const handleScroll = () => {
@@ -186,9 +154,10 @@ function CommunitySquare() {
       const scrollHeight = document.documentElement.scrollHeight || document.body.scrollHeight
       const clientHeight = document.documentElement.clientHeight || window.innerHeight
       if (scrollTop + clientHeight >= scrollHeight - 200) {
+        const { text, hotPost } = committedSearchRef.current
         fetchPostList({
-          text: searchText,
-          hotPost: currentHotPost,
+          text,
+          hotPost,
           page: currentPageRef.current + 1,
           append: true,
         })
@@ -196,7 +165,7 @@ function CommunitySquare() {
     }
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
-  }, [fetchPostList, hasMore, searchText, currentHotPost])
+  }, [fetchPostList, hasMore])
 
   useEffect(() => {
     const fetchCategoryList = async () => {
@@ -244,7 +213,6 @@ function CommunitySquare() {
     const header = document.querySelector('.app-header')
     const handleScroll = () => {
       const currentScrollY = window.scrollY
-      setShowBackToTop(currentScrollY > 100)
       if (!header) { lastScrollY = currentScrollY; return }
       if (currentScrollY > lastScrollY && currentScrollY > 80) {
         header.classList.add('header-hidden')
@@ -262,10 +230,18 @@ function CommunitySquare() {
     }
   }, [])
 
+  useEffect(() => {
+    if (location.state?.openCreatePost) {
+      setCreateEditModalOpen(true)
+      navigate('/community', { replace: true, state: {} })
+    }
+  }, [location.state?.openCreatePost, navigate])
+
   const handleSearch = () => {
     setCurrentHotPost(false)
     currentPageRef.current = 1
     setHasMore(true)
+    committedSearchRef.current = { text: searchText, hotPost: false }
     fetchPostList({ text: searchText, hotPost: false, page: 1, append: false })
   }
 
@@ -275,6 +251,7 @@ function CommunitySquare() {
       setCurrentHotPost(false)
       currentPageRef.current = 1
       setHasMore(true)
+      committedSearchRef.current = { text: searchText, hotPost: false }
       fetchPostList({ text: searchText, hotPost: false, page: 1, append: false })
     } else {
       setSelectedCategory(cat)
@@ -282,9 +259,11 @@ function CommunitySquare() {
       setHasMore(true)
       if (cat === '热门') {
         setCurrentHotPost(true)
+        committedSearchRef.current = { text: searchText, hotPost: true }
         fetchPostList({ text: searchText, hotPost: true, page: 1, append: false })
       } else {
         setCurrentHotPost(false)
+        committedSearchRef.current = { text: searchText, hotPost: false }
         fetchPostList({ text: searchText, hotPost: false, page: 1, append: false })
       }
     }
@@ -297,16 +276,6 @@ function CommunitySquare() {
     }
     setEditingPostDetail(null)
     setCreateEditModalOpen(true)
-  }
-
-  const handleRefresh = () => {
-    currentPageRef.current = 1
-    setHasMore(true)
-    fetchPostList({ text: searchText, hotPost: currentHotPost, page: 1, append: false })
-  }
-
-  const handleScrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const handleCreateEditSuccess = () => {
@@ -337,17 +306,11 @@ function CommunitySquare() {
       </div>
 
       {categoryList.length > 0 && (
-        <div className="category-bar">
-          {categoryList.map((cat) => (
-            <span
-              key={cat}
-              className={`category-tag ${selectedCategory === cat ? 'category-tag-active' : ''}`}
-              onClick={() => handleCategoryClick(cat)}
-            >
-              {cat}
-            </span>
-          ))}
-        </div>
+        <CategoryBar
+          items={categoryList}
+          selected={selectedCategory}
+          onSelect={handleCategoryClick}
+        />
       )}
 
       {loading ? (
@@ -400,19 +363,6 @@ function CommunitySquare() {
         onSuccess={handleCreateEditSuccess}
       />
 
-      <div className="floating-buttons">
-        <button type="button" className="floating-btn floating-btn-create" onClick={handleCreatePost} title="发帖">
-          <PlusOutlined />
-        </button>
-        <button type="button" className="floating-btn" onClick={handleRefresh} title="刷新">
-          <ReloadOutlined />
-        </button>
-        {showBackToTop && (
-          <button type="button" className="floating-btn floating-btn-top" onClick={handleScrollToTop} title="返回顶部">
-            <UpOutlined />
-          </button>
-        )}
-      </div>
     </main>
   )
 }

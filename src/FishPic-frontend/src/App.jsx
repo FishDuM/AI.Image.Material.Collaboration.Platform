@@ -27,6 +27,7 @@ const MobilePostCreatePage = lazy(() => import('./pages/MobilePostCreatePage'))
 const MobilePostDetailPage = lazy(() => import('./pages/MobilePostDetailPage'))
 const MobileEditPicturePage = lazy(() => import('./pages/MobileEditPicturePage'))
 const MobileEditProfilePage = lazy(() => import('./pages/MobileEditProfilePage'))
+const MobileUpgradePage = lazy(() => import('./pages/MobileUpgradePage'))
 
 function PageLoading() {
   return (
@@ -47,6 +48,7 @@ function App() {
           <Route path="/mobile/post/detail/:postId" element={<MobilePostDetailPage />} />
           <Route path="/mobile/picture/edit" element={<ProtectedRoute><MobileEditPicturePage /></ProtectedRoute>} />
           <Route path="/mobile/profile/edit" element={<ProtectedRoute><MobileEditProfilePage /></ProtectedRoute>} />
+          <Route path="/mobile/upgrade" element={<ProtectedRoute><MobileUpgradePage /></ProtectedRoute>} />
           <Route path="*" element={
             <GlobalLayout>
               <Routes>

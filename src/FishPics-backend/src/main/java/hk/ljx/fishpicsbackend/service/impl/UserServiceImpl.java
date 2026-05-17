@@ -4,7 +4,6 @@ import cn.hutool.captcha.CaptchaUtil;
 import cn.hutool.captcha.CircleCaptcha;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
-import cn.hutool.core.codec.Base64;
 import cn.hutool.core.lang.UUID;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.RandomUtil;
@@ -16,7 +15,6 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
-import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
@@ -38,7 +36,6 @@ import org.springframework.transaction.annotation.Transactional;
 import jakarta.annotation.Resource;
 
 import java.awt.*;
-import java.io.ByteArrayOutputStream;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
 
@@ -161,12 +158,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         User user = userMapper.selectOne(new QueryWrapper<User>().eq("username", username).eq("password", password));
         ExcUtils.throwIfTrue(user == null, ExceptionCode.PARAMETER_ERROR, "账号或密码错误");
 
-        ExcUtils.throwIfTrue(user.getStatus() == null || user.getStatus() != 1, ExceptionCode.PARAMETER_ERROR, "账号已被禁用");
+        ExcUtils.throwIfTrue(user.getStatus() == null || user.getStatus() != 1, ExceptionCode.PARAMETER_ERROR,
+                "账号已被禁用");
 
         // 查询到则存入 redis
         String token = UUID.randomUUID().toString(true);
-        stringRedisTemplate.opsForValue().set(RedisConstants.getUserIdKey(token), user.getId().toString(), 1, TimeUnit.DAYS);
-        stringRedisTemplate.opsForValue().set(RedisConstants.getUserInfoKey(user.getId()), JSONUtil.toJsonStr(user), 1, TimeUnit.DAYS);
+        stringRedisTemplate.opsForValue().set(RedisConstants.getUserIdKey(token), user.getId().toString(), 1,
+                TimeUnit.DAYS);
+        stringRedisTemplate.opsForValue().set(RedisConstants.getUserInfoKey(user.getId()), JSONUtil.toJsonStr(user), 1,
+                TimeUnit.DAYS);
 
         // 删除已登陆的验证码
         stringRedisTemplate.delete(checkCodeKeyByLogin);
@@ -244,7 +244,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
         // 5. 更新
         int rows = userMapper.updateById(user);
-        stringRedisTemplate.opsForValue().set(RedisConstants.getUserInfoKey(id), JSONUtil.toJsonStr(user), 1, TimeUnit.DAYS);
+        stringRedisTemplate.opsForValue().set(RedisConstants.getUserInfoKey(id), JSONUtil.toJsonStr(user), 1,
+                TimeUnit.DAYS);
         ExcUtils.throwIfTrue(rows != 1, ExceptionCode.DATABASE_ERROR, "更新用户失败");
 
         return true;
@@ -303,7 +304,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         boolean result = this.updateById(user);
         ExcUtils.throwIfTrue(!result, ExceptionCode.DATABASE_ERROR, "更新失败");
         // 更新 redis 缓存
-        stringRedisTemplate.opsForValue().set(RedisConstants.getUserInfoKey(id), JSONUtil.toJsonStr(user), 1, TimeUnit.DAYS);
+        stringRedisTemplate.opsForValue().set(RedisConstants.getUserInfoKey(id), JSONUtil.toJsonStr(user), 1,
+                TimeUnit.DAYS);
         return true;
     }
 

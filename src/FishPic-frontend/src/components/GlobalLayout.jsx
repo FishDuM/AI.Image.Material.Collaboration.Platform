@@ -1,4 +1,4 @@
-import { useContext, useState, useMemo, useCallback } from 'react'
+import { useContext, useState, useMemo, useCallback, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { App as AntApp, Button, Avatar, Dropdown, Drawer, Menu, Form } from 'antd'
 import {
@@ -19,14 +19,19 @@ import {
   ToolOutlined,
   PictureOutlined,
   BellOutlined,
+  ReloadOutlined,
+  UpOutlined,
+  PlusOutlined,
 } from '@ant-design/icons'
 import { AuthContext } from '../context/AuthContext.jsx'
 import { logout } from '../api'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { ThemeContext } from '../context/ThemeContext.jsx'
 import { useAuthModal } from '../hooks/useAuthModal.js'
-import { LoginModal, RegisterModal, SettingsModal } from './shared/LoginModal.jsx'
+import { SettingsModal } from './shared/LoginModal.jsx'
+import AuthModals from './shared/AuthModals.jsx'
 import MobileBottomNav from './shared/MobileBottomNav.jsx'
+import ErrorBoundary from './ErrorBoundary.jsx'
 import './shared/MobileBottomNav.css'
 
 function GlobalLayout({ children }) {
@@ -44,6 +49,16 @@ function GlobalLayout({ children }) {
   const [registerForm] = Form.useForm()
 
   const authModal = useAuthModal()
+  const [showBackToTop, setShowBackToTop] = useState(false)
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollY = window.scrollY || document.documentElement.scrollTop
+      setShowBackToTop(scrollY > 100)
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
 
   const handleLogout = useCallback(async () => {
     try { await logout() } catch { /* ignore */ }
@@ -53,6 +68,18 @@ function GlobalLayout({ children }) {
       navigate('/')
     }
   }, [authLogout, message, navigate])
+
+  const handleScrollToTop = useCallback(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [])
+
+  const handleRefresh = useCallback(() => {
+    window.location.reload()
+  }, [])
+
+  const handleCreatePost = useCallback(() => {
+    navigate('/community', { state: { openCreatePost: true } })
+  }, [navigate])
 
   const handleLoginButtonClick = useCallback(() => {
     if (isMobile) {
@@ -169,29 +196,42 @@ function GlobalLayout({ children }) {
         <Menu mode="vertical" selectedKeys={[location.pathname]} className="sidebar-menu" items={sidebarMenuItems} triggerSubMenuAction="click" />
       </Drawer>
 
-      {children}
+      <ErrorBoundary onReset={() => navigate('/')}>{children}</ErrorBoundary>
 
-      <LoginModal
-        open={authModal.loginVisible}
-        onCancel={() => { loginForm.resetFields(); authModal.closeLogin() }}
-        loginForm={loginForm}
-        loading={authModal.loginLoading}
-        checkCodeUrl={authModal.loginCheckCodeUrl}
-        onSubmit={(values) => authModal.handleLoginSubmit(values, loginForm)}
-        onRefreshCode={() => authModal.refreshLoginCode(loginForm)}
-        onSwitchToRegister={authModal.switchToRegister}
-      />
+      <div className="float-actions">
+        {showBackToTop && (
+          <Button
+            type="text"
+            shape="circle"
+            icon={<UpOutlined />}
+            onClick={handleScrollToTop}
+            className="float-action-btn float-back-top"
+            aria-label="返回顶部"
+          />
+        )}
+        {showBackToTop && location.pathname === '/community' && (
+          <Button
+            type="text"
+            shape="circle"
+            icon={<PlusOutlined />}
+            onClick={handleCreatePost}
+            className="float-action-btn float-create-post"
+            aria-label="发帖"
+          />
+        )}
+        {showBackToTop && (
+          <Button
+            type="text"
+            shape="circle"
+            icon={<ReloadOutlined />}
+            onClick={handleRefresh}
+            className="float-action-btn float-refresh"
+            aria-label="刷新"
+          />
+        )}
+      </div>
 
-      <RegisterModal
-        open={authModal.registerVisible}
-        onCancel={() => { registerForm.resetFields(); authModal.closeRegister() }}
-        registerForm={registerForm}
-        loading={authModal.registerLoading}
-        checkCodeUrl={authModal.registerCheckCodeUrl}
-        onSubmit={(values) => authModal.handleRegisterSubmit(values, registerForm)}
-        onRefreshCode={() => authModal.refreshRegisterCode(registerForm)}
-        onSwitchToLogin={authModal.switchToLogin}
-      />
+      <AuthModals authModal={authModal} loginForm={loginForm} registerForm={registerForm} />
 
       <SettingsModal open={settingsOpen} onCancel={() => setSettingsOpen(false)} />
       <MobileBottomNav />
