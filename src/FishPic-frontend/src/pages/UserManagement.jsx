@@ -127,6 +127,7 @@ function UserManagement() {
           email: editingUser.email,
           phone: editingUser.phone,
           role: editingUser.role,
+          level: editingUser.level,
         })
       })
     }
@@ -152,6 +153,7 @@ function UserManagement() {
         phone: values.phone || null,
         nickname: values.nickname || null,
         role: values.role,
+        level: values.level,
       }
 
       await api.post('/user/admin/editUser', submitData)
@@ -590,6 +592,19 @@ function UserManagement() {
                   <Select placeholder="请选择角色">
                     <Select.Option value="user">普通用户</Select.Option>
                     <Select.Option value="admin">管理员</Select.Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={12}>
+                <Form.Item
+                  name="level"
+                  label="等级"
+                  rules={[{ required: true, message: '请选择等级' }]}
+                >
+                  <Select placeholder="请选择等级">
+                    <Select.Option value={0}>普通</Select.Option>
+                    <Select.Option value={1}>VIP</Select.Option>
+                    <Select.Option value={2}>SVIP</Select.Option>
                   </Select>
                 </Form.Item>
               </Col>

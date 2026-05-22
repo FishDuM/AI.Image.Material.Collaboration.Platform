@@ -1,7 +1,17 @@
+.post-detail-modal.ant-modal {
+  max-width: 90vw;
+  max-height: 90vh;
+  height: auto !important;
+  width: auto !important;
+  min-width: 500px;
+}
+
 .post-detail-modal .ant-modal-container {
   padding: 0 !important;
   border-radius: var(--radius-lg) !important;
   overflow: hidden !important;
+  height: auto;
+  max-height: 90vh;
 }
 
 .post-detail-modal .ant-modal-content {
@@ -9,28 +19,33 @@
   border-radius: var(--radius-lg);
   overflow: hidden;
   padding: 0 !important;
+  height: auto;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .post-detail-modal .ant-modal-body {
   background: var(--bg-secondary);
   padding: 0 !important;
-  height: 75vh;
-  overflow: hidden;
+  height: auto;
+  max-height: calc(90vh - 60px);
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
 }
 
 .post-detail-modal .xiaohongshu-layout {
-  height: 100% !important;
-  max-height: 100% !important;
+  height: auto !important;
+  max-height: none !important;
 }
 
 .post-detail-modal .left-image-area {
-  height: 100% !important;
-  max-height: 100% !important;
+  max-height: calc(90vh - 60px);
 }
 
 .post-detail-modal .right-form-area {
-  height: 100% !important;
-  max-height: 100% !important;
+  max-height: calc(90vh - 60px);
   overflow-y: auto;
 }
 
@@ -187,21 +202,12 @@
 }
 
 @media (max-width: 768px) {
-  .post-detail-modal {
+  .post-detail-modal.ant-modal {
     max-width: 100vw !important;
+    max-height: 100vh !important;
     margin: 0 !important;
     padding: 0 !important;
-  }
-
-  .post-detail-modal .ant-modal {
-    max-width: 100vw;
-    top: 0;
-    padding: 0;
-    margin: 0;
-  }
-
-  .post-detail-modal .ant-modal-container {
-    border-radius: 0 !important;
+    min-width: 0;
   }
 
   .post-detail-modal .ant-modal-content {
@@ -211,8 +217,8 @@
 
   .post-detail-modal .ant-modal-body {
     height: auto !important;
-    max-height: 100vh;
-    overflow: hidden;
+    max-height: calc(100vh - 50px);
+    overflow-y: auto;
   }
 
   .post-detail-modal .xiaohongshu-layout {

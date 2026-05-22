@@ -7,6 +7,8 @@ import hk.ljx.fishpicsbackend.dto.post.*;
 import hk.ljx.fishpicsbackend.entity.Picture;
 import hk.ljx.fishpicsbackend.entity.Post;
 import com.baomidou.mybatisplus.extension.service.IService;
+
+import java.util.Map;
 import hk.ljx.fishpicsbackend.vo.picture.PictureListByEditPostVO;
 import hk.ljx.fishpicsbackend.vo.post.PostDetailVO;
 import hk.ljx.fishpicsbackend.vo.post.PostListVO;
@@ -14,10 +16,10 @@ import hk.ljx.fishpicsbackend.vo.post.PostListVO;
 import java.util.List;
 
 /**
-* @author 30574
-* @description 针对表【post(帖子表)】的数据库操作Service
-* @createDate 2026-04-13 21:24:41
-*/
+ * @author 30574
+ * @description 针对表【post(帖子表)】的数据库操作Service
+ * @createDate 2026-04-13 21:24:41
+ */
 public interface PostService extends IService<Post> {
 
     /**
@@ -78,7 +80,7 @@ public interface PostService extends IService<Post> {
     /**
      * 点赞帖子
      *
-     * @param id      帖子id
+     * @param id 帖子id
      */
     void likePost(Long id);
 
@@ -112,5 +114,5 @@ public interface PostService extends IService<Post> {
      * @param getPictureBySpaceRequest request
      * @return 图片列表
      */
-    List<PictureListByEditPostVO> getPictureList(GetPictureBySpaceRequest getPictureBySpaceRequest);
+    Map<String, Object> getPictureList(GetPictureBySpaceRequest getPictureBySpaceRequest);
 }

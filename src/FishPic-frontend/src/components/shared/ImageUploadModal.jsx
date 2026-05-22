@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Modal, Upload, App } from 'antd'
 import { InboxOutlined } from '@ant-design/icons'
-import api from '../../api'
+import { uploadPicture } from '../../api'
 import { isAllowedImageFile, getMaxUploadSize, formatMaxUploadSize } from '../../utils/uploadConstraints'
 import './ImageUploadModal.css'
 
@@ -33,9 +33,7 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
     }
 
     try {
-      const result = await api.post('/picture/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
+      const result = await uploadPicture(formData, spaceId)
 
       const { url, id } = result
       onUploadSuccess({ url, pictureId: id })

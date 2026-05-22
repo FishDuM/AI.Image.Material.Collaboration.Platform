@@ -21,6 +21,7 @@ import hk.ljx.fishpicsbackend.service.*;
 import hk.ljx.fishpicsbackend.mapper.PostMapper;
 import hk.ljx.fishpicsbackend.vo.picture.PictureListByEditPostVO;
 import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
+import hk.ljx.fishpicsbackend.vo.picture.PicturePageVO;
 import hk.ljx.fishpicsbackend.vo.post.PostDetailVO;
 import hk.ljx.fishpicsbackend.vo.post.PostListVO;
 import jakarta.servlet.http.HttpServletRequest;
@@ -29,7 +30,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.annotation.Resource;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -405,7 +411,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
     }
 
     @Override
-    public List<PictureListByEditPostVO> getPictureList(GetPictureBySpaceRequest getPictureBySpaceRequest) {
+    public Map<String, Object> getPictureList(GetPictureBySpaceRequest getPictureBySpaceRequest) {
         Long spaceId = getPictureBySpaceRequest.getSpaceId();
         int current = getPictureBySpaceRequest.getCurrent();
         int pageSize = getPictureBySpaceRequest.getPageSize();
@@ -417,31 +423,27 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
         ExcUtils.throwIfTrue(spaceId == null, "spaceId不能为空");
 
-        // 1. 查询空间内默认20张图片
         SpacePictureList spacePictures = new SpacePictureList();
         spacePictures.setSpaceId(spaceId);
         spacePictures.setCurrent(current);
         spacePictures.setPageSize(pageSize);
         spacePictures.setSortField(sortField);
         spacePictures.setSortOrder(sortOrder);
-        List<PictureListVO> spacePictureList = spaceService.pictureList(spacePictures)
-                .getRecords();
+        PicturePageVO pageResult = spaceService.pictureList(spacePictures);
 
-        // 2. 已选的图片则返回 false
         ArrayList<PictureListByEditPostVO> editPostVOS = new ArrayList<>();
-        for (int i = 0; i < spacePictureList.size(); i++) {
-            PictureListVO pictureListVO = spacePictureList.get(i);
+        for (PictureListVO pictureListVO : pageResult.getRecords()) {
             PictureListByEditPostVO editPostVO = new PictureListByEditPostVO();
             editPostVO.setId(pictureListVO.getId());
             editPostVO.setUrl(pictureListVO.getUrl());
-            if (picIds.contains(pictureListVO.getId())) {
-                editPostVO.setFlag(false);
-            } else {
-                editPostVO.setFlag(true);
-            }
+            editPostVO.setFlag(!picIds.contains(pictureListVO.getId()));
             editPostVOS.add(editPostVO);
         }
-        return editPostVOS;
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("records", editPostVOS);
+        result.put("total", pageResult.getTotal());
+        return result;
     }
 
     /**

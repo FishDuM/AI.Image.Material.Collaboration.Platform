@@ -2,11 +2,12 @@ import { useState, useEffect, useRef, useCallback, useContext } from 'react'
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom'
 import { App, Button, Masonry, Empty, Spin } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
-import api from '../api'
+import { getPost, getPostList } from '../api'
 import { AuthContext } from '../context/AuthContext'
 import PostDetailModal from '../components/PostDetailModal'
 import CreateEditPostModal from '../components/CreateEditPostModal'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { useFetchWithCleanup, useSystemTypes } from '../hooks/useRequestUtils'
 import SearchBar from '../components/shared/SearchBar.jsx'
 import PostCard from '../components/shared/PostCard.jsx'
 import CategoryBar from '../components/shared/CategoryBar.jsx'
@@ -42,7 +43,10 @@ function CommunitySquare() {
   const initialPostIdRef = useRef(searchParams.get('id'))
   const committedSearchRef = useRef({ text: '', hotPost: true })
 
-  const fetchPostList = useCallback(async ({ text, hotPost, page = 1, append = false } = {}) => {
+  const { createSignal } = useFetchWithCleanup()
+  const { fetchSystemTypes } = useSystemTypes()
+
+  const fetchPostList = useCallback(async ({ text, hotPost, page = 1, append = false } = {}, signal) => {
     if (append) {
       if (loadingMoreRef.current) return
       loadingMoreRef.current = true
@@ -61,7 +65,7 @@ function CommunitySquare() {
       if (hotPost) {
         params.hotPost = true
       }
-      const result = await api.post('/post/postList', params)
+      const result = await getPostList(params, signal ? { signal } : {})
       if (result && result.records) {
         const newRecords = result.records
         const newItems = newRecords.map((post) => ({
@@ -89,13 +93,14 @@ function CommunitySquare() {
         setHasMore(page < totalPages)
       }
     } catch (err) {
+      if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return
       message.error(err.message || '获取帖子列表失败')
     } finally {
       setLoading(false)
       setLoadingMore(false)
       loadingMoreRef.current = false
     }
-  }, [message, pageSize])
+  }, [message])
 
   const fetchPostDetail = useCallback(async (postId) => {
     if (isMobile) {
@@ -105,18 +110,20 @@ function CommunitySquare() {
     setPostDetailLoading(true)
     setDetailImageIndex(0)
     try {
-      const result = await api.get('/post/getPost', { params: { id: postId } })
+      const signal = createSignal()
+      const result = await getPost(postId, { signal })
       if (result) {
         setPostDetail(result)
         setPostDetailModalOpen(true)
         setSearchParams({ id: String(postId) }, { replace: true })
       }
     } catch (err) {
+      if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return
       message.error(err.message || '获取帖子详情失败')
     } finally {
       setPostDetailLoading(false)
     }
-  }, [message, setSearchParams, isMobile, navigate])
+  }, [message, setSearchParams, isMobile, navigate, createSignal])
 
   const handlePostClick = useCallback((post) => {
     fetchPostDetail(post.id)
@@ -139,13 +146,16 @@ function CommunitySquare() {
     setCreateEditModalOpen(true)
   }
 
-  /* eslint-disable react-hooks/exhaustive-deps */
+  const doFetchPostList = useCallback((opts) => {
+    const signal = createSignal()
+    fetchPostList(opts, signal)
+  }, [fetchPostList, createSignal])
+
   useEffect(() => {
     currentPageRef.current = 1
     setHasMore(true)
-    fetchPostList({ text: searchText, hotPost: currentHotPost, page: 1, append: false })
-  }, [fetchPostList])
-  /* eslint-enable react-hooks/exhaustive-deps */
+    doFetchPostList({ text: searchText, hotPost: currentHotPost, page: 1, append: false })
+  }, []) 
 
   useEffect(() => {
     const handleScroll = () => {
@@ -155,32 +165,29 @@ function CommunitySquare() {
       const clientHeight = document.documentElement.clientHeight || window.innerHeight
       if (scrollTop + clientHeight >= scrollHeight - 200) {
         const { text, hotPost } = committedSearchRef.current
+        const signal = createSignal()
         fetchPostList({
           text,
           hotPost,
           page: currentPageRef.current + 1,
           append: true,
-        })
+        }, signal)
       }
     }
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
-  }, [fetchPostList, hasMore])
+  }, [fetchPostList, hasMore, createSignal])
 
   useEffect(() => {
-    const fetchCategoryList = async () => {
-      try {
-        const result = await api.get('/system/list')
-        if (Array.isArray(result)) {
-          const merged = ['热门', ...result.filter(c => c !== '推荐' && c !== '热门')]
-          setCategoryList(merged)
-        }
-      } catch {
-        setCategoryList(['热门'])
+    fetchSystemTypes().then((result) => {
+      if (Array.isArray(result)) {
+        const merged = ['热门', ...result.filter(c => c !== '推荐' && c !== '热门')]
+        setCategoryList(merged)
       }
-    }
-    fetchCategoryList()
-  }, [])
+    }).catch(() => {
+      setCategoryList(['热门'])
+    })
+  }, [fetchSystemTypes])
 
   useEffect(() => {
     const postId = initialPostIdRef.current
@@ -194,19 +201,21 @@ function CommunitySquare() {
       setPostDetailLoading(true)
       setDetailImageIndex(0)
       try {
-        const result = await api.get('/post/getPost', { params: { id: postId } })
+        const signal = createSignal()
+        const result = await getPost(postId, { signal })
         if (result) {
           setPostDetail(result)
           setPostDetailModalOpen(true)
           setSearchParams({ id: String(postId) }, { replace: true })
         }
       } catch (err) {
+        if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return
         message.error(err.message || '获取帖子详情失败')
       } finally {
         setPostDetailLoading(false)
       }
     })()
-  }, [])
+  }, []) 
 
   useEffect(() => {
     let lastScrollY = window.scrollY
@@ -242,7 +251,7 @@ function CommunitySquare() {
     currentPageRef.current = 1
     setHasMore(true)
     committedSearchRef.current = { text: searchText, hotPost: false }
-    fetchPostList({ text: searchText, hotPost: false, page: 1, append: false })
+    doFetchPostList({ text: searchText, hotPost: false, page: 1, append: false })
   }
 
   const handleCategoryClick = (cat) => {
@@ -252,7 +261,7 @@ function CommunitySquare() {
       currentPageRef.current = 1
       setHasMore(true)
       committedSearchRef.current = { text: searchText, hotPost: false }
-      fetchPostList({ text: searchText, hotPost: false, page: 1, append: false })
+      doFetchPostList({ text: searchText, hotPost: false, page: 1, append: false })
     } else {
       setSelectedCategory(cat)
       currentPageRef.current = 1
@@ -260,11 +269,11 @@ function CommunitySquare() {
       if (cat === '热门') {
         setCurrentHotPost(true)
         committedSearchRef.current = { text: searchText, hotPost: true }
-        fetchPostList({ text: searchText, hotPost: true, page: 1, append: false })
+        doFetchPostList({ text: searchText, hotPost: true, page: 1, append: false })
       } else {
         setCurrentHotPost(false)
         committedSearchRef.current = { text: searchText, hotPost: false }
-        fetchPostList({ text: searchText, hotPost: false, page: 1, append: false })
+        doFetchPostList({ text: searchText, hotPost: false, page: 1, append: false })
       }
     }
   }
@@ -281,7 +290,7 @@ function CommunitySquare() {
   const handleCreateEditSuccess = () => {
     currentPageRef.current = 1
     setHasMore(true)
-    fetchPostList({ text: searchText, hotPost: currentHotPost, page: 1, append: false })
+    doFetchPostList({ text: searchText, hotPost: currentHotPost, page: 1, append: false })
   }
 
   return (

@@ -1,16 +1,14 @@
-import { useState, useEffect, useContext, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Carousel, Masonry, Image as AntImage, Spin, Form } from 'antd'
-import { getMarquee, getPictureList } from '../api'
-import api from '../api'
-import { AuthContext } from '../context/AuthContext.jsx'
+import { getPictureList } from '../api'
 import { useAuthModal } from '../hooks/useAuthModal.js'
+import { useFetchWithCleanup, useSystemTypes, useMarquee } from '../hooks/useRequestUtils'
 import AuthModals from '../components/shared/AuthModals.jsx'
 import SearchBar from '../components/shared/SearchBar.jsx'
 import CategoryBar from '../components/shared/CategoryBar.jsx'
 
 function HomePage() {
-  const { isAuthenticated } = useContext(AuthContext)
   const navigate = useNavigate()
   const location = useLocation()
   const [loginForm] = Form.useForm()
@@ -34,6 +32,10 @@ function HomePage() {
   const carouselWrapperRef = useRef(null)
   const touchStartXRef = useRef(null)
 
+  const { createSignal } = useFetchWithCleanup()
+  const { fetchSystemTypes } = useSystemTypes()
+  const { fetchMarquee } = useMarquee()
+
   const authModal = useAuthModal(() => {
     const from = location.state?.from?.pathname || '/community'
     navigate(from, { replace: true })
@@ -48,28 +50,40 @@ function HomePage() {
   }, [searchValue, navigate])
 
   useEffect(() => {
-    getMarquee().then((images) => { if (Array.isArray(images) && images.length > 0) setMarqueeImages(images) }).catch(() => {})
-  }, [])
+    fetchMarquee().then((images) => {
+      if (Array.isArray(images) && images.length > 0) setMarqueeImages(images)
+    }).catch(() => {})
+  }, [fetchMarquee])
 
   useEffect(() => {
-    api.get('/system/list').then((result) => {
-      if (Array.isArray(result)) setCategoryList(['热门', ...result.filter(c => c !== '推荐' && c !== '热门')])
+    fetchSystemTypes().then((result) => {
+      if (Array.isArray(result)) {
+        setCategoryList(['热门', ...result.filter(c => c !== '推荐' && c !== '热门')])
+      } else {
+        setCategoryList(['热门'])
+      }
     }).catch(() => setCategoryList(['热门']))
-  }, [])
+  }, [fetchSystemTypes])
 
   const loadPictures = useCallback(async (page) => {
     setPictureLoading(true)
     try {
-      const result = await getPictureList(page, PAGE_SIZE)
+      const signal = createSignal()
+      const result = await getPictureList(page, PAGE_SIZE, { signal })
       if (result && Array.isArray(result.records)) {
         setPictureList(prev => page === 1 ? result.records : [...prev, ...result.records])
         setHasMore(result.records.length === PAGE_SIZE)
       } else {
         setHasMore(false)
       }
-    } catch { setHasMore(false) }
-    finally { setPictureLoading(false) }
-  }, [])
+    } catch (err) {
+      if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return
+      setHasMore(false)
+    }
+    finally {
+      setPictureLoading(false)
+    }
+  }, [createSignal])
 
   useEffect(() => { loadPictures(1) }, [loadPictures])
 

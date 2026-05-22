@@ -4,6 +4,7 @@ import { App as AntApp, Typography, Button, Empty, Modal, Form, Input, Spin, Ava
 import { TeamOutlined, EditOutlined, PlusOutlined, PictureOutlined, CloudServerOutlined, UserOutlined } from '@ant-design/icons'
 import { createSpace, updateSpace, listSpace } from '../api'
 import { ThemeContext } from '../context/ThemeContext'
+import { useFetchWithCleanup } from '../hooks/useRequestUtils'
 import { LEVEL_MAP } from '../utils/constants'
 import './TeamSpace.css'
 
@@ -31,20 +32,24 @@ function TeamSpace() {
   const [form] = Form.useForm()
   const [editForm] = Form.useForm()
 
+  const { createSignal } = useFetchWithCleanup()
+
   const fetchSpaces = useCallback(async () => {
     setLoading(true)
     try {
-      const result = await listSpace(1)
+      const signal = createSignal()
+      const result = await listSpace(1, { signal })
       const list = Array.isArray(result) ? result : []
       setSpaces(list)
       setShowCreate(list.length === 0)
-    } catch {
+    } catch (err) {
+      if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return
       setSpaces([])
       setShowCreate(true)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [createSignal])
 
   useEffect(() => {
     fetchSpaces()
@@ -62,6 +67,7 @@ function TeamSpace() {
       form.resetFields()
       fetchSpaces()
     } catch (error) {
+      if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
       message.error(error.message || '创建失败')
     } finally {
       setCreateLoading(false)
@@ -103,6 +109,7 @@ function TeamSpace() {
       editForm.resetFields()
       fetchSpaces()
     } catch (error) {
+      if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
       message.error(error.message || '修改失败')
     } finally {
       setUpdateLoading(false)

@@ -34,7 +34,9 @@ api.interceptors.request.use(
       pendingRequests.delete(key)
     }
     const controller = new AbortController()
-    config.signal = controller.signal
+    if (!config.signal) {
+      config.signal = controller.signal
+    }
     config._dedupId = ++requestCounter
     config._dedupKey = key
     pendingRequests.set(key, { controller, id: config._dedupId })
@@ -45,19 +47,19 @@ api.interceptors.request.use(
   }
 )
 
-function handleAuthExpired() {
-  clearAuth()
-  window.dispatchEvent(new CustomEvent('auth:expired'))
+function cleanupDedup(config) {
+  if (!config) return
+  const key = config._dedupKey || getRequestKey(config)
+  const entry = pendingRequests.get(key)
+  if (entry && entry.id === config._dedupId) {
+    pendingRequests.delete(key)
+  }
 }
 
 api.interceptors.response.use(
   (response) => {
     if (!response || !response.config) return response
-    const key = response.config._dedupKey || getRequestKey(response.config)
-    const entry = pendingRequests.get(key)
-    if (entry && entry.id === response.config._dedupId) {
-      pendingRequests.delete(key)
-    }
+    cleanupDedup(response.config)
     if (response.config.responseType === 'blob') {
       return response
     }
@@ -77,15 +79,9 @@ api.interceptors.response.use(
     return responseData.data ?? responseData
   },
   (error) => {
-    if (error.config) {
-      const key = error.config._dedupKey || getRequestKey(error.config)
-      const entry = pendingRequests.get(key)
-      if (entry && entry.id === error.config._dedupId) {
-        pendingRequests.delete(key)
-      }
-    }
-    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {
-      return new Promise(() => { })
+    cleanupDedup(error.config)
+    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED' || axios.isCancel(error)) {
+      return new Promise(() => {})
     }
     if (error.response?.status === 401) {
       handleAuthExpired()
@@ -95,6 +91,74 @@ api.interceptors.response.use(
     return Promise.reject(new Error(message))
   }
 )
+
+function handleAuthExpired() {
+  clearAuth()
+  window.dispatchEvent(new CustomEvent('auth:expired'))
+}
+
+const cacheMap = new Map()
+const CACHE_TTL = 5 * 60 * 1000
+
+export function clearCache(pattern) {
+  if (!pattern) {
+    cacheMap.clear()
+    return
+  }
+  for (const key of cacheMap.keys()) {
+    if (key.includes(pattern)) {
+      cacheMap.delete(key)
+    }
+  }
+}
+
+function getCacheKey(config) {
+  const { method, url, params } = config
+  return [method, url, JSON.stringify(params || {})].join('&')
+}
+
+export const cachedGet = (axiosInstance) => {
+  return async (config) => {
+    const key = getCacheKey(config)
+    const cached = cacheMap.get(key)
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return cached.data
+    }
+    const response = await axiosInstance(config)
+    cacheMap.set(key, { data: response, timestamp: Date.now() })
+    return response
+  }
+}
+
+const MAX_RETRIES = 2
+const RETRY_DELAY = 1000
+
+export async function withRetry(fn, retries = MAX_RETRIES, delay = RETRY_DELAY) {
+  let lastError
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await fn()
+    } catch (error) {
+      lastError = error
+      if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED' || axios.isCancel(error)) {
+        throw error
+      }
+      if (error.response && error.response.status >= 400 && error.response.status < 500) {
+        throw error
+      }
+      if (i < retries) {
+        await new Promise(resolve => setTimeout(resolve, delay * (i + 1)))
+      }
+    }
+  }
+  throw lastError
+}
+
+export function useAbortController() {
+  const controller = new AbortController()
+  const abort = () => controller.abort()
+  return { signal: controller.signal, abort }
+}
 
 export const getLoginCheckCode = () => api.get('/user/checkCode/login', {
   validateStatus: () => true,
@@ -108,17 +172,19 @@ export const login = (data) => api.post('/user/login', data)
 
 export const register = (data) => api.post('/user/register', data)
 
-export const getUserMyself = () => api.get('/user/myself')
+export const getUserMyself = (config = {}) => api.get('/user/myself', config)
 
 export const logout = () => api.post('/user/logout', {})
 
-export const getUser = () => api.get('/user/getUser')
+export const getUser = (config = {}) => api.get('/user/getUser', config)
 
-export const getAdminUser = (userId) => api.post('/user/admin/getUser', { userId })
+export const getAdminUser = (userId, config = {}) => api.get('/user/admin/getUser', { params: { userId }, ...config })
 
 export const editUser = (data) => api.post('/user/editUser', data)
 
 export const uploadAvatar = (formData, onProgress) => api.post('/picture/avatar', formData, {
+  headers: { 'Content-Type': 'multipart/form-data' },
+  timeout: 60000,
   onUploadProgress: (progressEvent) => {
     if (onProgress && progressEvent.total) {
       onProgress({ percent: Math.round((progressEvent.loaded * 100) / progressEvent.total) })
@@ -126,33 +192,33 @@ export const uploadAvatar = (formData, onProgress) => api.post('/picture/avatar'
   }
 })
 
-export const getMyPosts = (data) => api.post('/post/myPosts', data)
+export const getMyPosts = (data, config = {}) => api.post('/post/myPosts', data, config)
 
-export const getMyCollects = (data) => api.post('/post/myCollects', data)
+export const getMyCollects = (data, config = {}) => api.post('/post/myCollects', data, config)
 
-export const getMyLikes = (data) => api.post('/post/myLikes', data)
+export const getMyLikes = (data, config = {}) => api.post('/post/myLikes', data, config)
 
 export const getMarquee = () => api.get('/system/marquee')
 
-export const getPictureList = (current = 1, pageSize = 20) =>
-  api.get('/picture/list', { params: { current, pageSize } })
+export const getPictureList = (current = 1, pageSize = 20, config = {}) =>
+  api.get('/picture/list', { params: { current, pageSize }, ...config })
 
 export const getAdminPictureList = (current = 1, pageSize = 20, status = 3) =>
   api.get('/picture/admin/list', { params: { current, pageSize, status } })
 
-export const reviewPicture = (pictureId, status, selected) => api.post('/picture/admin/review', {}, { params: { pictureId, status, selected } })
+export const reviewPicture = (pictureId, status, selected) => api.post('/picture/admin/review', { pictureId, status, selected })
 
 export const createSpace = (data) => api.post('/space/create', data)
 
 export const updateSpace = (data) => api.post('/space/update', data)
 
-export const listSpace = (type) => api.get('/space/list', { params: { type } })
+export const listSpace = (type, config = {}) => api.get('/space/list', { params: { type }, ...config })
 
 export const getSpace = (id) => api.get('/space/getSpace', { params: { id } })
 
-export const spaceListPicture = (data) => api.post('/space/pictureList', data)
+export const spaceListPicture = (data, config = {}) => api.post('/space/pictureList', data, config)
 
-export const postPictureList = (data) => api.post('/post/pictureList', data)
+export const postPictureList = (data, config = {}) => api.post('/post/pictureList', data, config)
 
 export const deletePicture = (ids) => api.delete('/picture/delete', { data: { ids } })
 
@@ -164,10 +230,28 @@ export const scalePicture = (data) => api.post('/picture/scale', data)
 
 export const watermarkPicture = (data) => api.post('/picture/watermark', data)
 
-export const likePost = (id) => api.post('/post/like', {}, { params: { id } })
+export const likePost = (id) => api.post('/post/like', { id })
 
-export const getPost = (id) => api.get('/post/getPost', { params: { id } })
+export const getPost = (id, config = {}) => api.get('/post/getPost', { params: { id }, ...config })
 
 export const editPost = (data) => api.post('/post/editPost', data)
+
+export const uploadPost = (data) => api.post('/post/post', data)
+
+export const getPostList = (data, config = {}) => api.post('/post/postList', data, config)
+
+export const getSystemTypes = () => api.get('/system/list')
+
+export const uploadPicture = (formData, targetSpaceId) => {
+  const fd = new FormData()
+  fd.append('file', formData.get('file'))
+  if (targetSpaceId != null) {
+    fd.append('targetSpaceId', targetSpaceId)
+  }
+  return api.post('/picture/upload', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000,
+  })
+}
 
 export default api

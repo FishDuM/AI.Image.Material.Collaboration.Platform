@@ -29,9 +29,10 @@ import {
   StarOutlined,
   UserOutlined
 } from '@ant-design/icons'
-import api, {editUser, getMyCollects, getMyLikes, getMyPosts, getUser, getUserMyself, uploadAvatar} from '../api'
+import {editUser, getMyCollects, getMyLikes, getMyPosts, getPost, getUser, getUserMyself, uploadAvatar} from '../api'
 import {AuthContext} from '../context/AuthContext'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { useFetchWithCleanup } from '../hooks/useRequestUtils'
 import { isAllowedImageFile, getMaxUploadSize, formatMaxUploadSize } from '../utils/uploadConstraints'
 import PostDetailModal from '../components/PostDetailModal'
 import CreateEditPostModal from '../components/CreateEditPostModal'
@@ -49,7 +50,7 @@ function UserProfile() {
   const [avatarVisible, setAvatarVisible] = useState(false)
   const [editModalVisible, setEditModalVisible] = useState(false)
   const [editForm] = Form.useForm()
-  const [uploadedAvatarUrl, setUploadedAvatarUrl] = useState(null)
+  const [, setUploadedAvatarUrl] = useState(null)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(null)
   const [showPasswordSection, setShowPasswordSection] = useState(false)
@@ -71,9 +72,11 @@ function UserProfile() {
   const [createEditModalOpen, setCreateEditModalOpen] = useState(false)
   const [editingPostDetail, setEditingPostDetail] = useState(null)
 
+  const { createSignal } = useFetchWithCleanup()
+
   const apiMap = { notes: getMyPosts, favorites: getMyCollects, likes: getMyLikes }
 
-  const fetchTabData = useCallback(async (tabKey, page = 1, append = false) => {
+  const fetchTabData = useCallback(async (tabKey, page = 1, append = false, signal) => {
     const fetchFn = apiMap[tabKey]
     if (!fetchFn) return
 
@@ -88,7 +91,7 @@ function UserProfile() {
     }
 
     try {
-      const result = await fetchFn({ current: page, pageSize: 20 })
+      const result = await fetchFn({ current: page, pageSize: 20 }, signal ? { signal } : {})
       const records = result.records || []
       const totalPages = result.pages || 0
       const hasMore = page < totalPages
@@ -118,6 +121,7 @@ function UserProfile() {
       setCounts(prev => ({ ...prev, [tabKey]: result.total || 0 }))
       pageRefs.current[tabKey] = page
     } catch (error) {
+      if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
       message.error(error.message || '获取数据失败')
       if (!append) {
         setTabState(prev => ({
@@ -135,7 +139,8 @@ function UserProfile() {
 
   const fetchUserInfo = async () => {
     try {
-      const data = await getUserMyself()
+      const signal = createSignal()
+      const data = await getUserMyself({ signal })
       setUserData(data)
       
       if (userInfo) {
@@ -143,13 +148,15 @@ function UserProfile() {
         authLogin(updatedUserInfo)
       }
     } catch (error) {
+      if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
       message.error(error.message || '获取个人信息失败')
     }
   }
 
   const refreshUserInfo = async () => {
     try {
-      const data = await getUser()
+      const signal = createSignal()
+      const data = await getUser({ signal })
       setUserData((prev) => ({ ...prev, ...data }))
       
       if (userInfo) {
@@ -157,6 +164,7 @@ function UserProfile() {
         authLogin(updatedUserInfo)
       }
     } catch (error) {
+      if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
       message.error(error.message || '刷新用户信息失败')
     }
   }
@@ -172,12 +180,15 @@ function UserProfile() {
     }
     
     setLoading(true)
-    fetchUserInfo().finally(() => setLoading(false))
+    fetchUserInfo().finally(() => {
+      setLoading(false)
+    })
   }, [navigate, message])
 
   useEffect(() => {
     if (!tabState[activeTab].loaded && !tabState[activeTab].loading) {
-      fetchTabData(activeTab, 1, false)
+      const signal = createSignal()
+      fetchTabData(activeTab, 1, false, signal)
     }
   }, [activeTab])
 
@@ -191,13 +202,14 @@ function UserProfile() {
       const clientHeight = document.documentElement.clientHeight || window.innerHeight
 
       if (scrollTop + clientHeight >= scrollHeight - 200) {
-        fetchTabData(currentTab, pageRefs.current[currentTab] + 1, true)
+        const signal = createSignal()
+        fetchTabData(currentTab, pageRefs.current[currentTab] + 1, true, signal)
       }
     }
 
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
-  }, [activeTab, tabState, fetchTabData])
+  }, [activeTab, tabState, fetchTabData, createSignal])
 
   useEffect(() => {
     if (!editModalVisible) return
@@ -239,9 +251,11 @@ function UserProfile() {
     setPostDetailModalOpen(true)
     setDetailImageIndex(0)
     try {
-      const result = await api.get('/post/getPost', { params: { id: post.id } })
+      const signal = createSignal()
+      const result = await getPost(post.id, { signal })
       setPostDetail(result)
     } catch (err) {
+      if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return
       message.error(err.message || '加载帖子详情失败')
       setPostDetailModalOpen(false)
     } finally {
@@ -320,7 +334,6 @@ function UserProfile() {
       const submitData = {
         id: values.id,
         username: values.username,
-        avatar: uploadedAvatarUrl || userData?.avatar || null,
         email: values.email || null,
         phone: values.phone || null,
         nickname: values.nickname
@@ -755,7 +768,8 @@ function UserProfile() {
         }}
         editPostDetail={editingPostDetail}
         onSuccess={() => {
-          fetchTabData(activeTab, 1, false)
+          const signal = createSignal()
+          fetchTabData(activeTab, 1, false, signal)
         }}
       />
     </>

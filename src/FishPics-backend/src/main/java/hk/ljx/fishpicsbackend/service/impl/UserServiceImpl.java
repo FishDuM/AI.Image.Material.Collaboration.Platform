@@ -224,29 +224,30 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
     @Override
     public Boolean editUser(UserEditByAdminRequest userEditByAdminRequest) {
-        // 1. 必传校验
         Long id = userEditByAdminRequest.getId();
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), ExceptionCode.PARAMETER_ERROR, "用户ID不能为空");
 
-        // 2. 查询用户是否存在
         User user = userMapper.selectById(id);
         ExcUtils.throwIfTrue(ObjectUtil.isNull(user), ExceptionCode.NOT_FOUND, "未找到该用户");
 
-        // 3. 密码加密（只在密码不为空时加密）
         if (ObjectUtil.isNotEmpty(userEditByAdminRequest.getPassword())) {
             String encryptPwd = DigestUtil.md5Hex(userEditByAdminRequest.getPassword() + SALT);
             userEditByAdminRequest.setPassword(encryptPwd);
         }
 
-        // 4. 自动拷贝 非空字段 到实体类（自动忽略null/空值）
         BeanUtil.copyProperties(userEditByAdminRequest, user,
                 CopyOptions.create().setIgnoreNullValue(true).setIgnoreError(true));
 
-        // 5. 更新
         int rows = userMapper.updateById(user);
-        stringRedisTemplate.opsForValue().set(RedisConstants.getUserInfoKey(id), JSONUtil.toJsonStr(user), 1,
-                TimeUnit.DAYS);
         ExcUtils.throwIfTrue(rows != 1, ExceptionCode.DATABASE_ERROR, "更新用户失败");
+
+        String userInfoKey = RedisConstants.getUserInfoKey(id);
+        if (stringRedisTemplate.hasKey(userInfoKey)) {
+            stringRedisTemplate.delete(userInfoKey);
+            User freshUser = userMapper.selectById(id);
+            stringRedisTemplate.opsForValue().set(userInfoKey, JSONUtil.toJsonStr(freshUser), 1,
+                    TimeUnit.DAYS);
+        }
 
         return true;
     }

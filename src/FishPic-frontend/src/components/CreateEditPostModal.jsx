@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { App, Modal, Form, Input, Button, Upload, Select, Switch, Image as AntImage, Tabs, Pagination, Spin, Empty } from 'antd'
+import { App, Modal, Form, Input, Button, Upload, Select, Switch, Tabs, Pagination, Spin, Empty } from 'antd'
 import { PlusOutlined, DeleteOutlined, LeftOutlined, RightOutlined, SendOutlined, CheckOutlined, CloudOutlined, TeamOutlined } from '@ant-design/icons'
-import api, { listSpace, postPictureList } from '../api'
+import { editPost, listSpace, postPictureList, uploadPicture, uploadPost } from '../api'
 import MobilePageWrapper from './MobilePageWrapper'
 import SpacePickerModal from './shared/SpacePickerModal'
+import PostModal from './shared/PostModal'
 import { isAllowedImageFile, getMaxUploadSize, formatMaxUploadSize } from '../utils/uploadConstraints'
 import './CreateEditPostModal.css'
 
@@ -44,7 +45,10 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
   const maxSizeText = formatMaxUploadSize()
 
   const uploadedImagesRef = useRef(uploadedImages)
-  uploadedImagesRef.current = uploadedImages
+
+  useEffect(() => {
+    uploadedImagesRef.current = uploadedImages
+  }, [uploadedImages])
 
   const existingImageIds = useMemo(
     () => uploadedImages.map(img => img.pictureId).filter(Boolean),
@@ -116,9 +120,9 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
     setSpaceImageLoading(true)
     try {
       const result = await postPictureList({ spaceId, pictureIds: ids, current: page, pageSize: 20 })
-      const list = Array.isArray(result) ? result : []
+      const list = result?.records ?? []
       setSpaceImages(list)
-      setSpaceImageTotal(result?.total ?? result?.pages * 20 ?? list.length)
+      setSpaceImageTotal(result?.total ?? list.length)
     } catch {
       setSpaceImages([])
     } finally {
@@ -147,9 +151,9 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
     setTeamSpaceImageLoading(true)
     try {
       const result = await postPictureList({ spaceId: teamSpaceId, pictureIds: ids, current: page, pageSize: 20 })
-      const list = Array.isArray(result) ? result : []
+      const list = result?.records ?? []
       setTeamSpaceImages(list)
-      setTeamSpaceImageTotal(result?.total ?? result?.pages * 20 ?? list.length)
+      setTeamSpaceImageTotal(result?.total ?? list.length)
     } catch {
       setTeamSpaceImages([])
     } finally {
@@ -332,9 +336,7 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
     formData.append('file', file)
 
     try {
-      const result = await api.post('/picture/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
+      const result = await uploadPicture(formData)
 
       const { url, id } = result
       onUploadSuccess({ url, pictureId: id })
@@ -390,26 +392,6 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
     setShowUploadSlide(false)
   }
 
-  const handleNextImage = () => {
-    if (currentImageIndex === uploadedImages.length - 1) {
-      if (uploadedImages.length < 15 && !showUploadSlide) {
-        setShowUploadSlide(true)
-      }
-    } else {
-      setCurrentImageIndex(prev => Math.min(uploadedImages.length - 1, prev + 1))
-      setShowUploadSlide(false)
-    }
-  }
-
-  const handlePrevImage = () => {
-    if (showUploadSlide) {
-      setShowUploadSlide(false)
-      setCurrentImageIndex(uploadedImages.length - 1)
-    } else if (currentImageIndex > 0) {
-      setCurrentImageIndex(prev => prev - 1)
-    }
-  }
-
   const handleTouchStart = (e) => {
     setTouchStartX(e.touches[0].clientX)
   }
@@ -458,7 +440,7 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
         if (currentImageIds.length > 0) {
           editData.imageId = currentImageIds
         }
-        await api.post('/post/editPost', editData)
+        await editPost(editData)
         message.success('编辑成功！')
       } else {
         const coverIndex = values.coverIndex ?? 0
@@ -469,7 +451,7 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
           cover: coverIndex,
           isPrivate: values.isPrivate ? 1 : 0
         }
-        await api.post('/post/post', submitData)
+        await uploadPost(submitData)
         message.success('发布成功！')
       }
       form.resetFields()
@@ -501,395 +483,335 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
     onClose()
   }
 
-  const renderContent = () => (
-    <Form form={form} layout="vertical" onFinish={handleSubmit} autoComplete="off" className="post-form">
-      {modalStep === 1 ? (
-        <div className="upload-step">
-          <div className="upload-step-hint">至少上传一张图片</div>
-          <Tabs
-            className="upload-tabs"
-            activeKey={uploadTabKey}
-            onChange={(key) => {
-              setUploadTabKey(key)
-              if (key === 'space' && spaceId) {
-                setSpaceImagePage(1)
+  const renderStep1 = () => (
+    <Modal
+      open={open && modalStep === 1}
+      onCancel={handleCancel}
+      footer={null}
+      closable={false}
+      className={`create-post-modal${uploadTabKey === 'manual' ? ' create-post-modal-compact' : ''}`}
+    >
+      <Form form={form} layout="vertical" onFinish={handleSubmit} autoComplete="off" className="post-form">
+        <div className="upload-step-hint">至少上传一张图片</div>
+        <Tabs
+          className="upload-tabs"
+          activeKey={uploadTabKey}
+          onChange={(key) => {
+            setUploadTabKey(key)
+            if (key === 'space') {
+              setSelectedSpaceImageIds([])
+              if (spaceId) {
+                fetchSpaceImages(1, imageId)
               }
-              if (key === 'team') {
-                setTeamSpaceImagePage(1)
-                setSelectedTeamSpaceImageIds([])
-                fetchTeamSpaces()
-              }
-            }}
-            items={[
-              {
-                key: 'manual',
-                label: '手动上传',
-                children: (
-                  <div className="upload-tab-content">
-                    <Upload
-                      listType="picture-card"
-                      className="image-dragger"
-                      customRequest={customUploadRequest}
-                      onRemove={handleImageRemove}
-                      fileList={uploadedImages}
-                      maxCount={15}
-                      beforeUpload={beforeUpload}
-                      accept=".jpeg,.png,.jpg,.gif,.webp,.heic"
-                      multiple={false}
-                      showUploadList={false}
-                    >
-                      <div className="upload-step-content">
-                        <PlusOutlined className="upload-step-icon" />
-                        <div className="upload-step-title">点击或拖拽图片到此区域上传</div>
-                        <div className="upload-step-desc">支持 JPG、PNG、GIF、WebP、HEIC 格式，单张图片不超过 {maxSizeText}，最多15张</div>
-                      </div>
-                    </Upload>
+            }
+            if (key === 'team') {
+              setTeamSpaceImagePage(1)
+              setSelectedTeamSpaceImageIds([])
+              fetchTeamSpaces()
+            }
+          }}
+          items={[
+            {
+              key: 'manual',
+              label: '手动上传',
+              children: (
+                <Upload
+                  listType="picture-card"
+                  className="image-dragger"
+                  customRequest={customUploadRequest}
+                  onRemove={handleImageRemove}
+                  fileList={uploadedImages}
+                  maxCount={15}
+                  beforeUpload={beforeUpload}
+                  accept=".jpeg,.png,.jpg,.gif,.webp,.heic"
+                  multiple={false}
+                  showUploadList={false}
+                >
+                  <div className="upload-step-content">
+                    <PlusOutlined className="upload-step-icon" />
+                    <div className="upload-step-title">点击或拖拽图片到此区域上传</div>
+                    <div className="upload-step-desc">支持 JPG、PNG、GIF、WebP、HEIC 格式，单张图片不超过 {maxSizeText}，最多15张</div>
                   </div>
-                ),
-              },
-              {
-                key: 'space',
-                label: '从私人空间选择',
-                children: (
-                  <div className="upload-tab-content space-select-tab">
-                    {!spaceId ? (
-                      <Empty description="暂无私人空间" style={{ padding: '60px 0' }} />
+                </Upload>
+              ),
+            },
+            {
+              key: 'space',
+              label: '从私人空间选择',
+              children: (
+                <div className="space-select-tab">
+                  {!spaceId ? (
+                    <Empty description="暂无私人空间" style={{ padding: '60px 0' }} />
+                  ) : (
+                    <>
+                      <Spin spinning={spaceImageLoading} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+                        <div className="space-image-grid">
+                          {spaceImages.map((img) => {
+                            const orderIndex = selectedSpaceImageIds.indexOf(img.id)
+                            const isSelected = orderIndex !== -1
+                            const isInCarousel = img.flag === false
+                            return (
+                              <div
+                                key={img.id}
+                                className={`space-image-item${isSelected ? ' space-image-selected' : ''}${isInCarousel ? ' space-image-in-carousel' : ''}`}
+                                onClick={() => toggleSpaceImage(img)}
+                              >
+                                <img src={img.url} alt="" className="space-image-thumb" />
+                                <div className="space-image-check">
+                                  {isSelected ? (
+                                    <span className="space-order-badge">{orderIndex + 1}</span>
+                                  ) : isInCarousel ? (
+                                    <span className="space-order-exists">已有</span>
+                                  ) : (
+                                    <span className="space-order-empty" />
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                        {spaceImages.length === 0 && !spaceImageLoading && (
+                          <Empty description="暂无图片" style={{ padding: '40px 0' }} />
+                        )}
+                      </Spin>
+                      <div className="space-image-footer">
+                        <Pagination
+                          current={spaceImagePage}
+                          total={spaceImageTotal}
+                          pageSize={20}
+                          size="small"
+                          showSizeChanger={false}
+                          showTotal={(total) => `共 ${total} 张`}
+                          onChange={(page) => setSpaceImagePage(page)}
+                        />
+                        <Button
+                          type="primary"
+                          icon={<CheckOutlined />}
+                          disabled={selectedSpaceImageIds.length === 0}
+                          onClick={handleConfirmSpaceSelect}
+                        >
+                          确认选择 ({selectedSpaceImageIds.length})
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ),
+            },
+            {
+              key: 'team',
+              label: '从团队空间选择',
+              children: (
+                <div className="space-select-tab">
+                  <Spin spinning={teamSpacesLoading} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+                    {teamSpaces.length === 0 ? (
+                      <Empty description="暂未加入团队空间" style={{ padding: '60px 0' }} />
+                    ) : teamSpaceView === 'list' ? (
+                      <div className="team-space-list-view">
+                        {teamSpaces.map((sp) => (
+                          <div
+                            key={sp.id}
+                            className="team-space-list-card"
+                            onClick={() => handleTeamSpaceSelect(sp.id)}
+                          >
+                            <TeamOutlined className="team-space-card-icon" />
+                            <div className="team-space-card-info">
+                              <span className="team-space-card-name">{sp.name}</span>
+                              {sp.introduction && (
+                                <span className="team-space-card-intro" title={sp.introduction}>{sp.introduction}</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     ) : (
                       <>
-                        <Spin spinning={spaceImageLoading} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                          <div className="space-image-grid">
-                            {spaceImages.map((img) => {
-                              const orderIndex = selectedSpaceImageIds.indexOf(img.id)
-                              const isSelected = orderIndex !== -1
-                              const isInCarousel = img.flag === false
-                              return (
-                                <div
-                                  key={img.id}
-                                  className={`space-image-item ${isSelected ? 'space-image-selected' : ''} ${isInCarousel ? 'space-image-in-carousel' : ''}`}
-                                  onClick={() => toggleSpaceImage(img)}
-                                >
-                                  <img src={img.url} alt="" className="space-image-thumb" />
-                                  <div className="space-image-check">
-                                    {isSelected ? (
-                                      <span className="space-order-badge">{orderIndex + 1}</span>
-                                    ) : isInCarousel ? (
-                                      <span className="space-order-exists">已有</span>
-                                    ) : (
-                                      <span className="space-order-empty" />
-                                    )}
-                                  </div>
-                                </div>
-                              )
-                            })}
-                          </div>
-                          {spaceImages.length === 0 && !spaceImageLoading && (
-                            <Empty description="暂无图片" style={{ padding: '40px 0' }} />
-                          )}
-                        </Spin>
-                        <div className="space-image-footer">
-                          <Pagination
-                            current={spaceImagePage}
-                            total={spaceImageTotal}
-                            pageSize={20}
-                            size="small"
-                            showSizeChanger={false}
-                            showTotal={(total) => `共 ${total} 张`}
-                            onChange={(page) => setSpaceImagePage(page)}
-                          />
+                        <div className="team-space-image-header">
                           <Button
-                            type="primary"
-                            icon={<CheckOutlined />}
-                            disabled={selectedSpaceImageIds.length === 0}
-                            onClick={handleConfirmSpaceSelect}
+                            type="link"
+                            icon={<LeftOutlined />}
+                            onClick={handleTeamSpaceBack}
+                            className="team-space-back-btn"
                           >
-                            确认选择 ({selectedSpaceImageIds.length})
+                            返回空间列表
                           </Button>
+                          <span className="team-space-image-title">
+                            {teamSpaces.find(s => s.id === teamSpaceId)?.name || '团队空间'}
+                          </span>
                         </div>
+                        {!teamSpaceId ? (
+                          <Empty description="请选择一个团队空间" style={{ padding: '60px 0' }} />
+                        ) : (
+                          <>
+                            <Spin spinning={teamSpaceImageLoading} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+                              <div className="space-image-grid">
+                                {teamSpaceImages.map((img) => {
+                                  const orderIndex = selectedTeamSpaceImageIds.indexOf(img.id)
+                                  const isSelected = orderIndex !== -1
+                                  const isInCarousel = img.flag === false
+                                  return (
+                                    <div
+                                      key={img.id}
+                                      className={`space-image-item${isSelected ? ' space-image-selected' : ''}${isInCarousel ? ' space-image-in-carousel' : ''}`}
+                                      onClick={() => handleTeamSpaceImageToggle(img)}
+                                    >
+                                      <img src={img.url} alt="" className="space-image-thumb" />
+                                      <div className="space-image-check">
+                                        {isSelected ? (
+                                          <span className="space-order-badge">{orderIndex + 1}</span>
+                                        ) : isInCarousel ? (
+                                          <span className="space-order-exists">已有</span>
+                                        ) : (
+                                          <span className="space-order-empty" />
+                                        )}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </Spin>
+                            {teamSpaceImages.length === 0 && !teamSpaceImageLoading && (
+                              <Empty description="暂无图片" style={{ padding: '40px 0' }} />
+                            )}
+                            <div className="space-image-footer">
+                              <Pagination
+                                current={teamSpaceImagePage}
+                                total={teamSpaceImageTotal}
+                                pageSize={20}
+                                size="small"
+                                showSizeChanger={false}
+                                showTotal={(total) => `共 ${total} 张`}
+                                onChange={(page) => setTeamSpaceImagePage(page)}
+                              />
+                              <Button
+                                type="primary"
+                                icon={<CheckOutlined />}
+                                disabled={selectedTeamSpaceImageIds.length === 0}
+                                onClick={handleTeamSpaceConfirm}
+                              >
+                                确认选择 ({selectedTeamSpaceImageIds.length})
+                              </Button>
+                            </div>
+                          </>
+                        )}
                       </>
                     )}
-                  </div>
-                ),
-              },
-              {
-                key: 'team',
-                label: '从团队空间选择',
-                children: (
-                  <div className="upload-tab-content space-select-tab">
-                    <Spin spinning={teamSpacesLoading}>
-                      {teamSpaces.length === 0 ? (
-                        <Empty description="暂未加入团队空间" style={{ padding: '60px 0' }} />
-                      ) : teamSpaceView === 'list' ? (
-                        <div className="team-space-list-view">
-                          {teamSpaces.map((sp) => (
-                            <div
-                              key={sp.id}
-                              className="team-space-list-card"
-                              onClick={() => handleTeamSpaceSelect(sp.id)}
-                            >
-                              <TeamOutlined className="team-space-card-icon" />
-                              <div className="team-space-card-info">
-                                <span className="team-space-card-name">{sp.name}</span>
-                                {sp.introduction && (
-                                  <span className="team-space-card-intro" title={sp.introduction}>{sp.introduction}</span>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <>
-                          <div className="team-space-image-header">
-                            <Button
-                              type="link"
-                              icon={<LeftOutlined />}
-                              onClick={handleTeamSpaceBack}
-                              className="team-space-back-btn"
-                            >
-                              返回空间列表
-                            </Button>
-                            <span className="team-space-image-title">
-                              {teamSpaces.find(s => s.id === teamSpaceId)?.name || '团队空间'}
-                            </span>
-                          </div>
-                          {!teamSpaceId ? (
-                            <Empty description="请选择一个团队空间" style={{ padding: '60px 0' }} />
-                          ) : (
-                            <>
-                              <Spin spinning={teamSpaceImageLoading}>
-                                <div className="space-image-grid">
-                                  {teamSpaceImages.map((img) => {
-                                    const orderIndex = selectedTeamSpaceImageIds.indexOf(img.id)
-                                    const isSelected = orderIndex !== -1
-                                    const isInCarousel = img.flag === false
-                                    return (
-                                      <div
-                                        key={img.id}
-                                        className={`space-image-item ${isSelected ? 'space-image-selected' : ''} ${isInCarousel ? 'space-image-in-carousel' : ''}`}
-                                        onClick={() => handleTeamSpaceImageToggle(img)}
-                                      >
-                                        <img src={img.url} alt="" className="space-image-thumb" />
-                                        <div className="space-image-check">
-                                          {isSelected ? (
-                                            <span className="space-order-badge">{orderIndex + 1}</span>
-                                          ) : isInCarousel ? (
-                                            <span className="space-order-exists">已有</span>
-                                          ) : (
-                                            <span className="space-order-empty" />
-                                          )}
-                                        </div>
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                              </Spin>
-                              {teamSpaceImages.length === 0 && !teamSpaceImageLoading && (
-                                <Empty description="暂无图片" style={{ padding: '40px 0' }} />
-                              )}
-                              <div className="space-image-footer">
-                                <Pagination
-                                  current={teamSpaceImagePage}
-                                  total={teamSpaceImageTotal}
-                                  pageSize={20}
-                                  size="small"
-                                  showSizeChanger={false}
-                                  showTotal={(total) => `共 ${total} 张`}
-                                  onChange={(page) => setTeamSpaceImagePage(page)}
-                                />
-                                <Button
-                                  type="primary"
-                                  icon={<CheckOutlined />}
-                                  disabled={selectedTeamSpaceImageIds.length === 0}
-                                  onClick={handleTeamSpaceConfirm}
-                                >
-                                  确认选择 ({selectedTeamSpaceImageIds.length})
-                                </Button>
-                              </div>
-                            </>
-                          )}
-                        </>
-                      )}
-                    </Spin>
-                  </div>
-                ),
-              },
-            ]}
+                  </Spin>
+                </div>
+              ),
+            },
+          ]}
+        />
+      </Form>
+    </Modal>
+  )
+
+  const renderStep2 = () => (
+    <PostModal
+      open={open && modalStep === 2}
+      onClose={handleCancel}
+      images={uploadedImages.map(img => img.url).filter(Boolean)}
+      currentIndex={currentImageIndex}
+      onIndexChange={(index) => { setCurrentImageIndex(index); setShowUploadSlide(false) }}
+      onRemove={(_, index) => {
+        const file = uploadedImages[index]
+        if (file) handleImageRemove(file)
+      }}
+      onAddImage={customUploadRequest}
+      showAddSlide={showUploadSlide}
+      maxImages={15}
+      touchProps={{
+        onTouchStart: handleTouchStart,
+        onTouchMove: handleTouchMove,
+        onTouchEnd: handleTouchEnd,
+      }}
+    >
+      <Form form={form} layout="vertical" onFinish={handleSubmit} autoComplete="off" className="post-form">
+        <Form.Item
+          name="title"
+          rules={[
+            { required: true, message: '请输入标题' },
+            { max: 50, message: '标题最多50个字' }
+          ]}
+        >
+          <Input placeholder="给帖子起个吸引人的标题吧~" size="large" />
+        </Form.Item>
+
+        <Form.Item
+          name="content"
+          rules={[
+            { required: true, message: '请输入正文' },
+            { max: 5000, message: '正文最多5000个字' }
+          ]}
+        >
+          <Input.TextArea
+            placeholder="写下你的精彩故事，分享生活的每个瞬间..."
+            autoSize={{ minRows: 10, maxRows: 12 }}
+            maxLength={5000}
+            showCount
           />
+        </Form.Item>
+
+        <div className="form-row">
+          <Form.Item label="帖子封面" name="coverIndex" layout="horizontal"
+            style={{ marginBottom: 0 }}>
+            <Select
+              placeholder="选择帖子封面"
+              disabled={uploadedImages.length === 0}
+              onChange={(value) => {
+                setCurrentImageIndex(value)
+                setShowUploadSlide(false)
+              }}
+            >
+              {uploadedImages.map((img, index) => (
+                <Select.Option key={index} value={index}>
+                  图片{CHINESE_NUMS[index] || index + 1}
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <Form.Item name="isPrivate" valuePropName="checked" initialValue={false}>
+            <div className="privacy-toggle">
+              <Switch checkedChildren="私密" unCheckedChildren="公开" />
+            </div>
+          </Form.Item>
         </div>
-      ) : (
-        <div className="xiaohongshu-layout">
-          <div className="left-image-area">
-            {uploadedImages.length > 0 ? (
-              <div
-                className="carousel-main"
-                onTouchStart={handleTouchStart}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
-              >
-                {showUploadSlide && uploadedImages.length < 15 ? (
-                  <Upload
-                    listType="picture-card"
-                    className="carousel-upload"
-                    customRequest={customUploadRequest}
-                    onRemove={handleImageRemove}
-                    fileList={uploadedImages}
-                    maxCount={15}
-                    showUploadList={false}
-                    beforeUpload={beforeUpload}
-                    accept=".jpeg,.png,.jpg,.gif,.webp,.heic"
-                  >
-                    <button type="button" className="carousel-upload-btn">
-                      <PlusOutlined />
-                      <div className="upload-text">继续上传</div>
-                    </button>
-                  </Upload>
-                ) : currentImageIndex < uploadedImages.length ? (
-                  <AntImage
-                    src={uploadedImages[currentImageIndex]?.url}
-                    alt={uploadedImages[currentImageIndex]?.name}
-                    className="carousel-main-image"
-                    preview={true}
-                  />
-                ) : null}
-                {(currentImageIndex < uploadedImages.length || showUploadSlide) && (
-                  <>
-                    <button
-                      type="button"
-                      className="carousel-remove-btn"
-                      onClick={() => !showUploadSlide && handleImageRemove(uploadedImages[currentImageIndex])}
-                      style={{ display: showUploadSlide ? 'none' : 'flex' }}
-                    >
-                      <DeleteOutlined />
-                    </button>
-                    <button
-                      type="button"
-                      className="carousel-arrow carousel-arrow-left"
-                      onClick={handlePrevImage}
-                      disabled={!showUploadSlide && (uploadedImages.length <= 1 || currentImageIndex === 0)}
-                    >
-                      <LeftOutlined />
-                    </button>
-                    <button
-                      type="button"
-                      className="carousel-arrow carousel-arrow-right"
-                      onClick={handleNextImage}
-                      disabled={currentImageIndex >= uploadedImages.length - 1 && (uploadedImages.length >= 15 || showUploadSlide)}
-                      style={{ display: showUploadSlide ? 'none' : 'flex' }}
-                    >
-                      <RightOutlined />
-                    </button>
-                    <div className="carousel-counter" style={{ display: showUploadSlide ? 'none' : 'block' }}>
-                      {currentImageIndex + 1} / {uploadedImages.length}
-                    </div>
-                  </>
-                )}
-              </div>
-            ) : (
-              <Upload
-                listType="picture-card"
-                className="upload-preview-inline"
-                customRequest={customUploadRequest}
-                onRemove={handleImageRemove}
-                fileList={uploadedImages}
-                maxCount={15}
-                showUploadList={false}
-                beforeUpload={beforeUpload}
-                accept=".jpeg,.png,.jpg,.gif,.webp,.heic"
-              >
-                <button type="button" className="upload-trigger-inline">
-                  <PlusOutlined />
-                  <div className="upload-text">上传图片</div>
-                </button>
-              </Upload>
+
+        <div className="modal-submit-buttons">
+          <div className="modal-submit-left">
+            <Button
+              size="large"
+              icon={<CloudOutlined />}
+              onClick={() => setSpacePickerOpen(true)}
+              disabled={imageId.length >= 15}
+              className="space-fetch-button"
+            >
+              从空间中获取
+            </Button>
+          </div>
+          <div className="modal-submit-right">
+            {mode !== 'page' && (
+              <>
+                <Button size="large" onClick={handleCancel}>
+                  取消
+                </Button>
+                <Button
+                  type="primary"
+                  htmlType="submit"
+                  size="large"
+                  icon={<SendOutlined />}
+                  loading={submitLoading}
+                  className="modal-submit-button"
+                >
+                  {isEditing ? '保存' : '发布'}
+                </Button>
+              </>
             )}
           </div>
-          <div className="right-form-area">
-            <Form.Item
-              name="title"
-              rules={[
-                { required: true, message: '请输入标题' },
-                { max: 50, message: '标题最多50个字' }
-              ]}
-            >
-              <Input placeholder="给帖子起个吸引人的标题吧~" size="large" />
-            </Form.Item>
-
-            <Form.Item
-              name="content"
-              rules={[
-                { required: true, message: '请输入正文' },
-                { max: 5000, message: '正文最多5000个字' }
-              ]}
-            >
-              <Input.TextArea
-                placeholder="写下你的精彩故事，分享生活的每个瞬间..."
-                autoSize={{ minRows: 10, maxRows: 12 }}
-                maxLength={5000}
-                showCount
-              />
-            </Form.Item>
-
-            <div className="form-row">
-              <Form.Item label="帖子封面" name="coverIndex" layout="horizontal"
-                style={{ marginBottom: 0 }}>
-                <Select
-                  placeholder="选择帖子封面"
-                  disabled={uploadedImages.length === 0}
-                  onChange={(value) => {
-                    setCurrentImageIndex(value)
-                    setShowUploadSlide(false)
-                  }}
-                >
-                  {uploadedImages.map((img, index) => (
-                    <Select.Option key={index} value={index}>
-                      图片{CHINESE_NUMS[index] || index + 1}
-                    </Select.Option>
-                  ))}
-                </Select>
-              </Form.Item>
-
-              <Form.Item name="isPrivate" valuePropName="checked" initialValue={false}>
-                <div className="privacy-toggle">
-                  <Switch checkedChildren="私密" unCheckedChildren="公开" />
-                </div>
-              </Form.Item>
-            </div>
-
-            <div className="modal-submit-buttons">
-              <div className="modal-submit-left">
-                <Button
-                  size="large"
-                  icon={<CloudOutlined />}
-                  onClick={() => setSpacePickerOpen(true)}
-                  disabled={imageId.length >= 15}
-                  className="space-fetch-button"
-                >
-                  从空间中获取
-                </Button>
-              </div>
-              <div className="modal-submit-right">
-                {mode !== 'page' && (
-                  <>
-                    <Button size="large" onClick={handleCancel}>
-                      取消
-                    </Button>
-                    <Button
-                      type="primary"
-                      htmlType="submit"
-                      size="large"
-                      icon={<SendOutlined />}
-                      loading={submitLoading}
-                      className="modal-submit-button"
-                    >
-                      {isEditing ? '保存' : '发布'}
-                    </Button>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
         </div>
-      )}
-    </Form>
+      </Form>
+    </PostModal>
   )
 
   if (mode === 'page') {
@@ -913,7 +835,7 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
           ) : null
         }
       >
-        {renderContent()}
+        {renderStep1()}
         <SpacePickerModal
           open={spacePickerOpen}
           onClose={() => setSpacePickerOpen(false)}
@@ -926,15 +848,9 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
   }
 
   return (
-    <Modal
-      open={open}
-      onCancel={handleCancel}
-      footer={null}
-      closable={false}
-      className={`create-post-modal ${modalStep === 1 && uploadTabKey === 'manual' ? 'create-post-modal-compact' : ''}`}
-      width={modalStep === 1 && uploadTabKey === 'manual' ? 600 : 900}
-    >
-      {renderContent()}
+    <>
+      {renderStep1()}
+      {renderStep2()}
       <SpacePickerModal
         open={spacePickerOpen}
         onClose={() => setSpacePickerOpen(false)}
@@ -942,7 +858,7 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
         currentImageCount={existingImageIds.length}
         existingImageIds={existingImageIds}
       />
-    </Modal>
+    </>
   )
 }
 

@@ -11,7 +11,6 @@ import hk.ljx.fishpicsbackend.dto.post.GetPictureBySpaceRequest;
 import hk.ljx.fishpicsbackend.dto.post.PostQueryRequest;
 import hk.ljx.fishpicsbackend.dto.post.UploadPostRequest;
 import hk.ljx.fishpicsbackend.service.PostService;
-import hk.ljx.fishpicsbackend.vo.picture.PictureListByEditPostVO;
 import hk.ljx.fishpicsbackend.vo.post.PostDetailVO;
 import hk.ljx.fishpicsbackend.vo.post.PostListVO;
 import jakarta.servlet.http.HttpServletRequest;
@@ -20,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/post")
@@ -62,7 +62,7 @@ public class PostController {
     }
 
     @PostMapping("/pictureList")
-    public Response<List<PictureListByEditPostVO>> getPictureList(@RequestBody GetPictureBySpaceRequest getPictureBySpaceRequest) {
+    public Response<Map<String, Object>> getPictureList(@RequestBody GetPictureBySpaceRequest getPictureBySpaceRequest) {
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(getPictureBySpaceRequest), "获取图片列表，空间不能为空");
         return ResUtils.success(postService.getPictureList(getPictureBySpaceRequest));
     }

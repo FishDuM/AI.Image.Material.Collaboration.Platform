@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useContext } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import api from '../api'
+import { getPost } from '../api'
 import { AuthContext } from '../context/AuthContext'
 import PostDetailModal from '../components/PostDetailModal'
 import CreateEditPostModal from '../components/CreateEditPostModal'
@@ -18,7 +18,7 @@ export default function MobilePostDetailPage() {
     if (!postId) return
     setLoading(true)
     try {
-      const result = await api.get('/post/getPost', { params: { id: postId } })
+      const result = await getPost(postId)
       setPostDetail(result)
     } catch {
       setPostDetail(null)

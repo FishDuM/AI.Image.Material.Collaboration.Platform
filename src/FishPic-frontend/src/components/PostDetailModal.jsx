@@ -1,6 +1,7 @@
-import { Modal, Image as AntImage, Spin, Popover, QRCode, App } from 'antd'
-import { LikeOutlined, HeartOutlined, StarOutlined, LeftOutlined, RightOutlined, FileTextOutlined, ShareAltOutlined, CopyOutlined, SendOutlined } from '@ant-design/icons'
+import { Spin, Popover, QRCode, App } from 'antd'
+import { LikeOutlined, HeartOutlined, StarOutlined, ShareAltOutlined, CopyOutlined, SendOutlined } from '@ant-design/icons'
 import MobilePageWrapper from './MobilePageWrapper'
+import PostModal from './shared/PostModal'
 import './PostDetailModal.css'
 
 const formatTime = (timeString) => {
@@ -90,85 +91,72 @@ function PostDetailModal({
     ? postDetail.pictureUrl.filter(url => typeof url === 'string' && url.trim())
     : []
 
-  const handlePrevImage = () => {
-    if (detailImageIndex > 0) {
-      onImageIndexChange(detailImageIndex - 1)
-    }
-  }
-
-  const handleNextImage = () => {
-    if (detailImageIndex < validPics.length - 1) {
-      onImageIndexChange(detailImageIndex + 1)
-    }
-  }
-
-  const renderContent = () => (
-    loading ? (
-      <div className="post-detail-loading">
-        <Spin size="large" />
-      </div>
-    ) : postDetail ? (
-      <div className="xiaohongshu-layout">
-        <div className="left-image-area">
-          {validPics.length > 0 ? (
-            <div className="carousel-main">
-              <AntImage
-                src={validPics[detailImageIndex]}
-                alt={postDetail.title}
-                className="carousel-main-image"
-                preview={true}
-              />
-              {validPics.length > 1 && (
-                <>
-                  <button
-                    type="button"
-                    className="carousel-arrow carousel-arrow-left"
-                    onClick={handlePrevImage}
-                    disabled={detailImageIndex === 0}
-                  >
-                    <LeftOutlined />
-                  </button>
-                  <button
-                    type="button"
-                    className="carousel-arrow carousel-arrow-right"
-                    onClick={handleNextImage}
-                    disabled={detailImageIndex === validPics.length - 1}
-                  >
-                    <RightOutlined />
-                  </button>
-                  <div className="carousel-counter">
-                    {detailImageIndex + 1} / {validPics.length}
-                  </div>
-                </>
-              )}
-            </div>
-          ) : (
-            <div className="no-image-placeholder">
-              <FileTextOutlined style={{ fontSize: 64, color: 'rgba(255,255,255,0.3)' }} />
-              <p>暂无图片</p>
-            </div>
-          )}
-        </div>
-        <div className="right-form-area">
-          {mode !== 'page' && (
-            <div className="post-detail-header">
-              <div className="post-detail-user-info">
-                {postDetail.avatar ? (
-                  <img src={postDetail.avatar} alt={postDetail.username} className="post-detail-avatar" />
-                ) : (
-                  <div className="post-detail-avatar post-detail-avatar-default">
-                    {postDetail.username?.charAt(0)?.toUpperCase()}
-                  </div>
-                )}
-                <span className="post-detail-username">{postDetail.username}</span>
+  if (mode === 'page') {
+    return (
+      <MobilePageWrapper
+        title=""
+        titleContent={
+          <>
+            {postDetail?.avatar ? (
+              <img src={postDetail.avatar} alt={postDetail.username} />
+            ) : (
+              <div className="mobile-page-title-avatar-default">
+                {postDetail?.username?.charAt(0)?.toUpperCase()}
               </div>
-              {currentUsername === postDetail.username ? (
-                <button type="button" className="edit-btn" onClick={onEdit}>编辑</button>
+            )}
+            <span className="mobile-page-title-username">{postDetail?.username}</span>
+          </>
+        }
+        onClose={onClose}
+        rightContent={
+          postDetail && currentUsername === postDetail.username ? (
+            <button type="button" className="edit-btn" onClick={onEdit}>编辑</button>
+          ) : postDetail && currentUsername !== postDetail.username ? (
+            <button type="button" className="follow-btn">关注</button>
+          ) : null
+        }
+      >
+        {postDetail && (
+          <>
+            <div className="post-detail-title">{postDetail.title}</div>
+            <div className="post-detail-content">{postDetail.content}</div>
+          </>
+        )}
+      </MobilePageWrapper>
+    )
+  }
+
+  return (
+    <PostModal
+      open={open}
+      onClose={onClose}
+      images={validPics}
+      currentIndex={detailImageIndex}
+      onIndexChange={onImageIndexChange}
+    >
+      {loading ? (
+        <div className="post-detail-loading">
+          <Spin size="large" />
+        </div>
+      ) : postDetail ? (
+        <>
+          <div className="post-detail-header">
+            <div className="post-detail-user-info">
+              {postDetail.avatar ? (
+                <img src={postDetail.avatar} alt={postDetail.username} className="post-detail-avatar" />
               ) : (
-                <button type="button" className="follow-btn">关注</button>
+                <div className="post-detail-avatar post-detail-avatar-default">
+                  {postDetail.username?.charAt(0)?.toUpperCase()}
+                </div>
               )}
+              <span className="post-detail-username">{postDetail.username}</span>
             </div>
-          )}
+            {currentUsername === postDetail.username ? (
+              <button type="button" className="edit-btn" onClick={onEdit}>编辑</button>
+            ) : (
+              <button type="button" className="follow-btn">关注</button>
+            )}
+          </div>
           <div className="post-detail-title">{postDetail.title}</div>
           <div className="post-detail-content">{postDetail.content}</div>
           <span className="post-detail-time">
@@ -200,54 +188,9 @@ function PostDetailModal({
               </div>
             </Popover>
           </div>
-        </div>
-      </div>
-    ) : null
-  )
-
-  if (mode === 'page') {
-    return (
-      <MobilePageWrapper
-        title=""
-        titleContent={
-          <>
-            {postDetail?.avatar ? (
-              <img src={postDetail.avatar} alt={postDetail.username} />
-            ) : (
-              <div className="mobile-page-title-avatar-default">
-                {postDetail?.username?.charAt(0)?.toUpperCase()}
-              </div>
-            )}
-            <span className="mobile-page-title-username">{postDetail?.username}</span>
-          </>
-        }
-        onClose={onClose}
-        rightContent={
-          postDetail && currentUsername === postDetail.username ? (
-            <button type="button" className="edit-btn" onClick={onEdit}>编辑</button>
-          ) : postDetail && currentUsername !== postDetail.username ? (
-            <button type="button" className="follow-btn">关注</button>
-          ) : null
-        }
-      >
-        {renderContent()}
-      </MobilePageWrapper>
-    )
-  }
-
-  return (
-    <Modal
-      open={open}
-      onCancel={onClose}
-      footer={null}
-      className="post-detail-modal"
-      width="80vw"
-      style={{ maxHeight: '75vh' }}
-      closable={false}
-      destroyOnHidden
-    >
-      {renderContent()}
-    </Modal>
+        </>
+      ) : null}
+    </PostModal>
   )
 }
 

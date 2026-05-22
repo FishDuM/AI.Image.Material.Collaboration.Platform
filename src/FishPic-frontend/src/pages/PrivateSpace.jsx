@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { App as AntApp, Typography, Button, Modal, Form, Input, Pagination, Masonry, Image as AntImage, Spin, Empty, Popconfirm, Progress, Popover } from 'antd'
+import { App as AntApp, Typography, Button, Modal, Form, Input, Masonry, Image as AntImage, Spin, Empty, Popconfirm, Progress, Popover } from 'antd'
 import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowUpOutlined, EditOutlined, CloudUploadOutlined, FontSizeOutlined, DatabaseOutlined, HddOutlined, UploadOutlined, ApartmentOutlined } from '@ant-design/icons'
 import { updateSpace, listSpace, spaceListPicture, deletePicture, updatePicture, cropPicture, watermarkPicture } from '../api'
 import { useIsMobile } from '../hooks/useIsMobile'
-import { PAGINATION_LOCALE, PAGE_SIZE, LEVEL_MAP, storageStrokeColor, formatStorage } from '../utils/constants'
+import { useFetchWithCleanup } from '../hooks/useRequestUtils'
+import { PAGE_SIZE, LEVEL_MAP, storageStrokeColor, formatStorage } from '../utils/constants'
 import ImageCropper from '../components/shared/ImageCropper'
 import ImageUploadModal from '../components/shared/ImageUploadModal'
 import UpgradeModal from '../components/shared/UpgradeModal'
@@ -22,10 +23,13 @@ function PrivateSpace() {
   const [editForm] = Form.useForm()
 
   const [pictures, setPictures] = useState([])
-  const [picturePage, setPicturePage] = useState(1)
-  const [pictureTotal, setPictureTotal] = useState(0)
   const [pictureLoading, setPictureLoading] = useState(false)
   const [searchKeyword, setSearchKeyword] = useState('')
+  const [hasMore, setHasMore] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const loadMoreRef = useRef(null)
+  const currentPageRef = useRef(1)
+  const loadingMoreRef = useRef(false)
 
   const [batchMode, setBatchMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState([])
@@ -39,6 +43,8 @@ function PrivateSpace() {
   const [watermarkText, setWatermarkText] = useState('')
   const [watermarkLoading, setWatermarkLoading] = useState(false)
 
+  const { createSignal } = useFetchWithCleanup()
+
   const fetchSpaces = useCallback(async () => {
     try {
       const result = await listSpace(0)
@@ -49,9 +55,14 @@ function PrivateSpace() {
     }
   }, [])
 
-  const fetchPictures = useCallback(async (spaceId, page, keyword) => {
-    setPictureLoading(true)
-    setPicturePage(page)
+  const fetchPictures = useCallback(async (spaceId, page, keyword, append = false, signal) => {
+    if (append) {
+      if (loadingMoreRef.current) return
+      loadingMoreRef.current = true
+      setLoadingMore(true)
+    } else {
+      setPictureLoading(true)
+    }
     try {
       const params = {
         spaceId,
@@ -61,17 +72,36 @@ function PrivateSpace() {
       if (keyword && keyword.trim()) {
         params.keyword = keyword.trim()
       }
-      const result = await spaceListPicture(params)
+      const result = await spaceListPicture(params, signal ? { signal } : {})
       const list = Array.isArray(result?.records) ? result.records : []
-      const total = typeof result?.total === 'number' ? result.total : list.length
-      setPictures(list)
-      setPictureTotal(total)
-    } catch {
-      setPictures([])
+      if (append) {
+        setPictures(prev => {
+          const existIds = new Set(prev.map(p => p.id))
+          const unique = list.filter(p => !existIds.has(p.id))
+          return unique.length > 0 ? [...prev, ...unique] : prev
+        })
+      } else {
+        setPictures(list)
+      }
+      const totalPages = result.pages ?? Math.ceil((result.total || 0) / PAGE_SIZE)
+      currentPageRef.current = page
+      setHasMore(page < totalPages)
+    } catch (err) {
+      if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return
+      if (!append) {
+        setPictures([])
+      }
     } finally {
       setPictureLoading(false)
+      setLoadingMore(false)
+      loadingMoreRef.current = false
     }
   }, [])
+
+  const doFetchPictures = useCallback((spaceId, page, keyword, append = false) => {
+    const signal = createSignal()
+    fetchPictures(spaceId, page, keyword, append, signal)
+  }, [fetchPictures, createSignal])
 
   useEffect(() => {
     const init = async () => { await fetchSpaces() }
@@ -81,11 +111,25 @@ function PrivateSpace() {
   useEffect(() => {
     const load = async () => {
       if (spaces.length > 0 && spaces[0].id) {
-        await fetchPictures(spaces[0].id, 1)
+        doFetchPictures(spaces[0].id, 1)
       }
     }
     load()
-  }, [spaces, fetchPictures])
+  }, [spaces, doFetchPictures])
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (loadingMoreRef.current || !hasMore || spaces.length === 0) return
+      const scrollTop = document.documentElement.scrollTop || document.body.scrollTop
+      const scrollHeight = document.documentElement.scrollHeight || document.body.scrollHeight
+      const clientHeight = document.documentElement.clientHeight || window.innerHeight
+      if (scrollTop + clientHeight >= scrollHeight - 200) {
+        doFetchPictures(spaces[0].id, currentPageRef.current + 1, searchKeyword, true)
+      }
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [doFetchPictures, hasMore, spaces, searchKeyword])
 
   const spaceInfo = useMemo(() => {
     if (!spaces.length) return null
@@ -96,26 +140,18 @@ function PrivateSpace() {
     return { ...s, percent, usedText: formatStorage(sizeBytes), totalText: formatStorage(storageBytes) }
   }, [spaces])
 
-  const handlePageChange = useCallback((page) => {
-    setSelectedIds([])
-    setBatchMode(false)
-    if (spaces.length > 0 && spaces[0].id) {
-      fetchPictures(spaces[0].id, page, searchKeyword)
-    }
-  }, [spaces, fetchPictures, searchKeyword])
-
   const handleSearch = useCallback(() => {
     if (spaces.length > 0 && spaces[0].id) {
-      fetchPictures(spaces[0].id, 1, searchKeyword)
+      doFetchPictures(spaces[0].id, 1, searchKeyword)
     }
-  }, [spaces, fetchPictures, searchKeyword])
+  }, [spaces, doFetchPictures, searchKeyword])
 
   const handleSearchReset = useCallback(() => {
     setSearchKeyword('')
     if (spaces.length > 0 && spaces[0].id) {
-      fetchPictures(spaces[0].id, 1, '')
+      doFetchPictures(spaces[0].id, 1, '')
     }
-  }, [spaces, fetchPictures])
+  }, [spaces, doFetchPictures])
 
   const toggleBatchMode = useCallback(() => {
     setBatchMode((prev) => {
@@ -136,18 +172,19 @@ function PrivateSpace() {
       return
     }
     try {
-      const res = await deletePicture(selectedIds)
-      message.success(res?.message || '删除成功')
+      await deletePicture(selectedIds)
+      message.success('删除成功')
       setSelectedIds([])
       setBatchMode(false)
       if (spaces.length > 0 && spaces[0].id) {
-        await fetchPictures(spaces[0].id, picturePage, searchKeyword)
+        doFetchPictures(spaces[0].id, 1, searchKeyword)
         fetchSpaces()
       }
     } catch (error) {
+      if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
       message.error(error.message || '批量删除失败')
     }
-  }, [selectedIds, spaces, fetchPictures, picturePage, searchKeyword, message])
+  }, [selectedIds, spaces, doFetchPictures, searchKeyword, fetchSpaces, message])
 
   const handleEditPictureOpen = () => {
     if (selectedIds.length === 0) {
@@ -192,13 +229,14 @@ function PrivateSpace() {
       message.success('图片编辑并保存成功')
       setIsCropping(false)
       if (spaces.length > 0 && spaces[0].id) {
-        await fetchPictures(spaces[0].id, picturePage, searchKeyword)
+        doFetchPictures(spaces[0].id, 1, searchKeyword)
       }
     } catch (error) {
+      if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
       message.error(error.message || '图片编辑保存失败')
       setIsCropping(false)
     }
-  }, [selectedIds, spaces, fetchPictures, picturePage, searchKeyword, message])
+  }, [selectedIds, spaces, doFetchPictures, searchKeyword, message])
 
   const handleWatermarkOpen = useCallback(() => {
     setWatermarkText('')
@@ -225,22 +263,23 @@ function PrivateSpace() {
       setShowWatermarkInput(false)
       setWatermarkText('')
       if (spaces.length > 0 && spaces[0].id) {
-        await fetchPictures(spaces[0].id, picturePage, searchKeyword)
+        doFetchPictures(spaces[0].id, 1, searchKeyword)
       }
     } catch (error) {
+      if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
       message.error(error.message || '添加水印失败')
     } finally {
       setWatermarkLoading(false)
     }
-  }, [watermarkText, selectedIds, spaces, fetchPictures, picturePage, searchKeyword, message])
+  }, [watermarkText, selectedIds, spaces, doFetchPictures, searchKeyword, message])
 
   const handleUploadSuccess = useCallback(() => {
     setShowUploadModal(false)
     if (spaces.length > 0 && spaces[0].id) {
-      fetchPictures(spaces[0].id, 1, searchKeyword)
+      doFetchPictures(spaces[0].id, 1, searchKeyword)
       fetchSpaces()
     }
-  }, [spaces, fetchPictures, searchKeyword, fetchSpaces])
+  }, [spaces, doFetchPictures, searchKeyword, fetchSpaces])
 
   const handleEditPictureSubmit = async (values) => {
     setEditPictureLoading(true)
@@ -256,16 +295,20 @@ function PrivateSpace() {
       setSelectedIds([])
       setBatchMode(false)
       if (spaces.length > 0 && spaces[0].id) {
-        await fetchPictures(spaces[0].id, picturePage, searchKeyword)
+        doFetchPictures(spaces[0].id, 1, searchKeyword)
       }
     } catch (error) {
+      if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
       message.error(error.message || '编辑失败')
     } finally {
       setEditPictureLoading(false)
     }
   }
 
-  const masonryItems = useMemo(() => pictureListToMasonry(pictures), [pictures])
+  const masonryItems = useMemo(() => pictures.map((pic) => ({
+    key: `pic-${pic.id}`,
+    data: pic,
+  })), [pictures])
 
   const handleEditOpen = () => {
     if (spaces.length > 0) {
@@ -287,6 +330,7 @@ function PrivateSpace() {
       editForm.resetFields()
       fetchSpaces()
     } catch (error) {
+      if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
       message.error(error.message || '修改失败')
     } finally {
       setUpdateLoading(false)
@@ -454,6 +498,16 @@ function PrivateSpace() {
               }}
             />
           )}
+          {loadingMore && (
+            <div className="load-more-indicator">
+              <Spin size="small" />
+              <span>加载中...</span>
+            </div>
+          )}
+          {!hasMore && masonryItems.length > 0 && (
+            <div className="load-more-indicator">没有更多了</div>
+          )}
+          <div ref={loadMoreRef} />
           {batchMode && (
             <div className="private-space-batch-bar">
               <span className="private-space-batch-count">
@@ -491,19 +545,6 @@ function PrivateSpace() {
                   </Button>
                 </Popconfirm>
               </div>
-            </div>
-          )}
-          {pictureTotal > PAGE_SIZE && (
-            <div className="private-space-pagination">
-              <Pagination
-                current={picturePage}
-                total={pictureTotal}
-                pageSize={PAGE_SIZE}
-                onChange={handlePageChange}
-                showSizeChanger={false}
-                showQuickJumper
-                locale={PAGINATION_LOCALE}
-              />
             </div>
           )}
         </div>
@@ -655,13 +696,6 @@ function PrivateSpace() {
       />
     </main>
   )
-}
-
-function pictureListToMasonry(pictures) {
-  return pictures.map((pic) => ({
-    key: `pic-${pic.id}`,
-    data: pic,
-  }))
 }
 
 export default PrivateSpace

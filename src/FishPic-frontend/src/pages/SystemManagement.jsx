@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { App as AntApp, Card, Typography, Tag, Input, Button, Space, Spin, Empty, Popconfirm, Modal, Image, Checkbox, Pagination } from 'antd'
 import { PlusOutlined, ReloadOutlined, TagOutlined, PictureOutlined, DeleteOutlined, EyeOutlined } from '@ant-design/icons'
 import { AuthContext } from '../context/AuthContext.jsx'
-import api, { getAdminPictureList } from '../api'
+import api, { getAdminPictureList, getMarquee, getSystemTypes } from '../api'
 import { PAGINATION_LOCALE } from '../utils/constants'
 import './SystemManagement.css'
 
@@ -39,7 +39,7 @@ function SystemManagement() {
   const fetchTypeList = useCallback(async () => {
     setLoading(true)
     try {
-      const result = await api.get('/system/list')
+      const result = await getSystemTypes()
       if (Array.isArray(result)) {
         setTypeList(result)
       }
@@ -61,7 +61,7 @@ function SystemManagement() {
   const fetchMarquee = useCallback(async () => {
     setMarqueeLoading(true)
     try {
-      const result = await api.get('/system/marquee')
+      const result = await getMarquee()
       if (Array.isArray(result)) {
         setMarqueeUrls(result)
       }

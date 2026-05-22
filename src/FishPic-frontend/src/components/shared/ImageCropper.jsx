@@ -42,8 +42,9 @@ function adaptCropForRotation(cropPixels, rotation, imgW, imgH) {
 
 export default function ImageCropper({ imageUrl, onSave, onCancel }) {
   const { message } = App.useApp()
-  const imgRef = useRef(null)
   const containerRef = useRef(null)
+  const [imgElement, setImgElement] = useState(null)
+  const imgRef = useCallback((node) => { if (node) setImgElement(node) }, [])
   const [crop, setCrop] = useState()
   const [completedCrop, setCompletedCrop] = useState(null)
   const [zoom, setZoom] = useState(1)
@@ -79,9 +80,7 @@ export default function ImageCropper({ imageUrl, onSave, onCancel }) {
     return () => { cancelled = true }
   }, [imageUrl, message])
 
-  const onImageLoad = useCallback((e) => {
-    imgRef.current = e.currentTarget
-  }, [])
+  const onImageLoad = useCallback(() => {}, [])
 
   const handleZoomIn  = useCallback(() => setZoom((prev) => Math.min(prev + 0.5, 5)), [])
   const handleZoomOut = useCallback(() => setZoom((prev) => Math.max(prev - 0.5, 0.5)), [])
@@ -97,16 +96,15 @@ export default function ImageCropper({ imageUrl, onSave, onCancel }) {
     if (!naturalSize) return null
     const effectiveCrop = completedCrop || crop
     if (!effectiveCrop) return null
-    const img = imgRef.current
     const isSwapped = normalizeRotation(rotation) === 90 || normalizeRotation(rotation) === 270
-    const renderedW = img
-      ? (isSwapped ? img.clientHeight : img.clientWidth)
+    const renderedW = imgElement
+      ? (isSwapped ? imgElement.clientHeight : imgElement.clientWidth)
       : (isSwapped ? naturalSize.height : naturalSize.width)
-    const renderedH = img
-      ? (isSwapped ? img.clientWidth : img.clientHeight)
+    const renderedH = imgElement
+      ? (isSwapped ? imgElement.clientWidth : imgElement.clientHeight)
       : (isSwapped ? naturalSize.width : naturalSize.height)
     return convertToPixelCrop(effectiveCrop, renderedW, renderedH)
-  }, [completedCrop, crop, naturalSize, rotation])
+  }, [completedCrop, crop, naturalSize, rotation, imgElement])
 
   const handleSave = useCallback(async () => {
     const pixelCrop = getPixelCrop()
@@ -119,7 +117,7 @@ export default function ImageCropper({ imageUrl, onSave, onCancel }) {
       return
     }
 
-    const img = imgRef.current
+    const img = imgElement
     const isSwapped = normalizeRotation(rotation) === 90 || normalizeRotation(rotation) === 270
     const renderedW = img
       ? (isSwapped ? img.clientHeight : img.clientWidth)
@@ -154,7 +152,7 @@ export default function ImageCropper({ imageUrl, onSave, onCancel }) {
     } finally {
       setSaving(false)
     }
-  }, [getPixelCrop, rotation, naturalSize, onSave, message])
+  }, [getPixelCrop, rotation, naturalSize, onSave, message, imgElement])
 
   if (!imageUrl) return null
 

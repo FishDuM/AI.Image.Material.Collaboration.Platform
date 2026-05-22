@@ -1,7 +1,7 @@
 import { createContext, useState, useEffect } from 'react'
-import { getUserInfo, saveUserInfo, removeUserInfo, saveToken, getToken, clearAuth } from '../utils/storage'
-import { getUser } from '../api'
+import { getUserInfo, saveUserInfo, saveToken, getToken, clearAuth } from '../utils/storage'
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
@@ -13,38 +13,6 @@ export function AuthProvider({ children }) {
     const token = getToken()
     return !!(token && getUserInfo())
   })
-
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    const token = getToken()
-    const user = getUserInfo()
-    if (token && user) {
-      getUser()
-        .then((freshUser) => {
-          if (freshUser) {
-            saveUserInfo(freshUser)
-            setUserInfo(freshUser)
-            setIsAuthenticated(true)
-          } else {
-            clearAuth()
-            setUserInfo(null)
-            setIsAuthenticated(false)
-          }
-        })
-        .catch(() => {
-          clearAuth()
-          setUserInfo(null)
-          setIsAuthenticated(false)
-        })
-    } else {
-      if (!token) {
-        removeUserInfo()
-      }
-      setUserInfo(null)
-      setIsAuthenticated(false)
-    }
-  }, [])
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     const handleAuthExpired = () => {
