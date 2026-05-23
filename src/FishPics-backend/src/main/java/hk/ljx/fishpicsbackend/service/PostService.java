@@ -123,4 +123,27 @@ public interface PostService extends IService<Post> {
      * @return 图片列表
      */
     Map<String, Object> getPictureList(GetPictureBySpaceRequest getPictureBySpaceRequest);
+
+    /**
+     * 管理员分页查看所有帖子
+     *
+     * @param req 查询条件
+     * @return 帖子列表
+     */
+    IPage<PostListVO> getAdminPostPage(PostQueryRequest req);
+
+    /**
+     * 管理员审核帖子
+     *
+     * @param id     帖子ID
+     * @param status 目标状态
+     */
+    void reviewPost(Long id, Integer status);
+
+    /**
+     * 管理员删除帖子
+     *
+     * @param id 帖子ID
+     */
+    void adminDeletePost(Long id);
 }

@@ -8,13 +8,16 @@ import './PrivateSpace.css'
 
 function MobileUpgradePage() {
   const navigate = useNavigate()
-  const { message } = AntApp.useApp()
+  const { modal } = AntApp.useApp()
 
   const handleConfirm = useCallback((plan) => {
     if (!plan) return
-    message.success('升级申请已提交，等待审核')
-    navigate(-1)
-  }, [navigate, message])
+    modal.info({
+      title: '升级会员',
+      content: '请联系管理员开通 VIP/SVIP 会员',
+      okText: '知道了',
+    })
+  }, [modal])
 
   return (
     <MobilePageWrapper title="升级空间" showBack={false}>

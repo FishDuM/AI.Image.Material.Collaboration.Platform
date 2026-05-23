@@ -265,6 +265,10 @@ export const adminDeleteComment = (id) => api.post('/comment/adminDelete', null,
 
 export const getAdminCommentList = (data) => api.post('/comment/admin/list', data)
 
+export const getAdminPostList = (data) => api.post('/post/admin/list', data)
+export const reviewPost = (id, status) => api.post('/post/admin/review', null, { params: { id, status } })
+export const adminDeletePost = (id) => api.post('/post/admin/delete', null, { params: { id } })
+
 export const uploadPicture = (formData, targetSpaceId) => {
   const fd = new FormData()
   fd.append('file', formData.get('file'))

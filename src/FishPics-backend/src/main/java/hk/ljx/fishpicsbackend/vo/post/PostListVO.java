@@ -4,6 +4,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Date;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -52,4 +54,14 @@ public class PostListVO {
      * 当前用户是否已收藏
      */
     private Boolean isCollected;
+
+    /**
+     * 状态 1-正常 0-禁用 2-待审核
+     */
+    private Integer status;
+
+    /**
+     * 创建时间
+     */
+    private Date createTime;
 }

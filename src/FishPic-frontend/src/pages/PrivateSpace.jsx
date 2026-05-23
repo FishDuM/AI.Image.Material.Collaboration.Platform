@@ -15,7 +15,7 @@ const { Title } = Typography
 function PrivateSpace() {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
-  const { message } = AntApp.useApp()
+  const { message, modal } = AntApp.useApp()
   const [spaces, setSpaces] = useState([])
   const [showEdit, setShowEdit] = useState(false)
   const [updateLoading, setUpdateLoading] = useState(false)
@@ -529,7 +529,11 @@ function PrivateSpace() {
           open={showUpgrade}
           onClose={() => setShowUpgrade(false)}
           onConfirm={() => {
-            message.success('升级申请已提交，等待审核')
+            modal.info({
+              title: '升级会员',
+              content: '请联系管理员开通 VIP/SVIP 会员',
+              okText: '知道了',
+            })
             setShowUpgrade(false)
           }}
         />

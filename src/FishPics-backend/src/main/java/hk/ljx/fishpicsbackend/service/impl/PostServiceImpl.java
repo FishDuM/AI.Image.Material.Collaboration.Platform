@@ -99,7 +99,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
         // 保存帖子
         Post post = Post.builder().userId(userId).title(title).content(content).cover(imageId.get(cover))
-                .isPrivate(isPrivate)
+                .isPrivate(isPrivate).status(2)
                 .build();
         int insert = postMapper.insert(post);
         ExcUtils.throwIfTrue(insert != 1, ExceptionCode.INTERNAL_SERVER_ERROR, "保存失败，数据库错误");
@@ -512,6 +512,36 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         result.put("records", editPostVOS);
         result.put("total", pageResult.getTotal());
         return result;
+    }
+
+    @Override
+    public IPage<PostListVO> getAdminPostPage(PostQueryRequest req) {
+        Page<Post> page = new Page<>(req.getCurrent(), req.getPageSize());
+        QueryWrapper<Post> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq(ObjectUtil.isNotNull(req.getStatus()), "status", req.getStatus());
+        if (ObjectUtil.isNotNull(req.getText())) {
+            queryWrapper.and(wrapper -> wrapper.like("title", req.getText()).or().like("content", req.getText()));
+        }
+        queryWrapper.orderByDesc("create_time");
+        IPage<Post> postPage = postMapper.selectPage(page, queryWrapper);
+        return convertToPostListVO(postPage);
+    }
+
+    @Override
+    public void reviewPost(Long id, Integer status) {
+        Post post = postMapper.selectById(id);
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(post) || post.getId() == null, ExceptionCode.NOT_FOUND, "帖子不存在");
+        post.setStatus(status);
+        int i = postMapper.updateById(post);
+        ExcUtils.throwIfTrue(i != 1, ExceptionCode.DATABASE_ERROR, "审核失败");
+    }
+
+    @Override
+    public void adminDeletePost(Long id) {
+        Post post = postMapper.selectById(id);
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(post) || post.getId() == null, ExceptionCode.NOT_FOUND, "帖子不存在");
+        int i = postMapper.deleteById(id);
+        ExcUtils.throwIfTrue(i != 1, ExceptionCode.DATABASE_ERROR, "删除失败");
     }
 
     /**

@@ -36,6 +36,11 @@ public class PostQueryRequest extends PageRequest implements Serializable {
      */
     private Boolean hotPost;
 
+    /**
+     * 状态 1-正常 0-禁用 2-待审核
+     */
+    private Integer status;
+
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }

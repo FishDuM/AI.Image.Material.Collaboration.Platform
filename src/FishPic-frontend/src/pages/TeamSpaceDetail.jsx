@@ -17,7 +17,7 @@ function TeamSpaceDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
-  const { message } = AntApp.useApp()
+  const { message, modal } = AntApp.useApp()
   const { isDarkMode } = useContext(ThemeContext)
 
   const [spaceInfo, setSpaceInfo] = useState(null)
@@ -455,7 +455,11 @@ function TeamSpaceDetail() {
           open={showUpgrade}
           onClose={() => setShowUpgrade(false)}
           onConfirm={() => {
-            message.success('升级申请已提交，等待审核')
+            modal.info({
+              title: '升级会员',
+              content: '请联系管理员开通 VIP/SVIP 会员',
+              okText: '知道了',
+            })
             setShowUpgrade(false)
           }}
         />

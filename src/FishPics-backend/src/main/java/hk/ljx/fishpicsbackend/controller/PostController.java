@@ -2,6 +2,7 @@ package hk.ljx.fishpicsbackend.controller;
 
 import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
@@ -20,6 +21,8 @@ import org.springframework.web.bind.annotation.*;
 import jakarta.annotation.Resource;
 import java.util.List;
 import java.util.Map;
+
+import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
 @RestController
 @RequestMapping("/post")
@@ -96,5 +99,28 @@ public class PostController {
     @PostMapping("/myLikes")
     public Response<IPage<PostListVO>> getMyLikes(@RequestBody PageRequest pageRequest) {
         return ResUtils.success(postService.getMyLikes(pageRequest));
+    }
+
+    @AuthCheck(role = ADMIN)
+    @PostMapping("/admin/list")
+    public Response<IPage<PostListVO>> adminList(@RequestBody PostQueryRequest req) {
+        return ResUtils.success(postService.getAdminPostPage(req));
+    }
+
+    @AuthCheck(role = ADMIN)
+    @PostMapping("/admin/review")
+    public Response<Boolean> adminReview(@RequestParam("id") Long id, @RequestParam("status") Integer status) {
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), "帖子ID不能为空");
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(status), "审核状态不能为空");
+        postService.reviewPost(id, status);
+        return ResUtils.success(true);
+    }
+
+    @AuthCheck(role = ADMIN)
+    @PostMapping("/admin/delete")
+    public Response<Boolean> adminDelete(@RequestParam("id") Long id) {
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), "帖子ID不能为空");
+        postService.adminDeletePost(id);
+        return ResUtils.success(true);
     }
 }
