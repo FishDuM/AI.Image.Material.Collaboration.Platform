@@ -30,7 +30,8 @@ public class MvcConfig implements WebMvcConfigurer {
                         "/doc.html",
                         "/webjars/**",
                         "/v3/api-docs/**",
-                        "/favicon.ico")
+                        "/favicon.ico",
+                        "/ai/**")
                 .order(1);
         // 刷新token有效期
         registry.addInterceptor(new RefreshTokenInterceptor(stringRedisTemplate)).order(0);

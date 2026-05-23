@@ -22,6 +22,17 @@ spring:
       host: # redis 地址
       database: 0
       port: 6379
+# Spring AI Alibaba
+#  ai:
+#    dashscope:
+#      api-key:
+#      base-url: https://dashscope.aliyuncs.com
+#      chat:
+#        options:
+#          model: qwen-vl-plus
+#      image:
+#        options:
+#          model: wanx-v1
   profiles: # 使用本地环境配置文件
     active: local
 knife4j:
@@ -38,14 +49,15 @@ knife4j:
         api-rule: package
         api-rule-resources:
           - hk.ljx.fishpicsbackend.controller
-# 阿里云 COS 配置
+# 腾讯云 COS 配置
 #cos:
 #  secretId:
 #  secretKey:
 #  region:
 #  bucket:
 #  public: true  # 开发true 生产false
-#  url: # 阿里云图片 url 前缀
+#  url: # 腾讯云图片 url 前缀
+# AI 模型配置
 logging:
   level:
     root: info

@@ -13,6 +13,7 @@ const AdminUserList = lazy(() => import('./pages/AdminUserList'))
 const UserProfile = lazy(() => import('./pages/UserProfile'))
 const SpaceManagement = lazy(() => import('./pages/SpaceManagement'))
 const TeamManagement = lazy(() => import('./pages/TeamManagement'))
+const AIImageTools = lazy(() => import('./pages/AIImageTools'))
 const AIManagement = lazy(() => import('./pages/AIManagement'))
 const SystemManagement = lazy(() => import('./pages/SystemManagement'))
 const AdminPictureManagement = lazy(() => import('./pages/AdminPictureManagement'))
@@ -65,6 +66,7 @@ function App() {
                 <Route path="/team-space" element={<ProtectedRoute><TeamSpace /></ProtectedRoute>} />
                 <Route path="/team-space/:id" element={<ProtectedRoute><TeamSpaceDetail /></ProtectedRoute>} />
                 <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+                <Route path="/ai-tools" element={<ProtectedRoute><AIImageTools /></ProtectedRoute>} />
                 <Route path="/admin/users" element={<ProtectedRoute requireAdmin><UserManagement /></ProtectedRoute>} />
                 <Route path="/admin/pictures" element={<ProtectedRoute requireAdmin><AdminPictureManagement /></ProtectedRoute>} />
                 <Route path="/admin/comments" element={<ProtectedRoute requireAdmin><AdminCommentManagement /></ProtectedRoute>} />

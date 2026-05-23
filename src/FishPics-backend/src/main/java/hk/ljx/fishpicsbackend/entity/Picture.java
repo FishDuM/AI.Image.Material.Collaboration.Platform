@@ -81,6 +81,11 @@ public class Picture implements Serializable {
      */
     private String introduction;
 
+    /**
+     * AI生成标签 (逗号分隔)
+     */
+    private String tags;
+
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }

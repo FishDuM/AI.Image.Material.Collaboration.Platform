@@ -9,7 +9,9 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
+import hk.ljx.fishpicsbackend.common.stream.StreamProducer;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
+import lombok.extern.slf4j.Slf4j;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import hk.ljx.fishpicsbackend.dto.comment.CommentQueryRequest;
 import hk.ljx.fishpicsbackend.dto.comment.CreateCommentRequest;
@@ -35,6 +37,7 @@ import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 * @description 针对表【comment(评论表)】的数据库操作Service实现
 * @createDate 2026-04-13 21:24:56
 */
+@Slf4j
 @Service
 public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment>
     implements CommentService {
@@ -44,6 +47,9 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment>
 
     @Resource
     private PostService postService;
+
+    @Resource
+    private StreamProducer streamProducer;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -79,6 +85,14 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment>
         updateWrapper.eq(Post::getId, req.getPostId())
                 .setSql("comment_num = comment_num + 1");
         postService.update(updateWrapper);
+
+        // 异步发送评论事件（非阻塞）
+        try {
+            streamProducer.sendCommentEvent(user.getId(), req.getPostId(), comment.getId(),
+                    req.getParentId(), req.getToUserId() != null ? req.getToUserId().longValue() : null);
+        } catch (Exception e) {
+            log.warn("Failed to enqueue comment notification: {}", e.getMessage());
+        }
 
         return comment.getId();
     }

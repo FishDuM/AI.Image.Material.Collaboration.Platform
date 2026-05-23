@@ -14,12 +14,11 @@ import hk.ljx.fishpicsbackend.dto.post.UploadPostRequest;
 import hk.ljx.fishpicsbackend.service.PostService;
 import hk.ljx.fishpicsbackend.vo.post.PostDetailVO;
 import hk.ljx.fishpicsbackend.vo.post.PostListVO;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;
-import java.util.List;
+
 import java.util.Map;
 
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
@@ -60,8 +59,8 @@ public class PostController {
     @PostMapping("/like")
     public Response<Boolean> like(@RequestParam("id") Long id) {
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), "帖子不存在");
-        postService.likePost(id);
-        return ResUtils.success(true);
+        boolean liked = postService.likePost(id);
+        return ResUtils.success(liked);
     }
 
     @PostMapping("/collect")

@@ -80,4 +80,9 @@ public class PostDetailVO {
      * 当前用户是否已收藏
      */
     private Boolean isCollected;
+
+    /**
+     * 当前用户是否已点赞
+     */
+    private Boolean isLiked;
 }

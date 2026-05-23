@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Spin, Popover, QRCode, App } from 'antd'
-import { LikeOutlined, StarFilled, StarOutlined, MessageOutlined, ShareAltOutlined, CopyOutlined, SendOutlined } from '@ant-design/icons'
+import { LikeOutlined, LikeFilled, StarFilled, StarOutlined, MessageOutlined, ShareAltOutlined, CopyOutlined, SendOutlined } from '@ant-design/icons'
 import MobilePageWrapper from './MobilePageWrapper'
 import PostModal from './shared/PostModal'
 import PostLayout from './shared/PostLayout'
 import CommentSection from './CommentSection'
-import { collectPost, followUser } from '../api'
+import { collectPost, followUser, likePost } from '../api'
 import './PostDetailModal.css'
 
 const formatTime = (timeString) => {
@@ -50,14 +50,19 @@ function PostDetailModal({
   const [isCollected, setIsCollected] = useState(postDetail?.isCollected ?? false)
   const [localCollectsNum, setLocalCollectsNum] = useState(null)
   const [isFollowing, setIsFollowing] = useState(false)
+  const [isLiked, setIsLiked] = useState(postDetail?.isLiked ?? false)
+  const [localLikesNum, setLocalLikesNum] = useState(null)
 
   useEffect(() => {
     setIsCollected(postDetail?.isCollected ?? false)
     setLocalCollectsNum(null)
     setIsFollowing(false)
+    setIsLiked(postDetail?.isLiked ?? false)
+    setLocalLikesNum(null)
   }, [postDetail?.id])
 
   const displayCollectsNum = localCollectsNum ?? postDetail?.collectsNum ?? 0
+  const displayLikesNum = localLikesNum ?? postDetail?.likesNum ?? 0
 
   const handleCollect = async () => {
     if (!postDetail?.id) return
@@ -66,6 +71,20 @@ function PostDetailModal({
       setIsCollected(result)
       setLocalCollectsNum(prev => {
         const base = Number(prev ?? postDetail?.collectsNum ?? 0)
+        return result ? base + 1 : Math.max(0, base - 1)
+      })
+    } catch (err) {
+      message.error(err.message || '操作失败')
+    }
+  }
+
+  const handleLike = async () => {
+    if (!postDetail?.id) return
+    try {
+      const result = await likePost(postDetail.id)
+      setIsLiked(result)
+      setLocalLikesNum(prev => {
+        const base = Number(prev ?? postDetail?.likesNum ?? 0)
         return result ? base + 1 : Math.max(0, base - 1)
       })
     } catch (err) {
@@ -181,9 +200,9 @@ function PostDetailModal({
               {postDetail.updateTime ? `编辑于 ${formatTime(postDetail.updateTime)}` : ''}
             </span>
             <div className="post-detail-stats">
-              <div className="post-detail-stat-item">
-                <LikeOutlined />
-                <span>{postDetail.likesNum || 0}</span>
+              <div className={`post-detail-stat-item post-detail-stat-item-clickable${isLiked ? ' liked' : ''}`} onClick={handleLike}>
+                {isLiked ? <LikeFilled /> : <LikeOutlined />}
+                <span>{displayLikesNum}</span>
               </div>
               <div className={`post-detail-stat-item post-detail-stat-item-clickable${isCollected ? ' collected' : ''}`} onClick={handleCollect}>
                 {isCollected ? <StarFilled /> : <StarOutlined />}
@@ -252,9 +271,9 @@ function PostDetailModal({
             {postDetail.updateTime ? `编辑于 ${formatTime(postDetail.updateTime)}` : ''}
           </span>
           <div className="post-detail-stats">
-            <div className="post-detail-stat-item">
-              <LikeOutlined />
-              <span>{postDetail.likesNum || 0}</span>
+            <div className={`post-detail-stat-item post-detail-stat-item-clickable${isLiked ? ' liked' : ''}`} onClick={handleLike}>
+              {isLiked ? <LikeFilled /> : <LikeOutlined />}
+              <span>{displayLikesNum}</span>
             </div>
             <div className={`post-detail-stat-item post-detail-stat-item-clickable${isCollected ? ' collected' : ''}`} onClick={handleCollect}>
               {isCollected ? <StarFilled /> : <StarOutlined />}

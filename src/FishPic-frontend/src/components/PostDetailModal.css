@@ -205,6 +205,14 @@
   color: #FF5252;
 }
 
+.post-detail-stat-item-clickable.liked {
+  color: #1E88E5;
+}
+
+[data-theme='dark'] .post-detail-stat-item-clickable.liked {
+  color: #42A5F5;
+}
+
 .post-detail-stat-item .anticon {
   font-size: var(--text-xl);
 }

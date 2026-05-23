@@ -5,6 +5,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.Date;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -28,4 +29,6 @@ public class PictureAdminVO {
     private Long userId;
 
     private Integer isPrivate;
+
+    private List<String> tags;
 }

@@ -12,7 +12,10 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
+import hk.ljx.fishpicsbackend.common.stream.StreamProducer;
+import hk.ljx.fishpicsbackend.common.stream.StreamConstants;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
+import lombok.extern.slf4j.Slf4j;
 import hk.ljx.fishpicsbackend.dto.base.PageRequest;
 import hk.ljx.fishpicsbackend.dto.post.*;
 import hk.ljx.fishpicsbackend.dto.space.SpacePictureList;
@@ -47,6 +50,7 @@ import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
  * @description 针对表【post(帖子表)】的数据库操作Service实现
  * @createDate 2026-04-13 21:24:41
  */
+@Slf4j
 @Service
 public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         implements PostService {
@@ -74,6 +78,9 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
     @Resource
     private SpaceService spaceService;
+
+    @Resource
+    private StreamProducer streamProducer;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -144,12 +151,16 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         postDetailVO.setPictureUrl(pictureUrls);
         postDetailVO.setPictureIds(validPictureIds);
 
-        // 查询当前用户是否已收藏
+        // 查询当前用户的收藏/点赞状态
         User currentUser = UserHolder.getUser();
         if (currentUser != null) {
             boolean collected = userPostCollectService.count(
                     new QueryWrapper<UserPostCollect>().eq("user_id", currentUser.getId()).eq("post_id", id)) > 0;
             postDetailVO.setIsCollected(collected);
+
+            boolean liked = userPostLikesService.count(
+                    new QueryWrapper<UserPostLikes>().eq("user_id", currentUser.getId()).eq("post_id", id)) > 0;
+            postDetailVO.setIsLiked(liked);
         }
 
         return postDetailVO;
@@ -289,7 +300,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void likePost(Long id) {
+    public boolean likePost(Long id) {
         // 获取帖子 id
         Post post = postMapper.selectById(id);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(post) || id == null, ExceptionCode.DATABASE_ERROR, "帖子不存在");
@@ -311,6 +322,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         QueryWrapper<UserPostLikes> queryWrapper = new QueryWrapper<UserPostLikes>().eq("user_id", userId).eq("post_id",
                 postId);
         UserPostLikes userPostLikes = userPostLikesService.getOne(queryWrapper);
+        boolean liked;
         if (ObjectUtil.isEmpty(userPostLikes) || userPostLikes.getId() == null) {
             // 没点赞过，添加点赞
             UserPostLikes userPostLike = new UserPostLikes();
@@ -328,6 +340,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
                 int i = postMapper.update(post, postQueryWrapper);
 
                 ExcUtils.throwIfTrue(i != 1, "点赞失败，数据库错误");
+
+                liked = true;
             } finally {
                 // 释放锁
                 stringRedisTemplate.delete(LIKE_POST_KEY + userId);
@@ -338,11 +352,31 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
             try {
                 boolean delete = userPostLikesService.removeById(userPostLikes.getId());
                 ExcUtils.throwIfTrue(!delete, "取消点赞失败");
+
+                QueryWrapper<Post> postQueryWrapper = new QueryWrapper<>();
+                postQueryWrapper.eq("id", postId);
+                postQueryWrapper.eq("likes_num", likesNum);
+                post.setLikesNum(Math.max(0, likesNum - 1));
+                int i = postMapper.update(post, postQueryWrapper);
+                ExcUtils.throwIfTrue(i != 1, "取消点赞失败，数据库错误");
+
+                liked = false;
             } finally {
                 // 释放锁
                 stringRedisTemplate.delete(LIKE_POST_KEY + userId);
             }
         }
+
+        // 异步发送社交事件（非阻塞）
+        try {
+            streamProducer.sendSocialEvent(
+                    hk.ljx.fishpicsbackend.common.stream.StreamConstants.EVENT_SOCIAL_LIKE,
+                    userId, post.getUserId(), postId, liked ? "LIKE" : "UNLIKE");
+        } catch (Exception e) {
+            log.warn("Failed to enqueue like notification: {}", e.getMessage());
+        }
+
+        return liked;
     }
 
     @Override
@@ -366,6 +400,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         QueryWrapper<UserPostCollect> queryWrapper = new QueryWrapper<UserPostCollect>()
                 .eq("user_id", userId).eq("post_id", postId);
         UserPostCollect userPostCollect = userPostCollectService.getOne(queryWrapper);
+        boolean collected;
+
         if (ObjectUtil.isEmpty(userPostCollect) || userPostCollect.getId() == null) {
             // 未收藏，添加收藏
             UserPostCollect newCollect = new UserPostCollect();
@@ -381,10 +417,11 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
                 post.setCollectsNum(collectsNum + 1);
                 int i = postMapper.update(post, postQueryWrapper);
                 ExcUtils.throwIfTrue(i != 1, "收藏失败，数据库错误");
+
+                collected = true;
             } finally {
                 stringRedisTemplate.delete(COLLECT_POST_KEY + userId);
             }
-            return true;
         } else {
             // 已收藏，取消收藏
             try {
@@ -397,11 +434,23 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
                 post.setCollectsNum(Math.max(0, collectsNum - 1));
                 int i = postMapper.update(post, postQueryWrapper);
                 ExcUtils.throwIfTrue(i != 1, "取消收藏失败，数据库错误");
+
+                collected = false;
             } finally {
                 stringRedisTemplate.delete(COLLECT_POST_KEY + userId);
             }
-            return false;
         }
+
+        // 异步发送社交事件（非阻塞）
+        try {
+            streamProducer.sendSocialEvent(
+                    StreamConstants.EVENT_SOCIAL_COLLECT,
+                    userId, post.getUserId(), postId, collected ? "COLLECT" : "UNCOLLECT");
+        } catch (Exception e) {
+            log.warn("Failed to enqueue collect notification: {}", e.getMessage());
+        }
+
+        return collected;
     }
 
     /**

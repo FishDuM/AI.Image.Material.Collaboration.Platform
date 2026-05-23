@@ -109,6 +109,7 @@ function GlobalLayout({ children }) {
     ]
 
     if (userInfo) {
+      items.push({ key: '/ai-tools', icon: <RobotOutlined />, label: 'AI 工具', onClick: () => handleSidebarMenuClick('/ai-tools') })
       items.push(
         { key: '/profile', icon: <UserOutlined />, label: '个人中心', onClick: () => handleSidebarMenuClick('/profile') },
         { key: '/notifications', icon: <BellOutlined />, label: '通知', onClick: () => handleSidebarMenuClick('/notifications') },
@@ -169,6 +170,9 @@ function GlobalLayout({ children }) {
             <Button type="text" size="large" onClick={() => navigate('/community')} className={`desktop-only${navActiveClass('/community')}`}>社区广场</Button>
             <Button type="text" size="large" onClick={() => navigate('/private-space')} className={`desktop-only${navActiveClass('/private-space')}`}>私人空间</Button>
             <Button type="text" size="large" onClick={() => navigate('/team-space')} className={`desktop-only${navActiveClass('/team-space')}`}>团队空间</Button>
+            {userInfo && (
+              <Button type="text" size="large" icon={<RobotOutlined />} onClick={() => navigate('/ai-tools')} className={`desktop-only${navActiveClass('/ai-tools')}`}>AI 工具</Button>
+            )}
             {userInfo?.role === 'admin' && (
               <Dropdown menu={{ items: adminMenuItems }} placement="bottomLeft" className="desktop-only">
                 <Button type="text" size="large" className="system-management-btn desktop-only"><SettingOutlined /><span>管理页面</span></Button>

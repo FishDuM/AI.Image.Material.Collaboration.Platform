@@ -1,5 +1,6 @@
 package hk.ljx.fishpicsbackend.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.dto.post.EditPostRequest;
@@ -140,6 +141,39 @@ class PostServiceImplTest {
             when(valueOperations.setIfAbsent(anyString(), eq("1"), eq(10L), any())).thenReturn(false);
             assertThrows(BaseException.class, () -> postService.likePost(10L));
         }
+
+        @Test
+        void shouldReturnTrueWhenLiking() {
+            userHolderMock.when(UserHolder::getUser).thenReturn(testUser);
+            when(postMapper.selectById(10L)).thenReturn(testPost);
+            when(valueOperations.setIfAbsent(anyString(), eq("1"), eq(10L), any())).thenReturn(true);
+            when(userPostLikesService.getOne(any(QueryWrapper.class))).thenReturn(null);
+            when(userPostLikesService.save(any(UserPostLikes.class))).thenReturn(true);
+            when(postMapper.update(any(Post.class), any(QueryWrapper.class))).thenReturn(1);
+
+            boolean result = postService.likePost(10L);
+
+            assertTrue(result);
+        }
+
+        @Test
+        void shouldReturnFalseWhenUnliking() {
+            userHolderMock.when(UserHolder::getUser).thenReturn(testUser);
+            when(postMapper.selectById(10L)).thenReturn(testPost);
+            when(valueOperations.setIfAbsent(anyString(), eq("1"), eq(10L), any())).thenReturn(true);
+
+            UserPostLikes existingLike = new UserPostLikes();
+            existingLike.setId(100L);
+            existingLike.setUserId(1L);
+            existingLike.setPostId(10L);
+            when(userPostLikesService.getOne(any(QueryWrapper.class))).thenReturn(existingLike);
+            when(userPostLikesService.removeById(100L)).thenReturn(true);
+            when(postMapper.update(any(Post.class), any(QueryWrapper.class))).thenReturn(1);
+
+            boolean result = postService.likePost(10L);
+
+            assertFalse(result);
+        }
     }
 
     @Nested
@@ -181,11 +215,13 @@ class PostServiceImplTest {
             when(userService.getById(2L)).thenReturn(postUser);
             userHolderMock.when(UserHolder::getUser).thenReturn(testUser);
             when(userPostCollectService.count(any())).thenReturn(0L);
+            when(userPostLikesService.count(any())).thenReturn(0L);
 
             PostDetailVO result = postService.getPost(10L);
 
             assertEquals("测试帖子", result.getTitle());
             assertEquals("author", result.getUsername());
+            assertFalse(result.getIsLiked());
         }
     }
 

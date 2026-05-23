@@ -3,6 +3,7 @@ package hk.ljx.fishpicsbackend.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjUtil;
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -11,6 +12,8 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
+import hk.ljx.fishpicsbackend.ai.service.AiTaskService;
+import hk.ljx.fishpicsbackend.common.stream.StreamProducer;
 import hk.ljx.fishpicsbackend.common.utils.CosService;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.dto.picture.DeleteByIdList;
@@ -21,13 +24,13 @@ import hk.ljx.fishpicsbackend.service.*;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.vo.picture.PictureAdminVO;
 import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.annotation.Resource;
-import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.HashSet;
 import java.util.List;
@@ -41,6 +44,7 @@ import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
  * @description 针对表【picture(图片表)】的数据库操作Service实现
  * @createDate 2026-04-13 21:24:49
  */
+@Slf4j
 @Service
 public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         implements PictureService {
@@ -62,6 +66,13 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     @Lazy
     @Resource
     private PostService postService;
+
+    @Lazy
+    @Resource
+    private AiTaskService aiTaskService;
+
+    @Resource
+    private StreamProducer streamProducer;
 
     @Override
     public String uploadAvatar(MultipartFile file, Long id) {
@@ -146,6 +157,18 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             picture.setStatus(2);
         }
         ExcUtils.throwIfTrue(pictureMapper.insert(picture) != 1, "上传失败，数据库错误");
+        // 通过 Redis Stream 异步触发 AI 标注（持久化，可重试）
+        try {
+            streamProducer.sendAiTaggingEvent(picture.getId(), picture.getUrl(), userId);
+        } catch (Exception e) {
+            // Stream 不可用时降级为 @Async 直接调用
+            log.error("Failed to send AI tagging event, falling back to @Async", e);
+            try {
+                aiTaskService.triggerTaggingAsync(picture);
+            } catch (Exception ex) {
+                // 非阻塞
+            }
+        }
         return picture;
     }
 
@@ -159,7 +182,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 .orderByDesc("create_time");
         Page<Picture> page = new Page<>(current, pageSize);
         IPage<Picture> picturePage = pictureMapper.selectPage(page, queryWrapper);
-        return picturePage.convert(p -> new PictureListVO(p.getId(), p.getUrl()));
+        return picturePage.convert(p -> new PictureListVO(p.getId(), p.getUrl(), StrUtil.split(p.getTags(), ",")));
     }
 
     @Override
@@ -186,7 +209,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 p.getStatus(),
                 p.getCreateTime(),
                 p.getUserId(),
-                p.getIsPrivate()));
+                p.getIsPrivate(),
+                StrUtil.split(p.getTags(), ",")));
     }
 
     @Override
@@ -235,7 +259,15 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
         int i = pictureMapper.delete(new QueryWrapper<Picture>().in("id", ids));
         ExcUtils.throwIfTrue(i == 0, "删除失败");
-        pictureList.forEach(picture -> cosService.deletePictureByUrl(picture.getUrl()));
+        // 通过 Redis Stream 异步删除 COS 对象（非阻塞 HTTP 响应）
+        List<String> cosKeys = pictureList.stream().map(Picture::getUrl).collect(Collectors.toList());
+        try {
+            streamProducer.sendCosCleanupEvent(cosKeys);
+        } catch (Exception e) {
+            // Stream 不可用时降级为同步删除
+            log.error("Failed to send COS cleanup event, falling back to sync deletion", e);
+            pictureList.forEach(picture -> cosService.deletePictureByUrl(picture.getUrl()));
+        }
         return !count.isEmpty() ? "删除成功，但有" + count.size() + "个图片为帖子封面无法删除" : "删除成功";
     }
 

@@ -9,7 +9,7 @@ import hk.ljx.fishpicsbackend.entity.Post;
 import com.baomidou.mybatisplus.extension.service.IService;
 
 import java.util.Map;
-import hk.ljx.fishpicsbackend.vo.picture.PictureListByEditPostVO;
+
 import hk.ljx.fishpicsbackend.vo.post.PostDetailVO;
 import hk.ljx.fishpicsbackend.vo.post.PostListVO;
 
@@ -78,11 +78,12 @@ public interface PostService extends IService<Post> {
     QueryWrapper<Post> newQueryWrapper(PostQueryWrapper postQueryWrapper);
 
     /**
-     * 点赞帖子
+     * 点赞/取消点赞帖子（toggle）
      *
      * @param id 帖子id
+     * @return 当前点赞状态（true-已点赞, false-已取消）
      */
-    void likePost(Long id);
+    boolean likePost(Long id);
 
     /**
      * 收藏/取消收藏帖子（toggle）

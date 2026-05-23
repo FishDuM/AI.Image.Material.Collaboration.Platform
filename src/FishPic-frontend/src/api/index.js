@@ -269,6 +269,18 @@ export const getAdminPostList = (data) => api.post('/post/admin/list', data)
 export const reviewPost = (id, status) => api.post('/post/admin/review', null, { params: { id, status } })
 export const adminDeletePost = (id) => api.post('/post/admin/delete', null, { params: { id } })
 
+// AI 相关 API
+export const getAiTasks = (params) => api.get('/ai/admin/tasks', { params })
+export const getAiStats = () => api.get('/ai/admin/stats')
+export const getAiConfig = () => api.get('/ai/admin/config')
+export const updateAiConfig = (data) => api.post('/ai/admin/config', data)
+export const getMyAiTasks = (params) => api.get('/ai/task/my', { params })
+export const getAiTaskStatus = (id) => api.get('/ai/task/' + id)
+export const submitAiGenerate = (data) => api.post('/ai/generate', data)
+export const submitAiEdit = (data) => api.post('/ai/edit', data)
+export const submitAiTagging = (pictureId) => api.post('/ai/tagging', null, { params: { pictureId } })
+export const getAiRecommendations = (data) => api.post('/ai/recommend', data)
+
 export const uploadPicture = (formData, targetSpaceId) => {
   const fd = new FormData()
   fd.append('file', formData.get('file'))
