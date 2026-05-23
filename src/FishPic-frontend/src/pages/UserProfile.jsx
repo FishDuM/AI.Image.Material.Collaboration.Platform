@@ -263,6 +263,10 @@ function UserProfile() {
     }
   }
 
+  const handleCommentCountChange = (delta) => {
+    setPostDetail((prev) => prev ? { ...prev, commentNum: (prev.commentNum || 0) + delta } : prev)
+  }
+
   const formatDate = (date) => {
     if (!date) return '未知'
     const d = new Date(date)
@@ -758,6 +762,7 @@ function UserProfile() {
           setEditingPostDetail(postDetail)
           setCreateEditModalOpen(true)
         }}
+        onCommentCountChange={handleCommentCountChange}
       />
 
       <CreateEditPostModal

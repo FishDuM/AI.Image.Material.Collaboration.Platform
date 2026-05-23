@@ -1,7 +1,11 @@
+import { useState, useEffect } from 'react'
 import { Spin, Popover, QRCode, App } from 'antd'
-import { LikeOutlined, HeartOutlined, StarOutlined, ShareAltOutlined, CopyOutlined, SendOutlined } from '@ant-design/icons'
+import { LikeOutlined, StarFilled, StarOutlined, MessageOutlined, ShareAltOutlined, CopyOutlined, SendOutlined } from '@ant-design/icons'
 import MobilePageWrapper from './MobilePageWrapper'
 import PostModal from './shared/PostModal'
+import PostLayout from './shared/PostLayout'
+import CommentSection from './CommentSection'
+import { collectPost } from '../api'
 import './PostDetailModal.css'
 
 const formatTime = (timeString) => {
@@ -36,9 +40,34 @@ function PostDetailModal({
   onImageIndexChange,
   currentUsername,
   onEdit,
+  onCommentCountChange,
   mode = 'modal',
 }) {
   const { message } = App.useApp()
+
+  const [isCollected, setIsCollected] = useState(postDetail?.isCollected ?? false)
+  const [localCollectsNum, setLocalCollectsNum] = useState(null)
+
+  useEffect(() => {
+    setIsCollected(postDetail?.isCollected ?? false)
+    setLocalCollectsNum(null)
+  }, [postDetail?.id])
+
+  const displayCollectsNum = localCollectsNum ?? postDetail?.collectsNum ?? 0
+
+  const handleCollect = async () => {
+    if (!postDetail?.id) return
+    try {
+      const result = await collectPost(postDetail.id)
+      setIsCollected(result)
+      setLocalCollectsNum(prev => {
+        const base = Number(prev ?? postDetail?.collectsNum ?? 0)
+        return result ? base + 1 : Math.max(0, base - 1)
+      })
+    } catch (err) {
+      message.error(err.message || '操作失败')
+    }
+  }
   if (mode !== 'page' && !open) return null
 
   if (postDetail != null && typeof postDetail !== 'object') {
@@ -117,10 +146,44 @@ function PostDetailModal({
         }
       >
         {postDetail && (
-          <>
+          <PostLayout
+            images={validPics}
+            currentIndex={detailImageIndex}
+            onIndexChange={onImageIndexChange}
+          >
             <div className="post-detail-title">{postDetail.title}</div>
             <div className="post-detail-content">{postDetail.content}</div>
-          </>
+            <span className="post-detail-time">
+              {postDetail.updateTime ? `编辑于 ${formatTime(postDetail.updateTime)}` : ''}
+            </span>
+            <div className="post-detail-stats">
+              <div className="post-detail-stat-item">
+                <LikeOutlined />
+                <span>{postDetail.likesNum || 0}</span>
+              </div>
+              <div className={`post-detail-stat-item post-detail-stat-item-clickable${isCollected ? ' collected' : ''}`} onClick={handleCollect}>
+                {isCollected ? <StarFilled /> : <StarOutlined />}
+                <span>{displayCollectsNum}</span>
+              </div>
+              <div className="post-detail-stat-item">
+                <MessageOutlined />
+                <span>{postDetail.commentNum || 0}</span>
+              </div>
+              <Popover
+                content={shareContent}
+                trigger="click"
+                placement="top"
+                overlayClassName="share-popover-overlay"
+                align={{ offset: [0, -8] }}
+              >
+                <div className="post-detail-stat-item post-detail-share-btn">
+                  <ShareAltOutlined />
+                  <span>分享</span>
+                </div>
+              </Popover>
+            </div>
+            <CommentSection postId={postDetail.id} onCommentCountChange={onCommentCountChange} totalCommentCount={postDetail.commentNum} />
+          </PostLayout>
         )}
       </MobilePageWrapper>
     )
@@ -167,12 +230,12 @@ function PostDetailModal({
               <LikeOutlined />
               <span>{postDetail.likesNum || 0}</span>
             </div>
-            <div className="post-detail-stat-item">
-              <HeartOutlined />
-              <span>{postDetail.collectsNum || 0}</span>
+            <div className={`post-detail-stat-item post-detail-stat-item-clickable${isCollected ? ' collected' : ''}`} onClick={handleCollect}>
+              {isCollected ? <StarFilled /> : <StarOutlined />}
+              <span>{displayCollectsNum}</span>
             </div>
             <div className="post-detail-stat-item">
-              <StarOutlined />
+              <MessageOutlined />
               <span>{postDetail.commentNum || 0}</span>
             </div>
             <Popover
@@ -188,6 +251,7 @@ function PostDetailModal({
               </div>
             </Popover>
           </div>
+          <CommentSection postId={postDetail.id} onCommentCountChange={onCommentCountChange} totalCommentCount={postDetail.commentNum} />
         </>
       ) : null}
     </PostModal>

@@ -146,6 +146,10 @@ function CommunitySquare() {
     setCreateEditModalOpen(true)
   }
 
+  const handleCommentCountChange = (delta) => {
+    setPostDetail((prev) => prev ? { ...prev, commentNum: (prev.commentNum || 0) + delta } : prev)
+  }
+
   const doFetchPostList = useCallback((opts) => {
     const signal = createSignal()
     fetchPostList(opts, signal)
@@ -360,6 +364,7 @@ function CommunitySquare() {
         onImageIndexChange={setDetailImageIndex}
         currentUsername={userInfo?.username}
         onEdit={handleEditPost}
+        onCommentCountChange={handleCommentCountChange}
       />
 
       <CreateEditPostModal

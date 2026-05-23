@@ -48,6 +48,10 @@ export default function MobilePostDetailPage() {
     fetchDetail()
   }, [fetchDetail])
 
+  const handleCommentCountChange = useCallback((delta) => {
+    setPostDetail((prev) => prev ? { ...prev, commentNum: (prev.commentNum || 0) + delta } : prev)
+  }, [])
+
   if (showEditModal && postDetail) {
     return (
       <CreateEditPostModal
@@ -71,6 +75,7 @@ export default function MobilePostDetailPage() {
       onImageIndexChange={setDetailImageIndex}
       currentUsername={userInfo?.username}
       onEdit={handleEdit}
+      onCommentCountChange={handleCommentCountChange}
     />
   )
 }

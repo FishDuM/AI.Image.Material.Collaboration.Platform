@@ -61,6 +61,13 @@ public class PostController {
         return ResUtils.success(true);
     }
 
+    @PostMapping("/collect")
+    public Response<Boolean> collect(@RequestParam("id") Long id) {
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), "帖子不存在");
+        boolean collected = postService.collectPost(id);
+        return ResUtils.success(collected);
+    }
+
     @PostMapping("/pictureList")
     public Response<Map<String, Object>> getPictureList(@RequestBody GetPictureBySpaceRequest getPictureBySpaceRequest) {
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(getPictureBySpaceRequest), "获取图片列表，空间不能为空");

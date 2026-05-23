@@ -24,7 +24,6 @@ import hk.ljx.fishpicsbackend.vo.picture.PictureListVO;
 import hk.ljx.fishpicsbackend.vo.picture.PicturePageVO;
 import hk.ljx.fishpicsbackend.vo.post.PostDetailVO;
 import hk.ljx.fishpicsbackend.vo.post.PostListVO;
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,6 +38,7 @@ import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.COLLECT_POST_KEY;
 import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.LIKE_POST_KEY;
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
@@ -143,6 +143,15 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
         postDetailVO.setPictureUrl(pictureUrls);
         postDetailVO.setPictureIds(validPictureIds);
+
+        // 查询当前用户是否已收藏
+        User currentUser = UserHolder.getUser();
+        if (currentUser != null) {
+            boolean collected = userPostCollectService.count(
+                    new QueryWrapper<UserPostCollect>().eq("user_id", currentUser.getId()).eq("post_id", id)) > 0;
+            postDetailVO.setIsCollected(collected);
+        }
+
         return postDetailVO;
     }
 
@@ -336,6 +345,65 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         }
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean collectPost(Long id) {
+        Post post = postMapper.selectById(id);
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(post) || id == null, ExceptionCode.DATABASE_ERROR, "帖子不存在");
+
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user) || user.getId() == null, "用户不存在");
+        Long userId = user.getId();
+        Long postId = post.getId();
+
+        // 获取 Redis 分布式锁
+        Boolean lock = stringRedisTemplate.opsForValue().setIfAbsent(COLLECT_POST_KEY + userId, "1", 10, TimeUnit.SECONDS);
+        ExcUtils.throwIfTrue(Boolean.FALSE.equals(lock), "操作频繁，请稍后再试");
+
+        Long collectsNum = post.getCollectsNum();
+
+        // 查询用户是否已收藏
+        QueryWrapper<UserPostCollect> queryWrapper = new QueryWrapper<UserPostCollect>()
+                .eq("user_id", userId).eq("post_id", postId);
+        UserPostCollect userPostCollect = userPostCollectService.getOne(queryWrapper);
+        if (ObjectUtil.isEmpty(userPostCollect) || userPostCollect.getId() == null) {
+            // 未收藏，添加收藏
+            UserPostCollect newCollect = new UserPostCollect();
+            newCollect.setUserId(userId);
+            newCollect.setPostId(postId);
+            boolean insert = userPostCollectService.save(newCollect);
+            ExcUtils.throwIfTrue(!insert, "收藏失败");
+
+            try {
+                QueryWrapper<Post> postQueryWrapper = new QueryWrapper<>();
+                postQueryWrapper.eq("id", postId);
+                postQueryWrapper.eq("collects_num", collectsNum);
+                post.setCollectsNum(collectsNum + 1);
+                int i = postMapper.update(post, postQueryWrapper);
+                ExcUtils.throwIfTrue(i != 1, "收藏失败，数据库错误");
+            } finally {
+                stringRedisTemplate.delete(COLLECT_POST_KEY + userId);
+            }
+            return true;
+        } else {
+            // 已收藏，取消收藏
+            try {
+                boolean delete = userPostCollectService.removeById(userPostCollect.getId());
+                ExcUtils.throwIfTrue(!delete, "取消收藏失败");
+
+                QueryWrapper<Post> postQueryWrapper = new QueryWrapper<>();
+                postQueryWrapper.eq("id", postId);
+                postQueryWrapper.eq("collects_num", collectsNum);
+                post.setCollectsNum(Math.max(0, collectsNum - 1));
+                int i = postMapper.update(post, postQueryWrapper);
+                ExcUtils.throwIfTrue(i != 1, "取消收藏失败，数据库错误");
+            } finally {
+                stringRedisTemplate.delete(COLLECT_POST_KEY + userId);
+            }
+            return false;
+        }
+    }
+
     /**
      * 获取本人发布的帖子列表（分页）
      * 用户可以查看自己发布的所有帖子，与社区广场查询逻辑保持一致
@@ -479,9 +547,24 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
                     .collect(Collectors.toMap(User::getId, user -> user));
         }
 
+        // 批量查询当前用户的收藏状态
+        HashSet<Long> collectedPostIds = new HashSet<>();
+        User currentUser = UserHolder.getUser();
+        if (currentUser != null) {
+            List<Long> postIds = postPage.getRecords().stream().map(Post::getId).collect(Collectors.toList());
+            if (CollUtil.isNotEmpty(postIds)) {
+                collectedPostIds = userPostCollectService.list(
+                        new QueryWrapper<UserPostCollect>().select("post_id")
+                                .eq("user_id", currentUser.getId())
+                                .in("post_id", postIds))
+                        .stream().map(UserPostCollect::getPostId).collect(Collectors.toCollection(HashSet::new));
+            }
+        }
+
         // 封装VO
         Map<Long, String> finalCoverUrlMap = coverUrlMap;
         Map<Long, User> finalUserMap = userMap;
+        HashSet<Long> finalCollectedPostIds = collectedPostIds;
         return postPage.convert(post -> {
             PostListVO vo = new PostListVO();
             BeanUtil.copyProperties(post, vo);
@@ -493,6 +576,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
             }
             // 帖子关联的封面图片可能已被删除，使用 getOrDefault 避免空指针
             vo.setUrl(finalCoverUrlMap.getOrDefault(post.getCover(), null));
+            // 当前用户是否已收藏
+            vo.setIsCollected(finalCollectedPostIds.contains(post.getId()));
             return vo;
         });
     }

@@ -75,4 +75,9 @@ public class PostDetailVO {
      * 封面图片 id
      */
     private Long cover;
+
+    /**
+     * 当前用户是否已收藏
+     */
+    private Boolean isCollected;
 }

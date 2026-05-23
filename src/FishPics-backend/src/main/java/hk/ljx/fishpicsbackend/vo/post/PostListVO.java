@@ -42,4 +42,14 @@ public class PostListVO {
      * 封面图片的 url
      */
     private String url;
+
+    /**
+     * 收藏数
+     */
+    private Long collectsNum;
+
+    /**
+     * 当前用户是否已收藏
+     */
+    private Boolean isCollected;
 }

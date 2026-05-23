@@ -7,10 +7,7 @@ import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.dto.picture.DeleteByIdList;
-import hk.ljx.fishpicsbackend.dto.picture.PictureCropRequest;
-import hk.ljx.fishpicsbackend.dto.picture.PictureScaleRequest;
 import hk.ljx.fishpicsbackend.dto.picture.PictureUpdateRequest;
-import hk.ljx.fishpicsbackend.dto.picture.PictureWatermarkRequest;
 import hk.ljx.fishpicsbackend.entity.Picture;
 import hk.ljx.fishpicsbackend.service.PictureService;
 import hk.ljx.fishpicsbackend.vo.picture.PictureAdminVO;
@@ -20,7 +17,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.annotation.Resource;
-import jakarta.servlet.http.HttpServletRequest;
 
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
@@ -78,51 +74,6 @@ public class PictureController {
     public Response<Boolean> updatePicture(@RequestBody PictureUpdateRequest request) {
         pictureService.updatePicture(request);
         return ResUtils.success(true);
-    }
-
-    /**
-     * 裁剪图片
-     * 从COS下载原图，按前端传入的原始图像坐标先裁剪、再旋转（如有），
-     * 最后重新上传至COS并更新数据库，返回新的图片URL
-     *
-     * @param request        裁剪请求，含图片id、裁剪区域坐标(x/y/width/height)、旋转角度、输出格式
-     * @return 裁剪后新图片的COS访问URL
-     */
-    @PostMapping("/crop")
-    public Response<String> cropPicture(@RequestBody PictureCropRequest request) {
-        ExcUtils.throwIfTrue(request.getPictureId() == null, "图片id不能为空");
-        String newUrl = pictureService.cropPicture(request);
-        return ResUtils.success(newUrl);
-    }
-
-    /**
-     * 缩放图片
-     * 支持按比例缩放或按目标宽度等比缩放，处理完成后重新上传至COS并更新数据库
-     *
-     * @param request        缩放请求，含图片id、缩放比例(scale)或目标宽度(targetWidth)、输出格式
-     * @return 缩放后新图片的COS访问URL
-     */
-    @PostMapping("/scale")
-    public Response<String> scalePicture(@RequestBody PictureScaleRequest request) {
-        ExcUtils.throwIfTrue(request.getPictureId() == null, "图片id不能为空");
-        ExcUtils.throwIfTrue(request.getScale() == null && request.getTargetWidth() == null, "缩放比例或目标宽度不能同时为空");
-        String newUrl = pictureService.scalePicture(request);
-        return ResUtils.success(newUrl);
-    }
-
-    /**
-     * 添加文字水印
-     * 在图片中央叠加半透明白色文字水印，处理完成后重新上传至COS并更新数据库
-     *
-     * @param request        水印请求，含图片id、水印文字、输出格式
-     * @return 添加水印后新图片的COS访问URL
-     */
-    @PostMapping("/watermark")
-    public Response<String> watermarkPicture(@RequestBody PictureWatermarkRequest request) {
-        ExcUtils.throwIfTrue(request.getPictureId() == null, "图片id不能为空");
-        ExcUtils.throwIfTrue(request.getText() == null || request.getText().isEmpty(), "水印文字不能为空");
-        String newUrl = pictureService.watermarkPicture(request);
-        return ResUtils.success(newUrl);
     }
 
     @AuthCheck(role = ADMIN)

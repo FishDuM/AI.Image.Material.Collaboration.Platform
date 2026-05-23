@@ -1,4 +1,4 @@
-create database if not exists fishpics;
+create database if not exists FishPics;
 
 use fishpics;
 
@@ -102,7 +102,7 @@ create table post
     is_private   tinyint  default 0                 not null comment '0-公开，1-仅自己可见，',
     cover        bigint                             null comment '封面图片的id（主图）',
     views_num    bigint   default 0                 not null comment '查看数',
-    hot          decimal  default 0                 null
+    hot          int      default 0                 null comment '热度值'
 )
     comment '帖子表';
 
@@ -126,7 +126,7 @@ create table space
     type          tinyint                null comment '0-私人空间，1-团队空间',
     team_users_id varchar(1024)          null comment '团队空间的用户id',
     user_id       bigint                 null comment '创建的用户Id',
-    storage_size  bigint  default 524288 not null comment '空间的存储大小(KB)：512MB-5G-10G',
+    storage_size  bigint  default 536870912 not null comment '空间存储大小(Byte)：512MB-5G-10G-30G-50G',
     level         tinyint default 0      not null comment '空间级别：普通-VIP-SVIP',
     name          varchar(246)           not null comment '空间名',
     size          bigint                 null comment '现在使用大小'
@@ -141,7 +141,7 @@ create index space_user_id_index
 
 create table user
 (
-    id                      bigint unsigned auto_increment comment '用户ID'
+    id                      bigint auto_increment comment '用户ID'
         primary key,
     username                varchar(32)                           null comment '用户名（登录用）',
     password                varchar(128)                          null comment '密码',
@@ -161,7 +161,6 @@ create table user
     is_private_likes        tinyint     default 0                 not null comment '0-公开点赞帖子列表，1-不公开点赞帖子列表',
     is_private_fans         tinyint     default 0                 not null comment '0-公开粉丝列表，1-不公开粉丝列表',
     level                   tinyint     default 0                 not null comment '0-普通，1-VIP，2-SVIP',
-    size                    bigint      default 0                 not null comment '已存空间',
     constraint uk_nickname
         unique (nickname),
     constraint uk_username

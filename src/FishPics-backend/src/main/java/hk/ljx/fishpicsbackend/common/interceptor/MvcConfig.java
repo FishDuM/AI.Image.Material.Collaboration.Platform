@@ -23,6 +23,7 @@ public class MvcConfig implements WebMvcConfigurer {
                         "/user/checkCode/login",
                         "/post/getPost",
                         "/post/postList",
+                        "/comment/list",
                         "/picture/list",
                         "/system/list",
                         "/system/marquee",

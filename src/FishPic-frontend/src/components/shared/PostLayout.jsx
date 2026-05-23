@@ -94,30 +94,54 @@ export default function PostLayout({
           </button>
         )}
 
-        {/* 左右切换箭头 */}
-        {(currentIndex < images.length || showAddSlide) && (
+        {/* 左右切换箭头 — 仅多图时显示 */}
+        {images.length > 1 && !showAddSlide && (
+          <>
+            {currentIndex > 0 && (
+              <button
+                type="button"
+                className="carousel-arrow carousel-arrow-left"
+                onClick={handlePrevImage}
+              >
+                <LeftOutlined />
+              </button>
+            )}
+            {currentIndex < images.length - 1 && (
+              <button
+                type="button"
+                className="carousel-arrow carousel-arrow-right"
+                onClick={handleNextImage}
+              >
+                <RightOutlined />
+              </button>
+            )}
+            <div className="carousel-counter">
+              {currentIndex + 1} / {images.length}
+            </div>
+          </>
+        )}
+        {/* 编辑模式下显示添加图片占位和切换 */}
+        {showAddSlide && (
           <>
             <button
               type="button"
               className="carousel-arrow carousel-arrow-left"
-              onClick={showAddSlide ? () => {
-                onIndexChange?.(images.length - 1)
-              } : handlePrevImage}
-              disabled={!showAddSlide && (images.length <= 1 || currentIndex === 0)}
+              onClick={() => onIndexChange?.(images.length - 1)}
+              disabled={images.length === 0}
             >
               <LeftOutlined />
             </button>
-            <button
-              type="button"
-              className="carousel-arrow carousel-arrow-right"
-              onClick={handleNextImage}
-              disabled={currentIndex >= images.length - 1 && (images.length >= maxImages || showAddSlide)}
-              style={{ display: showAddSlide ? 'none' : 'flex' }}
-            >
-              <RightOutlined />
-            </button>
-            <div className="carousel-counter" style={{ display: showAddSlide ? 'none' : 'block' }}>
-              {currentIndex + 1} / {images.length}
+            {currentIndex < images.length - 1 && (
+              <button
+                type="button"
+                className="carousel-arrow carousel-arrow-right"
+                onClick={handleNextImage}
+              >
+                <RightOutlined />
+              </button>
+            )}
+            <div className="carousel-counter" style={{ display: images.length > 0 ? 'block' : 'none' }}>
+              {currentIndex < images.length ? `${currentIndex + 1} / ${images.length}` : `${images.length} / ${images.length}`}
             </div>
           </>
         )}

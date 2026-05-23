@@ -1,7 +1,11 @@
 package hk.ljx.fishpicsbackend.service;
 
-import hk.ljx.fishpicsbackend.entity.Comment;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
+import hk.ljx.fishpicsbackend.dto.comment.CommentQueryRequest;
+import hk.ljx.fishpicsbackend.dto.comment.CreateCommentRequest;
+import hk.ljx.fishpicsbackend.entity.Comment;
+import hk.ljx.fishpicsbackend.vo.comment.CommentVO;
 
 /**
 * @author 30574
@@ -10,4 +14,13 @@ import com.baomidou.mybatisplus.extension.service.IService;
 */
 public interface CommentService extends IService<Comment> {
 
+    Long createComment(CreateCommentRequest req);
+
+    IPage<CommentVO> getCommentPage(CommentQueryRequest req);
+
+    void deleteComment(Long commentId);
+
+    void reviewComment(Long commentId, Integer status);
+
+    void adminDeleteComment(Long commentId);
 }

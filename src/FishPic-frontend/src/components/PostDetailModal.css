@@ -183,6 +183,28 @@
   color: var(--accent);
 }
 
+.post-detail-stat-item-clickable {
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out);
+}
+
+.post-detail-stat-item-clickable:hover {
+  color: var(--accent);
+}
+
+.post-detail-stat-item-clickable:active {
+  transform: scale(0.9);
+}
+
+.post-detail-stat-item-clickable.collected {
+  color: #E53935;
+}
+
+[data-theme='dark'] .post-detail-stat-item-clickable.collected {
+  color: #FF5252;
+}
+
 .post-detail-stat-item .anticon {
   font-size: var(--text-xl);
 }

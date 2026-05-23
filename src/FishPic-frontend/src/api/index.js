@@ -178,7 +178,7 @@ export const logout = () => api.post('/user/logout', {})
 
 export const getUser = (config = {}) => api.get('/user/getUser', config)
 
-export const getAdminUser = (userId, config = {}) => api.get('/user/admin/getUser', { params: { userId }, ...config })
+export const getAdminUser = (userId, config = {}) => api.post('/user/admin/getUser', { userId }, config)
 
 export const editUser = (data) => api.post('/user/editUser', data)
 
@@ -206,7 +206,7 @@ export const getPictureList = (current = 1, pageSize = 20, config = {}) =>
 export const getAdminPictureList = (current = 1, pageSize = 20, status = 3) =>
   api.get('/picture/admin/list', { params: { current, pageSize, status } })
 
-export const reviewPicture = (pictureId, status, selected) => api.post('/picture/admin/review', { pictureId, status, selected })
+export const reviewPicture = (pictureId, status, selected) => api.post('/picture/admin/review', null, { params: { pictureId, status, selected } })
 
 export const createSpace = (data) => api.post('/space/create', data)
 
@@ -224,13 +224,9 @@ export const deletePicture = (ids) => api.delete('/picture/delete', { data: { id
 
 export const updatePicture = (data) => api.put('/picture/update', data)
 
-export const cropPicture = (data) => api.post('/picture/crop', data)
+export const likePost = (id) => api.post('/post/like', null, { params: { id } })
 
-export const scalePicture = (data) => api.post('/picture/scale', data)
-
-export const watermarkPicture = (data) => api.post('/picture/watermark', data)
-
-export const likePost = (id) => api.post('/post/like', { id })
+export const collectPost = (id) => api.post('/post/collect', null, { params: { id } })
 
 export const getPost = (id, config = {}) => api.get('/post/getPost', { params: { id }, ...config })
 
@@ -241,6 +237,16 @@ export const uploadPost = (data) => api.post('/post/post', data)
 export const getPostList = (data, config = {}) => api.post('/post/postList', data, config)
 
 export const getSystemTypes = () => api.get('/system/list')
+
+export const createComment = (data) => api.post('/comment/create', data)
+
+export const getCommentList = (data, config = {}) => api.post('/comment/list', data, config)
+
+export const deleteComment = (id) => api.post('/comment/delete', null, { params: { id } })
+
+export const reviewComment = (id, status) => api.post('/comment/review', null, { params: { id, status } })
+
+export const adminDeleteComment = (id) => api.post('/comment/adminDelete', null, { params: { id } })
 
 export const uploadPicture = (formData, targetSpaceId) => {
   const fd = new FormData()

@@ -545,6 +545,28 @@
   font-size: 13px;
 }
 
+.post-card-collect {
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out);
+}
+
+.post-card-collect:hover {
+  color: var(--accent);
+}
+
+.post-card-collect:active {
+  transform: scale(0.85);
+}
+
+.post-card-collect.collected {
+  color: #E53935;
+}
+
+[data-theme='dark'] .post-card-collect.collected {
+  color: #FF5252;
+}
+
 .float-actions {
   position: fixed;
   right: var(--space-6);

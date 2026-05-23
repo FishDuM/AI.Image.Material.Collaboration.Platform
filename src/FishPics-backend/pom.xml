@@ -92,30 +92,6 @@
             <scope>compile</scope>
         </dependency>
 
-        <!-- Thumbnailator: 轻量级图片处理库 -->
-        <!-- https://github.com/coobird/thumbnailator -->
-        <dependency>
-            <groupId>net.coobird</groupId>
-            <artifactId>thumbnailator</artifactId>
-            <version>0.4.20</version>
-        </dependency>
-
-        <!-- metadata-extractor: Java EXIF/元数据读取库 -->
-        <dependency>
-            <groupId>com.drewnoakes</groupId>
-            <artifactId>metadata-extractor</artifactId>
-            <version>2.19.0</version>
-        </dependency>
-
-        <!-- HEIC/HEIF 和 WEBP 格式支持说明:
-             JDK 21 具备有限的 WEBP 读取支持，可借助 ImageIO 进行读取。
-             如需完整的 WEBP 写入和 HEIC 读写支持，有以下方案：
-             1. 升级至 JDK 22+ 并启用 NightMonkeys 插件:
-                com.github.gotson.nightmonkeys:imageio-webp:1.1.0
-                com.github.gotson.nightmonkeys:imageio-heif:1.1.0
-             2. 或使用系统级工具(ffmpeg/ImageMagick)进行格式预处理
-             当前代码已实现运行时检测：插件可用时自动启用，无插件时返回明确错误提示。
-        -->
     </dependencies>
     <dependencyManagement>
         <dependencies>

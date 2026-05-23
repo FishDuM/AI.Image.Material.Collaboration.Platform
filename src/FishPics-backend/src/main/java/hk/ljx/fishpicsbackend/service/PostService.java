@@ -85,6 +85,14 @@ public interface PostService extends IService<Post> {
     void likePost(Long id);
 
     /**
+     * 收藏/取消收藏帖子（toggle）
+     *
+     * @param id 帖子id
+     * @return 当前收藏状态（true-已收藏, false-已取消）
+     */
+    boolean collectPost(Long id);
+
+    /**
      * 获取本人发布的帖子列表（分页）
      *
      * @param pageRequest 分页参数

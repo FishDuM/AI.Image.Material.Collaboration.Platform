@@ -1,5 +1,6 @@
 package hk.ljx.fishpicsbackend.controller;
 
+import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
@@ -10,6 +11,8 @@ import hk.ljx.fishpicsbackend.service.PicSystemService;
 import hk.ljx.fishpicsbackend.service.PictureService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+
+import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
 import jakarta.annotation.Resource;
 import java.util.List;
@@ -29,6 +32,7 @@ public class SystemController {
         return ResUtils.success(list);
     }
 
+    @AuthCheck(role = ADMIN)
     @PostMapping("/addList")
     public Response<Boolean> addList(@RequestBody AddSysPicType addSysPicType) {
         ExcUtils.throwIfTrue(addSysPicType == null, ExceptionCode.PARAMETER_ERROR, "type不能为空");
@@ -36,6 +40,7 @@ public class SystemController {
         return ResUtils.success(true);
     }
 
+    @AuthCheck(role = ADMIN)
     @PostMapping("/deleteType")
     public Response<Boolean> deleteType(@RequestBody Map<String, String> body) {
         String type = body.get("value");
@@ -50,6 +55,7 @@ public class SystemController {
         return ResUtils.success(urls);
     }
 
+    @AuthCheck(role = ADMIN)
     @PostMapping("/addMarquee")
     public Response<Boolean> addMarquee(@RequestBody AddSysMarquee addSysMarquee) {
         ExcUtils.throwIfTrue(addSysMarquee == null, ExceptionCode.PARAMETER_ERROR, "url不能为空");
@@ -57,6 +63,7 @@ public class SystemController {
         return ResUtils.success(true);
     }
 
+    @AuthCheck(role = ADMIN)
     @PostMapping("/deleteMarquee")
     public Response<Boolean> deleteMarquee(@RequestBody Map<String, String> body) {
         String url = body.get("url");

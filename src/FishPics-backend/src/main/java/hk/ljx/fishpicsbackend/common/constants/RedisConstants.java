@@ -15,6 +15,9 @@ public interface RedisConstants {
     // 点赞类
     String LIKE_POST_KEY = "LIKE_POST";
 
+    // 收藏类
+    String COLLECT_POST_KEY = "COLLECT_POST";
+
     // 获取注册验证码 key
     static String getRegisterCodeKey(String str) {
         return REGISTER_CODE_KEY + str;
