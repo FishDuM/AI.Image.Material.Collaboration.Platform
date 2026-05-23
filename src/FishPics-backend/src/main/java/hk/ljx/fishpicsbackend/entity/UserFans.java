@@ -1,6 +1,8 @@
 package hk.ljx.fishpicsbackend.entity;
 
+import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import java.io.Serializable;
 import lombok.Data;
@@ -13,8 +15,9 @@ import lombok.Data;
 @Data
 public class UserFans implements Serializable {
     /**
-     * 
+     *
      */
+    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
     /**

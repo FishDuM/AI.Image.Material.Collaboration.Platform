@@ -1,7 +1,9 @@
 package hk.ljx.fishpicsbackend.service;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 import hk.ljx.fishpicsbackend.entity.UserFans;
+import hk.ljx.fishpicsbackend.vo.user.FollowUserVO;
 
 /**
 * @author 30574
@@ -10,4 +12,9 @@ import hk.ljx.fishpicsbackend.entity.UserFans;
 */
 public interface UserFansService extends IService<UserFans> {
 
+    boolean follow(Long targetUserId);
+
+    IPage<FollowUserVO> getFans(Long userId, int current, int pageSize);
+
+    IPage<FollowUserVO> getFollows(Long userId, int current, int pageSize);
 }

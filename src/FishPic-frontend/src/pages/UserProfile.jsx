@@ -1,5 +1,5 @@
 import {useCallback, useContext, useEffect, useRef, useState} from 'react'
-import {useNavigate} from 'react-router-dom'
+import {useNavigate, useSearchParams} from 'react-router-dom'
 import {
   App as AntApp,
   Avatar,
@@ -29,7 +29,7 @@ import {
   StarOutlined,
   UserOutlined
 } from '@ant-design/icons'
-import {editUser, getMyCollects, getMyLikes, getMyPosts, getPost, getUser, getUserMyself, uploadAvatar} from '../api'
+import {editUser, followUser, getFans, getFollows, getMyCollects, getMyLikes, getMyPosts, getPost, getPostList, getUser, getUserMyself, getUserProfile, uploadAvatar} from '../api'
 import {AuthContext} from '../context/AuthContext'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { useFetchWithCleanup } from '../hooks/useRequestUtils'
@@ -37,6 +37,7 @@ import { isAllowedImageFile, getMaxUploadSize, formatMaxUploadSize } from '../ut
 import PostDetailModal from '../components/PostDetailModal'
 import CreateEditPostModal from '../components/CreateEditPostModal'
 import PostCard from '../components/shared/PostCard'
+import FollowUserList from '../components/FollowUserList'
 import './UserProfile.css'
 
 function UserProfile() {
@@ -44,8 +45,14 @@ function UserProfile() {
   const { userInfo, login: authLogin, isAuthenticated } = useContext(AuthContext)
   const navigate = useNavigate()
   const isMobile = useIsMobile()
+  const [searchParams] = useSearchParams()
+  const profileUserId = searchParams.get('userId')
+  const currentUserId = userInfo?.id
+  const isOwnProfile = !profileUserId || String(profileUserId) === String(currentUserId)
+
   const [loading, setLoading] = useState(true)
   const [userData, setUserData] = useState(null)
+  const [isFollowed, setIsFollowed] = useState(false)
   const [activeTab, setActiveTab] = useState('notes')
   const [avatarVisible, setAvatarVisible] = useState(false)
   const [editModalVisible, setEditModalVisible] = useState(false)
@@ -61,7 +68,7 @@ function UserProfile() {
     favorites: { items: [], hasMore: true, loaded: false, loading: false },
     likes: { items: [], hasMore: true, loaded: false, loading: false },
   })
-  const [counts, setCounts] = useState({ notes: 0, favorites: 0, likes: 0 })
+  const [counts, setCounts] = useState({ notes: 0, favorites: 0, likes: 0, follows: 0, fans: 0 })
   const pageRefs = useRef({ notes: 1, favorites: 1, likes: 1 })
   const loadingMoreRef = useRef(false)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -71,15 +78,14 @@ function UserProfile() {
   const [detailImageIndex, setDetailImageIndex] = useState(0)
   const [createEditModalOpen, setCreateEditModalOpen] = useState(false)
   const [editingPostDetail, setEditingPostDetail] = useState(null)
+  const [followListModalOpen, setFollowListModalOpen] = useState(false)
+  const [followListModalType, setFollowListModalType] = useState('follows')
 
   const { createSignal } = useFetchWithCleanup()
 
   const apiMap = { notes: getMyPosts, favorites: getMyCollects, likes: getMyLikes }
 
   const fetchTabData = useCallback(async (tabKey, page = 1, append = false, signal) => {
-    const fetchFn = apiMap[tabKey]
-    if (!fetchFn) return
-
     if (append) {
       loadingMoreRef.current = true
       setLoadingMore(true)
@@ -91,7 +97,14 @@ function UserProfile() {
     }
 
     try {
-      const result = await fetchFn({ current: page, pageSize: 20 }, signal ? { signal } : {})
+      let result
+      if (!isOwnProfile && tabKey === 'notes') {
+        result = await getPostList({ userId: Number(profileUserId), current: page, pageSize: 20 }, signal ? { signal } : {})
+      } else {
+        const fetchFn = apiMap[tabKey]
+        if (!fetchFn) return
+        result = await fetchFn({ current: page, pageSize: 20 }, signal ? { signal } : {})
+      }
       const records = result.records || []
       const totalPages = result.pages || 0
       const hasMore = page < totalPages
@@ -135,20 +148,50 @@ function UserProfile() {
         setLoadingMore(false)
       }
     }
-  }, [message])
+  }, [message, isOwnProfile, profileUserId])
 
   const fetchUserInfo = async () => {
     try {
-      const data = await getUserMyself()
-      setUserData(data)
-
-      if (userInfo) {
-        const updatedUserInfo = { ...userInfo, ...data }
-        authLogin(updatedUserInfo)
+      if (isOwnProfile) {
+        const data = await getUserMyself()
+        setUserData(data)
+        if (userInfo) {
+          const updatedUserInfo = { ...userInfo, ...data }
+          authLogin(updatedUserInfo)
+        }
+      } else {
+        const data = await getUserProfile(profileUserId)
+        setUserData(data)
+        setIsFollowed(data.isFollowed ?? false)
+        setCounts(prev => ({
+          ...prev,
+          notes: data.postCount ?? 0,
+          favorites: data.collectCount ?? 0,
+          likes: data.likeCount ?? 0,
+          follows: data.followsCount ?? 0,
+          fans: data.fansCount ?? 0,
+        }))
       }
     } catch (error) {
       if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
       message.error(error.message || '获取个人信息失败')
+    }
+  }
+
+  const fetchFollowCounts = async () => {
+    if (!isOwnProfile) return
+    try {
+      const [followsResult, fansResult] = await Promise.all([
+        getFollows({ current: 1, pageSize: 1 }),
+        getFans({ current: 1, pageSize: 1 }),
+      ])
+      setCounts(prev => ({
+        ...prev,
+        follows: followsResult?.total || 0,
+        fans: fansResult?.total || 0,
+      }))
+    } catch {
+      // ignore count fetch errors
     }
   }
 
@@ -168,23 +211,32 @@ function UserProfile() {
   }
 
   useEffect(() => {
-    if (hasFetchedRef.current) return
-    hasFetchedRef.current = true
-    
     if (!isAuthenticated) {
       message.warning('请先登录')
       navigate('/')
       return
     }
-    
+
+    // Reset state when switching between profiles
+    setTabState({
+      notes: { items: [], hasMore: true, loaded: false, loading: false },
+      favorites: { items: [], hasMore: true, loaded: false, loading: false },
+      likes: { items: [], hasMore: true, loaded: false, loading: false },
+    })
+    setCounts({ notes: 0, favorites: 0, likes: 0, follows: 0, fans: 0 })
+    setActiveTab('notes')
+    pageRefs.current = { notes: 1, favorites: 1, likes: 1 }
+    hasFetchedRef.current = false
+
     setLoading(true)
     fetchUserInfo().finally(() => {
       setLoading(false)
     })
-  }, [navigate, message])
+    fetchFollowCounts()
+  }, [profileUserId, isAuthenticated])
 
   useEffect(() => {
-    if (!tabState[activeTab].loaded && !tabState[activeTab].loading) {
+    if (!tabState[activeTab].loading) {
       const signal = createSignal()
       fetchTabData(activeTab, 1, false, signal)
     }
@@ -302,6 +354,33 @@ function UserProfile() {
         }
       }
     }
+  }
+
+  const handleProfileFollow = async () => {
+    if (!profileUserId) return
+    try {
+      const result = await followUser(Number(profileUserId))
+      setIsFollowed(result)
+      message.success(result ? '已关注' : '已取消关注')
+    } catch (error) {
+      message.error(error.message || '操作失败')
+    }
+  }
+
+  const handleStatClick = (type) => {
+    if (isMobile) {
+      const userIdParam = isOwnProfile ? '' : `&userId=${profileUserId}`
+      navigate(`/mobile/follow-list?type=${type}${userIdParam}`)
+      return
+    }
+    setFollowListModalType(type)
+    setFollowListModalOpen(true)
+  }
+
+  const handleFollowListUserClick = (userId) => {
+    setFollowListModalOpen(false)
+    const path = isMobile ? '/mobile/profile' : '/profile'
+    navigate(`${path}?userId=${userId}`)
   }
 
   const handleAvatarClick = () => {
@@ -449,8 +528,8 @@ function UserProfile() {
     if (!tab.items || tab.items.length === 0) {
       return (
         <div className="empty-state">
-          <Empty 
-            description={emptyText} 
+          <Empty
+            description={emptyText}
             image={Empty.PRESENTED_IMAGE_SIMPLE}
           />
         </div>
@@ -537,17 +616,25 @@ function UserProfile() {
             <span className="stat-value">{counts.likes}</span>
             <span className="stat-label">点赞</span>
           </div>
+          <div className="stat-item stat-item-clickable" onClick={() => handleStatClick('follows')}>
+            <span className="stat-value">{counts.follows}</span>
+            <span className="stat-label">关注</span>
+          </div>
+          <div className="stat-item stat-item-clickable" onClick={() => handleStatClick('fans')}>
+            <span className="stat-value">{counts.fans}</span>
+            <span className="stat-label">粉丝</span>
+          </div>
         </div>
         
         <div className="profile-meta-row">
-          <Tooltip title={`你已经加入 ${calculateDaysSinceJoin(userData.createTime)} 天`}>
+          <Tooltip title={isOwnProfile ? `你已经加入 ${calculateDaysSinceJoin(userData.createTime)} 天` : `TA已加入 ${calculateDaysSinceJoin(userData.createTime)} 天`}>
             <span>
               <CalendarOutlined /> 加入于 {formatDate(userData.createTime)}
             </span>
           </Tooltip>
         </div>
         
-        {(userData.email || userData.phone) && (
+        {isOwnProfile && (userData.email || userData.phone) && (
           <div className="profile-info-cards">
             {userData.email && (
               <div className="info-card-simple">
@@ -564,17 +651,27 @@ function UserProfile() {
           </div>
         )}
 
-        <Button 
-          type="primary" 
-          icon={<EditOutlined />}
-          className="edit-profile-btn"
-          onClick={handleEditProfileClick}
-        >
-          修改信息
-        </Button>
+        {isOwnProfile ? (
+          <Button
+            type="primary"
+            icon={<EditOutlined />}
+            className="edit-profile-btn"
+            onClick={handleEditProfileClick}
+          >
+            修改信息
+          </Button>
+        ) : (
+          <Button
+            type={isFollowed ? 'default' : 'primary'}
+            className={isFollowed ? 'follow-btn-following profile-follow-btn' : 'follow-btn-tofollow profile-follow-btn'}
+            onClick={handleProfileFollow}
+          >
+            {isFollowed ? '已关注' : '关注'}
+          </Button>
+        )}
 
         <div className="profile-tabs-container">
-          {tabItems.map(tab => (
+          {(isOwnProfile ? tabItems : otherTabItems).map(tab => (
             <div
               key={tab.key}
               className={`profile-tab-item ${activeTab === tab.key ? 'profile-tab-active' : ''}`}
@@ -584,7 +681,7 @@ function UserProfile() {
             </div>
           ))}
         </div>
-        {renderTabContent(activeTab, tabItems.find(t => t.key === activeTab)?.emptyText || '')}
+        {renderTabContent(activeTab, (isOwnProfile ? tabItems : otherTabItems).find(t => t.key === activeTab)?.emptyText || '')}
 
         <Modal
           className="avatar-modal"
@@ -595,6 +692,17 @@ function UserProfile() {
           width={600}
         >
           {userData?.avatar && <img src={userData.avatar} alt="avatar" />}
+        </Modal>
+
+        <Modal
+          className="follow-list-modal"
+          open={followListModalOpen}
+          onCancel={() => setFollowListModalOpen(false)}
+          footer={null}
+          width={480}
+          title={followListModalType === 'fans' ? '粉丝' : '关注'}
+        >
+          <FollowUserList type={followListModalType} targetUserId={isOwnProfile ? undefined : profileUserId} onUserClick={handleFollowListUserClick} />
         </Modal>
 
         <Modal
@@ -741,6 +849,10 @@ function UserProfile() {
     { key: 'notes', label: '图文', icon: <FileTextOutlined />, emptyText: '你还没有发布任何内容哦' },
     { key: 'favorites', label: '收藏', icon: <StarOutlined />, emptyText: '暂无收藏内容' },
     { key: 'likes', label: '点赞', icon: <HeartOutlined />, emptyText: '暂无点赞内容' },
+  ]
+
+  const otherTabItems = [
+    { key: 'notes', label: '图文', icon: <FileTextOutlined />, emptyText: 'TA还没有发布任何内容哦' },
   ]
 
   return (

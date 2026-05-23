@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Spin, Popover, QRCode, App } from 'antd'
 import { LikeOutlined, StarFilled, StarOutlined, MessageOutlined, ShareAltOutlined, CopyOutlined, SendOutlined } from '@ant-design/icons'
 import MobilePageWrapper from './MobilePageWrapper'
 import PostModal from './shared/PostModal'
 import PostLayout from './shared/PostLayout'
 import CommentSection from './CommentSection'
-import { collectPost } from '../api'
+import { collectPost, followUser } from '../api'
 import './PostDetailModal.css'
 
 const formatTime = (timeString) => {
@@ -44,13 +45,16 @@ function PostDetailModal({
   mode = 'modal',
 }) {
   const { message } = App.useApp()
+  const navigate = useNavigate()
 
   const [isCollected, setIsCollected] = useState(postDetail?.isCollected ?? false)
   const [localCollectsNum, setLocalCollectsNum] = useState(null)
+  const [isFollowing, setIsFollowing] = useState(false)
 
   useEffect(() => {
     setIsCollected(postDetail?.isCollected ?? false)
     setLocalCollectsNum(null)
+    setIsFollowing(false)
   }, [postDetail?.id])
 
   const displayCollectsNum = localCollectsNum ?? postDetail?.collectsNum ?? 0
@@ -64,6 +68,24 @@ function PostDetailModal({
         const base = Number(prev ?? postDetail?.collectsNum ?? 0)
         return result ? base + 1 : Math.max(0, base - 1)
       })
+    } catch (err) {
+      message.error(err.message || '操作失败')
+    }
+  }
+
+  const handleUserClick = () => {
+    if (postDetail?.userId) {
+      const path = mode === 'page' ? '/mobile/profile' : '/profile'
+      navigate(`${path}?userId=${postDetail.userId}`)
+    }
+  }
+
+  const handleFollow = async () => {
+    if (!postDetail?.userId) return
+    try {
+      const result = await followUser(postDetail.userId)
+      setIsFollowing(result)
+      message.success(result ? '已关注' : '已取消关注')
     } catch (err) {
       message.error(err.message || '操作失败')
     }
@@ -125,7 +147,7 @@ function PostDetailModal({
       <MobilePageWrapper
         title=""
         titleContent={
-          <>
+          <span onClick={handleUserClick} style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             {postDetail?.avatar ? (
               <img src={postDetail.avatar} alt={postDetail.username} />
             ) : (
@@ -134,14 +156,16 @@ function PostDetailModal({
               </div>
             )}
             <span className="mobile-page-title-username">{postDetail?.username}</span>
-          </>
+          </span>
         }
         onClose={onClose}
         rightContent={
           postDetail && currentUsername === postDetail.username ? (
             <button type="button" className="edit-btn" onClick={onEdit}>编辑</button>
           ) : postDetail && currentUsername !== postDetail.username ? (
-            <button type="button" className="follow-btn">关注</button>
+            <button type="button" className="follow-btn" onClick={handleFollow}>
+              {isFollowing ? '已关注' : '关注'}
+            </button>
           ) : null
         }
       >
@@ -204,7 +228,7 @@ function PostDetailModal({
       ) : postDetail ? (
         <>
           <div className="post-detail-header">
-            <div className="post-detail-user-info">
+            <div className="post-detail-user-info" onClick={handleUserClick} style={{ cursor: 'pointer' }}>
               {postDetail.avatar ? (
                 <img src={postDetail.avatar} alt={postDetail.username} className="post-detail-avatar" />
               ) : (
@@ -217,7 +241,9 @@ function PostDetailModal({
             {currentUsername === postDetail.username ? (
               <button type="button" className="edit-btn" onClick={onEdit}>编辑</button>
             ) : (
-              <button type="button" className="follow-btn">关注</button>
+              <button type="button" className="follow-btn" onClick={handleFollow}>
+                {isFollowing ? '已关注' : '关注'}
+              </button>
             )}
           </div>
           <div className="post-detail-title">{postDetail.title}</div>

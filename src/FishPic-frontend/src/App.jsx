@@ -28,6 +28,8 @@ const MobilePostDetailPage = lazy(() => import('./pages/MobilePostDetailPage'))
 const MobileEditPicturePage = lazy(() => import('./pages/MobileEditPicturePage'))
 const MobileEditProfilePage = lazy(() => import('./pages/MobileEditProfilePage'))
 const MobileUpgradePage = lazy(() => import('./pages/MobileUpgradePage'))
+const MobileFollowListPage = lazy(() => import('./pages/MobileFollowListPage'))
+const MobileUserProfilePage = lazy(() => import('./pages/MobileUserProfilePage'))
 
 function PageLoading() {
   return (
@@ -49,6 +51,8 @@ function App() {
           <Route path="/mobile/picture/edit" element={<ProtectedRoute><MobileEditPicturePage /></ProtectedRoute>} />
           <Route path="/mobile/profile/edit" element={<ProtectedRoute><MobileEditProfilePage /></ProtectedRoute>} />
           <Route path="/mobile/upgrade" element={<ProtectedRoute><MobileUpgradePage /></ProtectedRoute>} />
+          <Route path="/mobile/follow-list" element={<ProtectedRoute><MobileFollowListPage /></ProtectedRoute>} />
+          <Route path="/mobile/profile" element={<ProtectedRoute><MobileUserProfilePage /></ProtectedRoute>} />
           <Route path="*" element={
             <GlobalLayout>
               <Routes>

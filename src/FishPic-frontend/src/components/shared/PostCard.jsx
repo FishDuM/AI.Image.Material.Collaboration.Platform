@@ -1,38 +1,11 @@
-import { useState, useEffect } from 'react'
-import { LikeOutlined, HeartFilled, HeartOutlined, StarFilled, StarOutlined } from '@ant-design/icons'
-import { Image as AntImage, App } from 'antd'
-import { collectPost } from '../../api'
+import { LikeOutlined, HeartFilled, HeartOutlined } from '@ant-design/icons'
+import { Image as AntImage } from 'antd'
 
 function PostCard({ post, onClick, variant = 'community' }) {
-  const { message } = App.useApp()
   const coverUrl = post.url || post.pictureUrl?.[0] || ''
-  const [isCollected, setIsCollected] = useState(post?.isCollected ?? false)
-  const [localCollectsNum, setLocalCollectsNum] = useState(null)
-
-  useEffect(() => {
-    setIsCollected(post?.isCollected ?? false)
-    setLocalCollectsNum(null)
-  }, [post?.id])
-
-  const displayCollectsNum = localCollectsNum ?? post.collectsNum ?? 0
 
   const handleClick = () => {
     onClick?.(post)
-  }
-
-  const handleCollect = async (e) => {
-    e.stopPropagation()
-    if (!post.id) return
-    try {
-      const result = await collectPost(post.id)
-      setIsCollected(result)
-      setLocalCollectsNum(prev => {
-        const base = Number(prev ?? post.collectsNum ?? 0)
-        return result ? base + 1 : Math.max(0, base - 1)
-      })
-    } catch (err) {
-      message.error(err.message || '操作失败')
-    }
   }
 
   if (variant === 'profile') {
@@ -51,10 +24,6 @@ function PostCard({ post, onClick, variant = 'community' }) {
                 <HeartOutlined style={{ marginRight: 4 }} />
               )}
               {post.likesNum || 0}
-            </span>
-            <span className={`post-card-stat post-card-collect${isCollected ? ' collected' : ''}`} onClick={handleCollect}>
-              {isCollected ? <StarFilled /> : <StarOutlined />}
-              <span>{displayCollectsNum}</span>
             </span>
           </div>
         </div>

@@ -236,6 +236,14 @@ export const uploadPost = (data) => api.post('/post/post', data)
 
 export const getPostList = (data, config = {}) => api.post('/post/postList', data, config)
 
+export const followUser = (userId) => api.post('/user/follow', { userId })
+
+export const getUserProfile = (userId, config = {}) => api.get('/user/profile', { params: { userId }, ...config })
+
+export const getFans = (params, config = {}) => api.get('/user/fans', { params, ...config })
+
+export const getFollows = (params, config = {}) => api.get('/user/follows', { params, ...config })
+
 export const getSystemTypes = () => api.get('/system/list')
 
 export const createComment = (data) => api.post('/comment/create', data)

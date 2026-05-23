@@ -13,4 +13,20 @@
     <sql id="Base_Column_List">
         id,user_id,fan_id
     </sql>
+
+    <select id="selectFansPage" resultType="hk.ljx.fishpicsbackend.vo.user.FollowUserVO">
+        SELECT u.id, u.username, u.nickname, u.avatar, u.level
+        FROM user_fans uf
+        INNER JOIN user u ON uf.fan_id = u.id
+        WHERE uf.user_id = #{userId}
+        ORDER BY uf.id DESC
+    </select>
+
+    <select id="selectFollowsPage" resultType="hk.ljx.fishpicsbackend.vo.user.FollowUserVO">
+        SELECT u.id, u.username, u.nickname, u.avatar, u.level
+        FROM user_fans uf
+        INNER JOIN user u ON uf.user_id = u.id
+        WHERE uf.fan_id = #{userId}
+        ORDER BY uf.id DESC
+    </select>
 </mapper>

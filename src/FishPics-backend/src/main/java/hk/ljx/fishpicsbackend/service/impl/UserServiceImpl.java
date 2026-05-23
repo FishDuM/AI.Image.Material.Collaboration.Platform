@@ -22,12 +22,21 @@ import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.dto.space.CreateSpace;
 import hk.ljx.fishpicsbackend.dto.user.*;
+import hk.ljx.fishpicsbackend.entity.Post;
 import hk.ljx.fishpicsbackend.entity.User;
+import hk.ljx.fishpicsbackend.entity.UserFans;
+import hk.ljx.fishpicsbackend.entity.UserPostCollect;
+import hk.ljx.fishpicsbackend.entity.UserPostLikes;
+import hk.ljx.fishpicsbackend.mapper.PostMapper;
+import hk.ljx.fishpicsbackend.mapper.UserPostCollectMapper;
+import hk.ljx.fishpicsbackend.mapper.UserPostLikesMapper;
+import hk.ljx.fishpicsbackend.mapper.UserFansMapper;
 import hk.ljx.fishpicsbackend.service.SpaceService;
 import hk.ljx.fishpicsbackend.service.UserService;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
 import hk.ljx.fishpicsbackend.vo.user.UserLoginVO;
 import hk.ljx.fishpicsbackend.vo.user.UserMessageVO;
+import hk.ljx.fishpicsbackend.vo.user.UserPublicProfileVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -57,6 +66,18 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
     @Resource
     private UserMapper userMapper;
+
+    @Resource
+    private PostMapper postMapper;
+
+    @Resource
+    private UserPostCollectMapper userPostCollectMapper;
+
+    @Resource
+    private UserPostLikesMapper userPostLikesMapper;
+
+    @Resource
+    private UserFansMapper userFansMapper;
 
     @Resource
     private SpaceService spaceService;
@@ -315,5 +336,70 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         return user.getId().equals(id);
+    }
+
+    @Override
+    public UserPublicProfileVO getUserProfile(Long userId) {
+        User currentUser = UserHolder.getUser();
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(currentUser), ExceptionCode.NOT_LOGIN);
+
+        User targetUser = userMapper.selectById(userId);
+        ExcUtils.throwIfTrue(targetUser == null || targetUser.getId() == null,
+                ExceptionCode.NOT_FOUND, "用户不存在");
+
+        boolean isMe = currentUser.getId().equals(userId);
+
+        UserPublicProfileVO vo = new UserPublicProfileVO();
+        vo.setId(targetUser.getId());
+        vo.setUsername(targetUser.getUsername());
+        vo.setNickname(targetUser.getNickname());
+        vo.setAvatar(targetUser.getAvatar());
+        vo.setLevel(targetUser.getLevel());
+        vo.setCreateTime(targetUser.getCreateTime());
+
+        // isFollowed: check if current user follows target
+        QueryWrapper<UserFans> fw = new QueryWrapper<>();
+        fw.eq("user_id", userId);
+        fw.eq("fan_id", currentUser.getId());
+        vo.setIsFollowed(userFansMapper.selectCount(fw) > 0);
+
+        // post count (only public posts if viewing someone else)
+        QueryWrapper<Post> postQw = new QueryWrapper<>();
+        postQw.eq("user_id", userId);
+        postQw.eq("status", 1);
+        if (!isMe) {
+            postQw.eq("is_private", 0);
+        }
+        vo.setPostCount(postMapper.selectCount(postQw));
+
+        // collect count
+        if (isMe || targetUser.getIsPrivatePostCollect() == null || targetUser.getIsPrivatePostCollect() == 0) {
+            QueryWrapper<UserPostCollect> cqw = new QueryWrapper<>();
+            cqw.eq("user_id", userId);
+            vo.setCollectCount(userPostCollectMapper.selectCount(cqw));
+        }
+
+        // like count
+        if (isMe || targetUser.getIsPrivateLikes() == null || targetUser.getIsPrivateLikes() == 0) {
+            QueryWrapper<UserPostLikes> lqw = new QueryWrapper<>();
+            lqw.eq("user_id", userId);
+            vo.setLikeCount(userPostLikesMapper.selectCount(lqw));
+        }
+
+        // follows count
+        if (isMe || targetUser.getIsPrivateFollows() == null || targetUser.getIsPrivateFollows() == 0) {
+            QueryWrapper<UserFans> foqw = new QueryWrapper<>();
+            foqw.eq("fan_id", userId);
+            vo.setFollowsCount(userFansMapper.selectCount(foqw));
+        }
+
+        // fans count
+        if (isMe || targetUser.getIsPrivateFans() == null || targetUser.getIsPrivateFans() == 0) {
+            QueryWrapper<UserFans> faqw = new QueryWrapper<>();
+            faqw.eq("user_id", userId);
+            vo.setFansCount(userFansMapper.selectCount(faqw));
+        }
+
+        return vo;
     }
 }

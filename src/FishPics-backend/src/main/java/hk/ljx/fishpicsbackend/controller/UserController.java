@@ -17,11 +17,14 @@ import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.dto.user.*;
 import hk.ljx.fishpicsbackend.entity.User;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
+import hk.ljx.fishpicsbackend.service.UserFansService;
 import hk.ljx.fishpicsbackend.service.UserService;
 import hk.ljx.fishpicsbackend.vo.user.AdminGetUserVO;
 import hk.ljx.fishpicsbackend.vo.user.CheckCodeVO;
+import hk.ljx.fishpicsbackend.vo.user.FollowUserVO;
 import hk.ljx.fishpicsbackend.vo.user.UserLoginVO;
 import hk.ljx.fishpicsbackend.vo.user.UserMessageVO;
+import hk.ljx.fishpicsbackend.vo.user.UserPublicProfileVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
@@ -43,6 +46,9 @@ public class UserController {
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
+
+    @Resource
+    private UserFansService userFansService;
 
     @PostMapping("/login")
     public Response<UserLoginVO> userLogin(@RequestBody UserLoginRequest userLoginRequest) {
@@ -107,6 +113,35 @@ public class UserController {
             stringRedisTemplate.delete(RedisConstants.getUserIdKey(token));
         }
         return ResUtils.success();
+    }
+
+    @PostMapping("/follow")
+    public Response<Boolean> follow(@RequestBody UserIdRequest userIdRequest) {
+        ExcUtils.throwIfTrue(userIdRequest == null || userIdRequest.getUserId() == null,
+                ExceptionCode.PARAMETER_ERROR);
+        return ResUtils.success(userFansService.follow(userIdRequest.getUserId()));
+    }
+
+    @GetMapping("/fans")
+    public Response<IPage<FollowUserVO>> getFans(@RequestParam(required = false) Long userId,
+                                                  @RequestParam(defaultValue = "1") int current,
+                                                  @RequestParam(defaultValue = "20") int pageSize) {
+        Long queryUserId = userId != null ? userId : UserHolder.getUser().getId();
+        return ResUtils.success(userFansService.getFans(queryUserId, current, pageSize));
+    }
+
+    @GetMapping("/follows")
+    public Response<IPage<FollowUserVO>> getFollows(@RequestParam(required = false) Long userId,
+                                                     @RequestParam(defaultValue = "1") int current,
+                                                     @RequestParam(defaultValue = "20") int pageSize) {
+        Long queryUserId = userId != null ? userId : UserHolder.getUser().getId();
+        return ResUtils.success(userFansService.getFollows(queryUserId, current, pageSize));
+    }
+
+    @GetMapping("/profile")
+    public Response<UserPublicProfileVO> getUserProfile(@RequestParam Long userId) {
+        ExcUtils.throwIfTrue(userId == null, ExceptionCode.PARAMETER_ERROR);
+        return ResUtils.success(userService.getUserProfile(userId));
     }
 
     @AuthCheck(role = ADMIN)

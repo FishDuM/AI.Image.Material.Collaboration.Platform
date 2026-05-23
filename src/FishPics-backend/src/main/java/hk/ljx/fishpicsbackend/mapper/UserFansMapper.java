@@ -1,7 +1,11 @@
 package hk.ljx.fishpicsbackend.mapper;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import hk.ljx.fishpicsbackend.entity.UserFans;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import hk.ljx.fishpicsbackend.vo.user.FollowUserVO;
+import org.apache.ibatis.annotations.Param;
 
 /**
 * @author 30574
@@ -11,6 +15,9 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 */
 public interface UserFansMapper extends BaseMapper<UserFans> {
 
+    IPage<FollowUserVO> selectFansPage(Page<?> page, @Param("userId") Long userId);
+
+    IPage<FollowUserVO> selectFollowsPage(Page<?> page, @Param("userId") Long userId);
 }
 
 

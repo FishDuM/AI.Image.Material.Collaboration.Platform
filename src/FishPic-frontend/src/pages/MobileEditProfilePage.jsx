@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useContext } from 'react'
-import { Form, Input, Button, Avatar, App } from 'antd'
-import { UserOutlined, MailOutlined, PhoneOutlined, CameraOutlined } from '@ant-design/icons'
+import { Form, Input, Button, Avatar, App, Switch } from 'antd'
+import { UserOutlined, MailOutlined, PhoneOutlined, CameraOutlined, LockOutlined, EyeOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { getUserMyself, editUser, uploadAvatar } from '../api'
 import { AuthContext } from '../context/AuthContext'
@@ -15,6 +15,7 @@ export default function MobileEditProfilePage() {
   const [loading, setLoading] = useState(false)
   const [userData, setUserData] = useState(null)
   const [avatarLoading, setAvatarLoading] = useState(false)
+  const [showPasswordSection, setShowPasswordSection] = useState(false)
 
   const fetchUserData = useCallback(async () => {
     try {
@@ -65,12 +66,17 @@ export default function MobileEditProfilePage() {
   const handleFinish = async (values) => {
     setLoading(true)
     try {
-      await editUser({
+      const submitData = {
         id: userData.id,
         nickname: values.nickname,
         email: values.email,
         phone: values.phone,
-      })
+      }
+      if (showPasswordSection && values.password && values.password.trim() !== '') {
+        submitData.password = values.password
+        submitData.originalPassword = values.originalPassword
+      }
+      await editUser(submitData)
       updateUserInfo(prev => ({
         ...prev,
         nickname: values.nickname,
@@ -137,6 +143,50 @@ export default function MobileEditProfilePage() {
               maxLength={20}
             />
           </Form.Item>
+
+          <div className="mobile-password-section">
+            <div className="mobile-password-section-header">
+              <span className="mobile-password-section-label">
+                <LockOutlined />
+                修改密码
+              </span>
+              <Switch
+                size="small"
+                checked={showPasswordSection}
+                onChange={(checked) => {
+                  setShowPasswordSection(checked)
+                  if (!checked) {
+                    form.setFieldsValue({ password: '', originalPassword: '' })
+                  }
+                }}
+              />
+            </div>
+            {showPasswordSection && (
+              <div className="mobile-password-section-fields">
+                <Form.Item
+                  name="password"
+                  rules={[
+                    { required: true, message: '请输入新密码' },
+                    { min: 8, message: '密码长度不能小于 8 个字符' },
+                    { max: 20, message: '密码长度不能大于 20 个字符' },
+                  ]}
+                >
+                  <Input.Password
+                    prefix={<LockOutlined />}
+                    placeholder="请输入新密码"
+                    size="large"
+                  />
+                </Form.Item>
+                <Form.Item name="originalPassword">
+                  <Input.Password
+                    prefix={<EyeOutlined />}
+                    placeholder="请输入原始密码"
+                    size="large"
+                  />
+                </Form.Item>
+              </div>
+            )}
+          </div>
 
           <Form.Item
             label="邮箱"

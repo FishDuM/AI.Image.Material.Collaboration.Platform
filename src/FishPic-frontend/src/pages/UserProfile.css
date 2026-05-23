@@ -559,6 +559,32 @@
   box-shadow: var(--shadow-md);
 }
 
+.stat-item-clickable {
+  cursor: pointer;
+  transition: opacity var(--duration-normal) var(--ease-out);
+}
+
+.stat-item-clickable:hover {
+  opacity: 0.75;
+}
+
+.profile-follow-btn {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: fit-content !important;
+  margin: 0 auto;
+  flex: none;
+  height: 36px;
+  padding: 0 var(--space-4);
+  font-weight: 500;
+  border-radius: var(--radius-full) !important;
+}
+
+.follow-list-modal .ant-modal-body {
+  padding: var(--space-4);
+}
+
 [data-theme="dark"] .post-cover {
   opacity: 0.9;
 }

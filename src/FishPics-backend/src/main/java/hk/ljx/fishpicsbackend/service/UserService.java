@@ -8,6 +8,7 @@ import hk.ljx.fishpicsbackend.entity.User;
 import com.baomidou.mybatisplus.extension.service.IService;
 import hk.ljx.fishpicsbackend.vo.user.UserLoginVO;
 import hk.ljx.fishpicsbackend.vo.user.UserMessageVO;
+import hk.ljx.fishpicsbackend.vo.user.UserPublicProfileVO;
 
 /**
 * @author 30574
@@ -92,4 +93,11 @@ public interface UserService extends IService<User> {
      * @return 是否是自己的信息
      */
     Boolean isMe(Long id);
+
+    /**
+     * 获取用户公开主页信息
+     * @param userId 目标用户ID
+     * @return 用户公开主页VO
+     */
+    UserPublicProfileVO getUserProfile(Long userId);
 }
