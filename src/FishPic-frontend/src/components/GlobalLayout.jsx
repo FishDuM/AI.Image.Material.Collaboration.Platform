@@ -18,6 +18,7 @@ import {
   LockFilled,
   ToolOutlined,
   PictureOutlined,
+  CommentOutlined,
   BellOutlined,
   ReloadOutlined,
   UpOutlined,
@@ -126,6 +127,7 @@ function GlobalLayout({ children }) {
         children: [
           { key: '/admin/users', icon: <UserOutlined />, label: '用户管理', onClick: () => handleSidebarMenuClick('/admin/users') },
           { key: '/admin/pictures', icon: <PictureOutlined />, label: '图片管理', onClick: () => handleSidebarMenuClick('/admin/pictures') },
+          { key: '/admin/comments', icon: <CommentOutlined />, label: '评论审核', onClick: () => handleSidebarMenuClick('/admin/comments') },
           { key: '/admin/spaces', icon: <AppstoreOutlined />, label: '空间管理', onClick: () => handleSidebarMenuClick('/admin/spaces') },
           { key: '/admin/teams', icon: <TeamOutlined />, label: '团队管理', onClick: () => handleSidebarMenuClick('/admin/teams') },
           { key: '/admin/ai', icon: <RobotOutlined />, label: 'AI 管理', onClick: () => handleSidebarMenuClick('/admin/ai') },
@@ -145,6 +147,7 @@ function GlobalLayout({ children }) {
   const adminMenuItems = useMemo(() => [
     { key: 'user-management', icon: <UserOutlined />, label: '用户管理', onClick: () => navigate('/admin/users') },
     { key: 'picture-management', icon: <PictureOutlined />, label: '图片管理', onClick: () => navigate('/admin/pictures') },
+    { key: 'comment-management', icon: <CommentOutlined />, label: '评论审核', onClick: () => navigate('/admin/comments') },
     { key: 'space-management', icon: <AppstoreOutlined />, label: '空间管理', onClick: () => navigate('/admin/spaces') },
     { key: 'team-management', icon: <TeamOutlined />, label: '团队管理', onClick: () => navigate('/admin/teams') },
     { key: 'ai-management', icon: <RobotOutlined />, label: 'AI 管理', onClick: () => navigate('/admin/ai') },

@@ -2,10 +2,12 @@ package hk.ljx.fishpicsbackend.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import hk.ljx.fishpicsbackend.dto.space.CreateSpace;
+import hk.ljx.fishpicsbackend.dto.space.SpaceAdminUpdateRequest;
 import hk.ljx.fishpicsbackend.dto.space.SpacePictureList;
 import hk.ljx.fishpicsbackend.dto.space.SpaceQueryWrapper;
 import hk.ljx.fishpicsbackend.dto.space.UpdateSpace;
 import hk.ljx.fishpicsbackend.entity.Space;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 import hk.ljx.fishpicsbackend.entity.User;
 import hk.ljx.fishpicsbackend.vo.picture.PicturePageVO;
@@ -61,4 +63,24 @@ public interface SpaceService extends IService<Space> {
      * @return QueryWrapper对象
      */
     QueryWrapper<Space> getSpaceQueryWrapper(SpaceQueryWrapper spaceQueryWrapper);
+
+    /**
+     * 管理员分页查看所有空间
+     */
+    IPage<SpaceVO> adminList(SpaceQueryWrapper spaceQueryWrapper, long current, long pageSize);
+
+    /**
+     * 管理员编辑任意空间
+     */
+    Boolean adminUpdate(SpaceAdminUpdateRequest request);
+
+    /**
+     * 管理员删除空间
+     */
+    Boolean adminDelete(Long id);
+
+    /**
+     * 管理员设置空间状态
+     */
+    Boolean adminSetStatus(Long id, Integer status);
 }

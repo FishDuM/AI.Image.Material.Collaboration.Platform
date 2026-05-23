@@ -23,4 +23,6 @@ public interface CommentService extends IService<Comment> {
     void reviewComment(Long commentId, Integer status);
 
     void adminDeleteComment(Long commentId);
+
+    IPage<CommentVO> getAdminCommentPage(CommentQueryRequest req);
 }

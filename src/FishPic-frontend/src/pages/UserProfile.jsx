@@ -29,7 +29,7 @@ import {
   StarOutlined,
   UserOutlined
 } from '@ant-design/icons'
-import {editUser, followUser, getFans, getFollows, getMyCollects, getMyLikes, getMyPosts, getPost, getPostList, getUser, getUserMyself, getUserProfile, uploadAvatar} from '../api'
+import {editUser, followUser, getFans, getFollows, getMyCollects, getMyLikes, getMyPosts, getPost, getPostList, getUser, getUserMyself, getUserProfile, updatePrivacy, uploadAvatar} from '../api'
 import {AuthContext} from '../context/AuthContext'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { useFetchWithCleanup } from '../hooks/useRequestUtils'
@@ -61,6 +61,12 @@ function UserProfile() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(null)
   const [showPasswordSection, setShowPasswordSection] = useState(false)
+  const [privacySettings, setPrivacySettings] = useState({
+    isPrivateFollows: 0,
+    isPrivatePostCollect: 0,
+    isPrivateLikes: 0,
+    isPrivateFans: 0,
+  })
   const hasFetchedRef = useRef(false)
 
   const [tabState, setTabState] = useState({
@@ -155,6 +161,12 @@ function UserProfile() {
       if (isOwnProfile) {
         const data = await getUserMyself()
         setUserData(data)
+        setPrivacySettings({
+          isPrivateFollows: data.isPrivateFollows ?? 0,
+          isPrivatePostCollect: data.isPrivatePostCollect ?? 0,
+          isPrivateLikes: data.isPrivateLikes ?? 0,
+          isPrivateFans: data.isPrivateFans ?? 0,
+        })
         if (userInfo) {
           const updatedUserInfo = { ...userInfo, ...data }
           authLogin(updatedUserInfo)
@@ -403,7 +415,11 @@ function UserProfile() {
           password: '',
           email: userData.email,
           phone: userData.phone,
-          nickname: userData.nickname
+          nickname: userData.nickname,
+          isPrivateFollows: privacySettings.isPrivateFollows,
+          isPrivatePostCollect: privacySettings.isPrivatePostCollect,
+          isPrivateLikes: privacySettings.isPrivateLikes,
+          isPrivateFans: privacySettings.isPrivateFans,
         })
       })
     }
@@ -424,10 +440,16 @@ function UserProfile() {
         submitData.originalPassword = values.originalPassword
       }
       await editUser(submitData)
+      await updatePrivacy({
+        isPrivateFollows: values.isPrivateFollows,
+        isPrivatePostCollect: values.isPrivatePostCollect,
+        isPrivateLikes: values.isPrivateLikes,
+        isPrivateFans: values.isPrivateFans,
+      })
       editForm.resetFields()
       message.success('修改成功')
       setEditModalVisible(false)
-      
+
       await refreshUserInfo()
     } catch (error) {
       if (error !== 'cancelled') {
@@ -834,11 +856,46 @@ function UserProfile() {
                 { pattern: /^1[3-9]\d{9}$/, message: '请输入有效的手机号' }
               ]}
             >
-              <Input 
-                prefix={<PhoneOutlined />} 
+              <Input
+                prefix={<PhoneOutlined />}
                 placeholder="请输入手机号"
               />
             </Form.Item>
+
+            <Form.Item name="isPrivateFollows" hidden><Input /></Form.Item>
+            <Form.Item name="isPrivatePostCollect" hidden><Input /></Form.Item>
+            <Form.Item name="isPrivateLikes" hidden><Input /></Form.Item>
+            <Form.Item name="isPrivateFans" hidden><Input /></Form.Item>
+
+            <div className="privacy-section">
+              <div className="privacy-section-header">
+                <span className="privacy-section-label">
+                  <LockOutlined className="privacy-section-icon" />
+                  隐私设置
+                </span>
+              </div>
+              <div className="privacy-section-items">
+                {[
+                  { key: 'isPrivateFollows', label: '关注列表不公开' },
+                  { key: 'isPrivatePostCollect', label: '收藏列表不公开' },
+                  { key: 'isPrivateLikes', label: '点赞列表不公开' },
+                  { key: 'isPrivateFans', label: '粉丝列表不公开' },
+                ].map(({ key, label }) => (
+                  <div key={key} className="privacy-item">
+                    <span>{label}</span>
+                    <Switch
+                      size="small"
+                      checked={privacySettings[key] === 1}
+                      onChange={(checked) => {
+                        const val = checked ? 1 : 0
+                        setPrivacySettings(prev => ({ ...prev, [key]: val }))
+                        editForm.setFieldsValue({ [key]: val })
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
           </Form>
         </Modal>
       </>

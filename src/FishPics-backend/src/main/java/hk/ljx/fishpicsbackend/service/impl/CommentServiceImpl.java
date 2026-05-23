@@ -240,6 +240,79 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment>
         }
     }
 
+    @Override
+    public IPage<CommentVO> getAdminCommentPage(CommentQueryRequest req) {
+        Page<Comment> page = new Page<>(req.getCurrent(), req.getPageSize());
+        LambdaQueryWrapper<Comment> wrapper = new LambdaQueryWrapper<>();
+        wrapper.isNull(Comment::getParentId)
+                .orderByDesc(Comment::getCreateTime);
+
+        if (req.getStatus() != null) {
+            wrapper.eq(Comment::getStatus, req.getStatus());
+        }
+
+        IPage<Comment> commentPage = baseMapper.selectPage(page, wrapper);
+
+        // 收集一级评论ID，批量查询回复
+        List<Long> parentIds = commentPage.getRecords().stream()
+                .map(Comment::getId)
+                .collect(Collectors.toList());
+
+        final List<Comment> allReplies;
+        if (CollUtil.isNotEmpty(parentIds)) {
+            allReplies = baseMapper.selectList(new LambdaQueryWrapper<Comment>()
+                    .in(Comment::getParentId, parentIds)
+                    .orderByAsc(Comment::getCreateTime));
+        } else {
+            allReplies = Collections.emptyList();
+        }
+
+        // 收集帖子ID，批量查帖子
+        Set<Long> postIds = new HashSet<>();
+        commentPage.getRecords().forEach(c -> postIds.add(c.getPostId()));
+        allReplies.forEach(r -> postIds.add(r.getPostId()));
+
+        final Map<Long, Post> postMap;
+        if (CollUtil.isNotEmpty(postIds)) {
+            postMap = postService.listByIds(postIds).stream()
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toMap(Post::getId, p -> p));
+        } else {
+            postMap = Collections.emptyMap();
+        }
+
+        // 收集所有 userId 和 toUserId
+        Set<Long> userIds = new HashSet<>();
+        commentPage.getRecords().forEach(c -> userIds.add(c.getUserId()));
+        allReplies.forEach(r -> {
+            userIds.add(r.getUserId());
+            if (r.getToUserId() != null) {
+                userIds.add(r.getToUserId().longValue());
+            }
+        });
+
+        final Map<Long, User> userMap;
+        if (CollUtil.isNotEmpty(userIds)) {
+            userMap = userService.listByIds(userIds).stream()
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toMap(User::getId, u -> u));
+        } else {
+            userMap = Collections.emptyMap();
+        }
+
+        final Map<Long, List<Comment>> replyMap = allReplies.stream()
+                .collect(Collectors.groupingBy(Comment::getParentId));
+
+        return commentPage.convert(comment -> {
+            CommentVO vo = toVO(comment, replyMap, userMap);
+            Post post = postMap.get(comment.getPostId());
+            if (post != null) {
+                vo.setPostTitle(post.getTitle());
+            }
+            return vo;
+        });
+    }
+
     private CommentVO toVO(Comment comment, Map<Long, List<Comment>> replyMap, Map<Long, User> userMap) {
         CommentVO vo = new CommentVO();
         BeanUtil.copyProperties(comment, vo);

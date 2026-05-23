@@ -61,6 +61,11 @@ public class Space implements Serializable {
      */
     private Long size;
 
+    /**
+     * 0=禁用, 1=正常
+     */
+    private Integer status;
+
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }

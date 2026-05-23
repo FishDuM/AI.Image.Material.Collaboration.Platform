@@ -53,6 +53,16 @@ public class CommentVO {
     private String toUsername;
 
     /**
+     * 所属帖子ID
+     */
+    private Long postId;
+
+    /**
+     * 所属帖子标题
+     */
+    private String postTitle;
+
+    /**
      * 状态 1-正常 0-禁用 2-待审核
      */
     private Integer status;

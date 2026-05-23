@@ -20,6 +20,11 @@ public class CommentQueryRequest extends PageRequest implements Serializable {
      */
     private Long postId;
 
+    /**
+     * 状态筛选 (管理员用)
+     */
+    private Integer status;
+
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }

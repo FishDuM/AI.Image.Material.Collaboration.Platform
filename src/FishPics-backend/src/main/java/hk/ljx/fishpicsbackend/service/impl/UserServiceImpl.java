@@ -332,6 +332,18 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     }
 
     @Override
+    public Boolean updatePrivacy(UserPrivacyRequest request) {
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
+        BeanUtil.copyProperties(request, user, CopyOptions.create().ignoreNullValue());
+        boolean result = this.updateById(user);
+        ExcUtils.throwIfTrue(!result, ExceptionCode.DATABASE_ERROR, "更新失败");
+        stringRedisTemplate.opsForValue().set(RedisConstants.getUserInfoKey(user.getId()), JSONUtil.toJsonStr(user), 1,
+                TimeUnit.DAYS);
+        return true;
+    }
+
+    @Override
     public Boolean isMe(Long id) {
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);

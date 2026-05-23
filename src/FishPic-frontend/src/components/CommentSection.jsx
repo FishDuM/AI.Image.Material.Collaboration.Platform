@@ -202,7 +202,7 @@ export default function CommentSection({ postId, onCommentCountChange, totalComm
   const { message } = App.useApp()
   const { userInfo } = useContext(AuthContext)
   const currentUserId = userInfo?.id
-  const isAdmin = userInfo?.role === 'ADMIN'
+  const isAdmin = userInfo?.role === 'admin'
 
   const [comments, setComments] = useState([])
   const [total, setTotal] = useState(0)

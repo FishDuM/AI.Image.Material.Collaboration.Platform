@@ -2,6 +2,7 @@ package hk.ljx.fishpicsbackend.controller;
 
 import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
@@ -13,6 +14,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;
+
+import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
 @RestController
 @RequestMapping("/comment")
@@ -41,6 +44,13 @@ public class CommentController {
         return ResUtils.success(true);
     }
 
+    @AuthCheck(role = ADMIN)
+    @PostMapping("/admin/list")
+    public Response<IPage<CommentVO>> adminList(@RequestBody CommentQueryRequest req) {
+        return ResUtils.success(commentService.getAdminCommentPage(req));
+    }
+
+    @AuthCheck(role = ADMIN)
     @PostMapping("/review")
     public Response<Boolean> reviewComment(@RequestParam("id") Long id, @RequestParam("status") Integer status) {
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), "评论ID不能为空");
@@ -49,6 +59,7 @@ public class CommentController {
         return ResUtils.success(true);
     }
 
+    @AuthCheck(role = ADMIN)
     @PostMapping("/adminDelete")
     public Response<Boolean> adminDeleteComment(@RequestParam("id") Long id) {
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), "评论ID不能为空");

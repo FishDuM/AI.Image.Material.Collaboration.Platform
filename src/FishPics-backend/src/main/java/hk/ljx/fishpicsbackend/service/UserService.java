@@ -100,4 +100,11 @@ public interface UserService extends IService<User> {
      * @return 用户公开主页VO
      */
     UserPublicProfileVO getUserProfile(Long userId);
+
+    /**
+     * 修改隐私设置
+     * @param request 隐私设置请求
+     * @return 修改结果
+     */
+    Boolean updatePrivacy(UserPrivacyRequest request);
 }

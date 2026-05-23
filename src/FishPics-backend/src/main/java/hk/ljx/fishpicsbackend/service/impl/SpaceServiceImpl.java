@@ -1,15 +1,19 @@
 package hk.ljx.fishpicsbackend.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.dto.space.CreateSpace;
+import hk.ljx.fishpicsbackend.dto.space.SpaceAdminUpdateRequest;
 import hk.ljx.fishpicsbackend.dto.space.SpacePictureList;
 import hk.ljx.fishpicsbackend.dto.space.SpaceQueryWrapper;
 import hk.ljx.fishpicsbackend.dto.space.UpdateSpace;
@@ -378,5 +382,98 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         queryWrapper.eq(!ObjectUtil.isEmpty(name), "name", name);
         queryWrapper.orderBy(ObjectUtil.isNotNull(sortField), sortOrder.equals("ascend"), sortField);
         return queryWrapper;
+    }
+
+    @Override
+    public IPage<SpaceVO> adminList(SpaceQueryWrapper spaceQueryWrapper, long current, long pageSize) {
+        QueryWrapper<Space> queryWrapper = getSpaceQueryWrapper(spaceQueryWrapper);
+        Page<Space> page = new Page<>(current, pageSize);
+        Page<Space> spacePage = spaceMapper.selectPage(page, queryWrapper);
+        List<Space> spaceList = spacePage.getRecords();
+        if (CollUtil.isEmpty(spaceList)) {
+            Page<SpaceVO> emptyPage = new Page<>(current, pageSize, spacePage.getTotal());
+            emptyPage.setRecords(new ArrayList<>());
+            return emptyPage;
+        }
+        Set<Long> allUserIds = new HashSet<>();
+        for (Space space : spaceList) {
+            if (space.getUserId() != null) allUserIds.add(space.getUserId());
+            parseTeamUserIds(space.getTeamUsersId()).forEach(allUserIds::add);
+        }
+        Map<Long, User> userMap = new HashMap<>();
+        if (!allUserIds.isEmpty()) {
+            userMap = userMapper.selectBatchIds(allUserIds)
+                    .stream().collect(Collectors.toMap(User::getId, u -> u));
+        }
+        List<Long> spaceIds = spaceList.stream().map(Space::getId).collect(Collectors.toList());
+        Map<Long, Long> pictureCountMap = new HashMap<>();
+        List<Map<String, Object>> countResult = pictureService.listMaps(
+                new QueryWrapper<Picture>()
+                        .select("space_id", "COUNT(*) as cnt")
+                        .in("space_id", spaceIds)
+                        .groupBy("space_id"));
+        for (Map<String, Object> row : countResult) {
+            Long sid = ((Number) row.get("space_id")).longValue();
+            Long cnt = ((Number) row.get("cnt")).longValue();
+            pictureCountMap.put(sid, cnt);
+        }
+        List<SpaceVO> voList = new ArrayList<>();
+        for (Space space : spaceList) {
+            SpaceVO vo = new SpaceVO(space);
+            vo.setPictureCount(pictureCountMap.getOrDefault(space.getId(), 0L));
+            User creator = userMap.get(space.getUserId());
+            if (creator != null) {
+                vo.setUserName(creator.getNickname());
+                vo.setUserAvatar(creator.getAvatar());
+            }
+            if (space.getType() != null && space.getType() == 1) {
+                List<Long> memberIds = parseTeamUserIds(space.getTeamUsersId());
+                List<SpaceMemberVO> members = memberIds.stream()
+                        .limit(10)
+                        .map(userMap::get)
+                        .filter(Objects::nonNull)
+                        .map(m -> new SpaceMemberVO(m.getId(), m.getNickname(), m.getAvatar()))
+                        .collect(Collectors.toList());
+                vo.setTeamMembers(members);
+            }
+            voList.add(vo);
+        }
+        Page<SpaceVO> voPage = new Page<>(current, pageSize, spacePage.getTotal());
+        voPage.setRecords(voList);
+        return voPage;
+    }
+
+    @Override
+    public Boolean adminUpdate(SpaceAdminUpdateRequest request) {
+        Long id = request.getId();
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
+        Space space = spaceMapper.selectById(id);
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
+        BeanUtil.copyProperties(request, space, CopyOptions.create().ignoreNullValue());
+        boolean result = this.updateById(space);
+        ExcUtils.throwIfTrue(!result, ExceptionCode.DATABASE_ERROR, "更新失败");
+        return true;
+    }
+
+    @Override
+    public Boolean adminDelete(Long id) {
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
+        Space space = spaceMapper.selectById(id);
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
+        int result = spaceMapper.deleteById(id);
+        ExcUtils.throwIfTrue(result <= 0, ExceptionCode.DATABASE_ERROR, "删除失败");
+        return true;
+    }
+
+    @Override
+    public Boolean adminSetStatus(Long id, Integer status) {
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
+        ExcUtils.throwIfTrue(status == null, ExceptionCode.PARAMETER_ERROR, "状态不能为空");
+        Space space = spaceMapper.selectById(id);
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
+        space.setStatus(status);
+        boolean result = this.updateById(space);
+        ExcUtils.throwIfTrue(!result, ExceptionCode.DATABASE_ERROR, "更新失败");
+        return true;
     }
 }

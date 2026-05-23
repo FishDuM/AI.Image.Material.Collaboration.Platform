@@ -218,6 +218,11 @@ export const getSpace = (id) => api.get('/space/getSpace', { params: { id } })
 
 export const spaceListPicture = (data, config = {}) => api.post('/space/pictureList', data, config)
 
+export const adminListSpace = (params) => api.get('/space/admin/list', { params })
+export const adminUpdateSpace = (data) => api.post('/space/admin/update', data)
+export const adminDeleteSpace = (id) => api.post('/space/admin/delete', { id })
+export const adminSetSpaceStatus = (id, status) => api.post('/space/admin/setStatus', { id, status })
+
 export const postPictureList = (data, config = {}) => api.post('/post/pictureList', data, config)
 
 export const deletePicture = (ids) => api.delete('/picture/delete', { data: { ids } })
@@ -240,6 +245,8 @@ export const followUser = (userId) => api.post('/user/follow', { userId })
 
 export const getUserProfile = (userId, config = {}) => api.get('/user/profile', { params: { userId }, ...config })
 
+export const updatePrivacy = (data) => api.post('/user/privacy', data)
+
 export const getFans = (params, config = {}) => api.get('/user/fans', { params, ...config })
 
 export const getFollows = (params, config = {}) => api.get('/user/follows', { params, ...config })
@@ -255,6 +262,8 @@ export const deleteComment = (id) => api.post('/comment/delete', null, { params:
 export const reviewComment = (id, status) => api.post('/comment/review', null, { params: { id, status } })
 
 export const adminDeleteComment = (id) => api.post('/comment/adminDelete', null, { params: { id } })
+
+export const getAdminCommentList = (data) => api.post('/comment/admin/list', data)
 
 export const uploadPicture = (formData, targetSpaceId) => {
   const fd = new FormData()

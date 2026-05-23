@@ -115,6 +115,12 @@ public class UserController {
         return ResUtils.success();
     }
 
+    @PostMapping("/privacy")
+    public Response<Boolean> updatePrivacy(@RequestBody UserPrivacyRequest request) {
+        ExcUtils.throwIfTrue(ObjectUtil.isNull(request), ExceptionCode.PARAMETER_ERROR);
+        return ResUtils.success(userService.updatePrivacy(request));
+    }
+
     @PostMapping("/follow")
     public Response<Boolean> follow(@RequestBody UserIdRequest userIdRequest) {
         ExcUtils.throwIfTrue(userIdRequest == null || userIdRequest.getUserId() == null,

@@ -508,6 +508,51 @@
   margin-bottom: 0;
 }
 
+.privacy-section {
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--border-color);
+}
+
+.privacy-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.privacy-section-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-base);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.privacy-section-icon {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+}
+
+.privacy-section-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.privacy-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
 @media (max-width: 768px) {
   .profile-nickname-row,
   .profile-stats-row,

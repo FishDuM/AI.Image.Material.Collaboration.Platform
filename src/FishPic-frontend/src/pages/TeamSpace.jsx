@@ -86,10 +86,9 @@ function TeamSpace() {
     const container = listRef.current
     if (!container) return
     const handler = (e) => {
-      const item = e.target.closest('.ts-list-item')
-      if (!item || item.scrollWidth <= item.clientWidth) return
+      if (container.scrollWidth <= container.clientWidth) return
       e.preventDefault()
-      item.scrollLeft += e.deltaY
+      container.scrollLeft += e.deltaY
     }
     container.addEventListener('wheel', handler, { passive: false })
     return () => container.removeEventListener('wheel', handler)

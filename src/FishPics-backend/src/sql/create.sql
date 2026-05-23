@@ -129,7 +129,8 @@ create table space
     storage_size  bigint  default 536870912 not null comment '空间存储大小(Byte)：512MB-5G-10G-30G-50G',
     level         tinyint default 0      not null comment '空间级别：普通-VIP-SVIP',
     name          varchar(246)           not null comment '空间名',
-    size          bigint                 null comment '现在使用大小'
+    size          bigint                 null comment '现在使用大小',
+    status        tinyint  default 1      not null comment '0=禁用, 1=正常'
 )
     comment '空间表';
 

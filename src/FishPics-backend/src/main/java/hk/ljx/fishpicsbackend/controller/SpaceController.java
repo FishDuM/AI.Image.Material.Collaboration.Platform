@@ -6,8 +6,12 @@ import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
 import hk.ljx.fishpicsbackend.dto.space.CreateSpace;
+import hk.ljx.fishpicsbackend.dto.space.SpaceAdminUpdateRequest;
 import hk.ljx.fishpicsbackend.dto.space.SpacePictureList;
+import hk.ljx.fishpicsbackend.dto.space.SpaceQueryWrapper;
 import hk.ljx.fishpicsbackend.dto.space.UpdateSpace;
 import hk.ljx.fishpicsbackend.entity.User;
 import hk.ljx.fishpicsbackend.service.SpaceService;
@@ -18,6 +22,9 @@ import org.springframework.web.bind.annotation.*;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
+import java.util.Map;
+
+import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
 /**
  * 空间控制器，提供空间管理的REST API
@@ -89,5 +96,41 @@ public class SpaceController {
     public Response<PicturePageVO> pictureList(@RequestBody SpacePictureList spacePictureList) {
         ExcUtils.throwIfTrue(spacePictureList == null, ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
         return ResUtils.success(spaceService.pictureList(spacePictureList));
+    }
+
+    @AuthCheck(role = ADMIN)
+    @GetMapping("/admin/list")
+    public Response<IPage<SpaceVO>> adminList(@RequestParam(defaultValue = "1") int current,
+                                              @RequestParam(defaultValue = "20") int pageSize,
+                                              @RequestParam(required = false) String name,
+                                              @RequestParam(required = false) Integer type) {
+        SpaceQueryWrapper wrapper = new SpaceQueryWrapper();
+        wrapper.setName(name);
+        wrapper.setType(type);
+        return ResUtils.success(spaceService.adminList(wrapper, current, pageSize));
+    }
+
+    @AuthCheck(role = ADMIN)
+    @PostMapping("/admin/update")
+    public Response<Boolean> adminUpdate(@RequestBody SpaceAdminUpdateRequest request) {
+        ExcUtils.throwIfTrue(ObjectUtil.isNull(request), ExceptionCode.PARAMETER_ERROR);
+        return ResUtils.success(spaceService.adminUpdate(request));
+    }
+
+    @AuthCheck(role = ADMIN)
+    @PostMapping("/admin/delete")
+    public Response<Boolean> adminDelete(@RequestBody Map<String, Long> body) {
+        Long id = body.get("id");
+        ExcUtils.throwIfTrue(id == null, ExceptionCode.PARAMETER_ERROR);
+        return ResUtils.success(spaceService.adminDelete(id));
+    }
+
+    @AuthCheck(role = ADMIN)
+    @PostMapping("/admin/setStatus")
+    public Response<Boolean> adminSetStatus(@RequestBody Map<String, Object> body) {
+        Long id = body.get("id") != null ? ((Number) body.get("id")).longValue() : null;
+        Integer status = body.get("status") != null ? ((Number) body.get("status")).intValue() : null;
+        ExcUtils.throwIfTrue(id == null || status == null, ExceptionCode.PARAMETER_ERROR);
+        return ResUtils.success(spaceService.adminSetStatus(id, status));
     }
 }

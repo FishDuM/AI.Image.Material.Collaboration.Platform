@@ -1,12 +1,10 @@
 package hk.ljx.fishpicsbackend.vo.user;
 
-import hk.ljx.fishpicsbackend.vo.post.PostListVO;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.Date;
-import java.util.List;
 
 @Data
 @AllArgsConstructor
@@ -49,4 +47,24 @@ public class UserMessageVO {
      * 创建时间
      */
     private Date createTime;
+
+    /**
+     * 关注列表可见性 (0=公开, 1=私密)
+     */
+    private Integer isPrivateFollows;
+
+    /**
+     * 收藏列表可见性 (0=公开, 1=私密)
+     */
+    private Integer isPrivatePostCollect;
+
+    /**
+     * 点赞列表可见性 (0=公开, 1=私密)
+     */
+    private Integer isPrivateLikes;
+
+    /**
+     * 粉丝列表可见性 (0=公开, 1=私密)
+     */
+    private Integer isPrivateFans;
 }
