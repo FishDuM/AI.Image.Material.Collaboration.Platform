@@ -139,10 +139,9 @@ function UserProfile() {
 
   const fetchUserInfo = async () => {
     try {
-      const signal = createSignal()
-      const data = await getUserMyself({ signal })
+      const data = await getUserMyself()
       setUserData(data)
-      
+
       if (userInfo) {
         const updatedUserInfo = { ...userInfo, ...data }
         authLogin(updatedUserInfo)
@@ -155,10 +154,9 @@ function UserProfile() {
 
   const refreshUserInfo = async () => {
     try {
-      const signal = createSignal()
-      const data = await getUser({ signal })
+      const data = await getUser()
       setUserData((prev) => ({ ...prev, ...data }))
-      
+
       if (userInfo) {
         const updatedUserInfo = { ...userInfo, ...data }
         authLogin(updatedUserInfo)

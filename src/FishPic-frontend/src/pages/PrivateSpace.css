@@ -252,7 +252,8 @@
 .private-space-masonry-item .ant-image {
   display: block;
   width: 100%;
-  height: 100%;
+  max-height: 350px;
+  overflow: hidden;
   position: relative;
 }
 
@@ -295,7 +296,12 @@
   display: block !important;
 }
 
-.private-space-masonry-image img { width: 100%; display: block; }
+.private-space-masonry-image img {
+  width: 100%;
+  max-height: 350px;
+  object-fit: cover;
+  display: block;
+}
 
 .private-space-loading {
   display: flex;
@@ -871,4 +877,12 @@
   .edit-picture-modal .edit-picture-layout { flex-direction: column; overflow: visible; }
   .edit-picture-modal .edit-picture-left { flex: none !important; max-width: 100% !important; width: 100% !important; height: 45vh !important; max-height: 45vh !important; min-height: 45vh !important; }
   .edit-picture-modal .edit-picture-right { flex: 1; height: auto !important; overflow-y: auto; max-height: 55vh; padding: var(--space-4); }
+
+  .private-space-masonry-item .ant-image {
+    max-height: 250px;
+  }
+
+  .private-space-masonry-image img {
+    max-height: 250px;
+  }
 }
