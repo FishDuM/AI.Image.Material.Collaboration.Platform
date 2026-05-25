@@ -192,11 +192,6 @@
   width: 100% !important;
 }
 
-.carousel-wrapper-coverflow > .carousel-arrow-btn,
-.carousel-wrapper-coverflow > .carousel-counter-badge {
-  display: none !important;
-}
-
 .coverflow-container {
   position: relative;
   width: 100%;
@@ -246,46 +241,6 @@
   transform-origin: right center;
   transform: scale(0.52);
   filter: brightness(0.4) saturate(0.75);
-}
-
-.coverflow-arrow {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 10;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-full);
-  border: none;
-  background: rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(8px);
-  color: #fff;
-  font-size: 20px;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0;
-  transition: all var(--duration-normal) var(--ease-out);
-  min-width: 44px;
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.coverflow-slide-active:hover .coverflow-arrow {
-  opacity: 1;
-}
-
-.coverflow-arrow:hover {
-  background: rgba(0, 0, 0, 0.55);
-}
-
-.coverflow-arrow-left {
-  left: 12px;
-}
-
-.coverflow-arrow-right {
-  right: 12px;
 }
 
 .coverflow-image {

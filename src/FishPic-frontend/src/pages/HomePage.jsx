@@ -184,12 +184,6 @@ function HomePage() {
                         onLoad={() => setImgLoaded(prev => ({ ...prev, [idx]: true }))}
                         onError={(e) => { e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwMCIgaGVpZ2h0PSI1MDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjEyMDAiIGhlaWdodD0iNTAwIiBmaWxsPSIjMWYxZjFmIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJhcmlhbCIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzZiNmI2YiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPua2ieWPiuWfuuinpuWNoOe6qTwvdGV4dD48L3N2Zz4='; setImgLoaded(prev => ({ ...prev, [idx]: true })) }}
                       />
-                      {isActive && marqueeImages.length > 1 && (
-                        <>
-                          <button type="button" className="coverflow-arrow coverflow-arrow-left" onClick={(e) => { e.stopPropagation(); handleCoverflowPrev() }}>&lsaquo;</button>
-                          <button type="button" className="coverflow-arrow coverflow-arrow-right" onClick={(e) => { e.stopPropagation(); handleCoverflowNext() }}>&rsaquo;</button>
-                        </>
-                      )}
                     </div>
                   )
                 })}

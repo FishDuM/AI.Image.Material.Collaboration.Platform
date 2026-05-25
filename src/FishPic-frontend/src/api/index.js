@@ -24,7 +24,7 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = token
     }
-    if (config.noDedup) {
+    if (!config.dedup) {
       return config
     }
     const key = getRequestKey(config)
@@ -81,7 +81,7 @@ api.interceptors.response.use(
   (error) => {
     cleanupDedup(error.config)
     if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED' || axios.isCancel(error)) {
-      return new Promise(() => {})
+      return Promise.reject(error)
     }
     if (error.response?.status === 401) {
       handleAuthExpired()

@@ -1,5 +1,6 @@
 import { createContext, useState, useEffect } from 'react'
 import { getUserInfo, saveUserInfo, saveToken, getToken, clearAuth } from '../utils/storage'
+import { getUser } from '../api'
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const AuthContext = createContext(null)
@@ -13,14 +14,55 @@ export function AuthProvider({ children }) {
     const token = getToken()
     return !!(token && getUserInfo())
   })
+  const [authLoading, setAuthLoading] = useState(() => !!getToken())
 
   useEffect(() => {
     const handleAuthExpired = () => {
       setUserInfo(null)
       setIsAuthenticated(false)
+      setAuthLoading(false)
     }
     window.addEventListener('auth:expired', handleAuthExpired)
     return () => window.removeEventListener('auth:expired', handleAuthExpired)
+  }, [])
+
+  useEffect(() => {
+    let ignore = false
+
+    const verifyLoginState = async () => {
+      const token = getToken()
+      if (!token) {
+        clearAuth()
+        setUserInfo(null)
+        setIsAuthenticated(false)
+        setAuthLoading(false)
+        return
+      }
+
+      setAuthLoading(true)
+      try {
+        const latestUserInfo = await getUser({ noDedup: true })
+        if (ignore) return
+        saveUserInfo(latestUserInfo)
+        setUserInfo(latestUserInfo)
+        setIsAuthenticated(true)
+      } catch {
+        if (ignore) return
+        clearAuth()
+        setUserInfo(null)
+        setIsAuthenticated(false)
+      } finally {
+        if (!ignore) {
+          setAuthLoading(false)
+        }
+      }
+    }
+
+    verifyLoginState()
+
+    return () => {
+      ignore = true
+    }
   }, [])
 
   const login = (data) => {
@@ -40,6 +82,7 @@ export function AuthProvider({ children }) {
     clearAuth()
     setUserInfo(null)
     setIsAuthenticated(false)
+    setAuthLoading(false)
   }
 
   const updateUserInfo = (updater) => {
@@ -56,7 +99,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ userInfo, isAuthenticated, login, logout, updateUserInfo }}>
+    <AuthContext.Provider value={{ userInfo, isAuthenticated, authLoading, login, logout, updateUserInfo }}>
       {children}
     </AuthContext.Provider>
   )

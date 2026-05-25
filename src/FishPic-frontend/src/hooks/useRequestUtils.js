@@ -14,7 +14,16 @@ export function useFetchWithCleanup() {
     return controller.signal
   }, [])
 
-  return { createSignal }
+  const abort = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort()
+      abortRef.current = null
+    }
+  }, [])
+
+  useEffect(() => abort, [abort])
+
+  return { createSignal, abort }
 }
 
 const systemTypesCache = {
