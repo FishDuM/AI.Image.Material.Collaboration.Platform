@@ -2,9 +2,9 @@ package hk.ljx.fishpicsbackend.mapper;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import hk.ljx.fishpicsbackend.entity.UserFans;
+import hk.ljx.fishpicsbackend.user.UserFans;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import hk.ljx.fishpicsbackend.vo.user.FollowUserVO;
+import hk.ljx.fishpicsbackend.user.vo.FollowUserVO;
 import org.apache.ibatis.annotations.Param;
 
 /**

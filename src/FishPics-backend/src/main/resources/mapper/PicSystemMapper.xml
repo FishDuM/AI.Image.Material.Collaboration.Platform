@@ -4,7 +4,7 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="hk.ljx.fishpicsbackend.mapper.PicSystemMapper">
 
-    <resultMap id="BaseResultMap" type="hk.ljx.fishpicsbackend.entity.PicSystem">
+    <resultMap id="BaseResultMap" type="hk.ljx.fishpicsbackend.system.PicSystem">
             <id property="id" column="id" />
             <result property="syskey" column="syskey" />
             <result property="sysvalue" column="sysvalue" />

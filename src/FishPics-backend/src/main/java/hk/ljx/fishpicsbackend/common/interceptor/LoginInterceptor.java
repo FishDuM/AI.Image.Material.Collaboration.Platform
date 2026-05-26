@@ -1,7 +1,7 @@
 package hk.ljx.fishpicsbackend.common.interceptor;
 
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
-import hk.ljx.fishpicsbackend.entity.User;
+import hk.ljx.fishpicsbackend.user.User;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.servlet.HandlerInterceptor;

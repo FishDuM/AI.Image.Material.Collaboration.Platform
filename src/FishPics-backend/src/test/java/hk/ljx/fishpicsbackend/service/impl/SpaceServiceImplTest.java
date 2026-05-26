@@ -1,15 +1,15 @@
 package hk.ljx.fishpicsbackend.service.impl;
+import hk.ljx.fishpicsbackend.space.SpaceServiceImpl;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
-import hk.ljx.fishpicsbackend.dto.space.CreateSpace;
-import hk.ljx.fishpicsbackend.dto.space.UpdateSpace;
-import hk.ljx.fishpicsbackend.entity.Space;
-import hk.ljx.fishpicsbackend.entity.User;
+import hk.ljx.fishpicsbackend.space.dto.CreateSpace;
+import hk.ljx.fishpicsbackend.space.dto.UpdateSpace;
+import hk.ljx.fishpicsbackend.space.Space;
+import hk.ljx.fishpicsbackend.user.User;
 import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
-import hk.ljx.fishpicsbackend.service.PictureService;
+import hk.ljx.fishpicsbackend.picture.PictureService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;

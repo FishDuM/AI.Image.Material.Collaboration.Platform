@@ -1,6 +1,6 @@
 package hk.ljx.fishpicsbackend.common.utils;
 
-import hk.ljx.fishpicsbackend.entity.User;
+import hk.ljx.fishpicsbackend.user.User;
 
 public class UserHolder {
     private static final ThreadLocal<User> USER_THREAD_LOCAL = new ThreadLocal<>();

@@ -1,15 +1,16 @@
 package hk.ljx.fishpicsbackend.service.impl;
+import hk.ljx.fishpicsbackend.user.UserFansServiceImpl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
-import hk.ljx.fishpicsbackend.entity.User;
-import hk.ljx.fishpicsbackend.entity.UserFans;
+import hk.ljx.fishpicsbackend.user.User;
+import hk.ljx.fishpicsbackend.user.UserFans;
 import hk.ljx.fishpicsbackend.mapper.UserFansMapper;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
-import hk.ljx.fishpicsbackend.vo.user.FollowUserVO;
+import hk.ljx.fishpicsbackend.user.vo.FollowUserVO;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;

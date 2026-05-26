@@ -50,7 +50,12 @@ knife4j:
         group-name: 开发测试
         api-rule: package
         api-rule-resources:
-          - hk.ljx.fishpicsbackend.controller
+          - hk.ljx.fishpicsbackend.user
+          - hk.ljx.fishpicsbackend.post
+          - hk.ljx.fishpicsbackend.picture
+          - hk.ljx.fishpicsbackend.comment
+          - hk.ljx.fishpicsbackend.space
+          - hk.ljx.fishpicsbackend.system
 
 # 腾讯云 COS 配置
 #cos:
