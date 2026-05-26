@@ -2,6 +2,7 @@ server:
   port: 8080
   servlet:
     context-path: /api
+
 spring:
   application:
     name: FishPic-backend
@@ -22,19 +23,20 @@ spring:
       host: # redis 地址
       database: 0
       port: 6379
-# Spring AI Alibaba
-#  ai:
-#    dashscope:
-#      api-key:
-#      base-url: https://dashscope.aliyuncs.com
-#      chat:
-#        options:
-#          model: qwen-vl-plus
-#      image:
-#        options:
-#          model: wanx-v1
   profiles: # 使用本地环境配置文件
     active: local
+# SpringAIAlibaba 配置
+#  ai:
+#    dashscope:
+#      api-key: # 阿里云灵积 api-key
+
+# 自定义大模型名称配置
+modal:
+  tagModal: qwen-vl-flash # ai 自动打图片标签
+  textModal: qwen3-vl-plus  # ai 自动图片描述
+  baseImageModal: qwen-image-2.0  # ai 基础图片编辑（普通用户）
+  VIPImageModal: qwen-image-2.0-pro # ai VIP高清编辑（专业级）
+
 knife4j:
   enable: true
   openapi:
@@ -49,6 +51,7 @@ knife4j:
         api-rule: package
         api-rule-resources:
           - hk.ljx.fishpicsbackend.controller
+
 # 腾讯云 COS 配置
 #cos:
 #  secretId:
@@ -57,7 +60,7 @@ knife4j:
 #  bucket:
 #  public: true  # 开发true 生产false
 #  url: # 腾讯云图片 url 前缀
-# AI 模型配置
+
 logging:
   level:
     root: info

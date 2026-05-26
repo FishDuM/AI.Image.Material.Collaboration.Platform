@@ -5,7 +5,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-@MapperScan({"hk.ljx.fishpicsbackend.mapper", "hk.ljx.fishpicsbackend.ai.mapper"})
+@MapperScan({"hk.ljx.fishpicsbackend.mapper"})
 public class FishPicsBackendApplication {
 
     public static void main(String[] args) {

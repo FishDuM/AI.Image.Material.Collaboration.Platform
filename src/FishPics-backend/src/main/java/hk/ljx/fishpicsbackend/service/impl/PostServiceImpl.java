@@ -12,8 +12,6 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
-import hk.ljx.fishpicsbackend.common.stream.StreamProducer;
-import hk.ljx.fishpicsbackend.common.stream.StreamConstants;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
 import hk.ljx.fishpicsbackend.dto.base.PageRequest;
@@ -78,9 +76,6 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
     @Resource
     private SpaceService spaceService;
-
-    @Resource
-    private StreamProducer streamProducer;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -367,15 +362,6 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
             }
         }
 
-        // 异步发送社交事件（非阻塞）
-        try {
-            streamProducer.sendSocialEvent(
-                    hk.ljx.fishpicsbackend.common.stream.StreamConstants.EVENT_SOCIAL_LIKE,
-                    userId, post.getUserId(), postId, liked ? "LIKE" : "UNLIKE");
-        } catch (Exception e) {
-            log.warn("Failed to enqueue like notification: {}", e.getMessage());
-        }
-
         return liked;
     }
 
@@ -439,15 +425,6 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
             } finally {
                 stringRedisTemplate.delete(COLLECT_POST_KEY + userId);
             }
-        }
-
-        // 异步发送社交事件（非阻塞）
-        try {
-            streamProducer.sendSocialEvent(
-                    StreamConstants.EVENT_SOCIAL_COLLECT,
-                    userId, post.getUserId(), postId, collected ? "COLLECT" : "UNCOLLECT");
-        } catch (Exception e) {
-            log.warn("Failed to enqueue collect notification: {}", e.getMessage());
         }
 
         return collected;

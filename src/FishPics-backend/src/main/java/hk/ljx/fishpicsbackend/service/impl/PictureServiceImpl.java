@@ -12,8 +12,6 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
-import hk.ljx.fishpicsbackend.ai.service.AiTaskService;
-import hk.ljx.fishpicsbackend.common.stream.StreamProducer;
 import hk.ljx.fishpicsbackend.common.utils.CosService;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.dto.picture.DeleteByIdList;
@@ -66,13 +64,6 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     @Lazy
     @Resource
     private PostService postService;
-
-    @Lazy
-    @Resource
-    private AiTaskService aiTaskService;
-
-    @Resource
-    private StreamProducer streamProducer;
 
     @Override
     public String uploadAvatar(MultipartFile file, Long id) {
@@ -157,18 +148,6 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             picture.setStatus(2);
         }
         ExcUtils.throwIfTrue(pictureMapper.insert(picture) != 1, "上传失败，数据库错误");
-        // 通过 Redis Stream 异步触发 AI 标注（持久化，可重试）
-        try {
-            streamProducer.sendAiTaggingEvent(picture.getId(), picture.getUrl(), userId);
-        } catch (Exception e) {
-            // Stream 不可用时降级为 @Async 直接调用
-            log.error("Failed to send AI tagging event, falling back to @Async", e);
-            try {
-                aiTaskService.triggerTaggingAsync(picture);
-            } catch (Exception ex) {
-                // 非阻塞
-            }
-        }
         return picture;
     }
 
@@ -259,15 +238,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
         int i = pictureMapper.delete(new QueryWrapper<Picture>().in("id", ids));
         ExcUtils.throwIfTrue(i == 0, "删除失败");
-        // 通过 Redis Stream 异步删除 COS 对象（非阻塞 HTTP 响应）
-        List<String> cosKeys = pictureList.stream().map(Picture::getUrl).collect(Collectors.toList());
-        try {
-            streamProducer.sendCosCleanupEvent(cosKeys);
-        } catch (Exception e) {
-            // Stream 不可用时降级为同步删除
-            log.error("Failed to send COS cleanup event, falling back to sync deletion", e);
-            pictureList.forEach(picture -> cosService.deletePictureByUrl(picture.getUrl()));
-        }
+        // 同步删除 COS 对象
+        pictureList.forEach(picture -> cosService.deletePictureByUrl(picture.getUrl()));
         return !count.isEmpty() ? "删除成功，但有" + count.size() + "个图片为帖子封面无法删除" : "删除成功";
     }
 

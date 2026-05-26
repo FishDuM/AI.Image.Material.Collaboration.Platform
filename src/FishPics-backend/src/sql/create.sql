@@ -2,35 +2,6 @@ create database FishPics;
 
 use FishPics;
 
-create table ai_task
-(
-    id          bigint auto_increment comment '主键'
-        primary key,
-    user_id     bigint                             not null comment '提交用户id',
-    type        tinyint                            not null comment '任务类型: 0=自动标注 1=图片编辑 2=图片生成 3=推荐',
-    sub_type    varchar(64)                        null comment '子类型: background_removal, style_transfer, text2image',
-    input_data  text                               null comment '输入参数JSON (图片URL、prompt等)',
-    output_data text                               null comment '输出结果JSON (tags、新图片URL、推荐列表等)',
-    status      tinyint  default 0                 not null comment '状态: 0=处理中 1=成功 2=失败',
-    error_msg   varchar(512)                       null comment '失败原因',
-    picture_id  bigint                             null comment '关联的图片ID (标注/编辑类任务)',
-    create_time datetime default CURRENT_TIMESTAMP not null comment '创建时间',
-    update_time datetime default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间'
-)
-    comment 'AI任务表';
-
-create index ai_task_picture_id_index
-    on ai_task (picture_id);
-
-create index ai_task_status_index
-    on ai_task (status);
-
-create index ai_task_type_index
-    on ai_task (type);
-
-create index ai_task_user_id_index
-    on ai_task (user_id);
-
 create table comment
 (
     id          bigint auto_increment comment '主键'

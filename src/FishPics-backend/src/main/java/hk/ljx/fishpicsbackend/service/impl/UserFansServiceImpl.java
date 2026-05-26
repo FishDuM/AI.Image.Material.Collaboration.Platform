@@ -6,8 +6,6 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
-import hk.ljx.fishpicsbackend.common.stream.StreamProducer;
-import hk.ljx.fishpicsbackend.common.stream.StreamConstants;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
 import hk.ljx.fishpicsbackend.entity.User;
@@ -31,9 +29,6 @@ public class UserFansServiceImpl extends ServiceImpl<UserFansMapper, UserFans>
 
     @Resource
     private UserMapper userMapper;
-
-    @Resource
-    private StreamProducer streamProducer;
 
     @Override
     public boolean follow(Long targetUserId) {
@@ -62,15 +57,6 @@ public class UserFansServiceImpl extends ServiceImpl<UserFansMapper, UserFans>
             userFans.setFanId(currentUserId);
             baseMapper.insert(userFans);
             followed = true;
-        }
-
-        // 异步发送关注事件（非阻塞）
-        try {
-            streamProducer.sendSocialEvent(
-                    StreamConstants.EVENT_SOCIAL_FOLLOW,
-                    currentUserId, targetUserId, null, followed ? "FOLLOW" : "UNFOLLOW");
-        } catch (Exception e) {
-            log.warn("Failed to enqueue follow notification: {}", e.getMessage());
         }
 
         return followed;
