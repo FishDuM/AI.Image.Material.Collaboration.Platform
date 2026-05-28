@@ -6,7 +6,7 @@ import lombok.Getter;
 public enum ExceptionCode {
     SUCCESS(1, "success"),
     PARAMETER_ERROR(40001, "参数错误"),
-    UNAUTHORIZED(40002, "未授权"),
+    UNAUTHORIZED(40002, "无权限"),
     FORBIDDEN(40003, "禁止访问"),
     NOT_FOUND(40004, "资源未找到"),
     NOT_LOGIN(40005, "未登录"),
@@ -14,6 +14,7 @@ public enum ExceptionCode {
     TOO_MANY_REQUESTS(40029, "请求过多"),
     INTERNAL_SERVER_ERROR(50000, "服务器内部错误"),
     DATABASE_ERROR(50003, "数据库错误"),
+    AI_TAG_ERROR(40006, "AI生成图片标签失败"),
     SERVICE_UNAVAILABLE(50001, "服务不可用");
 
     private Integer code;

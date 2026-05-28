@@ -69,8 +69,7 @@ public class CosService {
             "image/jpg",
             "image/gif",
             "image/webp",
-            "image/heic",
-            "image/heif");
+            "image/heic");
 
     /**
      * 文件扩展名 → MIME类型映射，用于浏览器未正确上报contentType时的兜底校验
@@ -83,7 +82,6 @@ public class CosService {
         EXT_TO_MIME.put(".gif", "image/gif");
         EXT_TO_MIME.put(".webp", "image/webp");
         EXT_TO_MIME.put(".heic", "image/heic");
-        EXT_TO_MIME.put(".heif", "image/heif");
     }
 
     // 临时URL有效期：10分钟（生产环境私有读写用）

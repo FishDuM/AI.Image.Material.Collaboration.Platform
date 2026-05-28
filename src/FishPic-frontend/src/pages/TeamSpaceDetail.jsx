@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useContext, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { App as AntApp, Typography, Button, Modal, Form, Input, Pagination, Masonry, Image as AntImage, Spin, Empty, Popconfirm, Progress, Popover, Avatar, Tooltip, Tag } from 'antd'
+import { App as AntApp, Typography, Button, Modal, Form, Input, Select, Pagination, Masonry, Image as AntImage, Spin, Empty, Popconfirm, Progress, Popover, Avatar, Tooltip, Tag } from 'antd'
 import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowLeftOutlined, TeamOutlined, UserOutlined, EditOutlined, CloudUploadOutlined, ArrowUpOutlined } from '@ant-design/icons'
-import { getSpace, updateSpace, spaceListPicture, deletePicture, updatePicture } from '../api'
+import { getSpace, updateSpace, spaceListPicture, deletePicture, updatePicture, getSystemTypes, getPictureEditMessage, aiTags } from '../api'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { ThemeContext } from '../context/ThemeContext'
+import { AuthContext } from '../context/AuthContext'
 import { PAGINATION_LOCALE, PAGE_SIZE, LEVEL_MAP, storageStrokeColor, formatStorage } from '../utils/constants'
 import ImageUploadModal from '../components/shared/ImageUploadModal'
 import UpgradeModal from '../components/shared/UpgradeModal'
@@ -18,7 +19,9 @@ function TeamSpaceDetail() {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const { message, modal } = AntApp.useApp()
+  const [systemTags, setSystemTags] = useState([])
   const { isDarkMode } = useContext(ThemeContext)
+  const { userInfo } = useContext(AuthContext)
 
   const [spaceInfo, setSpaceInfo] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -80,6 +83,12 @@ function TeamSpaceDetail() {
     } finally {
       setPictureLoading(false)
     }
+  }, [])
+
+  useEffect(() => {
+    getSystemTypes().then(result => {
+      if (Array.isArray(result)) setSystemTags(result)
+    }).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -160,6 +169,15 @@ function TeamSpaceDetail() {
     }
     editPictureForm.resetFields()
     setShowEditPicture(true)
+    getPictureEditMessage(selectedIds[0]).then(result => {
+      if (result) {
+        editPictureForm.setFieldsValue({
+          pictureName: result.pictureName || '',
+          introduction: result.introduction || '',
+          tags: Array.isArray(result.tags) ? result.tags : [],
+        })
+      }
+    }).catch(() => {})
   }
 
   const handleUploadSuccess = useCallback(() => {
@@ -174,9 +192,10 @@ function TeamSpaceDetail() {
     setEditPictureLoading(true)
     try {
       await updatePicture({
-        ids: selectedIds[0],
+        id: selectedIds[0],
         pictureName: values.pictureName || undefined,
         introduction: values.introduction || undefined,
+        tags: values.tags || undefined,
       })
       message.success('编辑成功')
       setShowEditPicture(false)
@@ -493,14 +512,36 @@ function TeamSpaceDetail() {
               <Form.Item name="introduction" label="图片介绍">
                 <Input.TextArea placeholder="留空则不修改" maxLength={500} rows={3} allowClear />
               </Form.Item>
+              <Form.Item name="tags" label="标签">
+                <Select mode="multiple" placeholder="请选择标签" allowClear options={systemTags.map(t => ({ label: t, value: t }))} />
+              </Form.Item>
             </Form>
             <div className="edit-picture-right-footer">
-              <Button onClick={() => { setShowEditPicture(false); editPictureForm.resetFields() }}>
-                取消
-              </Button>
-              <Button type="primary" onClick={() => editPictureForm.submit()} loading={editPictureLoading}>
-                保存
-              </Button>
+              <div>
+                {(userInfo?.level === 1 || userInfo?.level === 2) && (
+                  <Button onClick={async () => {
+                    try {
+                      const result = await aiTags(selectedIds[0])
+                      editPictureForm.setFieldsValue({
+                        pictureName: result.pictureName || undefined,
+                        introduction: result.introduction || undefined,
+                        tags: result.tags || [],
+                      })
+                      message.success('AI识别完成')
+                    } catch (e) {
+                      message.error(e.message || 'AI识别失败')
+                    }
+                  }}>AI一键填写</Button>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+                <Button onClick={() => { setShowEditPicture(false); editPictureForm.resetFields() }}>
+                  取消
+                </Button>
+                <Button type="primary" onClick={() => editPictureForm.submit()} loading={editPictureLoading}>
+                  保存
+                </Button>
+              </div>
             </div>
           </div>
         </div>

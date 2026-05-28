@@ -1,22 +1,20 @@
 package hk.ljx.fishpicsbackend.picture;
 
 import cn.hutool.core.util.ObjUtil;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
-import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.picture.dto.DeleteByIdList;
 import hk.ljx.fishpicsbackend.picture.dto.PictureUpdateRequest;
-import hk.ljx.fishpicsbackend.picture.Picture;
-import hk.ljx.fishpicsbackend.picture.PictureService;
 import hk.ljx.fishpicsbackend.picture.vo.PictureAdminVO;
+import hk.ljx.fishpicsbackend.picture.vo.PictureEditVO;
 import hk.ljx.fishpicsbackend.picture.vo.PictureListVO;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-
-import jakarta.annotation.Resource;
 
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
@@ -74,6 +72,11 @@ public class PictureController {
     public Response<Boolean> updatePicture(@RequestBody PictureUpdateRequest request) {
         pictureService.updatePicture(request);
         return ResUtils.success(true);
+    }
+
+    @GetMapping("/pictureEditMessage")
+    public Response<PictureEditVO> getPictureEditMessage(Long id) {
+        return ResUtils.success(pictureService.getPictureEditMessage(id));
     }
 
     @AuthCheck(role = ADMIN)

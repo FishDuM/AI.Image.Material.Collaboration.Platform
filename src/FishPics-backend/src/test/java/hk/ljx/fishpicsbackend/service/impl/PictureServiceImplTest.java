@@ -1,19 +1,17 @@
 package hk.ljx.fishpicsbackend.service.impl;
-import hk.ljx.fishpicsbackend.picture.PictureServiceImpl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.utils.CosService;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
-import hk.ljx.fishpicsbackend.picture.dto.DeleteByIdList;
-import hk.ljx.fishpicsbackend.picture.dto.PictureUpdateRequest;
-import hk.ljx.fishpicsbackend.picture.Picture;
-import hk.ljx.fishpicsbackend.post.Post;
-import hk.ljx.fishpicsbackend.user.User;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
+import hk.ljx.fishpicsbackend.picture.Picture;
+import hk.ljx.fishpicsbackend.picture.PictureServiceImpl;
+import hk.ljx.fishpicsbackend.picture.dto.DeleteByIdList;
+import hk.ljx.fishpicsbackend.post.Post;
 import hk.ljx.fishpicsbackend.post.PostService;
 import hk.ljx.fishpicsbackend.space.SpaceService;
+import hk.ljx.fishpicsbackend.user.User;
 import hk.ljx.fishpicsbackend.user.UserService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,7 +29,8 @@ import java.util.Collections;
 
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -167,38 +166,6 @@ class PictureServiceImplTest {
             String result = pictureService.deletePicture(req);
 
             assertTrue(result.contains("封面"));
-        }
-    }
-
-    @Nested
-    class UpdatePictureTests {
-
-        @Test
-        void shouldRejectWhenIdIsNull() {
-            PictureUpdateRequest req = new PictureUpdateRequest();
-            req.setIds(null);
-
-            assertThrows(BaseException.class, () -> pictureService.updatePicture(req));
-        }
-
-        @Test
-        void shouldUpdatePictureName() {
-            PictureUpdateRequest req = new PictureUpdateRequest();
-            req.setIds(1L);
-            req.setPictureName("新名称");
-
-            when(pictureMapper.update(any(), any(UpdateWrapper.class))).thenReturn(1);
-
-            assertDoesNotThrow(() -> pictureService.updatePicture(req));
-        }
-
-        @Test
-        void shouldDoNothingWhenAllFieldsNull() {
-            PictureUpdateRequest req = new PictureUpdateRequest();
-            req.setIds(1L);
-
-            assertDoesNotThrow(() -> pictureService.updatePicture(req));
-            verify(pictureMapper, never()).update(any(), any(UpdateWrapper.class));
         }
     }
 

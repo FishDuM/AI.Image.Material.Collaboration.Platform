@@ -33,6 +33,10 @@ create table pic_system
 )
     comment '系统表';
 
+INSERT INTO pic_system (syskey, sysvalue)
+VALUES ('type_list_key',
+        '["人物","动物","植物","美食","风景","建筑","物品","服饰","数码","家居","插画","二次元","实拍","文档","表情包"]');
+
 create table picture
 (
     id           bigint auto_increment comment '主键'
@@ -49,7 +53,7 @@ create table picture
     is_private   tinyint  default 0                 not null comment '0-不公开到首页，1-公开到首页',
     space_id     bigint                             null comment '空间Id',
     introduction varchar(256)                       null comment '图片介绍',
-    tags         varchar(512)                       null comment '标签 (逗号分隔)'
+    tags varchar(512) null comment '标签 (Json)'
 )
     comment '图片表';
 

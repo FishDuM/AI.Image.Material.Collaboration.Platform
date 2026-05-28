@@ -18,11 +18,13 @@
             <result property="isPrivate" column="is_private" />
             <result property="spaceId" column="space_id" />
             <result property="introduction" column="introduction" />
+        <result property="tags" column="tags"/>
+        <result property="type" column="type"/>
     </resultMap>
 
     <sql id="Base_Column_List">
         id,user_id,picture_name,url,width,height,
         size,status,create_time,update_time,is_private,
-        space_id,introduction
+        space_id,introduction,tags,type
     </sql>
 </mapper>

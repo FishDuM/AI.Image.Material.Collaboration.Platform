@@ -1,10 +1,11 @@
 package hk.ljx.fishpicsbackend.picture;
-import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
+import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -15,24 +16,26 @@ import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.utils.CosService;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
+import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.picture.dto.DeleteByIdList;
 import hk.ljx.fishpicsbackend.picture.dto.PictureMessage;
 import hk.ljx.fishpicsbackend.picture.dto.PictureUpdateRequest;
 import hk.ljx.fishpicsbackend.picture.vo.PictureAdminVO;
+import hk.ljx.fishpicsbackend.picture.vo.PictureEditVO;
 import hk.ljx.fishpicsbackend.picture.vo.PictureListVO;
 import hk.ljx.fishpicsbackend.post.Post;
 import hk.ljx.fishpicsbackend.post.PostService;
 import hk.ljx.fishpicsbackend.space.Space;
 import hk.ljx.fishpicsbackend.space.SpaceService;
+import hk.ljx.fishpicsbackend.system.PicSystemService;
 import hk.ljx.fishpicsbackend.user.User;
 import hk.ljx.fishpicsbackend.user.UserService;
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
-
-import jakarta.annotation.Resource;
 
 import java.util.HashSet;
 import java.util.List;
@@ -68,6 +71,9 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     @Lazy
     @Resource
     private PostService postService;
+
+    @Resource
+    private PicSystemService picSystemService;
 
     @Override
     public String uploadAvatar(MultipartFile file, Long id) {
@@ -249,23 +255,56 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
     @Override
     public void updatePicture(PictureUpdateRequest request) {
-        Long ids = request.getIds();
-        ExcUtils.throwIfTrue(ObjUtil.isEmpty(ids), "图片id不能为空");
-        UpdateWrapper<Picture> updateWrapper = new UpdateWrapper<Picture>().eq("id", ids);
-        if (request.getPictureName() != null) {
-            updateWrapper.set("picture_name", request.getPictureName());
+        Long id = request.getId();
+        ExcUtils.throwIfTrue(ObjUtil.isEmpty(id), "图片id不能为空");
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(user == null || user.getId() == null, ExceptionCode.UNAUTHORIZED, "用户未登录");
+        Picture picture = pictureMapper.selectById(id);
+        ExcUtils.throwIfTrue(picture == null || picture.getUserId() == null, ExceptionCode.NOT_FOUND, "图片不存在");
+        ExcUtils.throwIfFalse(picture.getUserId().equals(user.getId()) || user.getRole().equals(ADMIN), ExceptionCode.UNAUTHORIZED, "没有权限编辑图片");
+
+        String pictureName = request.getPictureName();
+        String introduction = request.getIntroduction();
+        List<String> tags = request.getTags();
+
+        if (ObjUtil.isNotEmpty(pictureName)) {
+            picture.setPictureName(pictureName);
         }
-        if (request.getIntroduction() != null) {
-            updateWrapper.set("introduction", request.getIntroduction());
+        if (ObjUtil.isNotEmpty(introduction)) {
+            picture.setIntroduction(introduction);
         }
-        if (request.getPictureUrl() != null) {
-            updateWrapper.set("url", request.getPictureUrl());
+        if (ObjUtil.isNotEmpty(tags)) {
+            List<String> typeList = picSystemService.getTypeList();
+            boolean result = tags.stream().anyMatch(tag -> !typeList.contains(tag));
+            ExcUtils.throwIfTrue(result, ExceptionCode.PARAMETER_ERROR, "标签不存在");
+            picture.setTags(JSON.toJSONString(tags));
         }
-        if (updateWrapper.getSqlSet() == null || updateWrapper.getSqlSet().isEmpty()) {
-            return;
-        }
-        int rows = pictureMapper.update(null, updateWrapper);
-        ExcUtils.throwIfTrue(rows == 0, "图片不存在");
+
+        int i = pictureMapper.updateById(picture);
+        ExcUtils.throwIfFalse(i > 0, ExceptionCode.INTERNAL_SERVER_ERROR, "更新失败");
+    }
+
+    /**
+     * 编辑时图片信息回填
+     *
+     * @param id 图片id
+     * @return 图片信息
+     */
+    @Override
+    public PictureEditVO getPictureEditMessage(Long id) {
+        ExcUtils.throwIfTrue(id == null, "图片id不能为空");
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(user == null || user.getId() == null, ExceptionCode.NOT_LOGIN);
+        Picture picture = pictureMapper.selectById(id);
+        ExcUtils.throwIfTrue(picture == null || picture.getUserId() == null, ExceptionCode.NOT_FOUND, "图片不存在");
+        ExcUtils.throwIfTrue(!picture.getUserId().equals(user.getId()) && !user.getRole().equals(ADMIN), ExceptionCode.FORBIDDEN, "无权限");
+        PictureEditVO pictureEditVO = new PictureEditVO();
+        pictureEditVO.setPictureName(picture.getPictureName());
+        pictureEditVO.setIntroduction(picture.getIntroduction());
+        String tags = picture.getTags();
+        List<String> tagList = JSONUtil.toList(tags, String.class);
+        pictureEditVO.setTags(tagList);
+        return pictureEditVO;
     }
 
 }

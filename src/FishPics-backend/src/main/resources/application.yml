@@ -29,13 +29,10 @@ spring:
 #  ai:
 #    dashscope:
 #      api-key: # 阿里云灵积 api-key
-
-# 自定义大模型名称配置
-modal:
-  tagModal: qwen-vl-flash # ai 自动打图片标签
-  textModal: qwen3-vl-plus  # ai 自动图片描述
-  baseImageModal: qwen-image-2.0  # ai 基础图片编辑（普通用户）
-  VIPImageModal: qwen-image-2.0-pro # ai VIP高清编辑（专业级）
+#      chat:
+#        options:
+#          model: qwen3.6-flash
+#          multi-model: true
 
 knife4j:
   enable: true

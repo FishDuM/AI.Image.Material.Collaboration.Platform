@@ -47,6 +47,11 @@ public class UserLoginVO implements Serializable {
     private String role;
 
     /**
+     * 用户等级 0-普通 1-VIP 2-SVIP
+     */
+    private Integer level;
+
+    /**
      * 昵称（展示用）
      */
     private String nickname;

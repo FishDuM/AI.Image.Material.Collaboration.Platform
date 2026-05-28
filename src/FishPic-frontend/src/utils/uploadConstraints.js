@@ -9,7 +9,7 @@ export const ALLOWED_IMAGE_TYPES = [
   'image/heic',
 ]
 
-const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.heif']
+const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic']
 
 const LEVEL_SIZE_MAP = {
   0: 3 * 1024 * 1024,   // 普通用户 3MB

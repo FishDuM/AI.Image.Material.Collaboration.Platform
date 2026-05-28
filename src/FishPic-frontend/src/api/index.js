@@ -229,6 +229,8 @@ export const deletePicture = (ids) => api.delete('/picture/delete', { data: { id
 
 export const updatePicture = (data) => api.put('/picture/update', data)
 
+export const getPictureEditMessage = (id) => api.get('/picture/pictureEditMessage', { params: { id } })
+
 export const likePost = (id) => api.post('/post/like', null, { params: { id } })
 
 export const collectPost = (id) => api.post('/post/collect', null, { params: { id } })
@@ -270,6 +272,7 @@ export const reviewPost = (id, status) => api.post('/post/admin/review', null, {
 export const adminDeletePost = (id) => api.post('/post/admin/delete', null, { params: { id } })
 
 // AI 相关 API
+export const aiTags = (id) => api.post('/ai/tags', null, { params: { id } })
 export const getAiTasks = (params) => api.get('/ai/admin/tasks', { params })
 export const getAiStats = () => api.get('/ai/admin/stats')
 export const getAiConfig = () => api.get('/ai/admin/config')

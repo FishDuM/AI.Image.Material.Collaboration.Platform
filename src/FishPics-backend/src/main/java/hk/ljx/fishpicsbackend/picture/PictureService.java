@@ -5,6 +5,7 @@ import hk.ljx.fishpicsbackend.picture.dto.PictureUpdateRequest;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 import hk.ljx.fishpicsbackend.picture.vo.PictureAdminVO;
+import hk.ljx.fishpicsbackend.picture.vo.PictureEditVO;
 import hk.ljx.fishpicsbackend.picture.vo.PictureListVO;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -74,4 +75,10 @@ public interface PictureService extends IService<Picture> {
      */
     void updatePicture(PictureUpdateRequest request);
 
+    /**
+     * 编辑时图片信息回填
+     * @param id 图片id
+     * @return 图片信息
+     */
+    PictureEditVO getPictureEditMessage(Long id);
 }

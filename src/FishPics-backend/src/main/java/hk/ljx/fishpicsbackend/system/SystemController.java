@@ -7,16 +7,13 @@ import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.system.dto.AddSysMarquee;
 import hk.ljx.fishpicsbackend.system.dto.AddSysPicType;
-import hk.ljx.fishpicsbackend.system.PicSystemService;
-import hk.ljx.fishpicsbackend.picture.PictureService;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.*;
 
-import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
-
-import jakarta.annotation.Resource;
 import java.util.List;
 import java.util.Map;
+
+import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
 @RestController
 @RequestMapping("/system")
@@ -28,7 +25,6 @@ public class SystemController {
     @GetMapping("/list")
     public Response<List<String>> list() {
         List<String> list = picSystemService.getTypeList();
-//        return ResUtils.success(List.of("推荐", "穿搭", "美食", "旅行", "宠物", "运动"));
         return ResUtils.success(list);
     }
 

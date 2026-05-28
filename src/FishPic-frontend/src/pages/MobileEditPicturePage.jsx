@@ -1,8 +1,9 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useContext } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Form, Input, Button, message } from 'antd'
+import { Form, Input, Select, Button, message } from 'antd'
 import MobilePageWrapper from '../components/MobilePageWrapper'
-import { updatePicture } from '../api'
+import { updatePicture, getSystemTypes, getPictureEditMessage, aiTags } from '../api'
+import { AuthContext } from '../context/AuthContext'
 import './MobileEditPicturePage.css'
 
 export default function MobileEditPicturePage() {
@@ -10,8 +11,29 @@ export default function MobileEditPicturePage() {
   const navigate = useNavigate()
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
+  const [systemTags, setSystemTags] = useState([])
+  const { userInfo } = useContext(AuthContext)
 
-  const { pictureId, pictureUrl, pictureName, introduction } = location.state || {}
+  const { pictureId, pictureUrl, pictureName, introduction, tags } = location.state || {}
+
+  useEffect(() => {
+    getSystemTypes().then(result => {
+      if (Array.isArray(result)) setSystemTags(result)
+    }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (!pictureId) return
+    getPictureEditMessage(pictureId).then(result => {
+      if (result) {
+        form.setFieldsValue({
+          pictureName: result.pictureName || '',
+          introduction: result.introduction || '',
+          tags: Array.isArray(result.tags) ? result.tags : [],
+        })
+      }
+    }).catch(() => {})
+  }, [pictureId, form])
 
   const handleClose = useCallback(() => {
     navigate(-1)
@@ -22,9 +44,10 @@ export default function MobileEditPicturePage() {
     setLoading(true)
     try {
       await updatePicture({
-        ids: pictureId,
+        id: pictureId,
         pictureName: values.pictureName || undefined,
         introduction: values.introduction || undefined,
+        tags: values.tags || undefined,
       })
       message.success('编辑成功')
       navigate(-1)
@@ -58,7 +81,7 @@ export default function MobileEditPicturePage() {
             form={form}
             layout="vertical"
             onFinish={handleSubmit}
-            initialValues={{ pictureName: pictureName || '', introduction: introduction || '' }}
+            initialValues={{ pictureName: pictureName || '', introduction: introduction || '', tags: tags || [] }}
           >
             <Form.Item name="pictureName" label="图片名称">
               <Input placeholder="留空则不修改" maxLength={50} allowClear />
@@ -66,6 +89,26 @@ export default function MobileEditPicturePage() {
             <Form.Item name="introduction" label="图片介绍">
               <Input.TextArea placeholder="留空则不修改" maxLength={500} rows={4} allowClear />
             </Form.Item>
+            <Form.Item name="tags" label="标签">
+              <Select mode="multiple" placeholder="请选择标签" allowClear options={systemTags.map(t => ({ label: t, value: t }))} />
+            </Form.Item>
+            {(userInfo?.level === 1 || userInfo?.level === 2) && (
+              <Form.Item>
+              <Button block onClick={async () => {
+                try {
+                  const result = await aiTags(pictureId)
+                  form.setFieldsValue({
+                    pictureName: result.pictureName || undefined,
+                    introduction: result.introduction || undefined,
+                    tags: result.tags || [],
+                  })
+                  message.success('AI识别完成')
+                } catch (e) {
+                  message.error(e.message || 'AI识别失败')
+                }
+              }}>AI一键填写</Button>
+              </Form.Item>
+            )}
           </Form>
         </div>
       </div>
