@@ -7,30 +7,8 @@ import PostModal from './shared/PostModal'
 import PostLayout from './shared/PostLayout'
 import CommentSection from './CommentSection'
 import { collectPost, followUser, likePost } from '../api'
+import { formatTime } from '../utils/constants'
 import './PostDetailModal.css'
-
-const formatTime = (timeString) => {
-  if (!timeString) return ''
-  const now = new Date()
-  const updateTime = new Date(timeString)
-  const diffMs = now - updateTime
-  const diffSeconds = Math.floor(diffMs / 1000)
-  const diffMinutes = Math.floor(diffSeconds / 60)
-  const diffHours = Math.floor(diffMinutes / 60)
-  const diffDays = Math.floor(diffHours / 24)
-
-  if (diffDays >= 7) {
-    return updateTime.toLocaleString('zh-CN')
-  } else if (diffDays >= 1) {
-    return `${diffDays}天前`
-  } else if (diffHours >= 1) {
-    return `${diffHours}小时前`
-  } else if (diffMinutes >= 1) {
-    return `${diffMinutes}分钟前`
-  } else {
-    return '刚刚'
-  }
-}
 
 function PostDetailModal({
   open,

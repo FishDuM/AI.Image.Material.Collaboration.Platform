@@ -97,69 +97,6 @@ function handleAuthExpired() {
   window.dispatchEvent(new CustomEvent('auth:expired'))
 }
 
-const cacheMap = new Map()
-const CACHE_TTL = 5 * 60 * 1000
-
-export function clearCache(pattern) {
-  if (!pattern) {
-    cacheMap.clear()
-    return
-  }
-  for (const key of cacheMap.keys()) {
-    if (key.includes(pattern)) {
-      cacheMap.delete(key)
-    }
-  }
-}
-
-function getCacheKey(config) {
-  const { method, url, params } = config
-  return [method, url, JSON.stringify(params || {})].join('&')
-}
-
-export const cachedGet = (axiosInstance) => {
-  return async (config) => {
-    const key = getCacheKey(config)
-    const cached = cacheMap.get(key)
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      return cached.data
-    }
-    const response = await axiosInstance(config)
-    cacheMap.set(key, { data: response, timestamp: Date.now() })
-    return response
-  }
-}
-
-const MAX_RETRIES = 2
-const RETRY_DELAY = 1000
-
-export async function withRetry(fn, retries = MAX_RETRIES, delay = RETRY_DELAY) {
-  let lastError
-  for (let i = 0; i <= retries; i++) {
-    try {
-      return await fn()
-    } catch (error) {
-      lastError = error
-      if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED' || axios.isCancel(error)) {
-        throw error
-      }
-      if (error.response && error.response.status >= 400 && error.response.status < 500) {
-        throw error
-      }
-      if (i < retries) {
-        await new Promise(resolve => setTimeout(resolve, delay * (i + 1)))
-      }
-    }
-  }
-  throw lastError
-}
-
-export function useAbortController() {
-  const controller = new AbortController()
-  const abort = () => controller.abort()
-  return { signal: controller.signal, abort }
-}
-
 export const getLoginCheckCode = () => api.get('/user/checkCode/login', {
   validateStatus: () => true,
 })
@@ -278,11 +215,8 @@ export const getAiStats = () => api.get('/ai/admin/stats')
 export const getAiConfig = () => api.get('/ai/admin/config')
 export const updateAiConfig = (data) => api.post('/ai/admin/config', data)
 export const getMyAiTasks = (params) => api.get('/ai/task/my', { params })
-export const getAiTaskStatus = (id) => api.get('/ai/task/' + id)
 export const submitAiGenerate = (data) => api.post('/ai/generate', data)
 export const submitAiEdit = (data) => api.post('/ai/edit', data)
-export const submitAiTagging = (pictureId) => api.post('/ai/tagging', null, { params: { pictureId } })
-export const getAiRecommendations = (data) => api.post('/ai/recommend', data)
 
 export const uploadPicture = (formData, targetSpaceId) => {
   const fd = new FormData()

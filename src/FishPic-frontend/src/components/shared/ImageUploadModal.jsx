@@ -8,7 +8,6 @@ import './ImageUploadModal.css'
 export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) {
   const { message } = App.useApp()
   const [uploading, setUploading] = useState(false)
-  const [uploadList, setUploadList] = useState([])
   const maxSize = getMaxUploadSize()
   const maxSizeText = formatMaxUploadSize()
 
@@ -34,19 +33,9 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
 
     try {
       const result = await uploadPicture(formData, spaceId)
-
       const { url, id } = result
-      onUploadSuccess({ url, pictureId: id })
+      onUploadSuccess()
       message.success('上传成功')
-
-      setUploadList([{
-        uid: file.uid,
-        name: file.name,
-        status: 'done',
-        url,
-        pictureId: id,
-      }])
-
       onSuccess?.({ url, id })
     } catch (error) {
       onError(error)
@@ -56,20 +45,11 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
     }
   }
 
-  const handleRemove = () => {
-    setUploadList([])
-  }
-
-  const handleClose = () => {
-    setUploadList([])
-    onClose()
-  }
-
   return (
     <Modal
       title="上传图片"
       open={open}
-      onCancel={handleClose}
+      onCancel={onClose}
       footer={null}
       width={520}
       destroyOnHidden
@@ -78,15 +58,10 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
         <Upload.Dragger
           className="image-upload-dragger"
           customRequest={handleUpload}
-          onRemove={handleRemove}
-          fileList={uploadList}
           maxCount={1}
           beforeUpload={beforeUpload}
           accept=".jpeg,.png,.jpg,.gif,.webp,.heic"
-          showUploadList={{
-            showPreviewIcon: true,
-            showRemoveIcon: true,
-          }}
+          showUploadList={false}
           disabled={uploading}
         >
           <p className="ant-upload-drag-icon">

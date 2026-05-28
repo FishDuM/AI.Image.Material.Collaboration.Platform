@@ -32,3 +32,22 @@ export const formatStorage = (bytes) => {
 }
 
 export const PAGE_SIZE = 20
+
+export const formatTime = (timeString) => {
+  if (!timeString) return ''
+  const now = new Date()
+  const diffMs = now - new Date(timeString)
+  const diffSeconds = Math.floor(diffMs / 1000)
+  const diffMinutes = Math.floor(diffSeconds / 60)
+  const diffHours = Math.floor(diffMinutes / 60)
+  const diffDays = Math.floor(diffHours / 24)
+
+  if (diffDays >= 7) {
+    return new Date(timeString).toLocaleString('zh-CN')
+  }
+  if (diffDays > 0) return `${diffDays}天前`
+  if (diffHours > 0) return `${diffHours}小时前`
+  if (diffMinutes > 0) return `${diffMinutes}分钟前`
+  if (diffSeconds > 0) return `${diffSeconds}秒前`
+  return '刚刚'
+}

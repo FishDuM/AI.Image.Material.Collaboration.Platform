@@ -69,9 +69,6 @@ create index picture_introduction_index
 create index picture_space_id_index
     on picture (space_id);
 
-create index picture_tags_index
-    on picture (tags);
-
 create index picture_update_time_index
     on picture (update_time);
 

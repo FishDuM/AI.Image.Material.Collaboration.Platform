@@ -1,5 +1,5 @@
 import { useRef, useCallback, useEffect } from 'react'
-import api, { clearCache, withRetry } from '../api'
+import api from '../api'
 
 export function useFetchWithCleanup() {
   const abortRef = useRef(null)
@@ -151,5 +151,3 @@ export function useThrottle(fn, delay = 300) {
 
   return throttledFn
 }
-
-export { withRetry, clearCache }

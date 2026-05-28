@@ -3,6 +3,7 @@ package hk.ljx.fishpicsbackend.ai;
 import cn.hutool.json.JSONUtil;
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
+import hk.ljx.fishpicsbackend.ai.dto.AiDrawPictureDTO;
 import hk.ljx.fishpicsbackend.ai.vo.AiPictureMessage;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
@@ -43,7 +44,7 @@ public class AiServiceImpl implements AiService {
      * @return 标签
      */
     @Override
-    public AiPictureMessage getTagsByPicture(Long id) throws Exception {
+    public AiPictureMessage getTagsByPicture(Long id) {
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_LOGIN);
         Picture picture = pictureService.getById(id);
@@ -60,17 +61,35 @@ public class AiServiceImpl implements AiService {
                 .systemPrompt(TAG_PROMPT)
                 .saver(new MemorySaver())
                 .build();
-        UserMessage userMessage = UserMessage.builder()
-                .text("帮我识别这个图片")
-                .media(Media.builder()
-                        .mimeType(MimeTypeUtils.IMAGE_JPEG)
-                        .data(new URI(picture.getUrl())).build()).build();
-        AssistantMessage response = agent.call(userMessage);
-        log.info("生成图片信息成功: {}", response.getText());
-        AiPictureMessage aiPictureMessage = JSONUtil.toBean(response.getText(), AiPictureMessage.class);
-        picture.setTags(JSONUtil.toJsonStr(aiPictureMessage.getTags()));
-        picture.setPictureName(aiPictureMessage.getPictureName());
-        picture.setIntroduction(aiPictureMessage.getIntroduction());
+        AssistantMessage response;
+        AiPictureMessage aiPictureMessage = null;
+        try {
+            UserMessage userMessage = UserMessage.builder()
+                    .text("帮我识别这个图片")
+                    .media(Media.builder()
+                            .mimeType(MimeTypeUtils.IMAGE_JPEG)
+                            .data(new URI(picture.getUrl())).build()).build();
+            response = agent.call(userMessage);
+            log.info("生成图片信息成功: {}", response.getText());
+            aiPictureMessage = JSONUtil.toBean(response.getText(), AiPictureMessage.class);
+            picture.setTags(JSONUtil.toJsonStr(aiPictureMessage.getTags()));
+            picture.setPictureName(aiPictureMessage.getPictureName());
+            picture.setIntroduction(aiPictureMessage.getIntroduction());
+        } catch (Exception e) {
+            log.error("生成图片信息失败: {}", e.getMessage());
+            ExcUtils.error(ExceptionCode.AI_DRAW_ERROR, e.getMessage());
+        }
         return aiPictureMessage;
+    }
+
+    /**
+     * ai 文生图
+     *
+     * @param drawPictureDTO 文生图参数
+     * @return 图片链接
+     */
+    @Override
+    public String drawPicture(AiDrawPictureDTO drawPictureDTO) {
+        return null;
     }
 }
