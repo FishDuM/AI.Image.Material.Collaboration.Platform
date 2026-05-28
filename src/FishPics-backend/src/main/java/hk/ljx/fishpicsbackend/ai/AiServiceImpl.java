@@ -1,6 +1,8 @@
 package hk.ljx.fishpicsbackend.ai;
 
 import cn.hutool.json.JSONUtil;
+import com.alibaba.cloud.ai.dashscope.image.DashScopeImageModel;
+import com.alibaba.cloud.ai.dashscope.image.DashScopeImageOptions;
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import hk.ljx.fishpicsbackend.ai.dto.AiDrawPictureDTO;
@@ -18,10 +20,13 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.content.Media;
 import org.springframework.ai.converter.BeanOutputConverter;
+import org.springframework.ai.image.*;
 import org.springframework.stereotype.Service;
 import org.springframework.util.MimeTypeUtils;
 
 import java.net.URI;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
@@ -33,9 +38,13 @@ public class AiServiceImpl implements AiService {
     private ChatModel chatModel;
 
     @Resource
+    private DashScopeImageModel dashScopeImageModel;
+
+    @Resource
     private PictureService pictureService;
 
     private static final String TAG_PROMPT = "你需要生成一个图片名称，长度不超过6个汉字。你需要生成一个图片描述，长度不超过100个汉字。你可以根据标签：'人物、动物、植物、美食、风景、建筑、物品、服饰、数码、家居、插画、二次元、实拍、文档、表情包'来描述图片的内容，最多选择不超过3个，最少也要有1个。";
+
 
     /**
      * 使用 ai 识别出图片的标签
@@ -90,6 +99,30 @@ public class AiServiceImpl implements AiService {
      */
     @Override
     public String drawPicture(AiDrawPictureDTO drawPictureDTO) {
-        return null;
+        String description = drawPictureDTO.getDescription();
+        String exclusion = drawPictureDTO.getExclusion();
+        Integer width = drawPictureDTO.getWidth();
+        Integer height = drawPictureDTO.getHeight();
+        String style = drawPictureDTO.getStyle();
+
+        DashScopeImageOptions imageOptions = DashScopeImageOptions.builder()
+                .width(width)
+                .height(height)
+                .style(style)
+                .build();
+        if (exclusion != null) {
+            imageOptions.setNegativePrompt(exclusion);
+        }
+        if (style == null) {
+            imageOptions.setStyle("auto");
+        }
+
+        ImagePrompt imagePrompt = new ImagePrompt(description, imageOptions);
+
+        ImageResponse imageResponse = dashScopeImageModel.call(imagePrompt);
+        String url = imageResponse.getResult().getOutput().getUrl();
+
+        log.info("生图成功，url: {}", url);
+        return url;
     }
 }

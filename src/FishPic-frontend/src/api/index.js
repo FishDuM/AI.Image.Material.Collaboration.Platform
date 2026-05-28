@@ -215,7 +215,7 @@ export const getAiStats = () => api.get('/ai/admin/stats')
 export const getAiConfig = () => api.get('/ai/admin/config')
 export const updateAiConfig = (data) => api.post('/ai/admin/config', data)
 export const getMyAiTasks = (params) => api.get('/ai/task/my', { params })
-export const submitAiGenerate = (data) => api.post('/ai/generate', data)
+export const submitAiGenerate = (data, config = {}) => api.post('/ai/draw', data, config)
 export const submitAiEdit = (data) => api.post('/ai/edit', data)
 
 export const uploadPicture = (formData, targetSpaceId) => {

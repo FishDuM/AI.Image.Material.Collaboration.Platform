@@ -12,9 +12,9 @@ public class AiDrawPictureDTO {
 
     private String exclusion;
 
-    private String wight;
+    private String style;
 
-    private String height;
+    private Integer width;
 
-    private Integer num;
+    private Integer height;
 }

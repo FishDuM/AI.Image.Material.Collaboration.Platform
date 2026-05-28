@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { App as AntApp, Card, Typography, Button, Input, Select, Slider, Table, Tag, Space, Tabs, Row, Col, Empty, Image } from 'antd'
+import { App as AntApp, Card, Typography, Button, Input, Select, Table, Tag, Space, Tabs, Row, Col, Empty, Image } from 'antd'
 import {
   RobotOutlined, ThunderboltOutlined, ScissorOutlined, UnorderedListOutlined,
   ReloadOutlined, SendOutlined, CheckCircleOutlined, CloseCircleOutlined,
@@ -30,6 +30,19 @@ const EDIT_TYPES = [
   { value: 'style_transfer', label: '风格迁移' },
 ]
 
+const DRAW_STYLE_OPTIONS = [
+  { value: 'auto', label: '自动' },
+  { value: 'photography', label: '摄影' },
+  { value: 'portrait', label: '人像/肖像' },
+  { value: '3d cartoon', label: '3D卡通' },
+  { value: 'anime', label: '动漫' },
+  { value: 'oil painting', label: '油画' },
+  { value: 'watercolor', label: '水彩画' },
+  { value: 'sketch', label: '速写/素描' },
+  { value: 'chinese painting', label: '中国画/国画' },
+  { value: 'flat illustration', label: '扁平化插画' },
+]
+
 const STYLE_OPTIONS = [
   { value: 'anime', label: '动漫风' },
   { value: 'oil_painting', label: '油画风' },
@@ -47,7 +60,7 @@ function AIImageTools() {
   const [genNegative, setGenNegative] = useState('')
   const [genWidth, setGenWidth] = useState(1024)
   const [genHeight, setGenHeight] = useState(1024)
-  const [genNum, setGenNum] = useState(1)
+  const [genStyle, setGenStyle] = useState('auto')
   const [genSubmitting, setGenSubmitting] = useState(false)
   const [genResults, setGenResults] = useState(null)
 
@@ -102,18 +115,17 @@ function AIImageTools() {
     if (!genPrompt.trim()) { message.warning('请输入画面描述'); return }
     setGenSubmitting(true)
     try {
-      const taskId = await submitAiGenerate({
-        prompt: genPrompt.trim(),
-        negativePrompt: genNegative.trim() || undefined,
+      const url = await submitAiGenerate({
+        description: genPrompt.trim(),
+        exclusion: genNegative.trim() || undefined,
         width: genWidth,
         height: genHeight,
-        numImages: genNum,
-      })
-      message.success(`已提交生图任务 #${taskId}`)
-      setGenResults({ taskId })
-      fetchTasks(1, taskPagination.pageSize)
+        style: genStyle,
+      }, { timeout: 0 })
+      message.success('图片生成成功')
+      setGenResults({ url })
     } catch (e) {
-      message.error(e.message || '提交失败')
+      message.error(e.message || '生成失败')
     } finally {
       setGenSubmitting(false)
     }
@@ -236,14 +248,14 @@ function AIImageTools() {
                   </Col>
                 </Row>
                 <div className="ai-form-group">
-                  <div className="ai-form-label">生成数量: {genNum}</div>
-                  <Slider min={1} max={4} value={genNum} onChange={setGenNum} marks={{ 1: '1', 2: '2', 3: '3', 4: '4' }} />
+                  <div className="ai-form-label">生成风格</div>
+                  <Select value={genStyle} onChange={setGenStyle} style={{ width: '100%' }} options={DRAW_STYLE_OPTIONS} />
                 </div>
                 <Space>
                   <Button type="primary" icon={<SendOutlined />} onClick={handleGenerate} loading={genSubmitting} size="large">
                     开始生成
                   </Button>
-                  <Button icon={<ClearOutlined />} onClick={() => { setGenPrompt(''); setGenNegative(''); setGenResults(null) }}>
+                  <Button icon={<ClearOutlined />} onClick={() => { setGenPrompt(''); setGenNegative(''); setGenStyle('auto'); setGenResults(null) }}>
                     清空
                   </Button>
                 </Space>
@@ -254,13 +266,31 @@ function AIImageTools() {
             <Card variant="borderless" className="ai-tool-card" title="生成结果">
               {genResults ? (
                 <div className="ai-result-area">
+                  {genResults.url && (
+                    <div style={{ textAlign: 'center', marginBottom: 16 }}>
+                      <Image
+                        src={genResults.url}
+                        alt="AI 生成图片"
+                        style={{ maxWidth: '100%', maxHeight: 500, borderRadius: 8 }}
+                      />
+                    </div>
+                  )}
                   <div className="ai-result-task-id">
                     <CheckCircleOutlined style={{ color: 'var(--success)' }} />
-                    <span>任务已提交，编号: <Text code>{genResults.taskId}</Text></span>
+                    <span>图片生成成功</span>
                   </div>
-                  <Paragraph type="secondary">
-                    图片正在生成中，可在「我的任务」标签页查看进度。
-                  </Paragraph>
+                  {genResults.url && (
+                    <div style={{ textAlign: 'center', marginTop: 8 }}>
+                      <a href={genResults.url} target="_blank" rel="noopener noreferrer">
+                        在新窗口打开原图
+                      </a>
+                    </div>
+                  )}
+                </div>
+              ) : genSubmitting ? (
+                <div className="ai-result-placeholder">
+                  <SyncOutlined className="ai-result-icon" spin />
+                  <Text type="secondary">图片生成中，请耐心等待...</Text>
                 </div>
               ) : (
                 <div className="ai-result-placeholder">

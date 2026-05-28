@@ -27,13 +27,13 @@ FishPics 是一个图片素材协作与社区平台。后端负责用户认证�
 | API 文档 | Knife4j OpenAPI3 |
 | 工具库 | Hutool, Lombok |
 | 对象存储 | 腾讯云 COS |
-| AI | Spring AI Alibaba / DashScope, 通义千问视觉理解与万相图像能力 |
+| AI | Spring AI Alibaba 1.1.2.0, DashScope, 通义千问视觉理解与万相图像能力 |
 
 ### 1.3 运行与配置
 
 - 服务端口：`8080`
 - Servlet 上下文：`/api`
-- Knife4j 扫描包：`hk.ljx.fishpicsbackend.controller`
+- Knife4j 扫描包：`hk.ljx.fishpicsbackend`（各模块 Controller 分布在 `user`、`picture`、`post`、`comment`、`space`、`system`、`ai` 包下）
 - 上传限制：单文件最大 `10MB`，单次请求最大 `100MB`
 - MySQL、Redis、COS、DashScope 密钥通过 `application-local.yml` 或本地配置注入。
 
@@ -193,7 +193,7 @@ FishPics 是一个图片素材协作与社区平台。后端负责用户认证�
 
 | 功能 | 接口 | 权限 | 说明 |
 | --- | --- | --- | --- |
-| 图片标注 | `POST /api/ai/tagging` | VIP/SVIP | 提交指定图片自动标签任务 |
+| 图片标注 | `POST /api/ai/tags` | VIP/SVIP | 提交指定图片自动标签任务 |
 | 图片编辑 | `POST /api/ai/edit` | VIP/SVIP | 提交抠图、风格迁移等编辑任务 |
 | 图片生成 | `POST /api/ai/generate` | VIP/SVIP | 根据提示词生成图片 |
 | 图片推荐 | `POST /api/ai/recommend` | VIP/SVIP | 根据参考图片推荐素材 |

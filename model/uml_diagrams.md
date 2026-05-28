@@ -136,6 +136,7 @@ classDiagram
         Long spaceId
         String introduction
         String tags
+        String type
     }
 
     class PictureChild {
@@ -302,6 +303,7 @@ erDiagram
         bigint space_id
         varchar introduction
         varchar tags
+        varchar type
     }
 
     PICTURE_CHILD {
@@ -473,7 +475,7 @@ erDiagram
 
 | 方法 | 路径 | 入参 | 出参 | 权限 |
 | --- | --- | --- | --- | --- |
-| `POST` | `/ai/tagging` | `pictureId` | `Long taskId` | VIP/SVIP |
+| `POST` | `/ai/tags` | `id` | `AiPictureMessage` | VIP/SVIP |
 | `POST` | `/ai/edit` | `EditingRequest` | `Long taskId` | VIP/SVIP |
 | `POST` | `/ai/generate` | `GenerationRequest` | `Long taskId` | VIP/SVIP |
 | `POST` | `/ai/recommend` | `RecommendationRequest` | `Long taskId` | VIP/SVIP |
@@ -629,7 +631,7 @@ stateDiagram-v2
 - `picture_child` 对 `picture_id + post_id` 建立唯一索引。
 - 帖子图片顺序必须依赖 `picture_child.sort_num`。
 - `picture.is_private` 当前承担首页公开标记含义：`0` 不公开到首页，`1` 公开到首页；管理员图片审核接口的 `selected` 参数会写入该字段。
-- `picture.tags` 存储 AI 标签，逗号分隔。
+- `picture.tags` 存储 AI 标签，格式为 JSON 数组（如 `["人物","风景"]`）。
 - `ai_task.input_data` 和 `ai_task.output_data` 存储 JSON 字符串。
 - 普通用户不能调用 AI 用户端能力，必须 `level >= 1`。
 

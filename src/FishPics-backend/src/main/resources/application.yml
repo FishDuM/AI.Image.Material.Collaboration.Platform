@@ -60,7 +60,6 @@ knife4j:
 #  secretKey:
 #  region:
 #  bucket:
-#  public: true  # 开发true 生产false
 #  url: # 腾讯云图片 url 前缀
 
 logging:
