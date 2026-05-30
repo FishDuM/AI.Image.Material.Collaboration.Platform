@@ -8,7 +8,7 @@
   min-width: 0;
 }
 
-.community-square-container .category-bar {
+.community-square-container .category-bar-wrapper {
     position: sticky;
     top: 60px;
     z-index: 101;

@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 import hk.ljx.fishpicsbackend.common.dto.PageRequest;
 import hk.ljx.fishpicsbackend.picture.dto.DeleteByIdList;
+import hk.ljx.fishpicsbackend.picture.dto.PictureQueryRequest;
 import hk.ljx.fishpicsbackend.picture.dto.PictureUpdateRequest;
 import hk.ljx.fishpicsbackend.picture.vo.PictureAdminVO;
 import hk.ljx.fishpicsbackend.picture.vo.PictureEditVO;
@@ -38,19 +39,19 @@ public interface PictureService extends IService<Picture> {
 
     /**
      * 首页获取图片列表（分页）
-     * 
-     * @param current  当前页
-     * @param pageSize 每页数量
+     *
      * @return 图片分页列表
      */
-    IPage<PictureListVO> getPictureList(PageRequest pageRequest);
+    IPage<PictureListVO> getPictureList(PictureQueryRequest pictureQueryRequest);
 
     /**
      * 管理员获取所有图片列表（分页，按状态过滤）
-     * 
-     * @return 图片分页列表
+     *
+     * @param pageRequest 分页参数
+     * @param status      状态过滤（0=禁用, 1=正常, 2=待审核, 4=精选, null=全部）
+     * @return 图片管理分页列表
      */
-    IPage<PictureAdminVO> getAdminPictureList(PageRequest pageRequest);
+    IPage<PictureAdminVO> getAdminPictureList(PageRequest pageRequest, Integer status);
 
     /**
      * 管理员审核图片

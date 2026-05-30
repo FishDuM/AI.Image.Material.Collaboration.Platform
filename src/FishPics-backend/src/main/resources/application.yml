@@ -28,11 +28,14 @@ spring:
 # SpringAIAlibaba 配置
 #  ai:
 #    dashscope:
-#      api-key: # 阿里云灵积 api-key
+#      api-key: # dashscope api-key
 #      chat:
 #        options:
-#          model: qwen3.6-flash
+#          model: qwen3.6-plus-2026-04-02
 #          multi-model: true
+#      image:
+#        options:
+#          model: qwen-image-2.0
 
 knife4j:
   enable: true

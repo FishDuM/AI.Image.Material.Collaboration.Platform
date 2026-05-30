@@ -17,14 +17,17 @@ function HomePage() {
   const [currentSlide, setCurrentSlide] = useState(0)
   const [imgLoaded, setImgLoaded] = useState({})
   const [searchValue, setSearchValue] = useState('')
+  const [searchTag, setSearchTag] = useState('热门')
   const [categoryList, setCategoryList] = useState([])
   const [selectedCategory, setSelectedCategory] = useState('热门')
   const [pictureList, setPictureList] = useState([])
   const [picturePage, setPicturePage] = useState(1)
-  const [pictureLoading, setPictureLoading] = useState(false)
+  const [pictureLoading, setPictureLoading] = useState(true)
   const [hasMore, setHasMore] = useState(true)
   const carouselRef = useRef(null)
   const loadMoreRef = useRef(null)
+  const isFirstRender = useRef(true)
+  const requestIdRef = useRef(0)
   const PAGE_SIZE = 20
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 1025px)').matches)
   const [coverflowIndex, setCoverflowIndex] = useState(0)
@@ -46,8 +49,15 @@ function HomePage() {
 
   const handleSearch = useCallback(() => {
     const trimmed = searchValue.trim()
-    navigate(trimmed ? `/community?search=${encodeURIComponent(trimmed)}` : '/community')
-  }, [searchValue, navigate])
+    setSearchTag(trimmed)
+    setPicturePage(1)
+  }, [searchValue])
+
+  const handleCategorySelect = useCallback((cat) => {
+    setSelectedCategory(cat)
+    setSearchTag(cat === '热门' ? '' : cat)
+    setPicturePage(1)
+  }, [])
 
   useEffect(() => {
     fetchMarquee().then((images) => {
@@ -66,10 +76,12 @@ function HomePage() {
   }, [fetchSystemTypes])
 
   const loadPictures = useCallback(async (page) => {
+    const requestId = ++requestIdRef.current
     setPictureLoading(true)
     try {
       const signal = createSignal()
-      const result = await getPictureList(page, PAGE_SIZE, { signal })
+      const result = await getPictureList(page, PAGE_SIZE, { signal }, searchTag)
+      if (requestId !== requestIdRef.current) return
       if (result && Array.isArray(result.records)) {
         setPictureList(prev => page === 1 ? result.records : [...prev, ...result.records])
         setHasMore(result.records.length === PAGE_SIZE)
@@ -78,14 +90,31 @@ function HomePage() {
       }
     } catch (err) {
       if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return
+      if (requestId !== requestIdRef.current) return
       setHasMore(false)
     }
     finally {
-      setPictureLoading(false)
+      if (requestId === requestIdRef.current) {
+        setPictureLoading(false)
+      }
     }
-  }, [createSignal])
+  }, [createSignal, searchTag])
 
-  useEffect(() => { loadPictures(1) }, [loadPictures])
+  // 组件挂载时加载首屏图片（默认 searchTag = '热门'）
+  useEffect(() => {
+    loadPictures(1)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // searchTag 变化时重新加载（跳过首次挂载，避免与上方效果重复）
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      return
+    }
+    loadPictures(1)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTag])
 
   useEffect(() => {
     if (!hasMore || pictureLoading) return
@@ -234,7 +263,7 @@ function HomePage() {
 
       {categoryList.length > 0 && (
         <div className="home-category-section">
-          <CategoryBar items={categoryList} selected={selectedCategory} onSelect={setSelectedCategory} className="home-category-bar" />
+          <CategoryBar items={categoryList} selected={selectedCategory} onSelect={handleCategorySelect} className="home-category-bar" />
         </div>
       )}
 

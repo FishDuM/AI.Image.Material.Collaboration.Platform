@@ -5,11 +5,12 @@ import hk.ljx.fishpicsbackend.picture.service.PictureService;
 import cn.hutool.core.util.ObjUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
-import hk.ljx.fishpicsbackend.common.dto.PageRequest;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
+import hk.ljx.fishpicsbackend.common.dto.PageRequest;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.picture.dto.DeleteByIdList;
+import hk.ljx.fishpicsbackend.picture.dto.PictureQueryRequest;
 import hk.ljx.fishpicsbackend.picture.dto.PictureUpdateRequest;
 import hk.ljx.fishpicsbackend.picture.vo.PictureAdminVO;
 import hk.ljx.fishpicsbackend.picture.vo.PictureEditVO;
@@ -57,8 +58,8 @@ public class PictureController {
     }
 
     @PostMapping("/list")
-    public Response<IPage<PictureListVO>> getPictureList(@RequestBody PageRequest pageRequest) {
-        return ResUtils.success(pictureService.getPictureList(pageRequest));
+    public Response<IPage<PictureListVO>> getPictureList(@RequestBody PictureQueryRequest pictureQueryRequest) {
+        return ResUtils.success(pictureService.getPictureList(pictureQueryRequest));
     }
 
     @DeleteMapping("/delete")
@@ -80,8 +81,9 @@ public class PictureController {
 
     @AuthCheck(role = ADMIN)
     @PostMapping("/admin/list")
-    public Response<IPage<PictureAdminVO>> getPictureListAdmin(@RequestBody PageRequest pageRequest) {
-        return ResUtils.success(pictureService.getAdminPictureList(pageRequest));
+    public Response<IPage<PictureAdminVO>> getPictureListAdmin(@RequestBody PageRequest pageRequest,
+            @RequestParam(required = false) Integer status) {
+        return ResUtils.success(pictureService.getAdminPictureList(pageRequest, status));
     }
 
     @AuthCheck(role = ADMIN)

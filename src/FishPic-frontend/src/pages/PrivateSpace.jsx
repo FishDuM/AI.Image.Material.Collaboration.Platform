@@ -29,7 +29,6 @@ function PrivateSpace() {
   const [searchKeyword, setSearchKeyword] = useState('')
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
-  const loadMoreRef = useRef(null)
   const currentPageRef = useRef(1)
   const loadingMoreRef = useRef(false)
 
@@ -459,7 +458,6 @@ function PrivateSpace() {
           {!hasMore && masonryItems.length > 0 && (
             <div className="load-more-indicator">没有更多了</div>
           )}
-          <div ref={loadMoreRef} />
           {batchMode && (
             <div className="private-space-batch-bar">
               <span className="private-space-batch-count">

@@ -21,6 +21,7 @@ import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.picture.dto.DeleteByIdList;
 import hk.ljx.fishpicsbackend.picture.dto.PictureMessage;
+import hk.ljx.fishpicsbackend.picture.dto.PictureQueryRequest;
 import hk.ljx.fishpicsbackend.picture.dto.PictureUpdateRequest;
 import hk.ljx.fishpicsbackend.picture.service.PictureService;
 import hk.ljx.fishpicsbackend.picture.vo.PictureAdminVO;
@@ -165,24 +166,42 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     }
 
     @Override
-    public IPage<PictureListVO> getPictureList(PageRequest pageRequest) {
+    public IPage<PictureListVO> getPictureList(PictureQueryRequest pictureQueryRequest) {
         QueryWrapper<Picture> queryWrapper = new QueryWrapper<Picture>()
                 .eq("status", 1)
                 .eq("is_private", 1)
                 .isNotNull("url")
                 .ne("url", "")
                 .orderByDesc("create_time");
-        Page<Picture> page = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
+
+        // 当 tag 参数不为空时，模糊搜索 tags 字段
+        // TODO: "热门" 标签后续实现热门排序/筛选逻辑，当前返回全部数据
+        if (StrUtil.isNotBlank(pictureQueryRequest.getTag())
+                && !"热门".equals(pictureQueryRequest.getTag())) {
+            queryWrapper.like("tags", pictureQueryRequest.getTag());
+        }
+
+        Page<Picture> page = new Page<>(pictureQueryRequest.getCurrent(), pictureQueryRequest.getPageSize());
         IPage<Picture> picturePage = pictureMapper.selectPage(page, queryWrapper);
         return picturePage.convert(p -> new PictureListVO(p.getId(), p.getUrl(), StrUtil.split(p.getTags(), ",")));
     }
 
     @Override
-    public IPage<PictureAdminVO> getAdminPictureList(PageRequest pageRequest) {
+    public IPage<PictureAdminVO> getAdminPictureList(PageRequest pageRequest, Integer status) {
         QueryWrapper<Picture> queryWrapper = new QueryWrapper<Picture>()
                 .isNotNull("url")
                 .ne("url", "")
                 .orderByDesc("create_time");
+
+        if (status != null) {
+            if (status == 4) {
+                // 精选：isPrivate = 1
+                queryWrapper.eq("is_private", 1);
+            } else {
+                // 0=禁用, 1=正常, 2=待审核
+                queryWrapper.eq("status", status);
+            }
+        }
 
         Page<Picture> page = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
         IPage<Picture> picturePage = pictureMapper.selectPage(page, queryWrapper);

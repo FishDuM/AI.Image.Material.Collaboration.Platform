@@ -287,6 +287,40 @@
   max-width: 500px;
 }
 
+.category-bar-wrapper {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+.category-bar-scroll-btn {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border-light);
+    background: var(--bg-primary);
+    border-radius: 50%;
+    cursor: pointer;
+    color: var(--text-secondary);
+    z-index: 1;
+    padding: 0;
+    transition: all var(--duration-fast);
+    box-shadow: var(--shadow-xs);
+}
+
+.category-bar-scroll-btn:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+
+.category-bar-scroll-btn:active {
+    transform: scale(0.92);
+}
+
 .category-bar {
     display: flex;
     align-items: center;

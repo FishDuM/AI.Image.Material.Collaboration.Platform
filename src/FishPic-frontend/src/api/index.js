@@ -137,11 +137,21 @@ export const getMyLikes = (data, config = {}) => api.post('/post/myLikes', data,
 
 export const getMarquee = () => api.get('/system/marquee')
 
-export const getPictureList = (current = 1, pageSize = 20, config = {}) =>
-  api.post('/picture/list', { current, pageSize }, config)
+export const getPictureList = (current = 1, pageSize = 20, config = {}, tag = '') => {
+  const data = { current, pageSize }
+  if (tag && tag.trim()) {
+    data.tag = tag.trim()
+  }
+  return api.post('/picture/list', data, config)
+}
 
-export const getAdminPictureList = (current = 1, pageSize = 20, status = 3) =>
-  api.post('/picture/admin/list', { current, pageSize, status })
+export const getAdminPictureList = (current = 1, pageSize = 20, status = 3) => {
+  const body = { current, pageSize }
+  if (status !== 3) {
+    return api.post('/picture/admin/list', body, { params: { status } })
+  }
+  return api.post('/picture/admin/list', body)
+}
 
 export const reviewPicture = (pictureId, status, selected) => api.post('/picture/admin/review', null, { params: { pictureId, status, selected } })
 
