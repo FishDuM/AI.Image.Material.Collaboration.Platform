@@ -7,9 +7,32 @@ export const ALLOWED_IMAGE_TYPES = [
   'image/gif',
   'image/webp',
   'image/heic',
+  'image/bmp',
+  'image/avif',
+  'image/tiff',
+  'image/vnd.adobe.photoshop',
+  'image/x-eps',
 ]
 
-const ALLOWED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic']
+/** 浏览器 <img> 能渲染的 MIME 类型（可用于裁剪） */
+export const BROWSER_RENDERABLE_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/bmp',
+  'image/avif',
+]
+
+const ALLOWED_EXTENSIONS = [
+  '.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.heif',
+  '.bmp', '.tiff', '.tif', '.avif', '.apng',
+  '.psd', '.ai', '.eps',
+  '.raw', '.dng', '.cr3', '.crw', '.mos', '.erf', '.3fr', '.fff',
+  '.kdc', '.dcr', '.rw2', '.pef', '.sr2', '.srf', '.arw', '.nef',
+  '.nrw', '.orf', '.mef', '.mrw',
+  '.astc', '.tpg',
+]
 
 const LEVEL_SIZE_MAP = {
   0: 3 * 1024 * 1024,   // 普通用户 3MB

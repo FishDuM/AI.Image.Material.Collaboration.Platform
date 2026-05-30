@@ -219,12 +219,13 @@ export const reviewPost = (id, status) => api.post('/post/admin/review', null, {
 export const adminDeletePost = (id) => api.post('/post/admin/delete', null, { params: { id } })
 
 // AI 相关 API
-export const aiTags = (id) => api.post('/ai/tags', null, { params: { id } })
+const AI_TIMEOUT = 60000
+export const aiTags = (id, config = {}) => api.post('/ai/tags', null, { params: { id }, timeout: AI_TIMEOUT, ...config })
 export const getAiTasks = (params) => api.get('/ai/admin/tasks', { params })
 export const getAiStats = () => api.get('/ai/admin/stats')
 export const getAiConfig = () => api.get('/ai/admin/config')
 export const updateAiConfig = (data) => api.post('/ai/admin/config', data)
-export const submitAiGenerate = (data, config = {}) => api.post('/ai/draw', data, config)
+export const submitAiGenerate = (data, config = {}) => api.post('/ai/draw', data, { timeout: AI_TIMEOUT, ...config })
 
 export const uploadPicture = (formData, targetSpaceId) => {
   const fd = new FormData()

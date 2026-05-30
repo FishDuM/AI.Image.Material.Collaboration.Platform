@@ -48,7 +48,7 @@ public class AiServiceImpl implements AiService {
     @Resource
     private PictureService pictureService;
 
-    private static final String TAG_PROMPT = "你需要生成一个图片名称，长度不超过6个汉字。你需要生成一个图片描述，长度不超过100个汉字。你可以根据标签：'人物、动物、植物、美食、风景、建筑、物品、服饰、数码、家居、插画、二次元、实拍、文档、表情包'来描述图片的内容，最多选择不超过3个，最少也要有1个。除了JSON之外不要输出任何无关的东西，不要输出markdown格式";
+    private static final String TAG_PROMPT = "你需要生成一个图片名称，长度不超过6个汉字。你需要生成一个图片描述，长度不超过100个汉字。你可以根据标签：'人物、动物、植物、美食、风景、建筑、物品、服饰、数码、家居、插画、二次元、实拍、文档、表情包'来描述图片的内容，最多选择不超过3个，最少也要有1个。";
 
     /**
      * 使用 ai 识别出图片的标签
@@ -84,7 +84,11 @@ public class AiServiceImpl implements AiService {
                             .data(new URI(picture.getUrl())).build()).build();
             response = agent.call(userMessage);
             log.info("生成图片信息成功: {}", response.getText());
-            aiPictureMessage = JSONUtil.toBean(response.getText(), AiPictureMessage.class);
+            String text = response.getText();
+            if (text.startsWith("```")) {
+                text = text.replaceAll("(?s)^```(?:json)?\\s*|\\s*```$", "");
+            }
+            aiPictureMessage = JSONUtil.toBean(text, AiPictureMessage.class);
             picture.setTags(JSONUtil.toJsonStr(aiPictureMessage.getTags()));
             picture.setPictureName(aiPictureMessage.getPictureName());
             picture.setIntroduction(aiPictureMessage.getIntroduction());

@@ -80,11 +80,24 @@ public class CosService {
         }
         try (InputStream in = file.getInputStream()) {
             String realType = FileTypeUtil.getType(in);
-            if (realType == null) {
-                return null;
+            if (realType != null) {
+                realType = realType.toLowerCase();
+                if (ALLOWED_TYPES.contains(realType)) {
+                    return realType;
+                }
             }
-            realType = realType.toLowerCase();
-            return ALLOWED_TYPES.contains(realType) ? realType : null;
+            // 魔数检测失败（如 HEIC 等 Hutool 未覆盖的格式），回退到扩展名判断
+            String fileName = file.getOriginalFilename();
+            if (fileName != null) {
+                int dot = fileName.lastIndexOf('.');
+                if (dot > 0) {
+                    String ext = fileName.substring(dot + 1).toLowerCase();
+                    if (ALLOWED_TYPES.contains(ext)) {
+                        return ext;
+                    }
+                }
+            }
+            return null;
         } catch (Exception e) {
             return null;
         }

@@ -18,3 +18,34 @@
 .image-upload-dragger .ant-upload-drag-icon {
   margin-bottom: var(--space-3);
 }
+
+/* 裁剪区域 */
+.image-cropper-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.image-cropper-container {
+  width: 100%;
+  height: 420px;
+  background: #f0f0f0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.image-cropper-container img {
+  display: block;
+  max-width: 100%;
+}
+
+.image-cropper-toolbar {
+  display: flex;
+  justify-content: center;
+}
+
+.image-cropper-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
