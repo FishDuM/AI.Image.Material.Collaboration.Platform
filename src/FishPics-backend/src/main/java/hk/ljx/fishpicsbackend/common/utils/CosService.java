@@ -9,7 +9,7 @@ import com.qcloud.cos.model.*;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.picture.dto.PictureMessage;
-import hk.ljx.fishpicsbackend.user.User;
+import hk.ljx.fishpicsbackend.user.entity.User;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;

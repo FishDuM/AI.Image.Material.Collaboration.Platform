@@ -1,6 +1,5 @@
 package hk.ljx.fishpicsbackend.post.dto;
 
-import com.baomidou.mybatisplus.annotation.TableField;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -38,6 +37,4 @@ public class UploadPostRequest implements Serializable {
      */
     private Integer isPrivate;
 
-    @TableField(exist = false)
-    private static final long serialVersionUID = 1L;
 }

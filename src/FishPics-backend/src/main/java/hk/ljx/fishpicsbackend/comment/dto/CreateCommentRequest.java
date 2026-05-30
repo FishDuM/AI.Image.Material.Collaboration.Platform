@@ -1,6 +1,5 @@
 package hk.ljx.fishpicsbackend.comment.dto;
 
-import com.baomidou.mybatisplus.annotation.TableField;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -30,8 +29,6 @@ public class CreateCommentRequest implements Serializable {
     /**
      * 回复给谁（回复时填）
      */
-    private Integer toUserId;
+    private Long toUserId;
 
-    @TableField(exist = false)
-    private static final long serialVersionUID = 1L;
 }

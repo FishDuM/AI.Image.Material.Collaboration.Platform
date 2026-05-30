@@ -1,6 +1,6 @@
 package hk.ljx.fishpicsbackend.mapper;
 
-import hk.ljx.fishpicsbackend.picture.PictureChild;
+import hk.ljx.fishpicsbackend.picture.entity.PictureChild;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 
 /**

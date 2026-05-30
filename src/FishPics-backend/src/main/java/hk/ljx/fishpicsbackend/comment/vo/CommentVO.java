@@ -45,7 +45,7 @@ public class CommentVO {
     /**
      * 回复给谁
      */
-    private Integer toUserId;
+    private Long toUserId;
 
     /**
      * 被回复人用户名

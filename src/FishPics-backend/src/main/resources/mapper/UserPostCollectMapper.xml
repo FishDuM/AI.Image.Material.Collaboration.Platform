@@ -4,7 +4,7 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="hk.ljx.fishpicsbackend.mapper.UserPostCollectMapper">
 
-    <resultMap id="BaseResultMap" type="hk.ljx.fishpicsbackend.user.UserPostCollect">
+    <resultMap id="BaseResultMap" type="hk.ljx.fishpicsbackend.user.entity.UserPostCollect">
             <id property="id" column="id" />
             <result property="userId" column="user_id" />
             <result property="postId" column="post_id" />

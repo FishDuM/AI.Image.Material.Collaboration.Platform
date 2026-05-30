@@ -1,6 +1,5 @@
 package hk.ljx.fishpicsbackend.space.dto;
 
-import com.baomidou.mybatisplus.annotation.TableField;
 import hk.ljx.fishpicsbackend.common.dto.PageRequest;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -43,6 +42,4 @@ public class SpaceQueryWrapper extends PageRequest implements Serializable {
     /** 空间名称 */
     private String name;
 
-    @TableField(exist = false)
-    private static final long serialVersionUID = 1L;
 }

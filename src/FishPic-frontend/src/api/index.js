@@ -138,10 +138,10 @@ export const getMyLikes = (data, config = {}) => api.post('/post/myLikes', data,
 export const getMarquee = () => api.get('/system/marquee')
 
 export const getPictureList = (current = 1, pageSize = 20, config = {}) =>
-  api.get('/picture/list', { params: { current, pageSize }, ...config })
+  api.post('/picture/list', { current, pageSize }, config)
 
 export const getAdminPictureList = (current = 1, pageSize = 20, status = 3) =>
-  api.get('/picture/admin/list', { params: { current, pageSize, status } })
+  api.post('/picture/admin/list', { current, pageSize, status })
 
 export const reviewPicture = (pictureId, status, selected) => api.post('/picture/admin/review', null, { params: { pictureId, status, selected } })
 
@@ -155,7 +155,7 @@ export const getSpace = (id) => api.get('/space/getSpace', { params: { id } })
 
 export const spaceListPicture = (data, config = {}) => api.post('/space/pictureList', data, config)
 
-export const adminListSpace = (params) => api.get('/space/admin/list', { params })
+export const adminListSpace = (params) => api.post('/space/admin/list', params)
 export const adminUpdateSpace = (data) => api.post('/space/admin/update', data)
 export const adminDeleteSpace = (id) => api.post('/space/admin/delete', { id })
 export const adminSetSpaceStatus = (id, status) => api.post('/space/admin/setStatus', { id, status })
@@ -214,9 +214,7 @@ export const getAiTasks = (params) => api.get('/ai/admin/tasks', { params })
 export const getAiStats = () => api.get('/ai/admin/stats')
 export const getAiConfig = () => api.get('/ai/admin/config')
 export const updateAiConfig = (data) => api.post('/ai/admin/config', data)
-export const getMyAiTasks = (params) => api.get('/ai/task/my', { params })
 export const submitAiGenerate = (data, config = {}) => api.post('/ai/draw', data, config)
-export const submitAiEdit = (data) => api.post('/ai/edit', data)
 
 export const uploadPicture = (formData, targetSpaceId) => {
   const fd = new FormData()

@@ -1,6 +1,5 @@
 package hk.ljx.fishpicsbackend.post.dto;
 
-import com.baomidou.mybatisplus.annotation.TableField;
 import hk.ljx.fishpicsbackend.common.dto.PageRequest;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -56,6 +55,4 @@ public class PostQueryWrapper extends PageRequest implements Serializable {
      */
     private Integer isPrivate;
 
-    @TableField(exist = false)
-    private static final long serialVersionUID = 1L;
 }

@@ -1,6 +1,6 @@
 package hk.ljx.fishpicsbackend.mapper;
 
-import hk.ljx.fishpicsbackend.user.UserPostLikes;
+import hk.ljx.fishpicsbackend.user.entity.UserPostLikes;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 
 /**

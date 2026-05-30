@@ -4,7 +4,7 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="hk.ljx.fishpicsbackend.mapper.PictureChildMapper">
 
-    <resultMap id="BaseResultMap" type="hk.ljx.fishpicsbackend.picture.PictureChild">
+    <resultMap id="BaseResultMap" type="hk.ljx.fishpicsbackend.picture.entity.PictureChild">
         <id property="id" column="id"/>
         <result property="pictureId" column="picture_id"/>
         <result property="postId" column="post_id"/>
