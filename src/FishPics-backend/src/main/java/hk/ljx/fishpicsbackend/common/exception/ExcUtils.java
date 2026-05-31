@@ -21,7 +21,7 @@ public class ExcUtils {
 
     public static void throwIfTrue(Boolean flag, String message) {
         if (flag) {
-            throw error(1,message);
+            throw error(0, message);
         }
     }
 

@@ -8,6 +8,7 @@ import { ThemeContext } from '../context/ThemeContext'
 import { AuthContext } from '../context/AuthContext'
 import { PAGINATION_LOCALE, PAGE_SIZE, LEVEL_MAP, storageStrokeColor, formatStorage } from '../utils/constants'
 import ImageUploadModal from '../components/shared/ImageUploadModal'
+import ImageEditorModal from '../components/shared/ImageEditorModal'
 import UpgradeModal from '../components/shared/UpgradeModal'
 import './TeamSpaceDetail.css'
 import './PrivateSpace.css'
@@ -38,6 +39,7 @@ function TeamSpaceDetail() {
   const [editPictureLoading, setEditPictureLoading] = useState(false)
   const [editPictureForm] = Form.useForm()
   const [showUploadModal, setShowUploadModal] = useState(false)
+  const [showImageEditor, setShowImageEditor] = useState(false)
 
   const [showEdit, setShowEdit] = useState(false)
   const [updateLoading, setUpdateLoading] = useState(false)
@@ -533,6 +535,7 @@ function TeamSpaceDetail() {
                     }
                   }}>AI一键填写</Button>
                 )}
+                <Button icon={<EditOutlined />} onClick={() => setShowImageEditor(true)}>编辑图片</Button>
               </div>
               <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
                 <Button onClick={() => { setShowEditPicture(false); editPictureForm.resetFields() }}>
@@ -552,6 +555,14 @@ function TeamSpaceDetail() {
         onClose={() => setShowUploadModal(false)}
         onSuccess={handleUploadSuccess}
         spaceId={Number(id)}
+      />
+
+      <ImageEditorModal
+        open={showImageEditor}
+        imageUrl={pictures.find(p => selectedIds.includes(p.id))?.url}
+        spaceId={Number(id)}
+        onSuccess={handleUploadSuccess}
+        onClose={() => setShowImageEditor(false)}
       />
     </main>
   )

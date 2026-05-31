@@ -8,6 +8,7 @@ import { AuthContext } from '../context/AuthContext'
 import { useFetchWithCleanup } from '../hooks/useRequestUtils'
 import { PAGE_SIZE, LEVEL_MAP, storageStrokeColor, formatStorage } from '../utils/constants'
 import ImageUploadModal from '../components/shared/ImageUploadModal'
+import ImageEditorModal from '../components/shared/ImageEditorModal'
 import UpgradeModal from '../components/shared/UpgradeModal'
 import './PrivateSpace.css'
 
@@ -45,6 +46,7 @@ function PrivateSpace() {
   const [editPictureLoading, setEditPictureLoading] = useState(false)
   const [editPictureForm] = Form.useForm()
   const [showUploadModal, setShowUploadModal] = useState(false)
+  const [showImageEditor, setShowImageEditor] = useState(false)
 
   const { createSignal } = useFetchWithCleanup()
 
@@ -605,6 +607,7 @@ function PrivateSpace() {
                     }
                   }}>AI一键填写</Button>
                 )}
+                <Button icon={<EditOutlined />} onClick={() => setShowImageEditor(true)}>编辑图片</Button>
               </div>
               <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
                 <Button onClick={() => { setShowEditPicture(false); editPictureForm.resetFields() }}>
@@ -624,6 +627,14 @@ function PrivateSpace() {
         onClose={() => setShowUploadModal(false)}
         onSuccess={handleUploadSuccess}
         spaceId={spaces[0]?.id}
+      />
+
+      <ImageEditorModal
+        open={showImageEditor}
+        imageUrl={pictures.find(p => selectedIds.includes(p.id))?.url}
+        spaceId={spaces[0]?.id}
+        onSuccess={handleUploadSuccess}
+        onClose={() => setShowImageEditor(false)}
       />
     </main>
   )

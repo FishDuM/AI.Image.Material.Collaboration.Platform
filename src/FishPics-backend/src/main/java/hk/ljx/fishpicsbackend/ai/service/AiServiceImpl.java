@@ -92,11 +92,12 @@ public class AiServiceImpl implements AiService {
             picture.setTags(JSONUtil.toJsonStr(aiPictureMessage.getTags()));
             picture.setPictureName(aiPictureMessage.getPictureName());
             picture.setIntroduction(aiPictureMessage.getIntroduction());
+            return aiPictureMessage;
         } catch (Exception e) {
             log.error("生成图片信息失败: {}", e.getMessage());
             ExcUtils.error(ExceptionCode.AI_DRAW_ERROR, e.getMessage());
         }
-        return aiPictureMessage;
+        return null;
     }
 
     /**

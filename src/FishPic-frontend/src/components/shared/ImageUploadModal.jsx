@@ -51,6 +51,7 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
   // 初始化 Cropper
   useEffect(() => {
     if (step !== 'crop' || !imgRef.current || !objectUrlRef.current) return
+    cropperRef.current?.destroy()
     cropperRef.current = new Cropper(imgRef.current, {
       viewMode: 1,
       autoCropArea: 1,
@@ -99,15 +100,23 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
     return false
   }, [message, maxSize, maxSizeText])
 
+  const handleRotate = (degree) => {
+    const cropper = cropperRef.current
+    if (!cropper) return
+    const { x, y, width, height } = cropper.getData()
+    cropper.rotate(degree)
+    cropper.setData({ x, y, width, height })
+  }
+
   const handleCropUpload = async () => {
     const cropper = cropperRef.current
     if (!cropper) return
     setUploading(true)
     try {
       const canvas = cropper.getCroppedCanvas()
-      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp'))
       const fd = new FormData()
-      fd.append('file', blob, selectedFile.name.replace(/\.[^.]+$/, '.png'))
+      fd.append('file', blob, selectedFile.name.replace(/\.[^.]+$/, '.webp'))
       const result = await uploadPicture(fd, spaceId)
       message.success('上传成功')
       onSuccess?.({ url: result.url, id: result.id })
@@ -166,8 +175,8 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
             <Space>
               <Button icon={<ZoomOutOutlined />} onClick={() => cropperRef.current?.zoom(-0.1)} size="small" title="缩小" />
               <Button icon={<ZoomInOutlined />} onClick={() => cropperRef.current?.zoom(0.1)} size="small" title="放大" />
-              <Button icon={<RotateLeftOutlined />} onClick={() => cropperRef.current?.rotate(-90)} size="small" title="左旋转" />
-              <Button icon={<RotateRightOutlined />} onClick={() => cropperRef.current?.rotate(90)} size="small" title="右旋转" />
+              <Button icon={<RotateLeftOutlined />} onClick={() => handleRotate(-90)} size="small" title="左旋转" />
+              <Button icon={<RotateRightOutlined />} onClick={() => handleRotate(90)} size="small" title="右旋转" />
             </Space>
           </div>
           <div className="image-cropper-actions">

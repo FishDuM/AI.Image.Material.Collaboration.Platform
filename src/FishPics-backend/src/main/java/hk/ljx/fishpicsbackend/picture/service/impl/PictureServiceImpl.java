@@ -259,7 +259,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         pictureList.forEach(picture -> userIds.add(picture.getUserId()));
         // 判断是否为图片的主人或者管理员
         ExcUtils.throwIfFalse(role.equals(ADMIN)
-                || userIds.stream().findFirst().map(id -> id.equals(user.getId())).orElse(false) || userIds.size() != 1,
+                || (userIds.size() == 1 && userIds.contains(user.getId())),
                 ExceptionCode.UNAUTHORIZED, "没有权限删除图片");
 
         int i = pictureMapper.delete(new QueryWrapper<Picture>().in("id", ids));

@@ -7,8 +7,10 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.CollectionUtils;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -124,6 +126,11 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
     public PostDetailVO getPost(Long id) {
         Post post = baseMapper.selectById(id);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(post) || post.getId() == null, ExceptionCode.NOT_FOUND, "帖子不存在");
+
+        // 增加浏览数（原子 SQL，无需加锁）
+        baseMapper.update(null, new UpdateWrapper<Post>()
+                .eq("id", id).setSql("views_num = views_num + 1"));
+
         PostDetailVO postDetailVO = new PostDetailVO();
         BeanUtil.copyProperties(post, postDetailVO);
         // 获取子图片列表
@@ -290,6 +297,24 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
             queryWrapper.and(wrapper -> wrapper.like("title", text)
                     .or()
                     .like("content", text));
+        }
+
+        // 按图片标签筛选帖子：通过 picture + picture_child 子查询找到匹配的帖子 ID
+        String tag = postQueryWrapper.getTag();
+        if (StrUtil.isNotBlank(tag)) {
+            List<Picture> pictures = pictureService.list(new QueryWrapper<Picture>().like("tags", tag));
+            if (CollUtil.isEmpty(pictures)) {
+                queryWrapper.eq("id", -1);
+            } else {
+                List<Long> pictureIds = pictures.stream().map(Picture::getId).collect(Collectors.toList());
+                List<PictureChild> children = pictureChildService.list(new QueryWrapper<PictureChild>().in("picture_id", pictureIds));
+                List<Long> postIds = children.stream().map(PictureChild::getPostId).distinct().collect(Collectors.toList());
+                if (CollUtil.isEmpty(postIds)) {
+                    queryWrapper.eq("id", -1);
+                } else {
+                    queryWrapper.in("id", postIds);
+                }
+            }
         }
 
         // 构建热门查询

@@ -194,7 +194,7 @@ export default function CommentSection({ postId, onCommentCountChange, totalComm
     if (!postId) return
     setLoading(true)
     try {
-      const result = await getCommentList({ postId, current: pageNum, pageSize: PAGE_SIZE })
+      const result = await getCommentList({ postId, current: pageNum, pageSize: PAGE_SIZE }, { dedup: true })
       const records = result?.records || []
       const totalCount = result?.total || 0
       if (append) {

@@ -55,4 +55,9 @@ public class PostQueryWrapper extends PageRequest implements Serializable {
      */
     private Integer isPrivate;
 
+    /**
+     * 图片标签关键词，按图片标签筛选帖子
+     */
+    private String tag;
+
 }

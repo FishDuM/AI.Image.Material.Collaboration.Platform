@@ -40,4 +40,9 @@ public class PostQueryRequest extends PageRequest implements Serializable {
      */
     private Integer status;
 
+    /**
+     * 图片标签关键词，按图片标签筛选帖子
+     */
+    private String tag;
+
 }

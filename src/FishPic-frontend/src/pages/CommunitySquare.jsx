@@ -41,12 +41,12 @@ function CommunitySquare() {
   const loadingMoreRef = useRef(false)
   const keyCounter = useRef(0)
   const initialPostIdRef = useRef(searchParams.get('id'))
-  const committedSearchRef = useRef({ text: '', hotPost: true })
+  const committedSearchRef = useRef({ text: '', hotPost: true, tag: '' })
 
   const { createSignal } = useFetchWithCleanup()
   const { fetchSystemTypes } = useSystemTypes()
 
-  const fetchPostList = useCallback(async ({ text, hotPost, page = 1, append = false } = {}, signal) => {
+  const fetchPostList = useCallback(async ({ text, hotPost, tag, page = 1, append = false } = {}, signal) => {
     if (append) {
       if (loadingMoreRef.current) return
       loadingMoreRef.current = true
@@ -61,6 +61,9 @@ function CommunitySquare() {
       }
       if (text && text.trim()) {
         params.text = text.trim()
+      }
+      if (tag && tag.trim()) {
+        params.tag = tag.trim()
       }
       if (hotPost) {
         params.hotPost = true
@@ -168,11 +171,12 @@ function CommunitySquare() {
       const scrollHeight = document.documentElement.scrollHeight || document.body.scrollHeight
       const clientHeight = document.documentElement.clientHeight || window.innerHeight
       if (scrollTop + clientHeight >= scrollHeight - 200) {
-        const { text, hotPost } = committedSearchRef.current
+        const { text, hotPost, tag } = committedSearchRef.current
         const signal = createSignal()
         fetchPostList({
           text,
           hotPost,
+          tag,
           page: currentPageRef.current + 1,
           append: true,
         }, signal)
@@ -252,10 +256,11 @@ function CommunitySquare() {
 
   const handleSearch = () => {
     setCurrentHotPost(false)
+    setSelectedCategory(null)
     currentPageRef.current = 1
     setHasMore(true)
-    committedSearchRef.current = { text: searchText, hotPost: false }
-    doFetchPostList({ text: searchText, hotPost: false, page: 1, append: false })
+    committedSearchRef.current = { text: searchText, hotPost: false, tag: '' }
+    doFetchPostList({ text: searchText, hotPost: false, tag: '', page: 1, append: false })
   }
 
   const handleCategoryClick = (cat) => {
@@ -264,20 +269,20 @@ function CommunitySquare() {
       setCurrentHotPost(false)
       currentPageRef.current = 1
       setHasMore(true)
-      committedSearchRef.current = { text: searchText, hotPost: false }
-      doFetchPostList({ text: searchText, hotPost: false, page: 1, append: false })
+      committedSearchRef.current = { text: searchText, hotPost: false, tag: '' }
+      doFetchPostList({ text: searchText, hotPost: false, tag: '', page: 1, append: false })
     } else {
       setSelectedCategory(cat)
       currentPageRef.current = 1
       setHasMore(true)
       if (cat === '热门') {
         setCurrentHotPost(true)
-        committedSearchRef.current = { text: searchText, hotPost: true }
-        doFetchPostList({ text: searchText, hotPost: true, page: 1, append: false })
+        committedSearchRef.current = { text: searchText, hotPost: true, tag: '' }
+        doFetchPostList({ text: searchText, hotPost: true, tag: '', page: 1, append: false })
       } else {
         setCurrentHotPost(false)
-        committedSearchRef.current = { text: searchText, hotPost: false }
-        doFetchPostList({ text: searchText, hotPost: false, page: 1, append: false })
+        committedSearchRef.current = { text: searchText, hotPost: false, tag: cat }
+        doFetchPostList({ text: searchText, hotPost: false, tag: cat, page: 1, append: false })
       }
     }
   }
@@ -294,7 +299,8 @@ function CommunitySquare() {
   const handleCreateEditSuccess = () => {
     currentPageRef.current = 1
     setHasMore(true)
-    doFetchPostList({ text: searchText, hotPost: currentHotPost, page: 1, append: false })
+    const { text, hotPost, tag } = committedSearchRef.current
+    doFetchPostList({ text, hotPost, tag, page: 1, append: false })
   }
 
   return (
