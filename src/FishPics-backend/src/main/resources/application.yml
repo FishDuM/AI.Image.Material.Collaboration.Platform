@@ -65,6 +65,12 @@ knife4j:
 #  bucket:
 #  url: # 腾讯云图片 url 前缀
 
+# RocketMQ 配置
+#rocketmq:
+#  name-server: # RocketMQ NameServer 地址
+#  producer:
+#    group: # 生产者组名
+
 logging:
   level:
     root: info
