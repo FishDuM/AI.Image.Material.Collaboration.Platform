@@ -10,11 +10,11 @@
 | --- | --- |
 | 访客 | 可查看公开配置、获取验证码、注册、登录、浏览公开内容 |
 | 登录用户 | 可维护个人资料、上传图片、管理空间、发布帖子、互动、评论、关注 |
-| VIP/SVIP 用户 | 继承登录用户能力，并可使用 AI 标注、编辑、生成和推荐 |
-| 管理员 | 可管理用户、图片、帖子、评论、空间、系统配置和 AI 任务 |
-| AI Provider | DashScope / 阿里云模型服务，执行视觉理解和图像生成编辑 |
+| VIP/SVIP 用户 | 继承登录用户能力，并可使用 AI 标注和文生图能力 |
+| 管理员 | 可管理用户、图片、帖子、评论、空间、系统配置 |
+| AI Provider | DashScope / 阿里云模型服务，执行视觉理解和图像生成 |
 | COS 对象存储 | 保存头像和图片文件 |
-| Redis | 保存验证码、Token、用户缓存、系统配置缓存和 Stream 消息 |
+| Redis | 保存验证码、Token、用户缓存、系统配置缓存 |
 | MySQL | 保存业务主数据 |
 
 ### 1.2 用例图
@@ -43,31 +43,25 @@ flowchart LR
     User --> UC10["关注/查看粉丝"]
 
     Vip --> UC11["AI 图片标注"]
-    Vip --> UC12["AI 图片编辑"]
-    Vip --> UC13["AI 图片生成"]
-    Vip --> UC14["AI 图片推荐"]
-    Vip --> UC15["查询 AI 任务"]
+    Vip --> UC12["AI 文生图"]
 
-    Admin --> UC16["用户管理"]
-    Admin --> UC17["图片审核"]
-    Admin --> UC18["帖子审核/删除"]
-    Admin --> UC19["评论审核/删除"]
-    Admin --> UC20["空间管理"]
-    Admin --> UC21["系统配置管理"]
-    Admin --> UC22["AI 任务/配置/统计管理"]
+    Admin --> UC13["用户管理"]
+    Admin --> UC14["图片审核"]
+    Admin --> UC15["帖子审核/删除"]
+    Admin --> UC16["评论审核/删除"]
+    Admin --> UC17["空间管理"]
+    Admin --> UC18["系统配置管理"]
 
     UC1 --> Redis
     UC3 --> Redis
     UC6 --> COS
     UC11 --> AI
     UC12 --> AI
-    UC13 --> AI
-    UC14 --> AI
     UC2 --> DB
     UC7 --> DB
     UC8 --> DB
     UC9 --> DB
-    UC16 --> DB
+    UC13 --> DB
 ```
 
 ### 1.3 权限矩阵
@@ -78,8 +72,7 @@ flowchart LR
 | 公开图片、帖子、系统配置查询 | 是 | 是 | 是 | 是 |
 | 当前用户、资料、隐私、退出 | 否 | 是 | 是 | 是 |
 | 上传图片、空间、发帖、互动、评论 | 否 | 是 | 是 | 是 |
-| AI 用户端提交与我的任务 | 否 | 否 | 是 | 是 |
-| AI 任务详情 | 是 | 是 | 是 | 是 |
+| AI 标签识别、文生图 | 否 | 否 | 是 | 是 |
 | 后台管理接口 | 否 | 否 | 否 | 是 |
 
 ## 2. 领域类图
@@ -411,10 +404,11 @@ erDiagram
 | --- | --- | --- | --- | --- |
 | `POST` | `/picture/avatar` | `file,id` | `String` | 登录 |
 | `POST` | `/picture/upload` | `file,targetSpaceId?` | `PictureListVO` | 登录 |
-| `GET` | `/picture/list` | `current,pageSize` | `IPage<PictureListVO>` | 公开 |
+| `POST` | `/picture/list` | `PictureQueryRequest` | `IPage<PictureListVO>` | 公开 |
 | `DELETE` | `/picture/delete` | `DeleteByIdList` | `String` | 登录 |
 | `PUT` | `/picture/update` | `PictureUpdateRequest` | `Boolean` | 登录 |
-| `GET` | `/picture/admin/list` | `current,pageSize,status` | `IPage<PictureAdminVO>` | 管理员 |
+| `GET` | `/picture/pictureEditMessage` | `id` | `PictureEditVO` | 登录 |
+| `POST` | `/picture/admin/list` | `PageRequest,status?` | `IPage<PictureAdminVO>` | 管理员 |
 | `POST` | `/picture/admin/review` | `pictureId,status,selected` | `Boolean` | 管理员；`selected` 写入 `is_private`，表示是否公开到首页 |
 
 ### 4.3 PostController
@@ -455,10 +449,10 @@ erDiagram
 | `GET` | `/space/getSpace` | `id` | `SpaceVO` | 登录/成员 |
 | `POST` | `/space/update` | `UpdateSpace` | `Boolean` | 拥有者/管理员 |
 | `POST` | `/space/pictureList` | `SpacePictureList` | `PicturePageVO` | 登录/成员 |
-| `GET` | `/space/admin/list` | `current,pageSize,name,type` | `IPage<SpaceVO>` | 管理员 |
+| `POST` | `/space/admin/list` | `SpaceQueryWrapper` | `IPage<SpaceVO>` | 管理员 |
 | `POST` | `/space/admin/update` | `SpaceAdminUpdateRequest` | `Boolean` | 管理员 |
-| `POST` | `/space/admin/delete` | `{id}` | `Boolean` | 管理员 |
-| `POST` | `/space/admin/setStatus` | `{id,status}` | `Boolean` | 管理员 |
+| `POST` | `/space/admin/delete` | `SpaceDeleteRequest` | `Boolean` | 管理员 |
+| `POST` | `/space/admin/setStatus` | `SpaceSetStatusRequest` | `Boolean` | 管理员 |
 
 ### 4.6 SystemController
 
@@ -466,25 +460,19 @@ erDiagram
 | --- | --- | --- | --- | --- |
 | `GET` | `/system/list` | - | `List<String>` | 公开 |
 | `POST` | `/system/addList` | `AddSysPicType` | `Boolean` | 管理员 |
-| `POST` | `/system/deleteType` | `{value}` | `Boolean` | 管理员 |
+| `POST` | `/system/deleteType` | `DeleteTypeRequest` | `Boolean` | 管理员 |
 | `GET` | `/system/marquee` | - | `List<String>` | 公开 |
 | `POST` | `/system/addMarquee` | `AddSysMarquee` | `Boolean` | 管理员 |
-| `POST` | `/system/deleteMarquee` | `{url}` | `Boolean` | 管理员 |
+| `POST` | `/system/deleteMarquee` | `DeleteMarqueeRequest` | `Boolean` | 管理员 |
 
 ### 4.7 AiController
 
 | 方法 | 路径 | 入参 | 出参 | 权限 |
 | --- | --- | --- | --- | --- |
-| `POST` | `/ai/tags` | `id` | `AiPictureMessage` | VIP/SVIP |
-| `POST` | `/ai/edit` | `EditingRequest` | `Long taskId` | VIP/SVIP |
-| `POST` | `/ai/generate` | `GenerationRequest` | `Long taskId` | VIP/SVIP |
-| `POST` | `/ai/recommend` | `RecommendationRequest` | `Long taskId` | VIP/SVIP |
-| `GET` | `/ai/task/{id}` | `id` | `AiTaskVO` | 白名单路径，Controller 仅校验任务存在 |
-| `GET` | `/ai/task/my` | `current,pageSize` | `IPage<AiTaskVO>` | VIP/SVIP |
-| `GET` | `/ai/admin/tasks` | `current,pageSize,type,status,userId` | `IPage<AiTaskVO>` | 管理员 |
-| `GET` | `/ai/admin/stats` | - | `AiStatsVO` | 管理员 |
-| `GET` | `/ai/admin/config` | - | `AiConfigVO` | 管理员 |
-| `POST` | `/ai/admin/config` | `AiConfigUpdateRequest` | `Boolean` | 管理员 |
+| `POST` | `/ai/tags` | `id` | `AiPictureMessage` | VIP/SVIP（登录校验 + level >= 1） |
+| `POST` | `/ai/draw` | `AiDrawPictureDTO` | `String` | VIP/SVIP（登录校验 + level >= 1） |
+
+注：`/ai/**` 路径在 `MvcConfig` 中被排除在登录拦截器之外。
 
 ## 5. 关键流程图
 
@@ -539,7 +527,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    A["用户点击点赞或收藏"] --> B["校验登录与帖子存在"]
+    A["用户点击点赞或收藏"] --> B{"校验登录与帖子存在"}
     B --> C{"是否已有关系记录"}
     C -->|有| D["删除 user_post_likes / user_post_collect"]
     C -->|无| E["新增关系记录"]
@@ -549,17 +537,26 @@ flowchart TD
     G --> I["返回当前状态 true"]
 ```
 
-### 5.4 AI 任务流程
+### 5.4 AI 调用流程
 
 ```mermaid
-stateDiagram-v2
-    [*] --> Submitted: VIP/SVIP 提交请求
-    Submitted --> Processing: 创建 ai_task(status=0)
-    Processing --> ProviderCall: 异步调用模型服务
-    ProviderCall --> Success: 生成 output_data
-    ProviderCall --> Failed: 捕获异常并写入 error_msg
-    Success --> [*]: status=1
-    Failed --> [*]: status=2
+sequenceDiagram
+    participant C as Client
+    participant A as AiController
+    participant S as AiService
+    participant AI as AI Provider
+
+    C->>A: POST /ai/tags(id)
+    A->>S: getTagsByPicture
+    S->>AI: ReactAgent + 通义千问视觉理解
+    AI-->>S: 名称/描述/标签
+    S-->>C: AiPictureMessage
+
+    C->>A: POST /ai/draw(AiDrawPictureDTO)
+    A->>S: drawPicture
+    S->>AI: DashScope + 万相图像生成
+    AI-->>S: 图片 URL
+    S-->>C: 图片 URL
 ```
 
 ## 6. DTO/VO 模型摘要
@@ -581,15 +578,19 @@ stateDiagram-v2
 | `CreateSpace` | `name,introduction,type` | 创建空间 |
 | `UpdateSpace` | `id,name,introduction` | 更新空间 |
 | `SpacePictureList` | `spaceId,current,pageSize` | 空间图片列表 |
+| `SpaceQueryWrapper` | 空间筛选与分页 | 后台空间列表 |
 | `SpaceAdminUpdateRequest` | 空间后台可改字段 | 后台空间编辑 |
+| `SpaceDeleteRequest` | `id` | 后台删除空间 |
+| `SpaceSetStatusRequest` | `id,status` | 后台设置空间状态 |
+| `PictureQueryRequest` | `tag,current,pageSize` | 图片列表查询 |
 | `PictureUpdateRequest` | `ids,pictureName,introduction,pictureUrl` | 图片信息编辑 |
 | `DeleteByIdList` | `ids` | 批量删除图片 |
 | `AddSysPicType` | `typeList` | 添加分类标签 |
 | `AddSysMarquee` | `marqueeList` | 添加跑马灯 |
-| `EditingRequest` | `imageUrl,editType,options` | AI 编辑 |
-| `GenerationRequest` | `prompt` 等 | AI 生成 |
-| `RecommendationRequest` | `referencePictureId` 等 | AI 推荐 |
-| `AiConfigUpdateRequest` | AI 配置字段 | 后台配置 |
+| `DeleteTypeRequest` | `value` | 删除分类标签 |
+| `DeleteMarqueeRequest` | `url` | 删除跑马灯 |
+| `AiDrawPictureDTO` | `description,exclusion,style,width,height` | AI 文生图 |
+| `PageRequest` | `current,pageSize,sortField,sortOrder` | 通用分页查询 |
 
 ### 6.2 主要响应 VO
 
@@ -599,17 +600,18 @@ stateDiagram-v2
 | `UserMessageVO` | 个人主页聚合信息 |
 | `UserPublicProfileVO` | 用户公开主页 |
 | `FollowUserVO` | 粉丝/关注列表项 |
+| `CheckCodeVO` | 验证码图片与 key |
 | `PictureListVO` | 图片列表基础项 |
 | `PictureAdminVO` | 后台图片管理项 |
+| `PictureEditVO` | 图片编辑信息 |
 | `PicturePageVO` | 空间图片分页 |
 | `PostListVO` | 帖子列表项 |
 | `PostDetailVO` | 帖子详情聚合 |
 | `CommentVO` | 评论展示项 |
 | `SpaceVO` | 空间展示项 |
 | `SpaceMemberVO` | 团队成员展示项 |
-| `AiTaskVO` | AI 任务展示项 |
-| `AiStatsVO` | AI 统计 |
-| `AiConfigVO` | AI 配置 |
+| `AiPictureMessage` | AI 标注结果（名称、描述、标签列表） |
+| `AdminGetUserVO` | 管理员查看用户详情 |
 
 ## 7. 状态与约束
 
@@ -631,9 +633,11 @@ stateDiagram-v2
 - `picture_child` 对 `picture_id + post_id` 建立唯一索引。
 - 帖子图片顺序必须依赖 `picture_child.sort_num`。
 - `picture.is_private` 当前承担首页公开标记含义：`0` 不公开到首页，`1` 公开到首页；管理员图片审核接口的 `selected` 参数会写入该字段。
-- `picture.tags` 存储 AI 标签，格式为 JSON 数组（如 `["人物","风景"]`）。
-- `ai_task.input_data` 和 `ai_task.output_data` 存储 JSON 字符串。
-- 普通用户不能调用 AI 用户端能力，必须 `level >= 1`。
+- `picture.tags` 存储 AI 标签，格式为 JSON 数组（如 `["人物","风景"]`）。注意：代码中存在 JSON 序列化和逗号分割两种读取方式。
+- `picture.type` 存储图片格式类型，仅 Java 实体和 XML Mapper 中存在，对应 `create.sql` 缺少该列。
+- `comment.to_user_id` 在 Java 实体中为 `Long`，SQL DDL 中为 `int`。
+- 普通用户不能调用 AI 能力，必须 `level >= 1`。
+- 热度定时任务（`HotScoreScheduler`）每 10 分钟执行一次：`hot = likes_num * 3 + collects_num * 3 + comment_num * 2 + views_num * 2`。
 
 ## 8. 包依赖视图
 
@@ -641,12 +645,13 @@ stateDiagram-v2
 flowchart TD
     Controller["controller"]
     Service["service / service.impl"]
-    Mapper["mapper / ai.mapper"]
+    Mapper["mapper"]
     Entity["entity"]
-    DTO["dto / ai.dto"]
-    VO["vo / vo.ai"]
+    DTO["dto"]
+    VO["vo"]
     Common["common"]
-    AI["ai.interfaces / ai.provider / ai.service"]
+    Scheduled["scheduled"]
+    AI["ai"]
     DB["MySQL"]
     Redis["Redis"]
     COS["COS"]
@@ -663,6 +668,7 @@ flowchart TD
     Common --> Redis
     Common --> COS
     AI --> DashScope
-    AI --> Mapper
+    AI --> Service
+    Scheduled --> Mapper
     Service --> AI
 ```

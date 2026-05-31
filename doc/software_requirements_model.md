@@ -34,7 +34,7 @@ FishPics 是一个图片素材协作与社区平台。后端负责用户认证�
 - 服务端口：`8080`
 - Servlet 上下文：`/api`
 - Knife4j 扫描包：`hk.ljx.fishpicsbackend`（各模块 Controller 分布在 `user`、`picture`、`post`、`comment`、`space`、`system`、`ai` 包下）
-- 上传限制：单文件最大 `10MB`，单次请求最大 `100MB`
+- 上传限制：单文件最大 `50MB`，单次请求最大 `750MB`
 - MySQL、Redis、COS、DashScope 密钥通过 `application-local.yml` 或本地配置注入。
 
 ## 2. 架构与公共机制
@@ -45,12 +45,12 @@ FishPics 是一个图片素材协作与社区平台。后端负责用户认证�
 | --- | --- | --- |
 | Controller | `controller` | HTTP 入参校验、调用服务、统一响应 |
 | Service | `service`, `service.impl` | 业务规则、权限和状态流转 |
-| Mapper | `mapper`, `ai.mapper` | MyBatis-Plus 数据访问 |
-| DTO | `dto`, `ai.dto` | 请求参数模型 |
-| VO | `vo`, `vo.ai` | 响应视图模型 |
+| Mapper | `mapper` | MyBatis-Plus 数据访问 |
+| DTO | `dto` | 请求参数模型 |
+| VO | `vo` | 响应视图模型 |
 | Entity | `entity` | 数据库表映射 |
-| Common | `common` | 响应、异常、拦截器、AOP、常量、COS、Redis Stream |
-| AI | `ai` | AI 能力接口、任务服务和阿里云提供方适配 |
+| Common | `common` | 响应、异常、拦截器、AOP、常量、COS、配置、定时任务 |
+| AI | `ai` | AI 能力接口、Spring AI Alibaba Agent 和 DashScope SDK 实现 |
 
 ### 2.2 统一响应
 
@@ -119,7 +119,8 @@ FishPics 是一个图片素材协作与社区平台。后端负责用户认证�
 | --- | --- | --- |
 | 上传头像 | `POST /api/picture/avatar` | `multipart/form-data`，头像文件最大 5MB |
 | 上传图片 | `POST /api/picture/upload` | 上传到指定 `targetSpaceId`，未传默认私人空间 |
-| 公开图片列表 | `GET /api/picture/list` | 分页返回 `status=1` 且 `is_private=1` 的首页公开图片 |
+| 公开图片列表 | `POST /api/picture/list` | 分页返回 `status=1` 且 `is_private=1` 的首页公开图片，入参为 `PictureQueryRequest` 支持按标签筛选 |
+| 图片编辑信息 | `GET /api/picture/pictureEditMessage` | 返回 `PictureEditVO`，包含图片编辑所需数据 |
 | 删除图片 | `DELETE /api/picture/delete` | 请求体为 `DeleteByIdList`，支持批量删除 |
 | 更新图片信息 | `PUT /api/picture/update` | 修改图片名称和简介 |
 | 管理员图片列表 | `GET /api/picture/admin/list` | 按状态分页查询 |
@@ -193,18 +194,10 @@ FishPics 是一个图片素材协作与社区平台。后端负责用户认证�
 
 | 功能 | 接口 | 权限 | 说明 |
 | --- | --- | --- | --- |
-| 图片标注 | `POST /api/ai/tags` | VIP/SVIP | 提交指定图片自动标签任务 |
-| 图片编辑 | `POST /api/ai/edit` | VIP/SVIP | 提交抠图、风格迁移等编辑任务 |
-| 图片生成 | `POST /api/ai/generate` | VIP/SVIP | 根据提示词生成图片 |
-| 图片推荐 | `POST /api/ai/recommend` | VIP/SVIP | 根据参考图片推荐素材 |
-| 任务详情 | `GET /api/ai/task/{id}` | `/ai/**` 白名单 | 查询 AI 任务结果，Controller 当前只校验任务存在 |
-| 我的任务 | `GET /api/ai/task/my` | VIP/SVIP | 分页查询本人 AI 任务 |
-| 任务管理 | `GET /api/ai/admin/tasks` | 管理员 | 按类型、状态、用户筛选 |
-| AI 统计 | `GET /api/ai/admin/stats` | 管理员 | 查看任务统计 |
-| AI 配置查询 | `GET /api/ai/admin/config` | 管理员 | 查看模型配置 |
-| AI 配置更新 | `POST /api/ai/admin/config` | 管理员 | 更新模型开关与参数 |
+| 图片标注 | `POST /api/ai/tags` | VIP/SVIP | 通过 Spring AI Alibaba Agent 识别图片标签、名称和描述 |
+| 文生图 | `POST /api/ai/draw` | VIP/SVIP | 通过 DashScope SDK 调用万相模型根据提示词生成图片 |
 
-AI 任务记录在 `ai_task` 表：`type` 区分标注、编辑、生成、推荐；`input_data` 和 `output_data` 保存 JSON；失败原因写入 `error_msg`。
+AI 能力为**同步调用**模式：标注任务通过 `ReactAgent` + 通义千问视觉理解模型处理，生成图片通过 `qwen-image-2.0-pro` 模型生成。无 `ai_task` 表持久化和异步任务队列。管理员暂无 AI 任务统计和配置管理接口。
 
 ## 4. 数据需求
 
@@ -237,8 +230,8 @@ AI 任务记录在 `ai_task` 表：`type` 区分标注、编辑、生成、推�
 
 - 用户：`uk_username`、`uk_nickname`
 - 帖子：`idx_user_id`、`idx_title`、`post_content_index`、`post_status_index`
-- 图片：`idx_user_id`、`idx_picture_name`、`picture_space_id_index`、`picture_tags_index`、`picture_update_time_index`
-- 图片关联：`picture_child_picture_id_post_id_uindex`
+- 图片：`idx_user_id`、`idx_picture_name`、`picture_space_id_index`、`picture_introduction_index`、`picture_update_time_index`
+- 图片关联：`picture_child_picture_id_post_id_uindex`、`picture_child_picture_id_index`、`picture_child_post_id_index`
 - 评论：`idx_post_id`、`idx_user_id`
 - AI 任务：`ai_task_user_id_index`、`ai_task_type_index`、`ai_task_status_index`、`ai_task_picture_id_index`
 
@@ -283,16 +276,16 @@ AI 任务记录在 `ai_task` 表：`type` 区分标注、编辑、生成、推�
 4. 服务端写入 `picture_child`，保存图片顺序。
 5. 列表和详情接口聚合帖子、图片、作者和互动数据。
 
-### 6.3 AI 任务流程
+### 6.3 AI 调用流程
 
-1. VIP/SVIP 用户提交标注、编辑、生成或推荐请求。
-2. 服务端创建 `ai_task`，状态为处理中。
-3. 异步处理器调用 AI Provider。
-4. 成功时写入 `output_data` 和状态成功；失败时写入 `error_msg` 和状态失败。
-5. 用户或管理员通过任务接口查询状态和结果。
+1. VIP/SVIP 用户调用 `/ai/tags`（图片标注）或 `/ai/draw`（文生图）。
+2. 标签识别：服务端通过 `ReactAgent` + 通义千问视觉理解模型同步分析图片，返回结构化结果（名称、描述、标签列表）。
+3. 文生图：服务端通过 DashScope SDK 调用 `qwen-image-2.0-pro` 模型同步生成图片，返回图片 URL。
+4. 当前为同步调用模式，不支持异步任务查询。
 
 ## 7. 后续维护说明
 
-- 本文档应优先跟随 `controller`、`entity`、`src/sql/create.sql` 和 AI DTO 变化更新。
+- 本文档应优先跟随 `controller`、`entity`、`src/sql/create.sql`、AI DTO 和 `common` 包变化更新。
 - 若数据库结构调整，必须同步更新 `model/uml_diagrams.md` 中的类图和 ER 图。
 - 若新增接口，需在功能需求和接口矩阵中补齐路径、权限和输入输出。
+- `common` 包中的 `scheduled/HotScoreScheduler`（热度定时任务）、`config/RestClientConfig`、`config/RocketMQConfig`、`enums/PicturePromptEnum` 如有更新需同步至本文档。

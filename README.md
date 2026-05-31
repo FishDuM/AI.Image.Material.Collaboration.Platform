@@ -1,8 +1,8 @@
-# FishPics AI 图片素材协作平台
-
 <div align="center">
 
-![Java](https://img.shields.io/badge/Java-21-007396) ![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.3.0-6DB33F) ![MyBatis Plus](https://img.shields.io/badge/MyBatis_Plus-3.5.14-C6534B) ![MySQL](https://img.shields.io/badge/MySQL-8-4479A1) ![Redis](https://img.shields.io/badge/Redis-6-DC382D) ![Redisson](https://img.shields.io/badge/Redisson-3.27.0-B31B1B) ![Knife4j](https://img.shields.io/badge/Knife4j-4.4.0-009688) ![腾讯云 COS](https://img.shields.io/badge/腾讯云_COS-5.6.227-0052D9) ![Spring AI Alibaba](https://img.shields.io/badge/Spring_AI_Alibaba-1.1.2.0-00A1D6)
+# FishPics AI 图片素材协作平台
+
+![Java](https://img.shields.io/badge/Java-21-007396) ![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.3.0-6DB33F) ![MyBatis Plus](https://img.shields.io/badge/MyBatis_Plus-3.5.14-C6534B) ![MySQL](https://img.shields.io/badge/MySQL-8-4479A1) ![Redis](https://img.shields.io/badge/Redis-6-DC382D) ![Redisson](https://img.shields.io/badge/Redisson-3.27.0-B31B1B) ![Knife4j](https://img.shields.io/badge/Knife4j-4.4.0-009688) ![腾讯云 COS](https://img.shields.io/badge/腾讯云_COS-5.6.227-0052D9) ![Spring AI Alibaba](https://img.shields.io/badge/Spring_AI_Alibaba-1.1.2.3-00A1D6) ![RocketMQ](https://img.shields.io/badge/RocketMQ-2.3.2-D77310)
 
 ![React](https://img.shields.io/badge/React-19.2-61DAFB) ![Vite](https://img.shields.io/badge/Vite-8.0-646CFF) ![Ant Design](https://img.shields.io/badge/Ant_Design-6.3-1677FF) ![React Router](https://img.shields.io/badge/React_Router-7.14-CA4245) ![Axios](https://img.shields.io/badge/Axios-1.15-5A29E4)
 
@@ -14,9 +14,9 @@
 
 FishPics 是一个面向图片素材管理、社区分享与团队协作的前后端分离平台，围绕图片上传、素材归档、内容发布、用户互动、空间协作、后台审核和 AI 图片处理构建完整业务流程。系统既支持普通用户进行图片上传、帖子发布、评论点赞收藏等社区行为，也支持管理员对用户、图片、帖子、评论、空间和系统配置进行统一治理。
 
-后端以 Spring Boot 为核心，承担认证授权、业务规则校验、数据持久化、对象存储对接、缓存管理、异步事件处理和 AI 任务编排等职责。图片文件统一上传至腾讯云 COS，数据库保存图片元数据和业务关联；用户登录态通过 Token + Redis 管理；管理员权限通过自定义注解与 AOP 切面控制；图片标注、图片生成、图片编辑、图片推荐等 AI 能力通过任务表和异步处理链路统一调度。
+后端以 Spring Boot 为核心，承担认证授权、业务规则校验、数据持久化、对象存储对接、缓存管理、消息队列和 AI 能力编排等职责。图片文件统一上传至腾讯云 COS，数据库保存图片元数据和业务关联；用户登录态通过 Token + Redis 管理；管理员权限通过自定义注解与 AOP 切面控制；AI 图片标注通过 Spring AI Alibaba Agent 驱动，文生图通过 DashScope SDK 调用万相模型。
 
-平台在数据模型上覆盖用户、图片、帖子、评论、空间、社交关系、系统配置和 AI 任务等核心领域；在工程实现上采用 DTO/VO 分层、统一响应、全局异常处理、MyBatis-Plus 分页、Redis Stream 事件消费和 Knife4j 接口文档，保证接口结构清晰、业务边界明确、后续扩展成本可控。前端主要提供社区广场、私人空间、团队空间、后台管理和移动端页面，用于承载完整的业务操作闭环。
+平台在数据模型上覆盖用户、图片、帖子、评论、空间、社交关系、系统配置和 AI 任务等核心领域；在工程实现上采用 DTO/VO 分层、统一响应、全局异常处理、MyBatis-Plus 分页、RocketMQ 消息队列和 Knife4j 接口文档，保证接口结构清晰、业务边界明确、后续扩展成本可控。前端主要提供社区广场、私人空间、团队空间、后台管理和移动端页面，用于承载完整的业务操作闭环。
 
 ## 技术栈
 
@@ -26,11 +26,12 @@ FishPics 是一个面向图片素材管理、社区分享与团队协作的前�
 | ---------- | ----------------------------------------------------------------- |
 | 基础框架   | Java 21, Spring Boot 3.3.0, Spring MVC                            |
 | 数据访问   | MyBatis-Plus 3.5.14, MyBatis XML Mapper, MySQL 8                  |
-| 缓存与并发 | Redis, `setIfAbsent` 短锁, Redisson RStream, Redis Stream         |
+| 缓存与并发 | Redis, Redisson 分布式锁, 本地缓存                                |
+| 消息队列   | RocketMQ 2.3.2                                                    |
 | 权限与安全 | Token + Redis, Spring Interceptor, AOP, 自定义 `@AuthCheck`       |
 | 文件存储   | 腾讯云 COS, 图片元数据落库                                        |
-| AI 能力    | Spring AI Alibaba, DashScope, 通义千问视觉理解, 万相图像生成/编辑 |
-| 工程能力   | Knife4j OpenAPI3, Lombok, Hutool, 全局异常处理, 统一响应模型      |
+| AI 能力    | Spring AI Alibaba, DashScope SDK 2.22.18, 通义千问视觉理解, 万相图像生成 |
+| 工程能力   | Knife4j OpenAPI3, Lombok 1.18.36, Hutool 5.8.38, JsonSchema Generator 4.38.0, 全局异常处理, 统一响应模型 |
 
 ### 前端
 
@@ -48,8 +49,8 @@ FishPics 是一个面向图片素材管理、社区分享与团队协作的前�
 - **图片对象存储与空间容量管理**：图片文件上传到腾讯云 COS，数据库保存图片元数据；上传时按用户等级校验文件大小，并根据私人/团队空间容量扣减使用量。
 - **内容审核闭环**：图片、帖子、评论均具备正常、禁用、待审核状态；管理员可在后台完成用户封禁、图片审核、帖子审核、评论审核和空间状态管理。
 - **互动并发控制**：点赞、收藏等高频互动使用 Redis `setIfAbsent` 短锁限制同一用户重复操作，配合统计字段条件更新降低并发写异常。
-- **异步事件处理**：通过 Redisson RStream 封装 AI 标注、AI 任务、COS 清理和社交通知事件；Stream 不可用时降级到异步或同步处理，保证核心链路可用。
-- **AI 图片能力接入**：封装图片标注、图片编辑、图片生成、图片推荐接口，任务统一落到 `ai_task` 表，支持用户查询任务进度与管理员统计管理。
+- **异步消息能力**：RocketMQ 消息队列已集成，支持异步任务编排。
+- **AI 图片能力接入**：实现 AI 图片标注（标签识别）和 AI 文生图，通过 Spring AI Alibaba Agent 与 DashScope SDK 驱动。
 - **DTO/VO 分层与统一响应**：请求参数、数据库实体和响应视图分离，统一 `Response<T>` 出参和全局异常处理，便于前后端联调和接口文档生成。
 - **系统配置缓存**：分类标签、跑马灯等系统配置持久化在 `pic_system`，并通过 Redis 做热点配置缓存。
 
@@ -80,15 +81,14 @@ FishPics 是一个面向图片素材管理、社区分享与团队协作的前�
 - 帖子与图片通过 `picture_child` 维护有序关联，支持最多 15 张图片。
 - 点赞、收藏、评论、二级回复。
 - 我的帖子、我的收藏、我的点赞分页查询。
-- 帖子统计字段：点赞数、收藏数、评论数、浏览数、热度值。
+- 帖子统计字段：点赞数、收藏数、评论数、浏览数、热度值（定时任务每10分钟更新）。
 - 管理员帖子管理：列表、审核、删除。
 
 ### AI 能力
 
-- VIP/SVIP 用户可提交图片标注、图片编辑、图片生成、图片推荐任务。
-- 图片上传后可通过 Redis Stream 异步触发 AI 自动标注。
-- AI 任务统一存储在 `ai_task` 表，包含任务类型、输入 JSON、输出 JSON、状态和错误信息。
-- 管理员可查询 AI 任务列表、任务统计和 AI 功能开关配置。
+- VIP/SVIP 用户可使用 AI 图片标注（自动识别标签、名称和描述）和 AI 文生图功能。
+- AI 图片标注：基于 Spring AI Alibaba Agent，通过通义千问视觉理解模型自动提取图片标签、名称和介绍。
+- AI 文生图：通过 DashScope SDK 调用万相图像生成模型，支持多种绘图风格和参数配置。
 
 ### 系统与后台
 
@@ -113,15 +113,15 @@ FishPics 是一个面向图片素材管理、社区分享与团队协作的前�
 ```text
 上传文件 -> 校验登录态和等级大小限制 -> 上传 COS -> 读取图片元数据
        -> 校验目标空间容量 -> 更新空间已用容量 -> 写入 picture
-       -> 投递 AI 标注事件 -> 返回图片 id/url
+       -> 返回图片 id/url
 ```
 
-### AI 任务链路
+### AI 调用链路
 
 ```text
-用户提交 AI 请求 -> 创建 ai_task(status=0) -> Redis Stream 投递任务
-              -> Consumer/AsyncProcessor 调用模型服务
-              -> 成功写 output_data，失败写 error_msg -> 更新任务状态
+用户提交 AI 请求 -> 同步调用 AI Provider（Spring AI Alibaba / DashScope SDK）
+              -> 标签识别：Agent 分析图片返回结构化结果
+              -> 文生图：万相模型生成图片并返回 URL
 ```
 
 ### 核心数据表
@@ -148,87 +148,34 @@ FishPics 是一个面向图片素材管理、社区分享与团队协作的前�
 src/FishPics-backend/src/main/java/hk/ljx/fishpicsbackend
 ├── FishPicsBackendApplication.java     # Spring Boot 启动类
 ├── user/                               # 用户模块
-│   ├── UserController.java             #   用户、关注、粉丝、管理员接口
-│   ├── UserService.java                #   业务接口
-│   ├── UserServiceImpl.java            #   业务实现
-│   ├── User.java, UserFans.java,       #   数据库实体
-│   │   UserPostCollect.java,
-│   │   UserPostLikes.java
-│   ├── dto/                            #   登录、注册、编辑、隐私、查询
-│   └── vo/                             #   登录态、主页、粉丝关注、管理员
 ├── picture/                            # 图片模块
-│   ├── PictureController.java          #   上传、删除、更新、审核接口
-│   ├── PictureService.java
-│   ├── PictureServiceImpl.java
-│   ├── Picture.java, PictureChild.java #   数据库实体
-│   ├── dto/                            #   删除、更新、元数据
-│   └── vo/                             #   列表、后台、空间图片、编辑
 ├── post/                               # 帖子模块
-│   ├── PostController.java             #   发帖、详情、编辑、互动、管理接口
-│   ├── PostService.java
-│   ├── PostServiceImpl.java
-│   ├── Post.java                       #   数据库实体
-│   ├── dto/                            #   发帖、编辑、列表查询
-│   └── vo/                             #   列表、详情
 ├── comment/                            # 评论模块
-│   ├── CommentController.java          #   创建、列表、删除、审核接口
-│   ├── CommentService.java
-│   ├── CommentServiceImpl.java
-│   ├── Comment.java                    #   数据库实体
-│   ├── dto/                            #   创建与查询
-│   └── vo/                             #   评论展示
 ├── space/                              # 空间模块
-│   ├── SpaceController.java            #   创建、列表、详情、更新、管理接口
-│   ├── SpaceService.java
-│   ├── SpaceServiceImpl.java
-│   ├── Space.java                      #   数据库实体
-│   ├── dto/                            #   创建、更新、后台管理
-│   └── vo/                             #   空间展示、团队成员
 ├── system/                             # 系统配置模块
-│   ├── SystemController.java           #   分类标签、跑马灯接口
-│   ├── PicSystemService.java
-│   ├── PicSystemServiceImpl.java
-│   ├── PicSystem.java                  #   数据库实体
-│   ├── dto/                            #   标签、跑马灯配置
-│   └── vo/                             #   系统展示
 ├── ai/                                 # AI 能力模块
-│   ├── AiController.java               #   标注、生成、编辑、推荐接口
-│   ├── AiService.java
-│   ├── AiServiceImpl.java
-│   ├── dto/                            #   AI 请求模型
-│   ├── temp/                           #   临时 DTO
-│   └── vo/                             #   AI 响应模型
-├── mapper/                             # 所有 MyBatis-Plus Mapper 接口
-│   ├── UserMapper.java
-│   ├── PictureMapper.java
-│   ├── PictureChildMapper.java
-│   ├── PostMapper.java
-│   ├── CommentMapper.java
-│   ├── SpaceMapper.java
-│   ├── UserFansMapper.java
-│   ├── UserPostCollectMapper.java
-│   ├── UserPostLikesMapper.java
-│   └── PicSystemMapper.java
+├── mapper/                             # MyBatis-Plus Mapper 接口
 └── common/                             # 通用基础设施
-    ├── annotation/                     #   AuthCheck 权限注解
-    ├── aop/                            #   AuthInterceptor 权限切面
-    ├── config/                         #   CORS、COS、JSON、MyBatis、Async 配置
-    ├── constants/                      #   Redis、User、Space、Sys 常量
-    ├── dto/                            #   DeleteById、PageRequest 基础请求
-    ├── enums/                          #   UserRoleEnum 角色枚举
-    ├── exception/                      #   BaseException、ExceptionCode、ExcUtils、GlobalExceptionHandler
-    ├── interceptor/                    #   LoginInterceptor、RefreshTokenInterceptor、MvcConfig
-    ├── response/                       #   Response、ResUtils 统一响应
-    └── utils/                          #   CosService、UserHolder
+    ├── config/                         # CORS、COS、JSON、MyBatis、Async 等配置
+    ├── enums/                          # 角色枚举、绘图风格枚举
+    ├── exception/                      # 全局异常处理
+    ├── interceptor/                    # 登录拦截器
+    ├── response/                       # 统一响应模型
+    ├── scheduled/                      # 定时任务
+    ├── annotation/                     # 自定义注解
+    ├── aop/                            # AOP 切面
+    ├── constants/                      # 常量
+    ├── dto/                            # 通用 DTO
+    └── utils/                          # 工具类
 ```
 
 ### 后端资源路径
 
 ```text
 src/FishPics-backend/src/main/resources
-├── application.yml                     # 通用配置，启用 local profile
-├── application-local.yml               # 本地数据库、Redis、COS、AI 密钥配置
-└── mapper/                             # MyBatis XML，自定义 SQL 映射
+├── application.yml                     # 通用配置
+├── application-local.yml               # 本地密钥配置
+└── mapper/                             # MyBatis XML 映射
 
 src/FishPics-backend/src/sql/create.sql # 数据库建表脚本
 ```
@@ -238,76 +185,15 @@ src/FishPics-backend/src/sql/create.sql # 数据库建表脚本
 ```text
 src/FishPic-frontend/src
 ├── api/                                # Axios 请求封装
-│   └── index.js                        # 拦截器、请求去重、所有 API 函数
-├── assets/                             # 静态资源（空目录）
 ├── components/                         # 通用组件
-│   ├── CommentSection.jsx              #   评论列表与回复
-│   ├── CreateEditPostModal.jsx         #   创建/编辑帖子弹窗
-│   ├── ErrorBoundary.jsx               #   React 错误边界
-│   ├── FollowUserList.jsx              #   关注/粉丝列表
-│   ├── GlobalLayout.jsx                #   主布局：头部、侧边栏、底部导航
-│   ├── MobilePageWrapper.jsx           #   移动端页面壳
-│   ├── PostDetailModal.jsx             #   帖子详情弹窗
-│   ├── ProtectedRoute.jsx              #   路由守卫
 │   └── shared/                         #   共享 UI 组件
-│       ├── AuthModals.jsx              #     认证弹窗包装器
-│       ├── CategoryBar.jsx             #     分类标签栏
-│       ├── ImageUploadModal.jsx        #     图片上传弹窗
-│       ├── LoginModal.jsx              #     登录/注册/设置弹窗
-│       ├── MobileBottomNav.jsx         #     移动端底部导航
-│       ├── PostCard.jsx                #     帖子卡片
-│       ├── PostLayout.jsx              #     帖子图文布局
-│       ├── PostModal.jsx               #     帖子弹窗包装器
-│       ├── SearchBar.jsx               #     搜索栏
-│       ├── SpacePickerModal.jsx        #     空间图片选择器
-│       ├── UpgradeContent.jsx          #     升级方案内容
-│       └── UpgradeModal.jsx            #     升级弹窗
 ├── context/                            # React Context
-│   ├── AuthContext.jsx                 #   认证状态：用户信息、登录态
-│   └── ThemeContext.jsx                #   主题切换：深色/浅色
 ├── hooks/                              # 自定义 Hooks
-│   ├── useAuthModal.js                 #   登录/注册弹窗状态管理
-│   ├── useIsMobile.js                  #   移动端断点检测（768px）
-│   └── useRequestUtils.js              #   AbortController、系统分类缓存、防抖节流
 ├── pages/                              # 页面组件
-│   ├── HomePage.jsx                    #   首页：轮播、瀑布流、搜索、分类
-│   ├── CommunitySquare.jsx             #   社区广场：帖子瀑布流
-│   ├── UserProfile.jsx                 #   用户主页：帖子/收藏/点赞、头像上传
-│   ├── PrivateSpace.jsx                #   私人空间：图片网格、上传、批量操作
-│   ├── TeamSpace.jsx                   #   团队空间列表
-│   ├── TeamSpaceDetail.jsx             #   团队空间详情
-│   ├── Notifications.jsx               #   消息通知（占位）
-│   ├── AIImageTools.jsx                #   AI 工具：图片生成、编辑
-│   ├── NotFound.jsx                    #   404 页面
-│   ├── UserManagement.jsx              #   管理员：用户管理
-│   ├── AdminUserList.jsx               #   管理员：用户列表
-│   ├── AdminPictureManagement.jsx      #   管理员：图片审核
-│   ├── AdminCommentManagement.jsx      #   管理员：评论管理
-│   ├── AdminPostManagement.jsx         #   管理员：帖子管理
-│   ├── SpaceManagement.jsx             #   管理员：空间管理（占位）
-│   ├── TeamManagement.jsx              #   管理员：团队管理
-│   ├── SystemManagement.jsx            #   管理员：标签和跑马灯管理
-│   ├── AIManagement.jsx                #   管理员：AI 任务监控
-│   ├── MobileLoginPage.jsx             #   移动端：登录
-│   ├── MobileRegisterPage.jsx          #   移动端：注册
-│   ├── MobilePostCreatePage.jsx        #   移动端：创建帖子
-│   ├── MobilePostDetailPage.jsx        #   移动端：帖子详情
-│   ├── MobileEditPicturePage.jsx       #   移动端：编辑图片
-│   ├── MobileEditProfilePage.jsx       #   移动端：编辑资料
-│   ├── MobileUpgradePage.jsx           #   移动端：升级空间
-│   ├── MobileFollowListPage.jsx        #   移动端：关注列表
-│   └── MobileUserProfilePage.jsx       #   移动端：用户主页
 ├── styles/                             # 全局样式
-│   ├── animations.css                  #   动画定义
-│   ├── carousel.css                    #   轮播样式
-│   └── shared.css                      #   共享样式变量
 ├── utils/                              # 工具函数
-│   ├── constants.js                    #   分页配置、等级映射、格式化函数
-│   ├── storage.js                      #   localStorage Token 和用户信息
-│   └── uploadConstraints.js            #   文件类型/大小校验
-├── App.jsx                             # 路由与页面入口
-├── App.css                             # 全局布局样式
-├── index.css                           # CSS 自定义属性、深色模式变量
+├── App.jsx                             # 路由入口
+├── App.css / index.css                 # 全局样式
 └── main.jsx                            # React 挂载入口
 ```
 
