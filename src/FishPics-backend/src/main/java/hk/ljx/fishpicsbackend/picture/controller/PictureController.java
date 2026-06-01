@@ -12,6 +12,7 @@ import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.picture.dto.DeleteByIdList;
 import hk.ljx.fishpicsbackend.picture.dto.PictureQueryRequest;
 import hk.ljx.fishpicsbackend.picture.dto.PictureUpdateRequest;
+import hk.ljx.fishpicsbackend.picture.dto.SavePictureByUrlRequest;
 import hk.ljx.fishpicsbackend.picture.vo.PictureAdminVO;
 import hk.ljx.fishpicsbackend.picture.vo.PictureEditVO;
 import hk.ljx.fishpicsbackend.picture.vo.PictureListVO;
@@ -51,6 +52,18 @@ public class PictureController {
             @RequestParam(value = "targetSpaceId", required = false) Long targetSpaceId) {
         ExcUtils.throwIfTrue(file.isEmpty(), "文件不能为空");
         Picture picture = pictureService.uploadPicture(file, targetSpaceId);
+        PictureListVO pictureListVO = new PictureListVO();
+        pictureListVO.setId(picture.getId());
+        pictureListVO.setUrl(picture.getUrl());
+        return ResUtils.success(pictureListVO);
+    }
+
+    /**
+     * 通过 URL 保存图片到空间
+     */
+    @PostMapping("/save-by-url")
+    public Response<PictureListVO> savePictureByUrl(@RequestBody SavePictureByUrlRequest request) {
+        Picture picture = pictureService.savePictureByUrl(request.getUrl(), request.getTargetSpaceId());
         PictureListVO pictureListVO = new PictureListVO();
         pictureListVO.setId(picture.getId());
         pictureListVO.setUrl(picture.getUrl());

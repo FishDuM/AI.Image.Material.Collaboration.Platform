@@ -16,6 +16,7 @@ import { PlusOutlined, DeleteOutlined, LeftOutlined, RightOutlined, FileTextOutl
  *  touchProps    - 触摸滑动事件 { onTouchStart, onTouchMove, onTouchEnd }
  *  children      - 右侧内容区
  *  emptyImage    - 无图片时显示的提示文字
+ *  onAddMore     - 点击右箭头追加图片的回调（编辑模式）
  */
 export default function PostLayout({
   images = [],
@@ -28,8 +29,11 @@ export default function PostLayout({
   touchProps = {},
   children,
   emptyImage = '暂无图片',
+  onAddMore,
 }) {
   const hasImages = images.length > 0
+  const isLastImage = currentIndex === images.length - 1
+  const canAddMore = images.length < maxImages
 
   const handlePrevImage = () => {
     if (currentIndex > 0) {
@@ -38,7 +42,9 @@ export default function PostLayout({
   }
 
   const handleNextImage = () => {
-    if (currentIndex < images.length - 1) {
+    if (isLastImage && canAddMore) {
+      onAddMore?.()
+    } else if (currentIndex < images.length - 1) {
       onIndexChange?.(currentIndex + 1)
     }
   }
@@ -56,7 +62,7 @@ export default function PostLayout({
     return (
       <div className="carousel-main" {...touchProps}>
         {/* 添加图片占位（编辑模式） */}
-        {showAddSlide && images.length < maxImages && (
+        {showAddSlide && canAddMore && (
           <Upload
             listType="picture-card"
             className="carousel-upload"
@@ -94,56 +100,47 @@ export default function PostLayout({
           </button>
         )}
 
-        {/* 左右切换箭头 — 仅多图时显示 */}
-        {images.length > 1 && !showAddSlide && (
-          <>
-            {currentIndex > 0 && (
-              <button
-                type="button"
-                className="carousel-arrow carousel-arrow-left"
-                onClick={handlePrevImage}
-              >
-                <LeftOutlined />
-              </button>
-            )}
-            {currentIndex < images.length - 1 && (
-              <button
-                type="button"
-                className="carousel-arrow carousel-arrow-right"
-                onClick={handleNextImage}
-              >
-                <RightOutlined />
-              </button>
-            )}
-            <div className="carousel-counter">
-              {currentIndex + 1} / {images.length}
-            </div>
-          </>
+        {/* 左箭头 - 不在第一张图时显示 */}
+        {currentIndex > 0 && !showAddSlide && (
+          <button
+            type="button"
+            className="carousel-arrow carousel-arrow-left"
+            onClick={handlePrevImage}
+          >
+            <LeftOutlined />
+          </button>
         )}
-        {/* 编辑模式下显示添加图片占位和切换 */}
+        {currentIndex > 0 && showAddSlide && (
+          <button
+            type="button"
+            className="carousel-arrow carousel-arrow-left"
+            onClick={() => onIndexChange?.(images.length - 1)}
+          >
+            <LeftOutlined />
+          </button>
+        )}
+
+        {/* 右箭头 - 不是最后一张，或最后一张但还可以添加时显示 */}
+        {!showAddSlide && (currentIndex < images.length - 1 || (isLastImage && canAddMore)) && (
+          <button
+            type="button"
+            className="carousel-arrow carousel-arrow-right"
+            onClick={handleNextImage}
+          >
+            <RightOutlined />
+          </button>
+        )}
+
+        {/* 计数器 */}
+        {!showAddSlide && (
+          <div className="carousel-counter">
+            {currentIndex + 1} / {images.length}
+          </div>
+        )}
         {showAddSlide && (
-          <>
-            <button
-              type="button"
-              className="carousel-arrow carousel-arrow-left"
-              onClick={() => onIndexChange?.(images.length - 1)}
-              disabled={images.length === 0}
-            >
-              <LeftOutlined />
-            </button>
-            {currentIndex < images.length - 1 && (
-              <button
-                type="button"
-                className="carousel-arrow carousel-arrow-right"
-                onClick={handleNextImage}
-              >
-                <RightOutlined />
-              </button>
-            )}
-            <div className="carousel-counter" style={{ display: images.length > 0 ? 'block' : 'none' }}>
-              {currentIndex < images.length ? `${currentIndex + 1} / ${images.length}` : `${images.length} / ${images.length}`}
-            </div>
-          </>
+          <div className="carousel-counter">
+            {images.length} / {images.length}
+          </div>
         )}
       </div>
     )

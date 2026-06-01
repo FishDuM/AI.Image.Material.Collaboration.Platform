@@ -5,7 +5,7 @@ import {
   SendOutlined, SyncOutlined, ExperimentOutlined, ClearOutlined, CloseCircleOutlined,
   RedoOutlined, SaveOutlined, TeamOutlined,
 } from '@ant-design/icons'
-import { submitAiDraw, getAiDrawResult } from '../api'
+import { submitAiDraw, getAiDrawResult, savePictureByUrl } from '../api'
 import { onMessage, offMessage, getConnectionStatus } from '../hooks/useWebSocket'
 import './AIImageTools.css'
 
@@ -185,6 +185,21 @@ function AIImageTools() {
     setGenSize('1:1')
   }
 
+  const handleSaveToPrivate = async () => {
+    if (!genResults?.url) return
+    try {
+      await savePictureByUrl(genResults.url, null)
+      message.success('已保存到私人空间')
+    } catch (e) {
+      message.error(e.message || '保存失败')
+    }
+  }
+
+  const handleSaveToTeam = () => {
+    if (!genResults?.url) return
+    message.info('团队空间功能待实现')
+  }
+
   const renderResultArea = () => {
     if (genState === 'generating') {
       return (
@@ -217,7 +232,7 @@ function AIImageTools() {
               src={genResults.url}
               alt="AI 生成图片"
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-              preview={{ mask: null }}
+              preview={{ cover: false }}
             />
           </div>
           <div className="ai-result-toolbar">
@@ -226,10 +241,10 @@ function AIImageTools() {
                 重新生成
               </Button>
             </Tooltip>
-            <Button icon={<SaveOutlined />}>
+            <Button icon={<SaveOutlined />} onClick={handleSaveToPrivate}>
               保存到私人空间
             </Button>
-            <Button icon={<TeamOutlined />}>
+            <Button icon={<TeamOutlined />} onClick={handleSaveToTeam}>
               保存到团队空间
             </Button>
           </div>

@@ -1,9 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Modal, Upload, Button, Space, App } from 'antd'
-import { InboxOutlined, RotateLeftOutlined, RotateRightOutlined, ZoomInOutlined, ZoomOutOutlined } from '@ant-design/icons'
+import { Modal, Upload, Button, Space, App, Tabs, Input, Image, Empty } from 'antd'
+import {
+  InboxOutlined, RotateLeftOutlined, RotateRightOutlined,
+  ZoomInOutlined, ZoomOutOutlined, LinkOutlined, ImportOutlined, EyeOutlined,
+} from '@ant-design/icons'
 import Cropper from 'cropperjs'
 import 'cropperjs/dist/cropper.css'
-import { uploadPicture } from '../../api'
+import { uploadPicture, savePictureByUrl } from '../../api'
 import { isAllowedImageFile, getMaxUploadSize, formatMaxUploadSize, BROWSER_RENDERABLE_TYPES } from '../../utils/uploadConstraints'
 import './ImageUploadModal.css'
 
@@ -23,6 +26,7 @@ function canBrowserRender(file) {
 export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) {
   const { message } = App.useApp()
   const [step, setStep] = useState('select') // 'select' | 'crop'
+  const [activeTab, setActiveTab] = useState('upload') // 'upload' | 'url'
   const [selectedFile, setSelectedFile] = useState(null)
   const [uploading, setUploading] = useState(false)
   const imgRef = useRef(null)
@@ -31,9 +35,16 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
   const maxSize = getMaxUploadSize()
   const maxSizeText = formatMaxUploadSize()
 
-  // 重置状态
+  // URL 导入状态
+  const [url, setUrl] = useState('')
+  const [previewUrl, setPreviewUrl] = useState('')
+  const [previewError, setPreviewError] = useState(false)
+  const [urlResolved, setUrlResolved] = useState(false)
+
+  // 重置所有状态
   const resetState = useCallback(() => {
     setStep('select')
+    setActiveTab('upload')
     setSelectedFile(null)
     setUploading(false)
     cropperRef.current?.destroy()
@@ -42,6 +53,10 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
       URL.revokeObjectURL(objectUrlRef.current)
       objectUrlRef.current = ''
     }
+    setUrl('')
+    setPreviewUrl('')
+    setPreviewError(false)
+    setUrlResolved(false)
   }, [])
 
   useEffect(() => {
@@ -139,34 +154,65 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
     }
   }
 
-  return (
-    <Modal
-      title={step === 'select' ? '上传图片' : '裁剪图片'}
-      open={open}
-      onCancel={onClose}
-      footer={null}
-      width={step === 'crop' ? 700 : 520}
-      destroyOnHidden
-    >
-      {step === 'select' ? (
-        <div className="image-upload-modal-body">
-          <Upload.Dragger
-            className="image-upload-dragger"
-            beforeUpload={beforeUpload}
-            maxCount={1}
-            showUploadList={false}
-            accept=".jpeg,.jpg,.png,.gif,.webp,.heic,.heif,.bmp,.tiff,.tif,.avif,.apng,.psd,.ai,.eps,.raw,.dng,.cr3,.crw,.arw,.nef,.orf,.rw2"
-          >
-            <p className="ant-upload-drag-icon">
-              <InboxOutlined />
-            </p>
-            <p className="ant-upload-text">点击或拖拽图片到此区域上传</p>
-            <p className="ant-upload-hint">
-              支持 JPG、PNG、GIF、WebP、HEIC、BMP、TIFF、AVIF 及各类 RAW/PSD 等格式，单张图片不超过 {maxSizeText}
-            </p>
-          </Upload.Dragger>
-        </div>
-      ) : (
+  const handlePaste = async () => {
+    try {
+      const text = await navigator.clipboard.readText()
+      if (text) setUrl(text)
+    } catch {
+      message.warning('无法读取剪贴板')
+    }
+  }
+
+  const handleUrlResolve = () => {
+    if (!url.trim()) { message.warning('请输入图片URL'); return }
+    setPreviewUrl(url.trim())
+    setPreviewError(false)
+    setUrlResolved(true)
+  }
+
+  const handleUrlConfirm = async () => {
+    if (!previewUrl) { message.warning('请先解析图片URL'); return }
+    setUploading(true)
+    try {
+      const result = await savePictureByUrl(previewUrl, spaceId)
+      message.success('图片导入成功')
+      onSuccess?.({ url: result.url, id: result.id })
+      onClose()
+    } catch (e) {
+      message.error(e.message || '导入失败')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleUrlCancel = () => {
+    setUrl('')
+    setPreviewUrl('')
+    setPreviewError(false)
+    setUrlResolved(false)
+  }
+
+  const handleTabChange = (key) => {
+    setActiveTab(key)
+    if (key === 'url') {
+      setUrl('')
+      setPreviewUrl('')
+      setPreviewError(false)
+      setUrlResolved(false)
+    }
+  }
+
+  // 裁剪模式：不显示 Tabs，只显示裁剪 UI
+  if (step === 'crop') {
+    return (
+      <Modal
+        title="裁剪图片"
+        open={open}
+        onCancel={onClose}
+        footer={null}
+        width={700}
+        destroyOnHidden
+      >
         <div className="image-cropper-body">
           <div className="image-cropper-container">
             <img ref={imgRef} src={objectUrlRef.current} alt="裁剪预览" />
@@ -186,7 +232,104 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
             </Button>
           </div>
         </div>
-      )}
+      </Modal>
+    )
+  }
+
+  return (
+    <Modal
+      title="上传图片"
+      open={open}
+      onCancel={onClose}
+      footer={null}
+      width={520}
+      destroyOnHidden
+    >
+      <Tabs
+        activeKey={activeTab}
+        onChange={handleTabChange}
+        className="image-upload-tabs"
+        items={[
+          {
+            key: 'upload',
+            label: '文件上传',
+            children: (
+              <div className="image-upload-modal-body">
+                <Upload.Dragger
+                  className="image-upload-dragger"
+                  beforeUpload={beforeUpload}
+                  maxCount={1}
+                  showUploadList={false}
+                  accept=".jpeg,.jpg,.png,.gif,.webp,.heic,.heif,.bmp,.tiff,.tif,.avif,.apng,.psd,.ai,.eps,.raw,.dng,.cr3,.crw,.arw,.nef,.orf,.rw2"
+                >
+                  <p className="ant-upload-drag-icon">
+                    <InboxOutlined />
+                  </p>
+                  <p className="ant-upload-text">点击或拖拽图片到此区域上传</p>
+                  <p className="ant-upload-hint">
+                    支持 JPG、PNG、GIF、WebP、HEIC、BMP、TIFF、AVIF 及各类 RAW/PSD 等格式，单张图片不超过 {maxSizeText}
+                  </p>
+                </Upload.Dragger>
+              </div>
+            ),
+          },
+          {
+            key: 'url',
+            label: 'URL 导入',
+            children: (
+              <div className="image-upload-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <Input.Search
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="粘贴图片URL..."
+                  size="large"
+                  allowClear
+                  enterButton="解析"
+                  onSearch={handleUrlResolve}
+                />
+                <div>
+                  <div className="import-url-label">图片预览</div>
+                  <div className="import-url-preview-box">
+                    {previewUrl ? (
+                      previewError ? (
+                        <Empty description="无法预览该图片" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                      ) : (
+                        <Image
+                          src={previewUrl}
+                          alt="预览"
+                          style={{ maxHeight: 240, objectFit: 'contain' }}
+                          onError={() => setPreviewError(true)}
+                          preview={{ cover: false }}
+                        />
+                      )
+                    ) : (
+                      <Empty
+                        description="输入URL后点击解析预览图片"
+                        image={Empty.PRESENTED_IMAGE_SIMPLE}
+                        style={{ margin: '32px 0' }}
+                      />
+                    )}
+                  </div>
+                </div>
+                {urlResolved && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                    <Button onClick={handleUrlCancel}>取消</Button>
+                    <Button
+                      type="primary"
+                      icon={<ImportOutlined />}
+                      onClick={handleUrlConfirm}
+                      loading={uploading}
+                      size="large"
+                    >
+                      确认导入
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ),
+          },
+        ]}
+      />
     </Modal>
   )
 }

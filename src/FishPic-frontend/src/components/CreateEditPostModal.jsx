@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { App, Modal, Form, Input, Button, Upload, Select, Switch, Tabs, Pagination, Spin, Empty } from 'antd'
-import { PlusOutlined, DeleteOutlined, LeftOutlined, RightOutlined, SendOutlined, CheckOutlined, CloudOutlined, TeamOutlined } from '@ant-design/icons'
-import { editPost, listSpace, postPictureList, uploadPicture, uploadPost } from '../api'
+import { App, Modal, Form, Input, Button, Upload, Select, Switch, Tabs, Pagination, Spin, Empty, Popover, Image } from 'antd'
+import { PlusOutlined, DeleteOutlined, LeftOutlined, RightOutlined, SendOutlined, CheckOutlined, CloudOutlined, TeamOutlined, ImportOutlined } from '@ant-design/icons'
+import { editPost, listSpace, postPictureList, uploadPicture, uploadPost, savePictureByUrl } from '../api'
 import MobilePageWrapper from './MobilePageWrapper'
 import SpacePickerModal from './shared/SpacePickerModal'
 import PostModal from './shared/PostModal'
@@ -40,6 +40,12 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
   const [teamSpaceImageLoading, setTeamSpaceImageLoading] = useState(false)
   const [selectedTeamSpaceImageIds, setSelectedTeamSpaceImageIds] = useState([])
   const [teamSpaceView, setTeamSpaceView] = useState('list')
+  const [urlImportUrl, setUrlImportUrl] = useState('')
+  const [urlImporting, setUrlImporting] = useState(false)
+  const [urlPreviewUrl, setUrlPreviewUrl] = useState('')
+  const [urlPreviewError, setUrlPreviewError] = useState(false)
+  const [urlResolved, setUrlResolved] = useState(false)
+  const [popoverOpen, setPopoverOpen] = useState(false)
 
   const maxSize = getMaxUploadSize()
   const maxSizeText = formatMaxUploadSize()
@@ -109,6 +115,12 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
       setSelectedTeamSpaceImageIds([])
       setTeamSpaceView('list')
       form.resetFields()
+      setUrlImportUrl('')
+      setUrlImporting(false)
+      setUrlPreviewUrl('')
+      setUrlPreviewError(false)
+      setUrlResolved(false)
+      setPopoverOpen(false)
       setTimeout(() => {
         form.setFieldsValue({ coverIndex: 0 })
       }, 0)
@@ -219,6 +231,83 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
       form.setFieldsValue({ coverIndex: 0 })
     }
   }, [selectedTeamSpaceImageIds, teamSpaceImages, uploadedImages.length, form])
+
+  const handleUrlImportFromStep = async () => {
+    if (!urlImportUrl.trim()) { message.warning('请输入图片URL'); return }
+    if (imageId.length >= 15) { message.warning('最多只能上传15张图片'); return }
+    setUrlImporting(true)
+    try {
+      const result = await savePictureByUrl(urlImportUrl.trim())
+      const { url, id } = result
+      const uid = `url-${Date.now()}`
+      setUploadedImages(prev => [...prev, { uid, name: `url-image-${id}`, status: 'done', url, pictureId: id }])
+      setImageId(prev => [...prev, id])
+      setUrlImportUrl('')
+      setUrlPreviewUrl('')
+      setUrlResolved(false)
+      setModalStep(2)
+      const currentCover = form.getFieldValue('coverIndex')
+      if (currentCover == null) form.setFieldsValue({ coverIndex: 0 })
+      message.success('图片导入成功')
+    } catch (e) {
+      message.error(e.message || '导入失败')
+    } finally {
+      setUrlImporting(false)
+    }
+  }
+
+  const handleStep1UrlResolve = () => {
+    if (!urlImportUrl.trim()) { message.warning('请输入图片URL'); return }
+    setUrlPreviewUrl(urlImportUrl.trim())
+    setUrlPreviewError(false)
+    setUrlResolved(true)
+  }
+
+  const handleStep1UrlCancel = () => {
+    setUrlImportUrl('')
+    setUrlPreviewUrl('')
+    setUrlPreviewError(false)
+    setUrlResolved(false)
+  }
+
+  const handleStep2UrlResolve = () => {
+    if (!urlImportUrl.trim()) { message.warning('请输入图片URL'); return }
+    setUrlPreviewUrl(urlImportUrl.trim())
+    setUrlPreviewError(false)
+    setUrlResolved(true)
+  }
+
+  const handleStep2UrlConfirm = async () => {
+    if (imageId.length >= 15) { message.warning('最多只能上传15张图片'); return }
+    if (!urlPreviewUrl) { message.warning('请先解析图片URL'); return }
+    setUrlImporting(true)
+    try {
+      const result = await savePictureByUrl(urlPreviewUrl)
+      const { url, id } = result
+      const uid = `url-${Date.now()}`
+      setUploadedImages(prev => [...prev, { uid, name: `url-image-${id}`, status: 'done', url, pictureId: id }])
+      setImageId(prev => [...prev, id])
+      setUrlImportUrl('')
+      setUrlPreviewUrl('')
+      setUrlResolved(false)
+      setPopoverOpen(false)
+      setCurrentImageIndex(prev => prev + 1)
+      setShowUploadSlide(false)
+      message.success('图片导入成功')
+    } catch (e) {
+      message.error(e.message || '导入失败')
+    } finally {
+      setUrlImporting(false)
+    }
+  }
+
+  const handleStep2UrlCancel = () => {
+    setUrlImportUrl('')
+    setUrlPreviewUrl('')
+    setUrlPreviewError(false)
+    setUrlResolved(false)
+    setPopoverOpen(false)
+  }
 
   useEffect(() => {
     const loadSpace = async () => {
@@ -536,6 +625,58 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
               ),
             },
             {
+              key: 'url',
+              label: 'URL 导入',
+              children: (
+                <div className="space-select-tab" style={{ padding: '16px 0', display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <Input.Search
+                    value={urlImportUrl}
+                    onChange={(e) => setUrlImportUrl(e.target.value)}
+                    placeholder="粘贴图片URL..."
+                    size="large"
+                    allowClear
+                    enterButton="解析"
+                    onSearch={handleStep1UrlResolve}
+                  />
+                  <div className="import-url-preview-box">
+                    {urlPreviewUrl ? (
+                      urlPreviewError ? (
+                        <Empty description="无法预览该图片" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                      ) : (
+                        <Image
+                          src={urlPreviewUrl}
+                          alt="预览"
+                          style={{ maxHeight: 240, objectFit: 'contain' }}
+                          onError={() => setUrlPreviewError(true)}
+                          preview={{ cover: false }}
+                        />
+                      )
+                    ) : (
+                      <Empty
+                        description="输入URL后点击解析预览图片"
+                        image={Empty.PRESENTED_IMAGE_SIMPLE}
+                        style={{ margin: '32px 0' }}
+                      />
+                    )}
+                  </div>
+                  {urlResolved && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                      <Button onClick={handleStep1UrlCancel}>取消</Button>
+                      <Button
+                        type="primary"
+                        icon={<ImportOutlined />}
+                        onClick={handleUrlImportFromStep}
+                        loading={urlImporting}
+                        size="large"
+                      >
+                        确认导入
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ),
+            },
+            {
               key: 'space',
               label: '从私人空间选择',
               children: (
@@ -720,6 +861,7 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
       onAddImage={customUploadRequest}
       showAddSlide={showUploadSlide}
       maxImages={15}
+      onAddMore={() => { setCurrentImageIndex(prev => prev + 1); setShowUploadSlide(true) }}
       touchProps={{
         onTouchStart: handleTouchStart,
         onTouchMove: handleTouchMove,
@@ -789,6 +931,63 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
             >
               从空间中获取
             </Button>
+            <Popover
+              open={popoverOpen}
+              onOpenChange={(visible) => {
+                setPopoverOpen(visible)
+                if (!visible) { setUrlImportUrl(''); setUrlPreviewUrl(''); setUrlResolved(false); setUrlPreviewError(false) }
+              }}
+              trigger="click"
+              placement="bottomLeft"
+              title="从 URL 导入"
+              content={
+                <div style={{ width: 300, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <Input.Search
+                    value={urlImportUrl}
+                    onChange={(e) => setUrlImportUrl(e.target.value)}
+                    placeholder="粘贴图片URL..."
+                    allowClear
+                    enterButton="解析"
+                    onSearch={handleStep2UrlResolve}
+                  />
+                  {urlPreviewUrl && (
+                    urlPreviewError ? (
+                      <div style={{ color: '#ff4d4f', fontSize: 12 }}>无法预览该图片</div>
+                    ) : (
+                      <Image
+                        src={urlPreviewUrl}
+                        alt="预览"
+                        style={{ maxHeight: 160, objectFit: 'contain' }}
+                        onError={() => setUrlPreviewError(true)}
+                        preview={false}
+                      />
+                    )
+                  )}
+                  {urlResolved && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                      <Button size="small" onClick={handleStep2UrlCancel}>取消</Button>
+                      <Button
+                        size="small"
+                        type="primary"
+                        onClick={handleStep2UrlConfirm}
+                        loading={urlImporting}
+                      >
+                        确认导入
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              }
+            >
+              <Button
+                size="large"
+                icon={<ImportOutlined />}
+                disabled={imageId.length >= 15}
+                className="url-import-button"
+              >
+                从URL导入
+              </Button>
+            </Popover>
           </div>
           <div className="modal-submit-right">
             {mode !== 'page' && (

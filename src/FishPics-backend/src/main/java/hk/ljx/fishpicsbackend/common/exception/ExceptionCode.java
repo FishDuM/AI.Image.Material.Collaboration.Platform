@@ -15,7 +15,7 @@ public enum ExceptionCode {
     INTERNAL_SERVER_ERROR(50000, "服务器内部错误"),
     DATABASE_ERROR(50003, "数据库错误"),
     AI_TAG_ERROR(40006, "AI生成图片标签失败"),
-    AI_DRAW_ERROR(40006, "AI生成图片失败"),
+    AI_DRAW_ERROR(40007, "AI生成图片失败"),
     SERVICE_UNAVAILABLE(50001, "服务不可用");
 
     private Integer code;

@@ -38,6 +38,15 @@ public interface PictureService extends IService<Picture> {
     Picture uploadPicture(MultipartFile file, Long targetSpaceId);
 
     /**
+     * 通过 URL 保存图片到空间
+     *
+     * @param url           图片URL
+     * @param targetSpaceId 目标空间ID，为null时默认上传至私人空间
+     * @return 图片
+     */
+    Picture savePictureByUrl(String url, Long targetSpaceId);
+
+    /**
      * 首页获取图片列表（分页）
      *
      * @return 图片分页列表

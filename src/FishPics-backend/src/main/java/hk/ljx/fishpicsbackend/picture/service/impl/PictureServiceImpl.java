@@ -3,6 +3,7 @@ import hk.ljx.fishpicsbackend.picture.entity.Picture;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
@@ -17,6 +18,8 @@ import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.utils.CosService;
+import hk.ljx.fishpicsbackend.common.utils.DownloadUtils;
+import hk.ljx.fishpicsbackend.common.utils.FileTypeUtils;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.picture.dto.DeleteByIdList;
@@ -41,6 +44,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -163,6 +169,95 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         }
         ExcUtils.throwIfTrue(pictureMapper.insert(picture) != 1, "上传失败，数据库错误");
         return picture;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Picture savePictureByUrl(String url, Long targetSpaceId) {
+        User userLogin = UserHolder.getUser();
+        Long userId = userLogin.getId();
+        Integer level = userLogin.getLevel();
+        ExcUtils.throwIfTrue(ObjUtil.isEmpty(userLogin) || userId == null, "请先登录");
+        ExcUtils.throwIfTrue(StrUtil.isBlank(url), "图片URL不能为空");
+
+        // 根据用户等级确定最大下载大小
+        long maxSize;
+        if (level == 0) {
+            maxSize = 3L * 1024 * 1024;
+        } else if (level == 1) {
+            maxSize = 5L * 1024 * 1024;
+        } else if (level == 2) {
+            maxSize = 20L * 1024 * 1024;
+        } else {
+            maxSize = 3L * 1024 * 1024;
+        }
+
+        // 1. 下载到临时文件
+        File tempFile = DownloadUtils.download(url, maxSize);
+        try {
+            // 2. 魔数检测（新开一个流，避免影响后续上传）
+            try (FileInputStream fis = new FileInputStream(tempFile)) {
+                String fileType = FileTypeUtils.getValidFileType(fis);
+                ExcUtils.throwIfTrue(fileType == null, "不支持的图片格式");
+            } catch (IOException e) {
+                throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "读取临时文件失败");
+            }
+
+            // 3. 上传到 COS
+            String key;
+            try (FileInputStream fis = new FileInputStream(tempFile)) {
+                key = cosService.uploadPicture(fis, tempFile.length());
+            } catch (IOException e) {
+                throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "读取临时文件失败");
+            }
+
+            // 4. 获取 COS 图片信息
+            PictureMessage pictureMessage = cosService.getPictureMessage(key);
+            Picture picture = new Picture();
+            BeanUtil.copyProperties(pictureMessage, picture);
+            picture.setUserId(userId);
+            if (picture.getSize() == null && pictureMessage.getSize() != null) {
+                picture.setSize(Long.parseLong(pictureMessage.getSize()));
+            }
+            ExcUtils.throwIfTrue(picture.getSize() == null, ExceptionCode.INTERNAL_SERVER_ERROR, "获取图片大小失败");
+
+            long size = picture.getSize();
+            Space space;
+            if (targetSpaceId != null) {
+                space = spaceService.getById(targetSpaceId);
+                ExcUtils.throwIfTrue(space == null, "目标空间不存在");
+            } else {
+                List<hk.ljx.fishpicsbackend.space.vo.SpaceVO> spaceList = spaceService.listSpace(0);
+                ExcUtils.throwIfTrue(spaceList == null || spaceList.isEmpty(), "私人空间不存在，请联系管理员");
+                space = spaceService.getById(spaceList.get(0).getId());
+            }
+
+            // 5. 空间配额检查
+            long usedSize = space.getSize() != null ? space.getSize() : 0L;
+            long storageSize = space.getStorageSize() != null ? space.getStorageSize() : 0L;
+            long updateSize = usedSize + size;
+            if (updateSize > storageSize) {
+                cosService.deletePicture(key);
+                throw new BaseException(ExceptionCode.UNAUTHORIZED, "空间磁盘不足，请升级空间或删除图片");
+            }
+            Boolean update = spaceService.update(space,
+                    new UpdateWrapper<Space>().set("size", updateSize).eq("id", space.getId()));
+            ExcUtils.throwIfFalse(update, ExceptionCode.DATABASE_ERROR, "上传失败，数据库错误");
+            picture.setSpaceId(space.getId());
+
+            // 管理员上传直接通过，普通用户上传需要审核
+            if (ADMIN.equals(userLogin.getRole())) {
+                picture.setStatus(1);
+            } else {
+                picture.setStatus(2);
+            }
+            ExcUtils.throwIfTrue(pictureMapper.insert(picture) != 1, "上传失败，数据库错误");
+            return picture;
+
+        } finally {
+            // 6. 清理临时文件
+            FileUtil.del(tempFile);
+        }
     }
 
     @Override

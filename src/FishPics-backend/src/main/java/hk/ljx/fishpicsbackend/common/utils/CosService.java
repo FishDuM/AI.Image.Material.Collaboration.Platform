@@ -1,6 +1,5 @@
 package hk.ljx.fishpicsbackend.common.utils;
 
-import cn.hutool.core.io.FileTypeUtil;
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.lang.UUID;
 import cn.hutool.json.JSONUtil;
@@ -51,60 +50,13 @@ public class CosService {
      */
     private static final long SVIP_MAX_SIZE = 50 * 1024 * 1024L;
 
-    private static final Set<String> ALLOWED_TYPES = Set.of(
-            // 基础图片
-            "jpg", "jpeg", "png", "bmp", "webp", "tiff", "gif",
-            // 高级现代格式
-            "avif", "heic", "heif", "apng", "astc", "tpg",
-            // 专业设计格式
-            "psd", "ai", "eps",
-            // 相机RAW全格式
-            "raw", "dng", "cr3", "crw", "mos", "erf", "3fr", "fff",
-            "kdc", "dcr", "rw2", "pef", "sr2", "srf", "arw", "nef",
-            "nrw", "orf", "mef", "mrw"
-    );
-
     /**
      * 上传路径前缀
      */
     private static final String UPLOAD_PREFIX = "picture/";
 
     /**
-     * 判断文件类型
-     * @param file 文件
-     * @return 是否是允许的图片格式
-     */
-    public static String getValidFileType(MultipartFile file) {
-        if (file == null || file.isEmpty()) {
-            return null;
-        }
-        try (InputStream in = file.getInputStream()) {
-            String realType = FileTypeUtil.getType(in);
-            if (realType != null) {
-                realType = realType.toLowerCase();
-                if (ALLOWED_TYPES.contains(realType)) {
-                    return realType;
-                }
-            }
-            // 魔数检测失败（如 HEIC 等 Hutool 未覆盖的格式），回退到扩展名判断
-            String fileName = file.getOriginalFilename();
-            if (fileName != null) {
-                int dot = fileName.lastIndexOf('.');
-                if (dot > 0) {
-                    String ext = fileName.substring(dot + 1).toLowerCase();
-                    if (ALLOWED_TYPES.contains(ext)) {
-                        return ext;
-                    }
-                }
-            }
-            return null;
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    /**
-     * 上传图片到腾讯云COS
+     * 上传图片到腾讯云COS（MultipartFile 上传）
      *
      * @param file 前端上传的文件
      * @return cos文件唯一key
@@ -115,7 +67,7 @@ public class CosService {
 
         // 校验文件
         ExcUtils.throwIfTrue(file.isEmpty(), "上传文件不能为空");
-        String validFileType = getValidFileType(file);
+        String validFileType = FileTypeUtils.getValidFileType(file);
         ExcUtils.throwIfTrue(validFileType == null, "上传文件格式不正确");
 
         // 生成唯一文件路径
@@ -148,6 +100,33 @@ public class CosService {
             );
             ExcUtils.throwIfTrue(result == null, "上传文件失败");
         }catch (Exception e) {
+            log.error("上传文件失败{}", e.getMessage());
+            ExcUtils.error(ExceptionCode.INTERNAL_SERVER_ERROR, "上传文件失败");
+        }
+        return key;
+    }
+
+    /**
+     * 上传图片到腾讯云COS（InputStream 上传，用于 URL 下载等场景）
+     *
+     * @param inputStream   图片输入流
+     * @param contentLength 图片字节数
+     * @return cos文件唯一key
+     */
+    public String uploadPicture(InputStream inputStream, long contentLength) {
+        String key = UPLOAD_PREFIX + System.currentTimeMillis() + "_" + UUID.randomUUID().toString(true) + ".webp";
+        try {
+            ObjectMetadata metadata = new ObjectMetadata();
+            metadata.setContentLength(contentLength);
+
+            PutObjectResult result = cosClient.putObject(
+                    bucket,
+                    key,
+                    inputStream,
+                    metadata
+            );
+            ExcUtils.throwIfTrue(result == null, "上传文件失败");
+        } catch (Exception e) {
             log.error("上传文件失败{}", e.getMessage());
             ExcUtils.error(ExceptionCode.INTERNAL_SERVER_ERROR, "上传文件失败");
         }

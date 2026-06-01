@@ -105,7 +105,7 @@ function CommentItem({ comment, isReply, isAdmin, currentUserId, onReplySubmit, 
               onOpenChange={handleReplyOpenChange}
               placement="bottomLeft"
               overlayClassName="comment-reply-popover-overlay"
-              destroyTooltipOnHide
+              destroyOnHidden
             >
               <button type="button" className="comment-item-action-btn">
                 回复

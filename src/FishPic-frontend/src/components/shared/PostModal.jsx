@@ -31,6 +31,7 @@ export default function PostModal({
   maxImages,
   touchProps,
   children,
+  onAddMore,
 }) {
   return (
     <Modal
@@ -50,6 +51,7 @@ export default function PostModal({
         showAddSlide={showAddSlide}
         maxImages={maxImages}
         touchProps={touchProps}
+        onAddMore={onAddMore}
       >
         {children}
       </PostLayout>
