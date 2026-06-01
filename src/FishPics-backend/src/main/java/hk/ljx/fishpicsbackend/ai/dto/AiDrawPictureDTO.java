@@ -14,7 +14,5 @@ public class AiDrawPictureDTO {
 
     private String style;
 
-    private String width;
-
-    private String height;
+    private String size;
 }

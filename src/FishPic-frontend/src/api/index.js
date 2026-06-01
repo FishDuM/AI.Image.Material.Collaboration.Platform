@@ -237,6 +237,8 @@ export const getAiStats = () => api.get('/ai/admin/stats')
 export const getAiConfig = () => api.get('/ai/admin/config')
 export const updateAiConfig = (data) => api.post('/ai/admin/config', data)
 export const submitAiGenerate = (data, config = {}) => api.post('/ai/draw', data, { timeout: AI_TIMEOUT, ...config })
+export const submitAiDraw = (data) => api.post('/ai/draw/submit', data)
+export const getAiDrawResult = (taskId) => api.get(`/ai/draw/result/${taskId}`)
 
 export const uploadPicture = (formData, targetSpaceId) => {
   const fd = new FormData()

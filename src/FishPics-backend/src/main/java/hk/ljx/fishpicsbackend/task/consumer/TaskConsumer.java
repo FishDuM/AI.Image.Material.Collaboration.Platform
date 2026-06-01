@@ -1,9 +1,12 @@
 package hk.ljx.fishpicsbackend.task.consumer;
 
+import com.alibaba.dashscope.exception.ApiException;
+import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.task.entity.Task;
 import hk.ljx.fishpicsbackend.task.handler.TaskHandler;
 import hk.ljx.fishpicsbackend.mapper.TaskMapper;
 import hk.ljx.fishpicsbackend.task.message.TaskMessage;
+import hk.ljx.fishpicsbackend.websocket.WebSocketHandler;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
@@ -30,6 +33,9 @@ public class TaskConsumer implements RocketMQListener<TaskMessage> {
 
     @Resource
     private TransactionTemplate transactionTemplate;
+
+    @Resource
+    private WebSocketHandler webSocketHandler;
 
     private final Map<String, TaskHandler> handlerMap;
 
@@ -77,12 +83,37 @@ public class TaskConsumer implements RocketMQListener<TaskMessage> {
             });
 
             log.info("task done: taskId={}, bizType={}", taskId, task.getBizType());
+
+            // WebSocket 推送完成通知
+            notifyUser(task, "TASK_DONE", task.getResult(), null);
         } catch (Exception e) {
             log.error("task failed: taskId={}, bizType={}", taskId, task.getBizType(), e);
             task.setStatus("FAILED");
-            task.setErrorMsg(e.getMessage());
+
+            // DashScope 审核类错误使用友好提示，其他错误用原始消息
+            String errorMsg = e instanceof ApiException ae
+                    ? ExcUtils.translateDashScopeError(ae) : null;
+            if (errorMsg == null) {
+                errorMsg = e.getMessage();
+            }
+            task.setErrorMsg(errorMsg);
             taskMapper.updateById(task);
-            throw new RuntimeException("task processing failed, will retry: " + taskId, e);
+
+            // WebSocket 推送失败通知
+            notifyUser(task, "TASK_FAILED", null, errorMsg);
+        }
+    }
+
+    private void notifyUser(Task task, String type, String result, String errorMsg) {
+        if (task.getUserId() != null) {
+            webSocketHandler.sendToUser(
+                    task.getUserId(),
+                    type,
+                    task.getTaskId(),
+                    task.getBizType(),
+                    result,
+                    errorMsg
+            );
         }
     }
 }

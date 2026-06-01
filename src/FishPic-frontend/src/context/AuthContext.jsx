@@ -1,6 +1,7 @@
-import { createContext, useState, useEffect } from 'react'
+import { createContext, useState, useEffect, useCallback } from 'react'
 import { getUserInfo, saveUserInfo, saveToken, getToken, clearAuth } from '../utils/storage'
 import { getUser } from '../api'
+import { createConnection, destroyConnection } from '../hooks/useWebSocket'
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const AuthContext = createContext(null)
@@ -16,15 +17,27 @@ export function AuthProvider({ children }) {
   })
   const [authLoading, setAuthLoading] = useState(() => !!getToken())
 
+  const initWsConnection = useCallback(() => {
+    const token = getToken()
+    if (token) {
+      createConnection()
+    }
+  }, [])
+
+  const cleanupWs = useCallback(() => {
+    destroyConnection()
+  }, [])
+
   useEffect(() => {
     const handleAuthExpired = () => {
+      cleanupWs()
       setUserInfo(null)
       setIsAuthenticated(false)
       setAuthLoading(false)
     }
     window.addEventListener('auth:expired', handleAuthExpired)
     return () => window.removeEventListener('auth:expired', handleAuthExpired)
-  }, [])
+  }, [cleanupWs])
 
   useEffect(() => {
     let ignore = false
@@ -46,6 +59,8 @@ export function AuthProvider({ children }) {
         saveUserInfo(latestUserInfo)
         setUserInfo(latestUserInfo)
         setIsAuthenticated(true)
+        // Token 有效，建立 WebSocket 连接
+        createConnection()
       } catch {
         if (ignore) return
         clearAuth()
@@ -76,9 +91,12 @@ export function AuthProvider({ children }) {
       setUserInfo(data)
     }
     setIsAuthenticated(true)
+    // 登录成功后建立 WebSocket 连接
+    createConnection()
   }
 
   const logout = () => {
+    destroyConnection()
     clearAuth()
     setUserInfo(null)
     setIsAuthenticated(false)

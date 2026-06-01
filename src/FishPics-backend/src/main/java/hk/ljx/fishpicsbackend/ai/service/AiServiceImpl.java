@@ -1,5 +1,6 @@
 package hk.ljx.fishpicsbackend.ai.service;
 
+import cn.hutool.json.JSONUtil;
 import com.alibaba.dashscope.aigc.multimodalconversation.MultiModalConversation;
 import com.alibaba.dashscope.aigc.multimodalconversation.MultiModalConversationParam;
 import com.alibaba.dashscope.aigc.multimodalconversation.MultiModalConversationResult;
@@ -10,6 +11,7 @@ import com.alibaba.dashscope.exception.UploadFileException;
 import com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeConnectionProperties;
 import hk.ljx.fishpicsbackend.ai.dto.AiDrawPictureDTO;
 import hk.ljx.fishpicsbackend.common.enums.PicturePromptEnum;
+import hk.ljx.fishpicsbackend.common.enums.PictureSizeEnum;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.task.entity.Task;
@@ -59,9 +61,8 @@ public class AiServiceImpl implements AiService {
     public String drawPicture(AiDrawPictureDTO drawPictureDTO) {
         String description = drawPictureDTO.getDescription();
         String exclusion = drawPictureDTO.getExclusion();
-        String width = drawPictureDTO.getWidth();
-        String height = drawPictureDTO.getHeight();
         String style = drawPictureDTO.getStyle();
+        String size = PictureSizeEnum.getSizeByCode(drawPictureDTO.getSize());
 
         MultiModalConversation conv = new MultiModalConversation();
 
@@ -77,7 +78,7 @@ public class AiServiceImpl implements AiService {
         if (exclusion != null) {
             parameters.put("negative_prompt", exclusion);
         }
-        parameters.put("size", width + "*" + height);
+        parameters.put("size", size);
 
         String apikey = dashScopeConnectionProperties.getApiKey();
         MultiModalConversationParam param = MultiModalConversationParam.builder()
@@ -101,5 +102,18 @@ public class AiServiceImpl implements AiService {
         String url = result.getOutput().getChoices().getFirst().getMessage().getContent().getFirst().get("image").toString();
         log.info("生图成功: {}", url);
         return url;
+    }
+
+    @Override
+    public String submitDrawTask(AiDrawPictureDTO drawPictureDTO, Long userId) {
+        ExcUtils.throwIfTrue(drawPictureDTO == null || drawPictureDTO.getDescription() == null,
+                "画面描述不能为空");
+        String paramJson = JSONUtil.toJsonStr(drawPictureDTO);
+        return taskService.submitTask("ai_draw", null, paramJson, userId);
+    }
+
+    @Override
+    public Task getDrawResult(String taskId) {
+        return taskService.getTaskByTaskId(taskId);
     }
 }

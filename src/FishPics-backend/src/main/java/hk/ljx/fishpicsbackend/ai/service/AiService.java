@@ -10,4 +10,8 @@ public interface AiService {
     Task getTagResult(String taskId);
 
     String drawPicture(AiDrawPictureDTO drawPictureDTO);
+
+    String submitDrawTask(AiDrawPictureDTO drawPictureDTO, Long userId);
+
+    Task getDrawResult(String taskId);
 }
