@@ -152,7 +152,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         }
         Map<Long, User> userMap = new HashMap<>();
         if (!allUserIds.isEmpty()) {
-            userMap = userMapper.selectBatchIds(allUserIds)
+            userMap = userMapper.selectByIds(allUserIds)
                     .stream().collect(Collectors.toMap(User::getId, u -> u));
         }
 
@@ -227,7 +227,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         parseTeamUserIds(space.getTeamUsersId()).forEach(userIds::add);
         Map<Long, User> userMap = new HashMap<>();
         if (!userIds.isEmpty()) {
-            userMap = userMapper.selectBatchIds(userIds)
+            userMap = userMapper.selectByIds(userIds)
                     .stream().collect(Collectors.toMap(User::getId, u -> u));
         }
 
@@ -337,7 +337,11 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
                     .or()
                     .like("introduction", keyword));
         }
-        pictureQueryWrapper.orderBy(ObjectUtil.isNotNull(sortField), sortOrder.equals("ascend"), sortField);
+        // 排序字段白名单，防止 SQL 注入
+        Set<String> allowedPictureSortFields = Set.of("id", "picture_name", "introduction", "tags", "url", "space_id",
+                "user_id", "create_time", "update_time");
+        boolean isPictureSortFieldValid = sortField != null && allowedPictureSortFields.contains(sortField);
+        pictureQueryWrapper.orderBy(isPictureSortFieldValid, "ascend".equals(sortOrder), sortField);
         Page<Picture> pictureList = pictureService.page(picturePage, pictureQueryWrapper);
         // 3. 转换为VO（仅返回id和url，不暴露完整图片元数据）
         ArrayList<PictureListVO> pictureListVOS = new ArrayList<>();
@@ -352,7 +356,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
 
     /**
      * 构建空间查询条件包装器
-     * 
+     *
      * @param spaceQueryWrapper 查询条件包装器
      * @return QueryWrapper对象
      */
@@ -369,6 +373,10 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         String sortField = spaceQueryWrapper.getSortField();
         String sortOrder = spaceQueryWrapper.getSortOrder();
 
+        // 排序字段白名单，防止 SQL 注入
+        Set<String> allowedSortFields = Set.of("id", "introduction", "type", "user_id", "storage_size", "level", "name", "size", "create_time", "update_time");
+        boolean isSortFieldValid = sortField != null && allowedSortFields.contains(sortField);
+
         QueryWrapper<Space> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq(!ObjectUtil.isEmpty(id), "id", id);
         queryWrapper.eq(!ObjectUtil.isEmpty(introduction), "introduction", introduction);
@@ -378,7 +386,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         queryWrapper.eq(!ObjectUtil.isEmpty(storageSize), "storage_size", storageSize);
         queryWrapper.eq(!ObjectUtil.isEmpty(level), "level", level);
         queryWrapper.eq(!ObjectUtil.isEmpty(name), "name", name);
-        queryWrapper.orderBy(ObjectUtil.isNotNull(sortField), sortOrder.equals("ascend"), sortField);
+        queryWrapper.orderBy(isSortFieldValid, "ascend".equals(sortOrder), sortField);
         return queryWrapper;
     }
 
@@ -400,7 +408,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         }
         Map<Long, User> userMap = new HashMap<>();
         if (!allUserIds.isEmpty()) {
-            userMap = userMapper.selectBatchIds(allUserIds)
+            userMap = userMapper.selectByIds(allUserIds)
                     .stream().collect(Collectors.toMap(User::getId, u -> u));
         }
         List<Long> spaceIds = spaceList.stream().map(Space::getId).collect(Collectors.toList());

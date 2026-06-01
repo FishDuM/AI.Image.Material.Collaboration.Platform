@@ -6,10 +6,8 @@ const listeners = new Set()
 let isDestroyed = false
 
 function getWsUrl() {
-  const token = getToken()
-  if (!token) return null
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}/api/ws?token=${token}`
+  return `${protocol}//${window.location.host}/api/ws`
 }
 
 function notifyListeners(data) {
@@ -22,8 +20,10 @@ function connect() {
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return
   if (isDestroyed) return
 
+  const token = getToken()
+  if (!token) return
+
   const url = getWsUrl()
-  if (!url) return
 
   try {
     ws = new WebSocket(url)
@@ -33,6 +33,8 @@ function connect() {
   }
 
   ws.onopen = () => {
+    // 通过握手消息发送 Token，而不是在 URL 中暴露
+    ws.send(JSON.stringify({ type: 'auth', token }))
     notifyListeners({ type: '__WS_OPEN__' })
   }
 

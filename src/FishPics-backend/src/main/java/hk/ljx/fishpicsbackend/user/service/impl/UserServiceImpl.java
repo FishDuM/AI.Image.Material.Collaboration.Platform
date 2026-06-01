@@ -39,6 +39,7 @@ import hk.ljx.fishpicsbackend.user.dto.UserPrivacyRequest;
 import hk.ljx.fishpicsbackend.user.dto.UserQueryWrapper;
 import hk.ljx.fishpicsbackend.user.dto.UserRequestRequest;
 import hk.ljx.fishpicsbackend.user.service.UserService;
+import hk.ljx.fishpicsbackend.user.vo.AdminGetUserVO;
 import hk.ljx.fishpicsbackend.user.vo.UserLoginVO;
 import hk.ljx.fishpicsbackend.user.vo.UserMessageVO;
 import hk.ljx.fishpicsbackend.user.vo.UserPublicProfileVO;
@@ -51,6 +52,7 @@ import jakarta.annotation.Resource;
 
 import java.awt.*;
 import java.util.Date;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.DEFAULT_NICK_NAME;
@@ -213,6 +215,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         String sortField = userQueryWrapper.getSortField();
         String sortOrder = userQueryWrapper.getSortOrder();
 
+        // 排序字段白名单，防止 SQL 注入
+        Set<String> allowedSortFields = Set.of("id", "username", "email", "phone", "nickname", "role", "status", "level", "create_time", "update_time");
+        boolean isSortFieldValid = sortField != null && allowedSortFields.contains(sortField);
+
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq(ObjectUtil.isNotNull(id), "id", id);
         queryWrapper.like(ObjectUtil.isNotNull(username), "username", username);
@@ -223,15 +229,22 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         queryWrapper.eq(ObjectUtil.isNotNull(status), "status", status);
         queryWrapper.eq(ObjectUtil.isNotNull(createTime), "create_time", createTime);
 
-        queryWrapper.orderBy(ObjectUtil.isNotNull(sortField), sortOrder.equals("ascend"), sortField);
+        queryWrapper.orderBy(isSortFieldValid, "ascend".equals(sortOrder), sortField);
         return queryWrapper;
     }
 
     @Override
-    public IPage<User> getUserList(UserQueryWrapper userQueryWrapper, long current, long pageSize) {
+    public IPage<AdminGetUserVO> getUserList(UserQueryWrapper userQueryWrapper, long current, long pageSize) {
         ExcUtils.throwIfTrue(current <= 0 || pageSize <= 0, ExceptionCode.PARAMETER_ERROR);
         QueryWrapper<User> queryWrapper = this.newQueryWrapper(userQueryWrapper);
-        return baseMapper.selectPage(new Page<>(current, pageSize), queryWrapper);
+        IPage<User> userPage = baseMapper.selectPage(new Page<>(current, pageSize), queryWrapper);
+
+        // 转换为 AdminGetUserVO，过滤掉密码字段
+        return userPage.convert(user -> {
+            AdminGetUserVO vo = new AdminGetUserVO();
+            BeanUtil.copyProperties(user, vo);
+            return vo;
+        });
     }
 
     @Override

@@ -3,7 +3,8 @@ import { Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext.jsx'
 import GlobalLayout from './components/GlobalLayout'
 import ProtectedRoute from './components/ProtectedRoute'
-import { Spin } from 'antd'
+import ErrorBoundary from './components/ErrorBoundary'
+import { Spin, Result, Button } from 'antd'
 import './App.css'
 
 const HomePage = lazy(() => import('./pages/HomePage'))
@@ -42,47 +43,80 @@ function PageLoading() {
   )
 }
 
+// 路由级错误回退组件
+function RouteErrorFallback() {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+      <Result
+        status="error"
+        title="页面加载失败"
+        subTitle="抱歉，该页面出现了错误，请尝试刷新页面或返回首页"
+        extra={[
+          <Button key="home" onClick={() => window.location.href = '/'}>
+            返回首页
+          </Button>,
+          <Button key="refresh" type="primary" onClick={() => window.location.reload()}>
+            刷新页面
+          </Button>
+        ]}
+      />
+    </div>
+  )
+}
+
+// 包装懒加载组件的路由级错误边界
+function RouteWithBoundary({ children }) {
+  return (
+    <ErrorBoundary fallback={<RouteErrorFallback />}>
+      <Suspense fallback={<PageLoading />}>
+        {children}
+      </Suspense>
+    </ErrorBoundary>
+  )
+}
+
 function App() {
   return (
     <AuthProvider>
-      <Suspense fallback={<PageLoading />}>
-        <Routes>
-          <Route path="/mobile/login" element={<MobileLoginPage />} />
-          <Route path="/mobile/register" element={<MobileRegisterPage />} />
-          <Route path="/mobile/post/create" element={<ProtectedRoute><MobilePostCreatePage /></ProtectedRoute>} />
-          <Route path="/mobile/post/detail/:postId" element={<MobilePostDetailPage />} />
-          <Route path="/mobile/picture/edit" element={<ProtectedRoute><MobileEditPicturePage /></ProtectedRoute>} />
-          <Route path="/mobile/profile/edit" element={<ProtectedRoute><MobileEditProfilePage /></ProtectedRoute>} />
-          <Route path="/mobile/upgrade" element={<ProtectedRoute><MobileUpgradePage /></ProtectedRoute>} />
-          <Route path="/mobile/follow-list" element={<ProtectedRoute><MobileFollowListPage /></ProtectedRoute>} />
-          <Route path="/mobile/profile" element={<ProtectedRoute><MobileUserProfilePage /></ProtectedRoute>} />
-          <Route path="*" element={
-            <GlobalLayout>
-              <Routes>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/profile" element={<ProtectedRoute><UserProfile /></ProtectedRoute>} />
-                <Route path="/community" element={<CommunitySquare />} />
-                <Route path="/private-space" element={<ProtectedRoute><PrivateSpace /></ProtectedRoute>} />
-                <Route path="/team-space" element={<ProtectedRoute><TeamSpace /></ProtectedRoute>} />
-                <Route path="/team-space/:id" element={<ProtectedRoute><TeamSpaceDetail /></ProtectedRoute>} />
-                <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
-                <Route path="/ai-tools" element={<ProtectedRoute><AIImageTools /></ProtectedRoute>} />
-                <Route path="/admin/users" element={<ProtectedRoute requireAdmin><UserManagement /></ProtectedRoute>} />
-                <Route path="/admin/pictures" element={<ProtectedRoute requireAdmin><AdminPictureManagement /></ProtectedRoute>} />
-                <Route path="/admin/comments" element={<ProtectedRoute requireAdmin><AdminCommentManagement /></ProtectedRoute>} />
-                <Route path="/admin/posts" element={<ProtectedRoute requireAdmin><AdminPostManagement /></ProtectedRoute>} />
-                <Route path="/admin/spaces" element={<ProtectedRoute requireAdmin><SpaceManagement /></ProtectedRoute>} />
-                <Route path="/admin/teams" element={<ProtectedRoute requireAdmin><TeamManagement /></ProtectedRoute>} />
-                <Route path="/admin/ai" element={<ProtectedRoute requireAdmin><AIManagement /></ProtectedRoute>} />
-                <Route path="/admin/system" element={<ProtectedRoute requireAdmin><SystemManagement /></ProtectedRoute>} />
-                <Route path="/admin/user-list" element={<ProtectedRoute requireAdmin><AdminUserList /></ProtectedRoute>} />
-                <Route path="/404" element={<NotFound />} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </GlobalLayout>
-          } />
-        </Routes>
-      </Suspense>
+      <Routes>
+        {/* 移动端页面 - 使用路由级错误边界 */}
+        <Route path="/mobile/login" element={<RouteWithBoundary><MobileLoginPage /></RouteWithBoundary>} />
+        <Route path="/mobile/register" element={<RouteWithBoundary><MobileRegisterPage /></RouteWithBoundary>} />
+        <Route path="/mobile/post/create" element={<RouteWithBoundary><ProtectedRoute><MobilePostCreatePage /></ProtectedRoute></RouteWithBoundary>} />
+        <Route path="/mobile/post/detail/:postId" element={<RouteWithBoundary><MobilePostDetailPage /></RouteWithBoundary>} />
+        <Route path="/mobile/picture/edit" element={<RouteWithBoundary><ProtectedRoute><MobileEditPicturePage /></ProtectedRoute></RouteWithBoundary>} />
+        <Route path="/mobile/profile/edit" element={<RouteWithBoundary><ProtectedRoute><MobileEditProfilePage /></ProtectedRoute></RouteWithBoundary>} />
+        <Route path="/mobile/upgrade" element={<RouteWithBoundary><ProtectedRoute><MobileUpgradePage /></ProtectedRoute></RouteWithBoundary>} />
+        <Route path="/mobile/follow-list" element={<RouteWithBoundary><ProtectedRoute><MobileFollowListPage /></ProtectedRoute></RouteWithBoundary>} />
+        <Route path="/mobile/profile" element={<RouteWithBoundary><ProtectedRoute><MobileUserProfilePage /></ProtectedRoute></RouteWithBoundary>} />
+
+        {/* 桌面端页面 - 使用路由级错误边界 */}
+        <Route path="*" element={
+          <GlobalLayout>
+            <Routes>
+              <Route path="/" element={<RouteWithBoundary><HomePage /></RouteWithBoundary>} />
+              <Route path="/profile" element={<RouteWithBoundary><ProtectedRoute><UserProfile /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/community" element={<RouteWithBoundary><CommunitySquare /></RouteWithBoundary>} />
+              <Route path="/private-space" element={<RouteWithBoundary><ProtectedRoute><PrivateSpace /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/team-space" element={<RouteWithBoundary><ProtectedRoute><TeamSpace /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/team-space/:id" element={<RouteWithBoundary><ProtectedRoute><TeamSpaceDetail /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/notifications" element={<RouteWithBoundary><ProtectedRoute><Notifications /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/ai-tools" element={<RouteWithBoundary><ProtectedRoute><AIImageTools /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/users" element={<RouteWithBoundary><ProtectedRoute requireAdmin><UserManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/pictures" element={<RouteWithBoundary><ProtectedRoute requireAdmin><AdminPictureManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/comments" element={<RouteWithBoundary><ProtectedRoute requireAdmin><AdminCommentManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/posts" element={<RouteWithBoundary><ProtectedRoute requireAdmin><AdminPostManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/spaces" element={<RouteWithBoundary><ProtectedRoute requireAdmin><SpaceManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/teams" element={<RouteWithBoundary><ProtectedRoute requireAdmin><TeamManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/ai" element={<RouteWithBoundary><ProtectedRoute requireAdmin><AIManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/system" element={<RouteWithBoundary><ProtectedRoute requireAdmin><SystemManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/user-list" element={<RouteWithBoundary><ProtectedRoute requireAdmin><AdminUserList /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/404" element={<RouteWithBoundary><NotFound /></RouteWithBoundary>} />
+              <Route path="*" element={<RouteWithBoundary><NotFound /></RouteWithBoundary>} />
+            </Routes>
+          </GlobalLayout>
+        } />
+      </Routes>
     </AuthProvider>
   )
 }

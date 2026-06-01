@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.user.dto.*;
 import com.baomidou.mybatisplus.extension.service.IService;
+import hk.ljx.fishpicsbackend.user.vo.AdminGetUserVO;
 import hk.ljx.fishpicsbackend.user.vo.UserLoginVO;
 import hk.ljx.fishpicsbackend.user.vo.UserMessageVO;
 import hk.ljx.fishpicsbackend.user.vo.UserPublicProfileVO;
@@ -55,7 +56,7 @@ public interface UserService extends IService<User> {
      *
      * @return 用户列表
      */
-    IPage<User> getUserList(UserQueryWrapper userQueryWrapper, long current, long pageSize);
+    IPage<AdminGetUserVO> getUserList(UserQueryWrapper userQueryWrapper, long current, long pageSize);
 
     /**
      * 管理员设置用户状态（1正常，0封禁）

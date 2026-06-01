@@ -158,11 +158,11 @@ public class UserController {
 
     @AuthCheck(role = ADMIN)
     @PostMapping("/admin/userList")
-    public Response<IPage<User>> getUserList(@RequestBody UserQueryWrapper userQueryWrapper) {
+    public Response<IPage<AdminGetUserVO>> getUserList(@RequestBody UserQueryWrapper userQueryWrapper) {
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(userQueryWrapper), ExceptionCode.PARAMETER_ERROR);
         long current = userQueryWrapper.getCurrent();
         long pageSize = userQueryWrapper.getPageSize();
-        IPage<User> userList = userService.getUserList(userQueryWrapper, current, pageSize);
+        IPage<AdminGetUserVO> userList = userService.getUserList(userQueryWrapper, current, pageSize);
         return ResUtils.success(userList);
     }
 

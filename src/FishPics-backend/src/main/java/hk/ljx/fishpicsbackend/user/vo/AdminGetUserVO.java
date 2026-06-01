@@ -23,11 +23,6 @@ public class AdminGetUserVO implements Serializable {
     private String username;
 
     /**
-     * 密码
-     */
-    private String password;
-
-    /**
      * 头像URL
      */
     private String avatar;

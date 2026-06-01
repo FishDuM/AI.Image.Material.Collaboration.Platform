@@ -50,6 +50,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -286,6 +287,11 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         String sortField = postQueryWrapper.getSortField();
         String sortOrder = postQueryWrapper.getSortOrder();
 
+        // 排序字段白名单，防止 SQL 注入
+        Set<String> allowedSortFields = Set.of("id", "user_id", "title", "content", "cover", "status", "is_private",
+                "likes_num", "collect_num", "comment_num", "views_num", "hot", "create_time", "update_time");
+        boolean isSortFieldValid = sortField != null && allowedSortFields.contains(sortField);
+
         QueryWrapper<Post> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq(ObjectUtil.isNotNull(id), "id", id);
         queryWrapper.eq(ObjectUtil.isNotNull(userId), "user_id", userId);
@@ -323,7 +329,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
             queryWrapper.orderByDesc("hot");
         }
 
-        queryWrapper.orderBy(ObjectUtil.isNotNull(sortField), "asc".equalsIgnoreCase(sortOrder), sortField);
+        queryWrapper.orderBy(isSortFieldValid, "asc".equalsIgnoreCase(sortOrder), sortField);
         return queryWrapper;
     }
 

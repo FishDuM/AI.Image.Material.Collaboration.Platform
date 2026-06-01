@@ -150,16 +150,22 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             space = spaceService.getById(spaceList.get(0).getId());
         }
 
-        long usedSize = space.getSize() != null ? space.getSize() : 0L;
-        long storageSize = space.getStorageSize() != null ? space.getStorageSize() : 0L;
-        long updateSize = usedSize + size;
-        if (updateSize > storageSize) {
-            cosService.deletePicture(key);
-            throw new BaseException(ExceptionCode.UNAUTHORIZED, "空间磁盘不足，请升级空间或删除图片");
+        Long storageSize = space.getStorageSize();
+        if (storageSize != null) {
+            // 使用原子 SQL 增量更新空间大小，确保不超过配额（防止竞态条件）
+            UpdateWrapper<Space> updateWrapper = new UpdateWrapper<>();
+            updateWrapper.eq("id", space.getId())
+                    .setSql("size = size + " + size)
+                    .le("size + " + size, storageSize);  // 确保更新后不超过配额
+            Boolean update = spaceService.update(updateWrapper);
+            ExcUtils.throwIfFalse(update, ExceptionCode.PARAMETER_ERROR, "空间容量不足");
+        } else {
+            // 如果没有设置配额限制，直接更新
+            long usedSize = space.getSize() != null ? space.getSize() : 0L;
+            long updateSize = usedSize + size;
+            space.setSize(updateSize);
+            spaceService.updateById(space);
         }
-        Boolean update = spaceService.update(space,
-                new UpdateWrapper<Space>().set("size", updateSize).eq("id", space.getId()));
-        ExcUtils.throwIfFalse(update, ExceptionCode.DATABASE_ERROR, "上传失败，数据库错误");
         picture.setSpaceId(space.getId());
         // 管理员上传直接通过，普通用户上传需要审核
         if (ADMIN.equals(userLogin.getRole())) {
@@ -232,17 +238,26 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 space = spaceService.getById(spaceList.get(0).getId());
             }
 
-            // 5. 空间配额检查
-            long usedSize = space.getSize() != null ? space.getSize() : 0L;
-            long storageSize = space.getStorageSize() != null ? space.getStorageSize() : 0L;
-            long updateSize = usedSize + size;
-            if (updateSize > storageSize) {
-                cosService.deletePicture(key);
-                throw new BaseException(ExceptionCode.UNAUTHORIZED, "空间磁盘不足，请升级空间或删除图片");
+            // 5. 空间配额检查（使用原子操作防止竞态条件）
+            Long storageSize = space.getStorageSize();
+            if (storageSize != null) {
+                // 使用原子 SQL 增量更新空间大小，确保不超过配额
+                UpdateWrapper<Space> updateWrapper = new UpdateWrapper<>();
+                updateWrapper.eq("id", space.getId())
+                        .setSql("size = size + " + size)
+                        .le("size + " + size, storageSize);  // 确保更新后不超过配额
+                Boolean update = spaceService.update(updateWrapper);
+                if (!update) {
+                    cosService.deletePicture(key);
+                    throw new BaseException(ExceptionCode.PARAMETER_ERROR, "空间容量不足");
+                }
+            } else {
+                // 如果没有设置配额限制，直接更新
+                long usedSize = space.getSize() != null ? space.getSize() : 0L;
+                long updateSize = usedSize + size;
+                space.setSize(updateSize);
+                spaceService.updateById(space);
             }
-            Boolean update = spaceService.update(space,
-                    new UpdateWrapper<Space>().set("size", updateSize).eq("id", space.getId()));
-            ExcUtils.throwIfFalse(update, ExceptionCode.DATABASE_ERROR, "上传失败，数据库错误");
             picture.setSpaceId(space.getId());
 
             // 管理员上传直接通过，普通用户上传需要审核

@@ -4,6 +4,8 @@ import hk.ljx.fishpicsbackend.comment.entity.Comment;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
+import cn.hutool.http.HtmlUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -69,7 +71,9 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment>
         Comment comment = new Comment();
         comment.setUserId(user.getId());
         comment.setPostId(req.getPostId());
-        comment.setContent(req.getContent());
+        // 使用 hutool 的 HtmlUtil 进行 XSS 过滤，防止存储型 XSS 攻击
+        String safeContent = HtmlUtil.escape(req.getContent());
+        comment.setContent(safeContent);
         comment.setParentId(req.getParentId());
         comment.setToUserId(req.getToUserId());
         comment.setStatus(2); // 待审核
