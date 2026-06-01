@@ -16,7 +16,7 @@ public class RestClientConfig {
         return restClientBuilder -> {
             restClientBuilder.requestFactory(ClientHttpRequestFactories.get(
                     ClientHttpRequestFactorySettings.DEFAULTS
-                            .withConnectTimeout(Duration.ofSeconds(10))
+                            .withConnectTimeout(Duration.ofSeconds(30))
                             .withReadTimeout(Duration.ofSeconds(30))
             ));
         };

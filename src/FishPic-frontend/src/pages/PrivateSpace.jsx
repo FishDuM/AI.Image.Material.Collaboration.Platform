@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef, useContext } from 'r
 import { useNavigate } from 'react-router-dom'
 import { App as AntApp, Typography, Button, Modal, Form, Input, Select, Masonry, Image as AntImage, Spin, Empty, Popconfirm, Progress, Popover } from 'antd'
 import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowUpOutlined, EditOutlined, CloudUploadOutlined, DatabaseOutlined, HddOutlined, UploadOutlined, ApartmentOutlined } from '@ant-design/icons'
-import { updateSpace, listSpace, spaceListPicture, deletePicture, updatePicture, getSystemTypes, getPictureEditMessage, aiTags } from '../api'
+import { updateSpace, listSpace, spaceListPicture, deletePicture, updatePicture, getSystemTypes, getPictureEditMessage, submitAiTag } from '../api'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { AuthContext } from '../context/AuthContext'
 import { useFetchWithCleanup } from '../hooks/useRequestUtils'
@@ -595,15 +595,15 @@ function PrivateSpace() {
                 {(userInfo?.level === 1 || userInfo?.level === 2) && (
                   <Button onClick={async () => {
                     try {
-                      const result = await aiTags(selectedIds[0])
-                      editPictureForm.setFieldsValue({
-                        pictureName: result.pictureName || undefined,
-                        introduction: result.introduction || undefined,
-                        tags: result.tags || [],
+                      await submitAiTag(selectedIds[0])
+                      setShowEditPicture(false)
+                      modal.info({
+                        title: 'AI正在执行',
+                        content: 'AI正在后台识别图片信息，完成后将自动填充，请稍后重新打开编辑查看',
+                        okText: '知道了',
                       })
-                      message.success('AI识别完成')
                     } catch (e) {
-                      message.error(e.message || 'AI识别失败')
+                      message.error(e.message || 'AI识别提交失败')
                     }
                   }}>AI一键填写</Button>
                 )}

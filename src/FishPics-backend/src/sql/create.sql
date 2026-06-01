@@ -210,3 +210,32 @@ create table user_post_likes
 create index user_post_likes_user_id_index
     on user_post_likes (user_id);
 
+create table task
+(
+    id          bigint auto_increment comment '主键'
+        primary key,
+    task_id     varchar(32)                        not null comment '任务唯一标识(UUID)',
+    user_id     bigint                             not null comment '发起任务的用户id',
+    biz_type    varchar(32)                        not null comment '业务类型: ai_tag / ai_draw / notify / export ...',
+    biz_id      varchar(64)                        null comment '业务关联id',
+    status      varchar(20) default 'PENDING'      not null comment '状态: PENDING / PROCESSING / DONE / FAILED',
+    param       text                               null comment '任务参数JSON',
+    result      text                               null comment '任务结果JSON',
+    error_msg   text                               null comment '错误信息',
+    create_time datetime    default CURRENT_TIMESTAMP not null comment '创建时间',
+    update_time datetime    default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间'
+)
+    comment '异步任务表';
+
+create index idx_task_id
+    on task (task_id);
+
+create index idx_user_id
+    on task (user_id);
+
+create index idx_biz_type
+    on task (biz_type);
+
+create index idx_status
+    on task (status);
+

@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useContext } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Form, Input, Select, Button, message } from 'antd'
 import MobilePageWrapper from '../components/MobilePageWrapper'
-import { updatePicture, getSystemTypes, getPictureEditMessage, aiTags } from '../api'
+import { updatePicture, getSystemTypes, getPictureEditMessage, submitAiTag } from '../api'
 import { AuthContext } from '../context/AuthContext'
 import './MobileEditPicturePage.css'
 
@@ -96,15 +96,11 @@ export default function MobileEditPicturePage() {
               <Form.Item>
               <Button block onClick={async () => {
                 try {
-                  const result = await aiTags(pictureId)
-                  form.setFieldsValue({
-                    pictureName: result.pictureName || undefined,
-                    introduction: result.introduction || undefined,
-                    tags: result.tags || [],
-                  })
-                  message.success('AI识别完成')
+                  await submitAiTag(pictureId)
+                  message.info('AI正在后台执行，完成后将自动填充')
+                  navigate(-1)
                 } catch (e) {
-                  message.error(e.message || 'AI识别失败')
+                  message.error(e.message || 'AI识别提交失败')
                 }
               }}>AI一键填写</Button>
               </Form.Item>

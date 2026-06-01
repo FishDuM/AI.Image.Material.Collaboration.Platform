@@ -220,7 +220,18 @@ export const adminDeletePost = (id) => api.post('/post/admin/delete', null, { pa
 
 // AI 相关 API
 const AI_TIMEOUT = 60000
-export const aiTags = (id, config = {}) => api.post('/ai/tags', null, { params: { id }, timeout: AI_TIMEOUT, ...config })
+export const submitAiTag = (id) => api.post('/ai/tags', null, { params: { id } })
+export const getAiTagResult = (taskId) => api.get(`/ai/tags/result/${taskId}`)
+export const pollAiTagResult = async (taskId, interval = 2000, timeout = 60000) => {
+  const start = Date.now()
+  while (Date.now() - start < timeout) {
+    const task = await getAiTagResult(taskId)
+    if (task.status === 'DONE') return JSON.parse(task.result)
+    if (task.status === 'FAILED') throw new Error(task.errorMsg || 'AI识别失败')
+    await new Promise(r => setTimeout(r, interval))
+  }
+  throw new Error('AI识别超时')
+}
 export const getAiTasks = (params) => api.get('/ai/admin/tasks', { params })
 export const getAiStats = () => api.get('/ai/admin/stats')
 export const getAiConfig = () => api.get('/ai/admin/config')

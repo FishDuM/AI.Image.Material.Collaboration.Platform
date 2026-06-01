@@ -1,22 +1,13 @@
 package hk.ljx.fishpicsbackend.ai.service;
 
 import hk.ljx.fishpicsbackend.ai.dto.AiDrawPictureDTO;
-import hk.ljx.fishpicsbackend.ai.vo.AiPictureMessage;
+import hk.ljx.fishpicsbackend.task.entity.Task;
 
 public interface AiService {
 
-    /**
-     * 使用 ai 识别出图片的标签
-     *
-     * @param id 图片 id
-     * @return 标签
-     */
-    AiPictureMessage getTagsByPicture(Long id);
+    String submitTagTask(Long pictureId);
 
-    /**
-     * ai 文生图
-     * @param drawPictureDTO 文生图参数
-     * @return 图片链接
-     */
+    Task getTagResult(String taskId);
+
     String drawPicture(AiDrawPictureDTO drawPictureDTO);
 }
