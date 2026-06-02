@@ -13,7 +13,8 @@ FishPics 是一个图片素材协作与社区平台。后端负责用户认证�
 - 支持帖子发布、编辑、浏览、点赞、收藏、评论和热度排序。
 - 支持私人空间与团队空间的图片资产管理。
 - 支持管理员对用户、图片、帖子、评论、空间、系统配置和 AI 任务进行管理。
-- 支持 VIP/SVIP 用户使用 AI 标注、编辑、生成和推荐能力。
+- 支持 VIP/SVIP 用户使用 AI 标注、文生图能力（异步任务模式）。
+- 支持用户兴趣画像自动生成，为个性化推荐提供数据基础。
 
 ### 1.2 技术栈
 
@@ -148,6 +149,8 @@ FishPics 是一个图片素材协作与社区平台。后端负责用户认证�
 
 帖子统计字段包括 `likes_num`、`collects_num`、`comment_num`、`views_num`、`hot`。点赞使用 Redisson 锁降低并发重复操作风险。
 
+用户兴趣画像由定时任务（每 30 分钟）自动刷新：根据用户点赞（权重+3）和收藏（权重+5）的帖子关联图片标签，生成用户标签权重分布，持久化在 `user_interest_profile` 表中。
+
 ### 3.5 评论
 
 | 功能 | 接口 | 说明 |
@@ -194,10 +197,17 @@ FishPics 是一个图片素材协作与社区平台。后端负责用户认证�
 
 | 功能 | 接口 | 权限 | 说明 |
 | --- | --- | --- | --- |
-| 图片标注 | `POST /api/ai/tags` | VIP/SVIP | 通过 Spring AI Alibaba Agent 识别图片标签、名称和描述 |
-| 文生图 | `POST /api/ai/draw` | VIP/SVIP | 通过 DashScope SDK 调用万相模型根据提示词生成图片 |
+| 提交图片标注任务 | `POST /api/ai/tags` | VIP/SVIP | 提交异步标注任务，返回 `taskId` |
+| 查询标注结果 | `GET /api/ai/tags/result/{taskId}` | VIP/SVIP | 查询标注任务结果 |
+| 同步文生图 | `POST /api/ai/draw` | VIP/SVIP | 同步调用 DashScope 生成图片 |
+| 提交文生图任务 | `POST /api/ai/draw/submit` | VIP/SVIP | 提交异步文生图任务，返回 `taskId` |
+| 查询文生图结果 | `GET /api/ai/draw/result/{taskId}` | VIP/SVIP | 查询文生图任务结果 |
+| 管理员任务列表 | `POST /api/ai/admin/tasks` | 管理员 | 分页查询 AI 任务，支持按类型和状态筛选 |
+| 管理员任务统计 | `GET /api/ai/admin/stats` | 管理员 | 返回任务总数、成功/失败/处理中数量、按类型统计 |
+| 获取 AI 配置 | `GET /api/ai/admin/config` | 管理员 | 获取 AI 功能开关配置 |
+| 更新 AI 配置 | `POST /api/ai/admin/config` | 管理员 | 更新 AI 功能开关（标注/编辑/生成/推荐） |
 
-AI 能力为**同步调用**模式：标注任务通过 `ReactAgent` + 通义千问视觉理解模型处理，生成图片通过 `qwen-image-2.0-pro` 模型生成。无 `ai_task` 表持久化和异步任务队列。管理员暂无 AI 任务统计和配置管理接口。
+AI 能力采用**异步任务模式**：标注和文生图任务提交后立即返回 `taskId`，任务通过 RocketMQ 异步处理，结果持久化在 `task` 表中，前端可通过 WebSocket 实时接收任务完成通知。管理员可通过后台查看任务列表、统计和配置 AI 功能开关。
 
 ## 4. 数据需求
 
@@ -214,8 +224,9 @@ AI 能力为**同步调用**模式：标注任务通过 `ReactAgent` + 通义千
 | `user_fans` | `UserFans` | 用户关注/粉丝关系 |
 | `user_post_collect` | `UserPostCollect` | 用户收藏帖子 |
 | `user_post_likes` | `UserPostLikes` | 用户点赞帖子 |
+| `user_interest_profile` | `UserInterestProfile` | 用户兴趣画像（标签权重） |
 | `pic_system` | `PicSystem` | 系统键值配置 |
-| `ai_task` | `AiTask` | AI 异步任务 |
+| `task` | `Task` | 异步任务（AI 标注、文生图等） |
 
 ### 4.2 关键关系
 
@@ -224,7 +235,8 @@ AI 能力为**同步调用**模式：标注任务通过 `ReactAgent` + 通义千
 - 一个空间可以拥有多张图片。
 - 一个帖子可以被多个用户点赞、收藏和评论。
 - 一个用户可以关注多个用户，也可以被多个用户关注。
-- 一个 AI 任务属于一个用户，可关联一张图片。
+- 一个用户拥有一个兴趣画像，包含多个标签权重。
+- 一个异步任务属于一个用户，可关联一个业务对象（图片或帖子）。
 
 ### 4.3 重要索引
 
@@ -233,7 +245,8 @@ AI 能力为**同步调用**模式：标注任务通过 `ReactAgent` + 通义千
 - 图片：`idx_user_id`、`idx_picture_name`、`picture_space_id_index`、`picture_introduction_index`、`picture_update_time_index`
 - 图片关联：`picture_child_picture_id_post_id_uindex`、`picture_child_picture_id_index`、`picture_child_post_id_index`
 - 评论：`idx_post_id`、`idx_user_id`
-- AI 任务：`ai_task_user_id_index`、`ai_task_type_index`、`ai_task_status_index`、`ai_task_picture_id_index`
+- 用户兴趣画像：`uk_user_tag`（用户+标签唯一）
+- 异步任务：`idx_task_id`、`idx_user_id`、`idx_status`
 
 ## 5. 非功能需求
 
@@ -278,10 +291,12 @@ AI 能力为**同步调用**模式：标注任务通过 `ReactAgent` + 通义千
 
 ### 6.3 AI 调用流程
 
-1. VIP/SVIP 用户调用 `/ai/tags`（图片标注）或 `/ai/draw`（文生图）。
-2. 标签识别：服务端通过 `ReactAgent` + 通义千问视觉理解模型同步分析图片，返回结构化结果（名称、描述、标签列表）。
-3. 文生图：服务端通过 DashScope SDK 调用 `qwen-image-2.0-pro` 模型同步生成图片，返回图片 URL。
-4. 当前为同步调用模式，不支持异步任务查询。
+1. VIP/SVIP 用户调用 `/ai/tags`（提交标注任务）或 `/ai/draw/submit`（提交文生图任务）。
+2. 服务端创建 `task` 记录（状态 PENDING），通过 RocketMQ 发送异步消息。
+3. 标签识别：`AiTagTaskHandler` 消费消息，通过 Spring AI Alibaba Agent + 通义千问视觉理解模型分析图片，更新图片标签并标记任务完成（DONE）。
+4. 文生图：`AiDrawTaskHandler` 消费消息，通过 DashScope SDK 调用万相模型生成图片，保存 URL 并标记任务完成（DONE）。
+5. 前端可通过 WebSocket 实时接收任务完成通知，或通过 `/ai/tags/result/{taskId}` 和 `/ai/draw/result/{taskId}` 查询结果。
+6. 管理员可通过 `/ai/admin/tasks`、`/ai/admin/stats` 和 `/ai/admin/config` 管理 AI 任务和配置。
 
 ## 7. 后续维护说明
 

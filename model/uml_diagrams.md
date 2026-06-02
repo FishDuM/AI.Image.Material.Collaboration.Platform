@@ -10,12 +10,14 @@
 | --- | --- |
 | 访客 | 可查看公开配置、获取验证码、注册、登录、浏览公开内容 |
 | 登录用户 | 可维护个人资料、上传图片、管理空间、发布帖子、互动、评论、关注 |
-| VIP/SVIP 用户 | 继承登录用户能力，并可使用 AI 标注和文生图能力 |
-| 管理员 | 可管理用户、图片、帖子、评论、空间、系统配置 |
+| VIP/SVIP 用户 | 继承登录用户能力，并可使用 AI 标注和文生图能力（异步任务模式） |
+| 管理员 | 可管理用户、图片、帖子、评论、空间、系统配置、AI 任务和配置 |
 | AI Provider | DashScope / 阿里云模型服务，执行视觉理解和图像生成 |
 | COS 对象存储 | 保存头像和图片文件 |
 | Redis | 保存验证码、Token、用户缓存、系统配置缓存 |
 | MySQL | 保存业务主数据 |
+| RocketMQ | 异步任务消息队列 |
+| WebSocket | 实时任务通知 |
 
 ### 1.2 用例图
 
@@ -29,6 +31,8 @@ flowchart LR
     COS["腾讯云 COS"]
     AI["AI Provider"]
     DB["MySQL"]
+    MQ["RocketMQ"]
+    WS["WebSocket"]
 
     Guest --> UC1["获取验证码"]
     Guest --> UC2["注册"]
@@ -42,26 +46,30 @@ flowchart LR
     User --> UC9["点赞/收藏/评论"]
     User --> UC10["关注/查看粉丝"]
 
-    Vip --> UC11["AI 图片标注"]
-    Vip --> UC12["AI 文生图"]
+    Vip --> UC11["提交 AI 标注任务"]
+    Vip --> UC12["提交 AI 文生图任务"]
+    Vip --> UC13["查询任务结果"]
 
-    Admin --> UC13["用户管理"]
-    Admin --> UC14["图片审核"]
-    Admin --> UC15["帖子审核/删除"]
-    Admin --> UC16["评论审核/删除"]
-    Admin --> UC17["空间管理"]
-    Admin --> UC18["系统配置管理"]
+    Admin --> UC14["用户管理"]
+    Admin --> UC15["图片审核"]
+    Admin --> UC16["帖子审核/删除"]
+    Admin --> UC17["评论审核/删除"]
+    Admin --> UC18["空间管理"]
+    Admin --> UC19["系统配置管理"]
+    Admin --> UC20["AI 任务管理"]
+    Admin --> UC21["AI 配置管理"]
 
     UC1 --> Redis
     UC3 --> Redis
     UC6 --> COS
-    UC11 --> AI
-    UC12 --> AI
+    UC11 --> MQ
+    UC12 --> MQ
+    UC13 --> WS
     UC2 --> DB
     UC7 --> DB
     UC8 --> DB
     UC9 --> DB
-    UC13 --> DB
+    UC14 --> DB
 ```
 
 ### 1.3 权限矩阵
@@ -72,8 +80,9 @@ flowchart LR
 | 公开图片、帖子、系统配置查询 | 是 | 是 | 是 | 是 |
 | 当前用户、资料、隐私、退出 | 否 | 是 | 是 | 是 |
 | 上传图片、空间、发帖、互动、评论 | 否 | 是 | 是 | 是 |
-| AI 标签识别、文生图 | 否 | 否 | 是 | 是 |
-| 后台管理接口 | 否 | 否 | 否 | 是 |
+| 提交 AI 标注/文生图任务、查询任务结果 | 否 | 否 | 是 | 是 |
+| 后台管理接口（用户、图片、帖子、评论、空间、系统） | 否 | 否 | 否 | 是 |
+| AI 后台管理（任务列表、统计、配置） | 否 | 否 | 否 | 是 |
 
 ## 2. 领域类图
 
@@ -186,22 +195,31 @@ classDiagram
         Long postId
     }
 
+    class UserInterestProfile {
+        Long id
+        Long userId
+        String tag
+        Integer weight
+        Date createTime
+        Date updateTime
+    }
+
     class PicSystem {
         Long id
         String syskey
         String sysvalue
     }
 
-    class AiTask {
+    class Task {
         Long id
+        String taskId
         Long userId
-        Integer type
-        String subType
-        String inputData
-        String outputData
-        Integer status
+        String bizType
+        String bizId
+        String status
+        String param
+        String result
         String errorMsg
-        Long pictureId
         Date createTime
         Date updateTime
     }
@@ -210,7 +228,8 @@ classDiagram
     User "1" --> "0..*" Picture : uploads
     User "1" --> "0..*" Post : publishes
     User "1" --> "0..*" Comment : writes
-    User "1" --> "0..*" AiTask : submits
+    User "1" --> "0..*" Task : submits
+    User "1" --> "1" UserInterestProfile : has profile
     Space "1" --> "0..*" Picture : contains
     Post "1" --> "0..*" PictureChild : ordered images
     Picture "1" --> "0..*" PictureChild : used by posts
@@ -221,7 +240,8 @@ classDiagram
     User "1" --> "0..*" UserFans : target user
     User "1" --> "0..*" UserPostCollect : collects
     User "1" --> "0..*" UserPostLikes : likes
-    Picture "0..1" --> "0..*" AiTask : related
+    Picture "0..1" --> "0..*" Task : processed by
+    UserInterestProfile "1" --> "0..*" tags : contains
 ```
 
 ## 3. 数据库 ER 图
@@ -232,7 +252,8 @@ erDiagram
     USER ||--o{ PICTURE : uploads
     USER ||--o{ POST : publishes
     USER ||--o{ COMMENT : writes
-    USER ||--o{ AI_TASK : submits
+    USER ||--o{ TASK : submits
+    USER ||--o| USER_INTEREST_PROFILE : has
     USER ||--o{ USER_FANS : has_fans
     USER ||--o{ USER_POST_COLLECT : collects
     USER ||--o{ USER_POST_LIKES : likes
@@ -244,7 +265,7 @@ erDiagram
     COMMENT ||--o{ COMMENT : replies
     POST ||--o{ USER_POST_COLLECT : collected
     POST ||--o{ USER_POST_LIKES : liked
-    PICTURE ||--o{ AI_TASK : processed_by
+    PICTURE ||--o{ TASK : processed_by
 
     USER {
         bigint id PK
@@ -330,7 +351,7 @@ erDiagram
         bigint post_id
         text content
         bigint parent_id
-        int to_user_id
+        bigint to_user_id
         tinyint status
         datetime create_time
     }
@@ -345,12 +366,23 @@ erDiagram
         bigint id PK
         bigint user_id
         bigint post_id
+        datetime create_time
     }
 
     USER_POST_LIKES {
         bigint id PK
         bigint user_id
         bigint post_id
+        datetime create_time
+    }
+
+    USER_INTEREST_PROFILE {
+        bigint id PK
+        bigint user_id UK
+        varchar tag
+        int weight
+        datetime create_time
+        datetime update_time
     }
 
     PIC_SYSTEM {
@@ -359,16 +391,16 @@ erDiagram
         varchar sysvalue
     }
 
-    AI_TASK {
+    TASK {
         bigint id PK
+        varchar task_id UK
         bigint user_id
-        tinyint type
-        varchar sub_type
-        text input_data
-        text output_data
-        tinyint status
-        varchar error_msg
-        bigint picture_id
+        varchar biz_type
+        varchar biz_id
+        varchar status
+        text param
+        text result
+        text error_msg
         datetime create_time
         datetime update_time
     }
@@ -469,10 +501,17 @@ erDiagram
 
 | 方法 | 路径 | 入参 | 出参 | 权限 |
 | --- | --- | --- | --- | --- |
-| `POST` | `/ai/tags` | `id` | `AiPictureMessage` | VIP/SVIP（登录校验 + level >= 1） |
-| `POST` | `/ai/draw` | `AiDrawPictureDTO` | `String` | VIP/SVIP（登录校验 + level >= 1） |
+| `POST` | `/ai/tags` | `IdRequest` | `AiTaskSubmitVO` | VIP/SVIP |
+| `GET` | `/ai/tags/result/{taskId}` | `taskId` | `Task` | VIP/SVIP |
+| `POST` | `/ai/draw` | `AiDrawPictureDTO` | `String` | VIP/SVIP |
+| `POST` | `/ai/draw/submit` | `AiDrawPictureDTO` | `AiTaskSubmitVO` | VIP/SVIP |
+| `GET` | `/ai/draw/result/{taskId}` | `taskId` | `Task` | VIP/SVIP |
+| `POST` | `/ai/admin/tasks` | `AiTaskQueryDTO` | `IPage<AiTaskVO>` | 管理员 |
+| `GET` | `/ai/admin/stats` | - | `AiStatsVO` | 管理员 |
+| `GET` | `/ai/admin/config` | - | `AiConfigDTO` | 管理员 |
+| `POST` | `/ai/admin/config` | `AiConfigDTO` | `Boolean` | 管理员 |
 
-注：`/ai/**` 路径在 `MvcConfig` 中被排除在登录拦截器之外。
+注：`/ai/**` 路径在 `MvcConfig` 中被排除在登录拦截器之外。AI 能力采用异步任务模式，任务通过 RocketMQ 消费，结果持久化在 `task` 表中。
 
 ## 5. 关键流程图
 
@@ -544,19 +583,44 @@ sequenceDiagram
     participant C as Client
     participant A as AiController
     participant S as AiService
+    participant MQ as RocketMQ
+    participant H as TaskHandler
     participant AI as AI Provider
+    participant WS as WebSocket
 
-    C->>A: POST /ai/tags(id)
-    A->>S: getTagsByPicture
-    S->>AI: ReactAgent + 通义千问视觉理解
-    AI-->>S: 名称/描述/标签
-    S-->>C: AiPictureMessage
+    C->>A: POST /ai/tags(IdRequest)
+    A->>S: submitTagTask(pictureId)
+    S->>S: 创建 Task(PENDING)
+    S->>MQ: 发送 ai_tag 消息
+    S-->>C: AiTaskSubmitVO(taskId)
 
-    C->>A: POST /ai/draw(AiDrawPictureDTO)
-    A->>S: drawPicture
-    S->>AI: DashScope + 万相图像生成
-    AI-->>S: 图片 URL
-    S-->>C: 图片 URL
+    MQ->>H: AiTagTaskHandler 消费
+    H->>AI: ReactAgent + 通义千问视觉理解
+    AI-->>H: 名称/描述/标签
+    H->>S: 更新图片标签，标记 Task(DONE)
+    S->>WS: 推送任务完成通知
+    WS-->>C: 实时通知
+
+    C->>A: GET /ai/tags/result/{taskId}
+    A->>S: getTagResult(taskId)
+    S-->>C: Task(含结果)
+
+    C->>A: POST /ai/draw/submit(AiDrawPictureDTO)
+    A->>S: submitDrawTask(dto, userId)
+    S->>S: 创建 Task(PENDING)
+    S->>MQ: 发送 ai_draw 消息
+    S-->>C: AiTaskSubmitVO(taskId)
+
+    MQ->>H: AiDrawTaskHandler 消费
+    H->>AI: DashScope + 万相图像生成
+    AI-->>H: 图片 URL
+    H->>S: 标记 Task(DONE)
+    S->>WS: 推送任务完成通知
+    WS-->>C: 实时通知
+
+    C->>A: GET /ai/draw/result/{taskId}
+    A->>S: getDrawResult(taskId)
+    S-->>C: Task(含结果)
 ```
 
 ## 6. DTO/VO 模型摘要
@@ -590,6 +654,8 @@ sequenceDiagram
 | `DeleteTypeRequest` | `value` | 删除分类标签 |
 | `DeleteMarqueeRequest` | `url` | 删除跑马灯 |
 | `AiDrawPictureDTO` | `description,exclusion,style,width,height` | AI 文生图 |
+| `AiTaskQueryDTO` | `type,status,current,pageSize` | AI 任务查询 |
+| `AiConfigDTO` | `taggingEnabled,editingEnabled,generationEnabled,recommendationEnabled` | AI 功能配置 |
 | `PageRequest` | `current,pageSize,sortField,sortOrder` | 通用分页查询 |
 
 ### 6.2 主要响应 VO
@@ -611,6 +677,9 @@ sequenceDiagram
 | `SpaceVO` | 空间展示项 |
 | `SpaceMemberVO` | 团队成员展示项 |
 | `AiPictureMessage` | AI 标注结果（名称、描述、标签列表） |
+| `AiTaskSubmitVO` | AI 任务提交返回（taskId, status） |
+| `AiTaskVO` | AI 任务详情（管理后台） |
+| `AiStatsVO` | AI 任务统计（管理后台） |
 | `AdminGetUserVO` | 管理员查看用户详情 |
 
 ## 7. 状态与约束
@@ -624,20 +693,24 @@ sequenceDiagram
 | `Post` | `status` | `0` 禁用，`1` 正常，`2` 待审核 |
 | `Comment` | `status` | `0` 禁用，`1` 正常，`2` 待审核 |
 | `Space` | `status` | `0` 禁用，`1` 正常 |
-| `AiTask` | `status` | `0` 处理中，`1` 成功，`2` 失败 |
+| `Task` | `status` | `PENDING` 待处理，`PROCESSING` 处理中，`DONE` 成功，`FAILED` 失败 |
+| `Task` | `bizType` | `ai_tag` 标注任务，`ai_draw` 文生图任务 |
 
 ### 7.2 关键约束
 
 - `user.username`、`user.nickname` 唯一。
 - `pic_system.syskey` 唯一。
 - `picture_child` 对 `picture_id + post_id` 建立唯一索引。
+- `user_interest_profile` 对 `user_id + tag` 建立唯一索引。
+- `task.task_id` 唯一索引。
 - 帖子图片顺序必须依赖 `picture_child.sort_num`。
 - `picture.is_private` 当前承担首页公开标记含义：`0` 不公开到首页，`1` 公开到首页；管理员图片审核接口的 `selected` 参数会写入该字段。
 - `picture.tags` 存储 AI 标签，格式为 JSON 数组（如 `["人物","风景"]`）。注意：代码中存在 JSON 序列化和逗号分割两种读取方式。
 - `picture.type` 存储图片格式类型，仅 Java 实体和 XML Mapper 中存在，对应 `create.sql` 缺少该列。
-- `comment.to_user_id` 在 Java 实体中为 `Long`，SQL DDL 中为 `int`。
+- `comment.to_user_id` 在 Java 实体中为 `Long`，SQL DDL 中已修正为 `bigint`。
 - 普通用户不能调用 AI 能力，必须 `level >= 1`。
 - 热度定时任务（`HotScoreScheduler`）每 10 分钟执行一次：`hot = likes_num * 3 + collects_num * 3 + comment_num * 2 + views_num * 2`。
+- 用户画像定时任务（`UserProfileScheduler`）每 30 分钟执行一次，根据点赞（权重+3）和收藏（权重+5）行为刷新用户兴趣标签权重。
 
 ## 8. 包依赖视图
 
@@ -652,10 +725,13 @@ flowchart TD
     Common["common"]
     Scheduled["scheduled"]
     AI["ai"]
+    Task["task"]
     DB["MySQL"]
     Redis["Redis"]
     COS["COS"]
     DashScope["DashScope"]
+    MQ["RocketMQ"]
+    WS["WebSocket"]
 
     Controller --> DTO
     Controller --> Service
@@ -664,11 +740,16 @@ flowchart TD
     Service --> Mapper
     Service --> Entity
     Service --> Common
+    Service --> Task
     Mapper --> DB
     Common --> Redis
     Common --> COS
+    Common --> WS
     AI --> DashScope
     AI --> Service
+    AI --> Task
     Scheduled --> Mapper
-    Service --> AI
+    Scheduled --> Service
+    Task --> MQ
+    Task --> Service
 ```

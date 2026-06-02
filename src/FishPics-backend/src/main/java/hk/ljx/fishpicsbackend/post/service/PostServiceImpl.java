@@ -8,6 +8,7 @@ import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
@@ -19,6 +20,8 @@ import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import hk.ljx.fishpicsbackend.common.dto.PageRequest;
 import hk.ljx.fishpicsbackend.post.dto.*;
 import hk.ljx.fishpicsbackend.space.dto.SpacePictureList;
@@ -43,6 +46,8 @@ import hk.ljx.fishpicsbackend.picture.vo.PicturePageVO;
 import hk.ljx.fishpicsbackend.post.vo.PictureListPageVO;
 import hk.ljx.fishpicsbackend.post.vo.PostDetailVO;
 import hk.ljx.fishpicsbackend.post.vo.PostListVO;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -60,6 +65,9 @@ import java.util.stream.Collectors;
 
 import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.COLLECT_POST_KEY;
 import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.LIKE_POST_KEY;
+import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.POST_LIST_CACHE_KEY;
+import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.POST_LIST_LOCK_KEY;
+import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.POST_LIST_CACHE_TTL;
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
 /**
@@ -83,6 +91,9 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
+
+    @Resource
+    private RedissonClient redissonClient;
 
     @Resource
     private UserPostLikesService userPostLikesService;
@@ -128,6 +139,9 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
         // 批量设置子图片
         savePictureChildBatch(pictures, postId);
+
+        // 清除帖子列表缓存
+        clearPostListCache();
     }
 
     @Override
@@ -228,6 +242,9 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
                 .build();
         int insert = baseMapper.updateById(post);
         ExcUtils.throwIfTrue(insert != 1, ExceptionCode.INTERNAL_SERVER_ERROR, "保存失败，数据库错误");
+
+        // 清除帖子列表缓存
+        clearPostListCache();
     }
 
     /**
@@ -274,13 +291,70 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
     @Override
     public IPage<PostListVO> getPostList(PostQueryRequest postQueryRequest) {
-        Page<Post> page = new Page<>(postQueryRequest.getCurrent(), postQueryRequest.getPageSize());
-        PostQueryWrapper queryWrapper = new PostQueryWrapper();
-        BeanUtil.copyProperties(postQueryRequest, queryWrapper, CopyOptions.create().setIgnoreNullValue(true));
-        IPage<Post> postPage = baseMapper.selectPage(page, newQueryWrapper(queryWrapper));
+        // 1. 构建缓存键
+        String cacheKey = buildPostListCacheKey(postQueryRequest);
 
-        // 批量查询封面
-        return convertToPostListVO(postPage);
+        // 2. 先查缓存
+        String cachedJson = stringRedisTemplate.opsForValue().get(cacheKey);
+        if (cachedJson != null) {
+            log.debug("命中帖子列表缓存: {}", cacheKey);
+            return JSONUtil.toBean(cachedJson, new cn.hutool.core.lang.TypeReference<Page<PostListVO>>() {}, false);
+        }
+
+        // 3. 缓存未命中，尝试获取分布式锁防击穿
+        String lockKey = POST_LIST_LOCK_KEY + cacheKey;
+        RLock lock = redissonClient.getLock(lockKey);
+        boolean locked = false;
+        try {
+            // 尝试获取锁，不等待，leaseTime 5秒
+            locked = lock.tryLock(0, 5, TimeUnit.SECONDS);
+            if (locked) {
+                log.debug("获取锁成功，查询数据库: {}", cacheKey);
+                // 再次检查缓存（双重检查）
+                cachedJson = stringRedisTemplate.opsForValue().get(cacheKey);
+                if (cachedJson != null) {
+                    log.debug("再次命中缓存: {}", cacheKey);
+                    return JSONUtil.toBean(cachedJson, new cn.hutool.core.lang.TypeReference<Page<PostListVO>>() {}, false);
+                }
+                // 查数据库
+                Page<Post> page = new Page<>(postQueryRequest.getCurrent(), postQueryRequest.getPageSize());
+                PostQueryWrapper queryWrapper = new PostQueryWrapper();
+                BeanUtil.copyProperties(postQueryRequest, queryWrapper, CopyOptions.create().setIgnoreNullValue(true));
+                IPage<Post> postPage = baseMapper.selectPage(page, newQueryWrapper(queryWrapper));
+                IPage<PostListVO> result = convertToPostListVO(postPage);
+
+                // 写入缓存
+                try {
+                    stringRedisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(result), POST_LIST_CACHE_TTL, TimeUnit.MINUTES);
+                    log.debug("写入帖子列表缓存: {}", cacheKey);
+                } catch (Exception e) {
+                    log.warn("写入帖子列表缓存失败: {}", cacheKey, e);
+                }
+                return result;
+            } else {
+                // 4. 未获取到锁，循环等待读缓存（最多25次，每次100ms，共2.5秒）
+                log.debug("未获取到锁，等待缓存写入: {}", cacheKey);
+                for (int i = 0; i < 25; i++) {
+                    Thread.sleep(100);
+                    cachedJson = stringRedisTemplate.opsForValue().get(cacheKey);
+                    if (cachedJson != null) {
+                        log.debug("等待后命中缓存: {}", cacheKey);
+                        return JSONUtil.toBean(cachedJson, new cn.hutool.core.lang.TypeReference<Page<PostListVO>>() {}, false);
+                    }
+                }
+                // 超时返回空数据（兜底）
+                log.warn("等待超时，返回空数据: {}", cacheKey);
+                return new Page<>(postQueryRequest.getCurrent(), postQueryRequest.getPageSize()).convert(p -> new PostListVO());
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("获取锁被中断: {}", cacheKey);
+            return new Page<>(postQueryRequest.getCurrent(), postQueryRequest.getPageSize()).convert(p -> new PostListVO());
+        } finally {
+            if (locked && lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
+        }
     }
 
     @Override
@@ -607,6 +681,9 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         post.setStatus(status);
         int i = baseMapper.updateById(post);
         ExcUtils.throwIfTrue(i != 1, ExceptionCode.DATABASE_ERROR, "审核失败");
+
+        // 清除帖子列表缓存
+        clearPostListCache();
     }
 
     @Override
@@ -615,6 +692,9 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(post) || post.getId() == null, ExceptionCode.NOT_FOUND, "帖子不存在");
         int i = baseMapper.deleteById(id);
         ExcUtils.throwIfTrue(i != 1, ExceptionCode.DATABASE_ERROR, "删除失败");
+
+        // 清除帖子列表缓存
+        clearPostListCache();
     }
 
     @Override
@@ -743,5 +823,62 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
             vo.setIsCollected(finalCollectedPostIds.contains(post.getId()));
             return vo;
         });
+    }
+
+    /**
+     * 构建帖子列表缓存键
+     * @param request 查询请求
+     * @return 缓存键
+     */
+    private String buildPostListCacheKey(PostQueryRequest request) {
+        StringBuilder keyBuilder = new StringBuilder(POST_LIST_CACHE_KEY);
+
+        if (request == null) {
+            keyBuilder.append("default:1:10");
+            return keyBuilder.toString();
+        }
+
+        // 排序字段
+        String sortField = ObjectUtil.isNotEmpty(request.getSortField())
+                ? request.getSortField() : "default";
+        keyBuilder.append(sortField).append(":");
+
+        // 排序方式
+        keyBuilder.append(request.getSortOrder() != null ? request.getSortOrder() : "desc").append(":");
+
+        // 状态筛选
+        keyBuilder.append(request.getStatus() != null ? request.getStatus() : "all").append(":");
+
+        // 分页参数
+        keyBuilder.append(request.getCurrent() > 0 ? request.getCurrent() : 1).append(":");
+        keyBuilder.append(request.getPageSize() > 0 ? request.getPageSize() : 10);
+
+        return keyBuilder.toString();
+    }
+
+    /**
+     * 清除帖子列表缓存
+     * 在帖子发布、审核、删除时调用
+     */
+    public void clearPostListCache() {
+        try {
+            // 使用 SCAN 命令替代 keys，避免阻塞 Redis
+            ScanOptions options = ScanOptions.scanOptions()
+                    .match(POST_LIST_CACHE_KEY + "*")
+                    .count(100)
+                    .build();
+            List<String> keys = new ArrayList<>();
+            try (Cursor<String> cursor = stringRedisTemplate.scan(options)) {
+                while (cursor.hasNext()) {
+                    keys.add(cursor.next());
+                }
+            }
+            if (!keys.isEmpty()) {
+                stringRedisTemplate.delete(keys);
+                log.info("清除帖子列表缓存，共 {} 个", keys.size());
+            }
+        } catch (Exception e) {
+            log.warn("清除帖子列表缓存失败", e);
+        }
     }
 }
