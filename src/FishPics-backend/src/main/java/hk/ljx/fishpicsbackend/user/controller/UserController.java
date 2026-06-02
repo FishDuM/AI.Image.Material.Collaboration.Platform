@@ -123,20 +123,16 @@ public class UserController {
         return ResUtils.success(userFansService.follow(userIdRequest.getUserId()));
     }
 
-    @GetMapping("/fans")
-    public Response<IPage<FollowUserVO>> getFans(@RequestParam(required = false) Long userId,
-                                                  @RequestParam(defaultValue = "1") int current,
-                                                  @RequestParam(defaultValue = "20") int pageSize) {
-        Long queryUserId = userId != null ? userId : UserHolder.getUser().getId();
-        return ResUtils.success(userFansService.getFans(queryUserId, current, pageSize));
+    @PostMapping("/fans")
+    public Response<IPage<FollowUserVO>> getFans(@RequestBody FollowQueryDTO dto) {
+        Long queryUserId = dto.getUserId() != null ? dto.getUserId() : UserHolder.getUser().getId();
+        return ResUtils.success(userFansService.getFans(queryUserId, dto.getCurrent(), dto.getPageSize()));
     }
 
-    @GetMapping("/follows")
-    public Response<IPage<FollowUserVO>> getFollows(@RequestParam(required = false) Long userId,
-                                                     @RequestParam(defaultValue = "1") int current,
-                                                     @RequestParam(defaultValue = "20") int pageSize) {
-        Long queryUserId = userId != null ? userId : UserHolder.getUser().getId();
-        return ResUtils.success(userFansService.getFollows(queryUserId, current, pageSize));
+    @PostMapping("/follows")
+    public Response<IPage<FollowUserVO>> getFollows(@RequestBody FollowQueryDTO dto) {
+        Long queryUserId = dto.getUserId() != null ? dto.getUserId() : UserHolder.getUser().getId();
+        return ResUtils.success(userFansService.getFollows(queryUserId, dto.getCurrent(), dto.getPageSize()));
     }
 
     @GetMapping("/profile")

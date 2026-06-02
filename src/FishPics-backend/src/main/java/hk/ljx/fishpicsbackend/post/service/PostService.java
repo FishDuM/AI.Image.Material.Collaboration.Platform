@@ -8,8 +8,7 @@ import hk.ljx.fishpicsbackend.post.dto.*;
 import hk.ljx.fishpicsbackend.picture.entity.Picture;
 import com.baomidou.mybatisplus.extension.service.IService;
 
-import java.util.Map;
-
+import hk.ljx.fishpicsbackend.post.vo.PictureListPageVO;
 import hk.ljx.fishpicsbackend.post.vo.PostDetailVO;
 import hk.ljx.fishpicsbackend.post.vo.PostListVO;
 
@@ -123,7 +122,7 @@ public interface PostService extends IService<Post> {
      * @param getPictureBySpaceRequest request
      * @return 图片列表
      */
-    Map<String, Object> getPictureList(GetPictureBySpaceRequest getPictureBySpaceRequest);
+    PictureListPageVO getPictureList(GetPictureBySpaceRequest getPictureBySpaceRequest);
 
     /**
      * 管理员分页查看所有帖子

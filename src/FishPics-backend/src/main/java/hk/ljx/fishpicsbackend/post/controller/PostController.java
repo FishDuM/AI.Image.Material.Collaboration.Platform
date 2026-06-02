@@ -7,20 +7,21 @@ import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
+import hk.ljx.fishpicsbackend.common.dto.IdRequest;
 import hk.ljx.fishpicsbackend.common.dto.PageRequest;
 import hk.ljx.fishpicsbackend.post.dto.EditPostRequest;
 import hk.ljx.fishpicsbackend.post.dto.GetPictureBySpaceRequest;
 import hk.ljx.fishpicsbackend.post.dto.PostQueryRequest;
+import hk.ljx.fishpicsbackend.post.dto.ReviewPostDTO;
 import hk.ljx.fishpicsbackend.post.dto.UploadPostRequest;
 import hk.ljx.fishpicsbackend.post.service.PostService;
+import hk.ljx.fishpicsbackend.post.vo.PictureListPageVO;
 import hk.ljx.fishpicsbackend.post.vo.PostDetailVO;
 import hk.ljx.fishpicsbackend.post.vo.PostListVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.annotation.Resource;
-
-import java.util.Map;
 
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
@@ -58,21 +59,21 @@ public class PostController {
     }
 
     @PostMapping("/like")
-    public Response<Boolean> like(@RequestParam("id") Long id) {
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), "帖子不存在");
-        boolean liked = postService.likePost(id);
+    public Response<Boolean> like(@RequestBody IdRequest request) {
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(request.getId()), "帖子不存在");
+        boolean liked = postService.likePost(request.getId());
         return ResUtils.success(liked);
     }
 
     @PostMapping("/collect")
-    public Response<Boolean> collect(@RequestParam("id") Long id) {
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), "帖子不存在");
-        boolean collected = postService.collectPost(id);
+    public Response<Boolean> collect(@RequestBody IdRequest request) {
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(request.getId()), "帖子不存在");
+        boolean collected = postService.collectPost(request.getId());
         return ResUtils.success(collected);
     }
 
     @PostMapping("/pictureList")
-    public Response<Map<String, Object>> getPictureList(@RequestBody GetPictureBySpaceRequest getPictureBySpaceRequest) {
+    public Response<PictureListPageVO> getPictureList(@RequestBody GetPictureBySpaceRequest getPictureBySpaceRequest) {
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(getPictureBySpaceRequest), "获取图片列表，空间不能为空");
         return ResUtils.success(postService.getPictureList(getPictureBySpaceRequest));
     }
@@ -109,18 +110,18 @@ public class PostController {
 
     @AuthCheck(role = ADMIN)
     @PostMapping("/admin/review")
-    public Response<Boolean> adminReview(@RequestParam("id") Long id, @RequestParam("status") Integer status) {
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), "帖子ID不能为空");
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(status), "审核状态不能为空");
-        postService.reviewPost(id, status);
+    public Response<Boolean> adminReview(@RequestBody ReviewPostDTO dto) {
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(dto.getId()), "帖子ID不能为空");
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(dto.getStatus()), "审核状态不能为空");
+        postService.reviewPost(dto.getId(), dto.getStatus());
         return ResUtils.success(true);
     }
 
     @AuthCheck(role = ADMIN)
     @PostMapping("/admin/delete")
-    public Response<Boolean> adminDelete(@RequestParam("id") Long id) {
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), "帖子ID不能为空");
-        postService.adminDeletePost(id);
+    public Response<Boolean> adminDelete(@RequestBody IdRequest request) {
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(request.getId()), "帖子ID不能为空");
+        postService.adminDeletePost(request.getId());
         return ResUtils.success(true);
     }
 }

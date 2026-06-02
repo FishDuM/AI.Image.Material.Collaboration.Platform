@@ -5,8 +5,10 @@ import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.comment.dto.CommentQueryRequest;
 import hk.ljx.fishpicsbackend.comment.dto.CreateCommentRequest;
+import hk.ljx.fishpicsbackend.comment.dto.ReviewCommentDTO;
 import hk.ljx.fishpicsbackend.comment.vo.CommentVO;
 import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
+import hk.ljx.fishpicsbackend.common.dto.IdRequest;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
@@ -37,9 +39,9 @@ public class CommentController {
     }
 
     @PostMapping("/delete")
-    public Response<Boolean> deleteComment(@RequestParam("id") Long id) {
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), "评论ID不能为空");
-        commentService.deleteComment(id);
+    public Response<Boolean> deleteComment(@RequestBody IdRequest request) {
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(request.getId()), "评论ID不能为空");
+        commentService.deleteComment(request.getId());
         return ResUtils.success(true);
     }
 
@@ -51,18 +53,18 @@ public class CommentController {
 
     @AuthCheck(role = ADMIN)
     @PostMapping("/review")
-    public Response<Boolean> reviewComment(@RequestParam("id") Long id, @RequestParam("status") Integer status) {
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), "评论ID不能为空");
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(status), "审核状态不能为空");
-        commentService.reviewComment(id, status);
+    public Response<Boolean> reviewComment(@RequestBody ReviewCommentDTO dto) {
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(dto.getId()), "评论ID不能为空");
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(dto.getStatus()), "审核状态不能为空");
+        commentService.reviewComment(dto.getId(), dto.getStatus());
         return ResUtils.success(true);
     }
 
     @AuthCheck(role = ADMIN)
     @PostMapping("/adminDelete")
-    public Response<Boolean> adminDeleteComment(@RequestParam("id") Long id) {
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), "评论ID不能为空");
-        commentService.adminDeleteComment(id);
+    public Response<Boolean> adminDeleteComment(@RequestBody IdRequest request) {
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(request.getId()), "评论ID不能为空");
+        commentService.adminDeleteComment(request.getId());
         return ResUtils.success(true);
     }
 }

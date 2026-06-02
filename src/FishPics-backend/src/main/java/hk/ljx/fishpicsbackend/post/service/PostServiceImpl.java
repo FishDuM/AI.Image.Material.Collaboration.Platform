@@ -37,6 +37,7 @@ import hk.ljx.fishpicsbackend.user.service.UserService;
 import hk.ljx.fishpicsbackend.picture.vo.PictureListByEditPostVO;
 import hk.ljx.fishpicsbackend.picture.vo.PictureListVO;
 import hk.ljx.fishpicsbackend.picture.vo.PicturePageVO;
+import hk.ljx.fishpicsbackend.post.vo.PictureListPageVO;
 import hk.ljx.fishpicsbackend.post.vo.PostDetailVO;
 import hk.ljx.fishpicsbackend.post.vo.PostListVO;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -545,7 +546,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
     }
 
     @Override
-    public Map<String, Object> getPictureList(GetPictureBySpaceRequest getPictureBySpaceRequest) {
+    public PictureListPageVO getPictureList(GetPictureBySpaceRequest getPictureBySpaceRequest) {
         Long spaceId = getPictureBySpaceRequest.getSpaceId();
         int current = getPictureBySpaceRequest.getCurrent();
         int pageSize = getPictureBySpaceRequest.getPageSize();
@@ -574,9 +575,9 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
             editPostVOS.add(editPostVO);
         }
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("records", editPostVOS);
-        result.put("total", pageResult.getTotal());
+        PictureListPageVO result = new PictureListPageVO();
+        result.setRecords(editPostVOS);
+        result.setTotal(pageResult.getTotal());
         return result;
     }
 

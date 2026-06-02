@@ -145,15 +145,15 @@ export const getPictureList = (current = 1, pageSize = 20, config = {}, tag = ''
   return api.post('/picture/list', data, config)
 }
 
-export const getAdminPictureList = (current = 1, pageSize = 20, status = 3) => {
+export const getAdminPictureList = (current = 1, pageSize = 20, status) => {
   const body = { current, pageSize }
-  if (status !== 3) {
-    return api.post('/picture/admin/list', body, { params: { status } })
+  if (status !== undefined && status !== null) {
+    body.status = status
   }
   return api.post('/picture/admin/list', body)
 }
 
-export const reviewPicture = (pictureId, status, selected) => api.post('/picture/admin/review', null, { params: { pictureId, status, selected } })
+export const reviewPicture = (pictureId, status, selected) => api.post('/picture/admin/review', { pictureId, status, selected })
 
 export const createSpace = (data) => api.post('/space/create', data)
 
@@ -178,9 +178,9 @@ export const updatePicture = (data) => api.put('/picture/update', data)
 
 export const getPictureEditMessage = (id) => api.get('/picture/pictureEditMessage', { params: { id } })
 
-export const likePost = (id) => api.post('/post/like', null, { params: { id } })
+export const likePost = (id) => api.post('/post/like', { id })
 
-export const collectPost = (id) => api.post('/post/collect', null, { params: { id } })
+export const collectPost = (id) => api.post('/post/collect', { id })
 
 export const getPost = (id, config = {}) => api.get('/post/getPost', { params: { id }, ...config })
 
@@ -196,9 +196,9 @@ export const getUserProfile = (userId, config = {}) => api.get('/user/profile', 
 
 export const updatePrivacy = (data) => api.post('/user/privacy', data)
 
-export const getFans = (params, config = {}) => api.get('/user/fans', { params, ...config })
+export const getFans = (data, config = {}) => api.post('/user/fans', data, config)
 
-export const getFollows = (params, config = {}) => api.get('/user/follows', { params, ...config })
+export const getFollows = (data, config = {}) => api.post('/user/follows', data, config)
 
 export const getSystemTypes = () => api.get('/system/list')
 
@@ -206,21 +206,21 @@ export const createComment = (data) => api.post('/comment/create', data)
 
 export const getCommentList = (data, config = {}) => api.post('/comment/list', data, config)
 
-export const deleteComment = (id) => api.post('/comment/delete', null, { params: { id } })
+export const deleteComment = (id) => api.post('/comment/delete', { id })
 
-export const reviewComment = (id, status) => api.post('/comment/review', null, { params: { id, status } })
+export const reviewComment = (id, status) => api.post('/comment/review', { id, status })
 
-export const adminDeleteComment = (id) => api.post('/comment/adminDelete', null, { params: { id } })
+export const adminDeleteComment = (id) => api.post('/comment/adminDelete', { id })
 
 export const getAdminCommentList = (data) => api.post('/comment/admin/list', data)
 
 export const getAdminPostList = (data) => api.post('/post/admin/list', data)
-export const reviewPost = (id, status) => api.post('/post/admin/review', null, { params: { id, status } })
-export const adminDeletePost = (id) => api.post('/post/admin/delete', null, { params: { id } })
+export const reviewPost = (id, status) => api.post('/post/admin/review', { id, status })
+export const adminDeletePost = (id) => api.post('/post/admin/delete', { id })
 
 // AI 相关 API
 const AI_TIMEOUT = 60000
-export const submitAiTag = (id) => api.post('/ai/tags', null, { params: { id } })
+export const submitAiTag = (id) => api.post('/ai/tags', { id })
 export const getAiTagResult = (taskId) => api.get(`/ai/tags/result/${taskId}`)
 export const pollAiTagResult = async (taskId, interval = 2000, timeout = 60000) => {
   const start = Date.now()
@@ -232,7 +232,7 @@ export const pollAiTagResult = async (taskId, interval = 2000, timeout = 60000) 
   }
   throw new Error('AI识别超时')
 }
-export const getAiTasks = (params) => api.get('/ai/admin/tasks', { params })
+export const getAiTasks = (data) => api.post('/ai/admin/tasks', data)
 export const getAiStats = () => api.get('/ai/admin/stats')
 export const getAiConfig = () => api.get('/ai/admin/config')
 export const updateAiConfig = (data) => api.post('/ai/admin/config', data)

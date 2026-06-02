@@ -6,12 +6,13 @@ import cn.hutool.core.util.ObjUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
-import hk.ljx.fishpicsbackend.common.dto.PageRequest;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
+import hk.ljx.fishpicsbackend.picture.dto.AdminPictureListDTO;
 import hk.ljx.fishpicsbackend.picture.dto.DeleteByIdList;
 import hk.ljx.fishpicsbackend.picture.dto.PictureQueryRequest;
 import hk.ljx.fishpicsbackend.picture.dto.PictureUpdateRequest;
+import hk.ljx.fishpicsbackend.picture.dto.ReviewPictureDTO;
 import hk.ljx.fishpicsbackend.picture.dto.SavePictureByUrlRequest;
 import hk.ljx.fishpicsbackend.picture.vo.PictureAdminVO;
 import hk.ljx.fishpicsbackend.picture.vo.PictureEditVO;
@@ -94,18 +95,14 @@ public class PictureController {
 
     @AuthCheck(role = ADMIN)
     @PostMapping("/admin/list")
-    public Response<IPage<PictureAdminVO>> getPictureListAdmin(@RequestBody PageRequest pageRequest,
-            @RequestParam(required = false) Integer status) {
-        return ResUtils.success(pictureService.getAdminPictureList(pageRequest, status));
+    public Response<IPage<PictureAdminVO>> getPictureListAdmin(@RequestBody AdminPictureListDTO dto) {
+        return ResUtils.success(pictureService.getAdminPictureList(dto));
     }
 
     @AuthCheck(role = ADMIN)
     @PostMapping("/admin/review")
-    public Response<Boolean> reviewPicture(
-            @RequestParam("pictureId") Long pictureId,
-            @RequestParam("status") Integer status,
-            @RequestParam("selected") Integer selected) {
-        pictureService.reviewPicture(pictureId, status, selected);
+    public Response<Boolean> reviewPicture(@RequestBody ReviewPictureDTO dto) {
+        pictureService.reviewPicture(dto.getPictureId(), dto.getStatus(), dto.getSelected());
         return ResUtils.success(true);
     }
 }

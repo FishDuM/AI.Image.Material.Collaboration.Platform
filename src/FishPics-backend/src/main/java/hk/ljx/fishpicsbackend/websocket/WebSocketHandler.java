@@ -35,7 +35,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
                 try {
                     session.sendMessage(new TextMessage(msg.getPayload()));
                 } catch (IOException e) {
-                    log.error("websocket send error, userId={}", msg.getUserId(), e);
+                    log.error("WebSocket发送消息失败, userId={}", msg.getUserId(), e);
                 }
             }
         });

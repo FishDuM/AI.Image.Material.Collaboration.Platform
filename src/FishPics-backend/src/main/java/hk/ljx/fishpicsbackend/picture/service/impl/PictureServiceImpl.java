@@ -13,7 +13,6 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import hk.ljx.fishpicsbackend.common.dto.PageRequest;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
@@ -22,6 +21,7 @@ import hk.ljx.fishpicsbackend.common.utils.DownloadUtils;
 import hk.ljx.fishpicsbackend.common.utils.FileTypeUtils;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
+import hk.ljx.fishpicsbackend.picture.dto.AdminPictureListDTO;
 import hk.ljx.fishpicsbackend.picture.dto.DeleteByIdList;
 import hk.ljx.fishpicsbackend.picture.dto.PictureMessage;
 import hk.ljx.fishpicsbackend.picture.dto.PictureQueryRequest;
@@ -297,23 +297,22 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     }
 
     @Override
-    public IPage<PictureAdminVO> getAdminPictureList(PageRequest pageRequest, Integer status) {
+    public IPage<PictureAdminVO> getAdminPictureList(AdminPictureListDTO dto) {
         QueryWrapper<Picture> queryWrapper = new QueryWrapper<Picture>()
                 .isNotNull("url")
                 .ne("url", "")
                 .orderByDesc("create_time");
 
+        Integer status = dto.getStatus();
         if (status != null) {
             if (status == 4) {
-                // 精选：isPrivate = 1
                 queryWrapper.eq("is_private", 1);
             } else {
-                // 0=禁用, 1=正常, 2=待审核
                 queryWrapper.eq("status", status);
             }
         }
 
-        Page<Picture> page = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
+        Page<Picture> page = new Page<>(dto.getCurrent(), dto.getPageSize());
         IPage<Picture> picturePage = pictureMapper.selectPage(page, queryWrapper);
         return picturePage.convert(p -> new PictureAdminVO(
                 p.getId(),
