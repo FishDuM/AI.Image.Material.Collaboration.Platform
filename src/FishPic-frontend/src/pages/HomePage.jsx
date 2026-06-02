@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Carousel, Masonry, Image as AntImage, Spin, Form } from 'antd'
-import { getPictureList } from '../api'
+import { getPictureList, getRecommendPictures } from '../api'
 import { useAuthModal } from '../hooks/useAuthModal.js'
 import { useFetchWithCleanup, useSystemTypes, useMarquee } from '../hooks/useRequestUtils'
 import AuthModals from '../components/shared/AuthModals.jsx'
@@ -18,7 +18,7 @@ function HomePage() {
   const [imgLoaded, setImgLoaded] = useState({})
   const [searchValue, setSearchValue] = useState('')
   const [searchTag, setSearchTag] = useState('热门')
-  const [categoryList, setCategoryList] = useState([])
+  const [categoryList, setCategoryList] = useState(['热门', '推荐'])
   const [selectedCategory, setSelectedCategory] = useState('热门')
   const [pictureList, setPictureList] = useState([])
   const [picturePage, setPicturePage] = useState(1)
@@ -55,7 +55,7 @@ function HomePage() {
 
   const handleCategorySelect = useCallback((cat) => {
     setSelectedCategory(cat)
-    setSearchTag(cat === '热门' ? '' : cat)
+    setSearchTag(cat === '热门' || cat === '推荐' ? '' : cat)
     setPicturePage(1)
   }, [])
 
@@ -68,11 +68,11 @@ function HomePage() {
   useEffect(() => {
     fetchSystemTypes().then((result) => {
       if (Array.isArray(result)) {
-        setCategoryList(['热门', ...result.filter(c => c !== '推荐' && c !== '热门')])
+        setCategoryList(['热门', '推荐', ...result.filter(c => c !== '推荐' && c !== '热门')])
       } else {
-        setCategoryList(['热门'])
+        setCategoryList(['热门', '推荐'])
       }
-    }).catch(() => setCategoryList(['热门']))
+    }).catch(() => setCategoryList(['热门', '推荐']))
   }, [fetchSystemTypes])
 
   const loadPictures = useCallback(async (page) => {
@@ -80,7 +80,10 @@ function HomePage() {
     setPictureLoading(true)
     try {
       const signal = createSignal()
-      const result = await getPictureList(page, PAGE_SIZE, { signal }, searchTag)
+      const isRecommend = selectedCategory === '推荐'
+      const result = isRecommend
+        ? await getRecommendPictures({ current: page, pageSize: PAGE_SIZE }, { signal })
+        : await getPictureList(page, PAGE_SIZE, { signal }, searchTag)
       if (requestId !== requestIdRef.current) return
       if (result && Array.isArray(result.records)) {
         setPictureList(prev => page === 1 ? result.records : [...prev, ...result.records])
@@ -98,7 +101,7 @@ function HomePage() {
         setPictureLoading(false)
       }
     }
-  }, [createSignal, searchTag])
+  }, [createSignal, searchTag, selectedCategory])
 
   // 组件挂载时加载首屏图片（默认 searchTag = '热门'）
   useEffect(() => {
@@ -114,7 +117,7 @@ function HomePage() {
     }
     loadPictures(1)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTag])
+  }, [searchTag, selectedCategory])
 
   useEffect(() => {
     if (!hasMore || pictureLoading) return

@@ -3,6 +3,7 @@ import hk.ljx.fishpicsbackend.picture.entity.Picture;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
+import hk.ljx.fishpicsbackend.common.dto.PageRequest;
 import hk.ljx.fishpicsbackend.picture.dto.AdminPictureListDTO;
 import hk.ljx.fishpicsbackend.picture.dto.DeleteByIdList;
 import hk.ljx.fishpicsbackend.picture.dto.PictureQueryRequest;
@@ -90,4 +91,9 @@ public interface PictureService extends IService<Picture> {
      * @return 图片信息
      */
     PictureEditVO getPictureEditMessage(Long id);
+
+    /**
+     * 获取推荐图片列表（基于用户兴趣画像标签匹配）
+     */
+    IPage<PictureListVO> getRecommendPictures(PageRequest pageRequest, Long userId);
 }

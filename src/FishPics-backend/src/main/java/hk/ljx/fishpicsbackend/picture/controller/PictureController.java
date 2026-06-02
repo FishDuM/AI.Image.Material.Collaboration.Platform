@@ -5,6 +5,9 @@ import hk.ljx.fishpicsbackend.picture.service.PictureService;
 import cn.hutool.core.util.ObjUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
+import hk.ljx.fishpicsbackend.common.dto.PageRequest;
+import hk.ljx.fishpicsbackend.common.utils.UserHolder;
+import hk.ljx.fishpicsbackend.user.entity.User;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
@@ -74,6 +77,16 @@ public class PictureController {
     @PostMapping("/list")
     public Response<IPage<PictureListVO>> getPictureList(@RequestBody PictureQueryRequest pictureQueryRequest) {
         return ResUtils.success(pictureService.getPictureList(pictureQueryRequest));
+    }
+
+    /**
+     * 获取推荐图片列表（基于用户兴趣画像）
+     */
+    @PostMapping("/recommend")
+    public Response<IPage<PictureListVO>> getRecommendPictures(@RequestBody PageRequest pageRequest) {
+        User loginUser = UserHolder.getUser();
+        ExcUtils.throwIfTrue(loginUser == null, "请先登录");
+        return ResUtils.success(pictureService.getRecommendPictures(pageRequest, loginUser.getId()));
     }
 
     @DeleteMapping("/delete")

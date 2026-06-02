@@ -8,9 +8,10 @@
             <id property="id" column="id" />
             <result property="userId" column="user_id" />
             <result property="postId" column="post_id" />
+            <result property="createTime" column="create_time" />
     </resultMap>
 
     <sql id="Base_Column_List">
-        id,user_id,post_id
+        id,user_id,post_id,create_time
     </sql>
 </mapper>

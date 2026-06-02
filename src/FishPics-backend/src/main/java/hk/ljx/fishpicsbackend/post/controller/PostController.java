@@ -3,6 +3,8 @@ import hk.ljx.fishpicsbackend.post.service.PostService;
 
 import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import hk.ljx.fishpicsbackend.user.entity.User;
+import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
@@ -14,7 +16,6 @@ import hk.ljx.fishpicsbackend.post.dto.GetPictureBySpaceRequest;
 import hk.ljx.fishpicsbackend.post.dto.PostQueryRequest;
 import hk.ljx.fishpicsbackend.post.dto.ReviewPostDTO;
 import hk.ljx.fishpicsbackend.post.dto.UploadPostRequest;
-import hk.ljx.fishpicsbackend.post.service.PostService;
 import hk.ljx.fishpicsbackend.post.vo.PictureListPageVO;
 import hk.ljx.fishpicsbackend.post.vo.PostDetailVO;
 import hk.ljx.fishpicsbackend.post.vo.PostListVO;
@@ -100,6 +101,16 @@ public class PostController {
     @PostMapping("/myLikes")
     public Response<IPage<PostListVO>> getMyLikes(@RequestBody PageRequest pageRequest) {
         return ResUtils.success(postService.getMyLikes(pageRequest));
+    }
+
+    /**
+     * 获取推荐帖子列表（基于用户兴趣画像）
+     */
+    @PostMapping("/recommend")
+    public Response<IPage<PostListVO>> getRecommendPosts(@RequestBody PageRequest pageRequest) {
+        User loginUser = UserHolder.getUser();
+        ExcUtils.throwIfTrue(loginUser == null, "请先登录");
+        return ResUtils.success(postService.getRecommendPosts(pageRequest, loginUser.getId()));
     }
 
     @AuthCheck(role = ADMIN)

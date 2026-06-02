@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useContext } from 'react'
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom'
 import { App, Button, Masonry, Empty, Spin } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
-import { getPost, getPostList } from '../api'
+import { getPost, getPostList, getRecommendPosts } from '../api'
 import { AuthContext } from '../context/AuthContext'
 import PostDetailModal from '../components/PostDetailModal'
 import CreateEditPostModal from '../components/CreateEditPostModal'
@@ -27,7 +27,7 @@ function CommunitySquare() {
   const [postDetail, setPostDetail] = useState(null)
   const [postDetailLoading, setPostDetailLoading] = useState(false)
   const [detailImageIndex, setDetailImageIndex] = useState(0)
-  const [categoryList, setCategoryList] = useState([])
+  const [categoryList, setCategoryList] = useState(['热门', '推荐'])
   const [selectedCategory, setSelectedCategory] = useState('热门')
   const [searchText, setSearchText] = useState('')
   const [currentHotPost, setCurrentHotPost] = useState(true)
@@ -46,7 +46,7 @@ function CommunitySquare() {
   const { createSignal } = useFetchWithCleanup()
   const { fetchSystemTypes } = useSystemTypes()
 
-  const fetchPostList = useCallback(async ({ text, hotPost, tag, page = 1, append = false } = {}, signal) => {
+  const fetchPostList = useCallback(async ({ text, hotPost, tag, recommend, page = 1, append = false } = {}, signal) => {
     if (append) {
       if (loadingMoreRef.current) return
       loadingMoreRef.current = true
@@ -68,7 +68,9 @@ function CommunitySquare() {
       if (hotPost) {
         params.hotPost = true
       }
-      const result = await getPostList(params, signal ? { signal } : {})
+      const result = recommend
+        ? await getRecommendPosts({ current: page, pageSize }, signal ? { signal } : {})
+        : await getPostList(params, signal ? { signal } : {})
       if (result && result.records) {
         const newRecords = result.records
         const newItems = newRecords.map((post) => ({
@@ -171,12 +173,13 @@ function CommunitySquare() {
       const scrollHeight = document.documentElement.scrollHeight || document.body.scrollHeight
       const clientHeight = document.documentElement.clientHeight || window.innerHeight
       if (scrollTop + clientHeight >= scrollHeight - 200) {
-        const { text, hotPost, tag } = committedSearchRef.current
+        const { text, hotPost, tag, recommend } = committedSearchRef.current
         const signal = createSignal()
         fetchPostList({
           text,
           hotPost,
           tag,
+          recommend,
           page: currentPageRef.current + 1,
           append: true,
         }, signal)
@@ -189,11 +192,11 @@ function CommunitySquare() {
   useEffect(() => {
     fetchSystemTypes().then((result) => {
       if (Array.isArray(result)) {
-        const merged = ['热门', ...result.filter(c => c !== '推荐' && c !== '热门')]
+        const merged = ['热门', '推荐', ...result.filter(c => c !== '推荐' && c !== '热门')]
         setCategoryList(merged)
       }
     }).catch(() => {
-      setCategoryList(['热门'])
+      setCategoryList(['热门', '推荐'])
     })
   }, [fetchSystemTypes])
 
@@ -269,20 +272,24 @@ function CommunitySquare() {
       setCurrentHotPost(false)
       currentPageRef.current = 1
       setHasMore(true)
-      committedSearchRef.current = { text: searchText, hotPost: false, tag: '' }
-      doFetchPostList({ text: searchText, hotPost: false, tag: '', page: 1, append: false })
+      committedSearchRef.current = { text: searchText, hotPost: false, tag: '', recommend: false }
+      doFetchPostList({ text: searchText, hotPost: false, tag: '', recommend: false, page: 1, append: false })
     } else {
       setSelectedCategory(cat)
       currentPageRef.current = 1
       setHasMore(true)
       if (cat === '热门') {
         setCurrentHotPost(true)
-        committedSearchRef.current = { text: searchText, hotPost: true, tag: '' }
-        doFetchPostList({ text: searchText, hotPost: true, tag: '', page: 1, append: false })
+        committedSearchRef.current = { text: searchText, hotPost: true, tag: '', recommend: false }
+        doFetchPostList({ text: searchText, hotPost: true, tag: '', recommend: false, page: 1, append: false })
+      } else if (cat === '推荐') {
+        setCurrentHotPost(false)
+        committedSearchRef.current = { text: searchText, hotPost: false, tag: '', recommend: true }
+        doFetchPostList({ text: searchText, hotPost: false, tag: '', recommend: true, page: 1, append: false })
       } else {
         setCurrentHotPost(false)
-        committedSearchRef.current = { text: searchText, hotPost: false, tag: cat }
-        doFetchPostList({ text: searchText, hotPost: false, tag: cat, page: 1, append: false })
+        committedSearchRef.current = { text: searchText, hotPost: false, tag: cat, recommend: false }
+        doFetchPostList({ text: searchText, hotPost: false, tag: cat, recommend: false, page: 1, append: false })
       }
     }
   }
@@ -299,8 +306,8 @@ function CommunitySquare() {
   const handleCreateEditSuccess = () => {
     currentPageRef.current = 1
     setHasMore(true)
-    const { text, hotPost, tag } = committedSearchRef.current
-    doFetchPostList({ text, hotPost, tag, page: 1, append: false })
+    const { text, hotPost, tag, recommend } = committedSearchRef.current
+    doFetchPostList({ text, hotPost, tag, recommend, page: 1, append: false })
   }
 
   return (

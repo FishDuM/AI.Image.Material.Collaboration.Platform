@@ -254,7 +254,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         user.setStatus(user.getStatus() == 1 ? 0 : 1);
         int i = baseMapper.updateById(user);
         // 更新redis
-        stringRedisTemplate.opsForValue().set(RedisConstants.getUserInfoKey(userId), JSONUtil.toJsonStr(user));
+        stringRedisTemplate.opsForValue().set(RedisConstants.getUserInfoKey(userId), JSONUtil.toJsonStr(user), 1,
+                TimeUnit.DAYS);
         return i > 0;
     }
 

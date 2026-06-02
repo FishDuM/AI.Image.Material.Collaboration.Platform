@@ -190,6 +190,10 @@ export const uploadPost = (data) => api.post('/post/post', data)
 
 export const getPostList = (data, config = {}) => api.post('/post/postList', data, config)
 
+export const getRecommendPosts = (data, config = {}) => api.post('/post/recommend', data, config)
+
+export const getRecommendPictures = (data, config = {}) => api.post('/picture/recommend', data, config)
+
 export const followUser = (userId) => api.post('/user/follow', { userId })
 
 export const getUserProfile = (userId, config = {}) => api.get('/user/profile', { params: { userId }, ...config })

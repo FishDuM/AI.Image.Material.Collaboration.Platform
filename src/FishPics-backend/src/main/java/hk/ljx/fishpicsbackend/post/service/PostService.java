@@ -146,4 +146,13 @@ public interface PostService extends IService<Post> {
      * @param id 帖子ID
      */
     void adminDeletePost(Long id);
+
+    /**
+     * 获取推荐帖子列表（基于用户兴趣画像）
+     *
+     * @param pageRequest 分页参数
+     * @param userId      当前用户ID
+     * @return 推荐帖子列表
+     */
+    IPage<PostListVO> getRecommendPosts(PageRequest pageRequest, Long userId);
 }

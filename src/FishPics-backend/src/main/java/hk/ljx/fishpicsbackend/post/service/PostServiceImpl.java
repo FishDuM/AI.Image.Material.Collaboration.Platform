@@ -34,6 +34,9 @@ import hk.ljx.fishpicsbackend.user.service.UserPostCollectService;
 import hk.ljx.fishpicsbackend.user.entity.UserPostLikes;
 import hk.ljx.fishpicsbackend.user.service.UserPostLikesService;
 import hk.ljx.fishpicsbackend.user.service.UserService;
+import hk.ljx.fishpicsbackend.user.entity.UserInterestProfile;
+import hk.ljx.fishpicsbackend.user.service.UserInterestProfileService;
+import com.alibaba.fastjson.JSON;
 import hk.ljx.fishpicsbackend.picture.vo.PictureListByEditPostVO;
 import hk.ljx.fishpicsbackend.picture.vo.PictureListVO;
 import hk.ljx.fishpicsbackend.picture.vo.PicturePageVO;
@@ -89,6 +92,9 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
     @Resource
     private SpaceService spaceService;
+
+    @Resource
+    private UserInterestProfileService userInterestProfileService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -611,10 +617,70 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         ExcUtils.throwIfTrue(i != 1, ExceptionCode.DATABASE_ERROR, "删除失败");
     }
 
+    @Override
+    public IPage<PostListVO> getRecommendPosts(PageRequest pageRequest, Long userId) {
+        // 1. 查用户画像，取权重最高的5个标签
+        List<UserInterestProfile> topProfiles = userInterestProfileService.list(
+                new LambdaQueryWrapper<UserInterestProfile>()
+                        .eq(UserInterestProfile::getUserId, userId)
+                        .orderByDesc(UserInterestProfile::getWeight)
+                        .last("LIMIT 5"));
+
+        // 2. 冷启动：无画像 → fallback 热度排序
+        if (CollectionUtils.isEmpty(topProfiles)) {
+            Page<Post> page = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
+            return convertToPostListVO(baseMapper.selectPage(page, new LambdaQueryWrapper<Post>()
+                    .eq(Post::getStatus, 1)
+                    .orderByDesc(Post::getHot)));
+        }
+
+        // 3. 构建标签JSON数组
+        List<String> tags = topProfiles.stream()
+                .map(UserInterestProfile::getTag)
+                .collect(Collectors.toList());
+        String tagsJson = JSON.toJSONString(tags);
+
+        // 4. 排除自己的帖子
+        List<Long> myPostIds = baseMapper.selectList(
+                new LambdaQueryWrapper<Post>().select(Post::getId).eq(Post::getUserId, userId))
+                .stream().map(Post::getId).toList();
+
+        // 5. 排除已点赞/收藏的帖子
+        Set<Long> interactedIds = new HashSet<>();
+        List<Long> likedIds = userPostLikesService.list(
+                new LambdaQueryWrapper<UserPostLikes>().select(UserPostLikes::getPostId)
+                        .eq(UserPostLikes::getUserId, userId))
+                .stream().map(UserPostLikes::getPostId).toList();
+        List<Long> collectedIds = userPostCollectService.list(
+                new LambdaQueryWrapper<UserPostCollect>().select(UserPostCollect::getPostId)
+                        .eq(UserPostCollect::getUserId, userId))
+                .stream().map(UserPostCollect::getPostId).toList();
+        interactedIds.addAll(likedIds);
+        interactedIds.addAll(collectedIds);
+
+        List<Long> excludeIds = new ArrayList<>(myPostIds);
+        excludeIds.addAll(interactedIds);
+
+        // 6. 查询推荐帖子（标签匹配筛选 + 热度排序）
+        Page<Post> page = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
+
+        LambdaQueryWrapper<Post> lqw = new LambdaQueryWrapper<Post>()
+                .eq(Post::getStatus, 1)
+                .apply("id IN (SELECT DISTINCT pc.post_id FROM picture_child pc "
+                        + "JOIN picture pic ON pc.picture_id = pic.id "
+                        + "WHERE pic.tags IS NOT NULL AND pic.tags != '' "
+                        + "AND JSON_OVERLAPS(pic.tags, {0}))", tagsJson)
+                .orderByDesc(Post::getHot);
+
+        if (CollUtil.isNotEmpty(excludeIds)) {
+            lqw.notIn(Post::getId, excludeIds);
+        }
+
+        return convertToPostListVO(baseMapper.selectPage(page, lqw));
+    }
+
     /**
      * 将帖子分页结果转换为 PostListVO 分页结果
-     * 批量查询封面图片和用户信息，减少数据库查询次数
-     *
      * @param postPage 帖子分页数据
      * @return PostListVO 分页数据
      */

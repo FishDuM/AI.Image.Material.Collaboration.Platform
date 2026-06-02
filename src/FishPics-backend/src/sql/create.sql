@@ -10,7 +10,7 @@ create table comment
     post_id     bigint                             not null comment '关联帖子表',
     content     text                               not null comment '评论内容',
     parent_id   bigint                             null comment '父评论（支持二级评论 / 回复）',
-    to_user_id  int                                null comment '回复给谁',
+    to_user_id  bigint                             null comment '回复给谁',
     status      tinyint  default 1                 null comment '状态 1-正常 0-禁用 2-待审核',
     create_time datetime default CURRENT_TIMESTAMP not null comment '创建时间'
 )
@@ -188,10 +188,11 @@ create index user_fans_user_id_fan_id_index
 
 create table user_post_collect
 (
-    id      bigint not null
+    id          bigint                                 not null
         primary key,
-    user_id bigint not null,
-    post_id bigint not null
+    user_id     bigint                                 not null,
+    post_id     bigint                                 not null,
+    create_time datetime default CURRENT_TIMESTAMP     null comment '创建时间'
 )
     comment '用户帖子收藏表';
 
@@ -200,10 +201,11 @@ create index user_post_collect_user_id_index
 
 create table user_post_likes
 (
-    id      bigint not null
+    id          bigint                                 not null
         primary key,
-    user_id bigint not null,
-    post_id bigint not null
+    user_id     bigint                                 not null,
+    post_id     bigint                                 not null,
+    create_time datetime default CURRENT_TIMESTAMP     null comment '创建时间'
 )
     comment '用户点赞帖子表';
 
@@ -238,4 +240,18 @@ create index idx_biz_type
 
 create index idx_status
     on task (status);
+
+create table user_interest_profile
+(
+    id          bigint auto_increment comment '主键ID'
+        primary key,
+    user_id     bigint                             not null comment '用户ID',
+    tag         varchar(64)                        not null comment '标签',
+    weight      int      default 0                 null comment '兴趣权重',
+    create_time datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
+    constraint uk_user_tag
+        unique (user_id, tag)
+)
+    comment '用户兴趣画像表';
 

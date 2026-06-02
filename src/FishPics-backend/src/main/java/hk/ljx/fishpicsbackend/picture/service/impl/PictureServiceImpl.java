@@ -47,10 +47,21 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import hk.ljx.fishpicsbackend.common.dto.PageRequest;
+import hk.ljx.fishpicsbackend.user.entity.UserInterestProfile;
+import hk.ljx.fishpicsbackend.user.service.UserInterestProfileService;
+import hk.ljx.fishpicsbackend.user.entity.UserPostLikes;
+import hk.ljx.fishpicsbackend.user.service.UserPostLikesService;
+import hk.ljx.fishpicsbackend.user.entity.UserPostCollect;
+import hk.ljx.fishpicsbackend.user.service.UserPostCollectService;
 
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
@@ -84,6 +95,15 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
     @Resource
     private PicSystemService picSystemService;
+
+    @Resource
+    private UserInterestProfileService userInterestProfileService;
+
+    @Resource
+    private UserPostLikesService userPostLikesService;
+
+    @Resource
+    private UserPostCollectService userPostCollectService;
 
     @Override
     public String uploadAvatar(MultipartFile file, Long id) {
@@ -430,6 +450,77 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         List<String> tagList = JSONUtil.toList(tags, String.class);
         pictureEditVO.setTags(tagList);
         return pictureEditVO;
+    }
+
+    @Override
+    public IPage<PictureListVO> getRecommendPictures(PageRequest pageRequest, Long userId) {
+        // 1. 查用户画像 top5 标签
+        List<UserInterestProfile> topProfiles = userInterestProfileService.list(
+                new LambdaQueryWrapper<UserInterestProfile>()
+                        .eq(UserInterestProfile::getUserId, userId)
+                        .orderByDesc(UserInterestProfile::getWeight)
+                        .last("LIMIT 5"));
+
+        // 2. 冷启动：无画像 → fallback 全部公开图片
+        if (topProfiles == null || topProfiles.isEmpty()) {
+            Page<Picture> page = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
+            Page<Picture> picturePage = baseMapper.selectPage(page, new LambdaQueryWrapper<Picture>()
+                    .eq(Picture::getStatus, 1)
+                    .eq(Picture::getIsPrivate, 1)
+                    .isNotNull(Picture::getUrl)
+                    .ne(Picture::getUrl, "")
+                    .orderByDesc(Picture::getCreateTime));
+            return picturePage.convert(p -> new PictureListVO(p.getId(), p.getUrl(),
+                    p.getTags() == null ? Collections.emptyList() : StrUtil.split(p.getTags(), ",")));
+        }
+
+        // 3. 构建标签JSON
+        List<String> tags = topProfiles.stream()
+                .map(UserInterestProfile::getTag)
+                .collect(Collectors.toList());
+        String tagsJson = JSON.toJSONString(tags);
+
+        // 4. 排除已看过的图片（点赞/收藏帖子关联的图片）
+        Set<Long> seenPictureIds = new HashSet<>();
+        List<Long> likedPostIds = userPostLikesService.list(
+                new LambdaQueryWrapper<UserPostLikes>().select(UserPostLikes::getPostId)
+                        .eq(UserPostLikes::getUserId, userId))
+                .stream().map(UserPostLikes::getPostId).toList();
+        List<Long> collectedPostIds = userPostCollectService.list(
+                new LambdaQueryWrapper<UserPostCollect>().select(UserPostCollect::getPostId)
+                        .eq(UserPostCollect::getUserId, userId))
+                .stream().map(UserPostCollect::getPostId).toList();
+        List<Long> allPostIds = new ArrayList<>(likedPostIds);
+        allPostIds.addAll(collectedPostIds);
+        if (!allPostIds.isEmpty()) {
+            baseMapper.selectList(new LambdaQueryWrapper<Picture>()
+                    .select(Picture::getId)
+                    .inSql(Picture::getId,
+                            "SELECT DISTINCT picture_id FROM picture_child WHERE post_id IN ("
+                                    + allPostIds.stream().map(String::valueOf)
+                                    .collect(Collectors.joining(",")) + ")"))
+                    .forEach(p -> seenPictureIds.add(p.getId()));
+        }
+
+        // 5. 查询推荐图片
+        Page<Picture> page = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
+        LambdaQueryWrapper<Picture> lqw = new LambdaQueryWrapper<Picture>()
+                .eq(Picture::getStatus, 1)
+                .eq(Picture::getIsPrivate, 1)
+                .isNotNull(Picture::getUrl)
+                .ne(Picture::getUrl, "")
+                .isNotNull(Picture::getTags)
+                .ne(Picture::getTags, "")
+                .apply("JSON_OVERLAPS(tags, {0})", tagsJson)
+                .orderByDesc(Picture::getCreateTime);
+
+        if (!seenPictureIds.isEmpty()) {
+            lqw.notIn(Picture::getId, seenPictureIds);
+        }
+
+        Page<Picture> picturePage = baseMapper.selectPage(page, lqw);
+        return picturePage.convert(p -> new PictureListVO(p.getId(), p.getUrl(),
+                p.getTags() == null ? Collections.emptyList() : StrUtil.split(p.getTags(), ",")));
     }
 
 }
