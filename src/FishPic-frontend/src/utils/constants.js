@@ -33,6 +33,21 @@ export const formatStorage = (bytes) => {
 
 export const PAGE_SIZE = 20
 
+// 帖子最大图片数
+export const MAX_POST_IMAGES = 15
+
+// 滚动加载更多阈值（px）
+export const LOAD_MORE_THRESHOLD = 200
+
+// WebSocket 重连间隔（ms）
+export const WS_RECONNECT_INTERVAL = 3000
+
+// API 超时时间（ms）
+export const TIMEOUT_DEFAULT = 10000
+export const TIMEOUT_AVATAR = 60000
+export const TIMEOUT_AI = 60000
+export const TIMEOUT_PICTURE = 120000
+
 export const formatTime = (timeString) => {
   if (!timeString) return ''
   const now = new Date()

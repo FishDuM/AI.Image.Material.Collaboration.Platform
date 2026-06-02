@@ -4,7 +4,7 @@ import { App as AntApp, Table, Tag, Space, Button, Card, Typography, Avatar, Pop
 import { UserOutlined, EditOutlined, SearchOutlined, ReloadOutlined, LockOutlined, UnlockOutlined, PlusOutlined, LoadingOutlined } from '@ant-design/icons'
 import { AuthContext } from '../context/AuthContext.jsx'
 import api, { getAdminUser } from '../api'
-import { isAllowedImageFile, getMaxUploadSize, formatMaxUploadSize } from '../utils/uploadConstraints'
+import { getBase64, beforeUpload } from '../utils/upload'
 import { PAGINATION_LOCALE } from '../utils/constants'
 import './UserManagement.css'
 
@@ -52,9 +52,6 @@ function UserManagement() {
       }))
     } catch (error) {
       message.error(error.message || '获取用户列表失败')
-      setTimeout(() => {
-        navigate('/404', { replace: true })
-      }, 500)
     } finally {
       setLoading(false)
     }
@@ -62,10 +59,8 @@ function UserManagement() {
 
   useEffect(() => {
     if (!userInfo || userInfo.role !== 'admin') {
-      message.error('无权访问，正在跳转到 404 页面...')
-      setTimeout(() => {
-        navigate('/404', { replace: true })
-      }, 500)
+      message.error('无权访问')
+      navigate('/', { replace: true })
       return
     }
 
@@ -173,29 +168,6 @@ function UserManagement() {
     setEditingUser(null)
     setAvatarPreviewUrl(null)
     setUploadingAvatar(false)
-  }
-
-  const getBase64 = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.addEventListener('load', () => resolve(reader.result))
-      reader.addEventListener('error', reject)
-      reader.readAsDataURL(file)
-    })
-  }
-
-  const beforeUpload = (file) => {
-    const maxSize = getMaxUploadSize()
-    const maxSizeText = formatMaxUploadSize()
-    const isAllowedImage = isAllowedImageFile(file)
-    if (!isAllowedImage) {
-      message.error('只能上传图片文件（JPEG、PNG、JPG、GIF、WebP、HEIC）！')
-    }
-    const isLtSize = file.size <= maxSize
-    if (!isLtSize) {
-      message.error(`图片大小不能超过${maxSizeText}！`)
-    }
-    return isAllowedImage && isLtSize
   }
 
   const handleAvatarChange = async (info) => {

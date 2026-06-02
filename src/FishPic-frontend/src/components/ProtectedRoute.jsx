@@ -1,11 +1,12 @@
-import { useContext } from 'react'
+import { useContext, useEffect, useRef } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
-import { Spin } from 'antd'
+import { Spin, message } from 'antd'
 import { AuthContext } from '../context/AuthContext'
 
 function ProtectedRoute({ children, requireAdmin = false }) {
   const auth = useContext(AuthContext)
   const location = useLocation()
+  const hasPrompted = useRef(false)
 
   if (auth?.authLoading) {
     return (
@@ -16,11 +17,15 @@ function ProtectedRoute({ children, requireAdmin = false }) {
   }
 
   if (!auth || !auth.isAuthenticated) {
+    if (!hasPrompted.current) {
+      hasPrompted.current = true
+      message.info('请先登录')
+    }
     return <Navigate to="/" replace state={{ from: location }} />
   }
 
   if (requireAdmin && auth.userInfo?.role !== 'admin') {
-    return <Navigate to="/404" replace />
+    return <Navigate to="/" replace />
   }
 
   return children

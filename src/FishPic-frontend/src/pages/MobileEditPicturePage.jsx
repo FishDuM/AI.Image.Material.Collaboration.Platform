@@ -71,7 +71,7 @@ export default function MobileEditPicturePage() {
       <div className="mobile-edit-picture">
         <div className="mobile-edit-picture-image">
           {pictureUrl ? (
-            <img src={pictureUrl} alt="" />
+            <img src={pictureUrl} alt="预览" />
           ) : (
             <div className="mobile-edit-picture-placeholder">无图片</div>
           )}

@@ -7,6 +7,7 @@ import {
 } from '@ant-design/icons'
 import { submitAiDraw, getAiDrawResult, savePictureByUrl } from '../api'
 import { onMessage, offMessage, getConnectionStatus } from '../hooks/useWebSocket'
+import { logError } from '../utils/logger'
 import './AIImageTools.css'
 
 const { Title, Text } = Typography
@@ -113,8 +114,8 @@ function AIImageTools() {
           message.error(task.errorMsg || '图片生成失败')
           stopPolling()
         }
-      } catch {
-        // 轮询失败继续重试
+      } catch (error) {
+        logError('getAiDrawResult polling', error)
       }
     }, 3000)
   }, [message])

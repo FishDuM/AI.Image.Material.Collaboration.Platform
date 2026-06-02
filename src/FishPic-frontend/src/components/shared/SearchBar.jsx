@@ -16,7 +16,7 @@ function SearchBar({ placeholder = '搜索...', value, onChange, onSearch, class
   }
 
   return (
-    <div className={`search-bar-clean${className ? ` ${className}` : ''}`}>
+    <div className={`search-bar-clean${className ? ` ${className}` : ''}`} role="search">
       <div className="search-bar-clean-inner">
         <SearchOutlined className="search-bar-clean-icon" />
         <input
@@ -24,6 +24,7 @@ function SearchBar({ placeholder = '搜索...', value, onChange, onSearch, class
           className="search-bar-clean-input"
           type="text"
           placeholder={placeholder}
+          aria-label={placeholder}
           value={value}
           onChange={(e) => onChange?.(e.target.value)}
           onKeyDown={handleKeyDown}

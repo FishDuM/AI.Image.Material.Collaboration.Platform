@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { App, Modal, Form, Input, Button, Upload, Select, Switch, Tabs, Pagination, Spin, Empty, Popover, Image } from 'antd'
 import { PlusOutlined, DeleteOutlined, LeftOutlined, RightOutlined, SendOutlined, CheckOutlined, CloudOutlined, TeamOutlined, ImportOutlined } from '@ant-design/icons'
 import { editPost, listSpace, postPictureList, uploadPicture, uploadPost, savePictureByUrl } from '../api'
@@ -6,6 +6,8 @@ import MobilePageWrapper from './MobilePageWrapper'
 import SpacePickerModal from './shared/SpacePickerModal'
 import PostModal from './shared/PostModal'
 import { isAllowedImageFile, getMaxUploadSize, formatMaxUploadSize } from '../utils/uploadConstraints'
+import usePostImages from './CreateEditPostModal/usePostImages'
+import useUrlImport from './CreateEditPostModal/useUrlImport'
 import './CreateEditPostModal.css'
 
 const CHINESE_NUMS = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二', '十三', '十四', '十五']
@@ -14,10 +16,28 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
   const { message } = App.useApp()
   const [form] = Form.useForm()
   const [submitLoading, setSubmitLoading] = useState(false)
-  const [uploadedImages, setUploadedImages] = useState([])
-  const [imageId, setImageId] = useState([])
-  const [currentImageIndex, setCurrentImageIndex] = useState(0)
-  const [showUploadSlide, setShowUploadSlide] = useState(false)
+  const {
+    uploadedImages, setUploadedImages,
+    imageId, setImageId,
+    currentImageIndex, setCurrentImageIndex,
+    showUploadSlide, setShowUploadSlide,
+    existingImageIds,
+    uploadedImagesRef,
+    resetImages,
+  } = usePostImages({ open, editPostDetail })
+
+  const {
+    urlImportUrl, setUrlImportUrl,
+    urlImporting, setUrlImporting,
+    urlPreviewUrl, setUrlPreviewUrl,
+    urlPreviewError, setUrlPreviewError,
+    urlResolved, setUrlResolved,
+    popoverOpen, setPopoverOpen,
+    handleUrlResolve,
+    handleUrlCancel,
+    resetUrlImport,
+  } = useUrlImport()
+
   const [isEditing, setIsEditing] = useState(false)
   const [editingPostId, setEditingPostId] = useState(null)
   const [modalStep, setModalStep] = useState(1)
@@ -40,45 +60,16 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
   const [teamSpaceImageLoading, setTeamSpaceImageLoading] = useState(false)
   const [selectedTeamSpaceImageIds, setSelectedTeamSpaceImageIds] = useState([])
   const [teamSpaceView, setTeamSpaceView] = useState('list')
-  const [urlImportUrl, setUrlImportUrl] = useState('')
-  const [urlImporting, setUrlImporting] = useState(false)
-  const [urlPreviewUrl, setUrlPreviewUrl] = useState('')
-  const [urlPreviewError, setUrlPreviewError] = useState(false)
-  const [urlResolved, setUrlResolved] = useState(false)
-  const [popoverOpen, setPopoverOpen] = useState(false)
 
   const maxSize = getMaxUploadSize()
   const maxSizeText = formatMaxUploadSize()
-
-  const uploadedImagesRef = useRef(uploadedImages)
-
-  useEffect(() => {
-    uploadedImagesRef.current = uploadedImages
-  }, [uploadedImages])
-
-  const existingImageIds = useMemo(
-    () => uploadedImages.map(img => img.pictureId).filter(Boolean),
-    [uploadedImages]
-  )
 
   useEffect(() => {
     if (open && editPostDetail) {
       setIsEditing(true)
       setEditingPostId(editPostDetail.id)
-      const existingUrls = (editPostDetail.pics || editPostDetail.pictureUrl || []).filter(url => url && url.trim())
-      const existingIds = (editPostDetail.pictureIds || []).filter(Boolean)
-      const existingImages = existingIds.map((id, index) => ({
-        uid: `existing-${index}`,
-        name: `image-${index}`,
-        status: 'done',
-        url: existingUrls[index] || undefined,
-        pictureId: id,
-      }))
-      setUploadedImages(existingImages)
-      setImageId(existingIds.filter(Boolean))
-      setCurrentImageIndex(0)
-      setShowUploadSlide(false)
       setModalStep(2)
+      const existingIds = (editPostDetail.pictureIds || []).filter(Boolean)
       const coverIndex = (() => {
         if (editPostDetail.cover) {
           const idx = existingIds.indexOf(editPostDetail.cover)
@@ -95,10 +86,6 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
     } else if (open) {
       setIsEditing(false)
       setEditingPostId(null)
-      setUploadedImages([])
-      setImageId([])
-      setCurrentImageIndex(0)
-      setShowUploadSlide(false)
       setModalStep(1)
       setSelectedSpaceImageIds([])
       setSpaceImagePage(1)
@@ -115,12 +102,7 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
       setSelectedTeamSpaceImageIds([])
       setTeamSpaceView('list')
       form.resetFields()
-      setUrlImportUrl('')
-      setUrlImporting(false)
-      setUrlPreviewUrl('')
-      setUrlPreviewError(false)
-      setUrlResolved(false)
-      setPopoverOpen(false)
+      resetUrlImport()
       setTimeout(() => {
         form.setFieldsValue({ coverIndex: 0 })
       }, 0)
@@ -256,27 +238,6 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
     }
   }
 
-  const handleStep1UrlResolve = () => {
-    if (!urlImportUrl.trim()) { message.warning('请输入图片URL'); return }
-    setUrlPreviewUrl(urlImportUrl.trim())
-    setUrlPreviewError(false)
-    setUrlResolved(true)
-  }
-
-  const handleStep1UrlCancel = () => {
-    setUrlImportUrl('')
-    setUrlPreviewUrl('')
-    setUrlPreviewError(false)
-    setUrlResolved(false)
-  }
-
-  const handleStep2UrlResolve = () => {
-    if (!urlImportUrl.trim()) { message.warning('请输入图片URL'); return }
-    setUrlPreviewUrl(urlImportUrl.trim())
-    setUrlPreviewError(false)
-    setUrlResolved(true)
-  }
-
   const handleStep2UrlConfirm = async () => {
     if (imageId.length >= 15) { message.warning('最多只能上传15张图片'); return }
     if (!urlPreviewUrl) { message.warning('请先解析图片URL'); return }
@@ -299,14 +260,6 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
     } finally {
       setUrlImporting(false)
     }
-  }
-
-  const handleStep2UrlCancel = () => {
-    setUrlImportUrl('')
-    setUrlPreviewUrl('')
-    setUrlPreviewError(false)
-    setUrlResolved(false)
-    setPopoverOpen(false)
   }
 
   useEffect(() => {
@@ -545,8 +498,7 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
       }
       form.resetFields()
       onClose()
-      setUploadedImages([])
-      setImageId([])
+      resetImages()
       setModalStep(1)
       setIsEditing(false)
       setEditingPostId(null)
@@ -562,8 +514,7 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
 
   const handleCancel = () => {
     form.resetFields()
-    setUploadedImages([])
-    setImageId([])
+    resetImages()
     setModalStep(1)
     setIsEditing(false)
     setEditingPostId(null)
@@ -636,7 +587,7 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
                     size="large"
                     allowClear
                     enterButton="解析"
-                    onSearch={handleStep1UrlResolve}
+                    onSearch={handleUrlResolve}
                   />
                   <div className="import-url-preview-box">
                     {urlPreviewUrl ? (
@@ -661,7 +612,7 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
                   </div>
                   {urlResolved && (
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                      <Button onClick={handleStep1UrlCancel}>取消</Button>
+                      <Button onClick={handleUrlCancel}>取消</Button>
                       <Button
                         type="primary"
                         icon={<ImportOutlined />}
@@ -697,7 +648,7 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
                                 className={`space-image-item${isSelected ? ' space-image-selected' : ''}${isInCarousel ? ' space-image-in-carousel' : ''}`}
                                 onClick={() => toggleSpaceImage(img)}
                               >
-                                <img src={img.url} alt="" className="space-image-thumb" />
+                                <img src={img.url} alt={img.pictureName || '图片'} className="space-image-thumb" />
                                 <div className="space-image-check">
                                   {isSelected ? (
                                     <span className="space-order-badge">{orderIndex + 1}</span>
@@ -796,7 +747,7 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
                                       className={`space-image-item${isSelected ? ' space-image-selected' : ''}${isInCarousel ? ' space-image-in-carousel' : ''}`}
                                       onClick={() => handleTeamSpaceImageToggle(img)}
                                     >
-                                      <img src={img.url} alt="" className="space-image-thumb" />
+                                      <img src={img.url} alt={img.pictureName || '图片'} className="space-image-thumb" />
                                       <div className="space-image-check">
                                         {isSelected ? (
                                           <span className="space-order-badge">{orderIndex + 1}</span>
@@ -948,7 +899,7 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
                     placeholder="粘贴图片URL..."
                     allowClear
                     enterButton="解析"
-                    onSearch={handleStep2UrlResolve}
+                    onSearch={handleUrlResolve}
                   />
                   {urlPreviewUrl && (
                     urlPreviewError ? (
@@ -965,7 +916,7 @@ const CreateEditPostModal = ({ open, onClose, editPostDetail, onSuccess, mode = 
                   )}
                   {urlResolved && (
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-                      <Button size="small" onClick={handleStep2UrlCancel}>取消</Button>
+                      <Button size="small" onClick={handleUrlCancel}>取消</Button>
                       <Button
                         size="small"
                         type="primary"

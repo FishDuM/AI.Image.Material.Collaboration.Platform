@@ -1,4 +1,4 @@
-import {useCallback, useContext, useEffect, useRef, useState} from 'react'
+import {useContext, useEffect, useRef, useState} from 'react'
 import {useNavigate, useSearchParams} from 'react-router-dom'
 import {
   App as AntApp,
@@ -29,11 +29,14 @@ import {
   StarOutlined,
   UserOutlined
 } from '@ant-design/icons'
-import {editUser, followUser, getFans, getFollows, getMyCollects, getMyLikes, getMyPosts, getPost, getPostList, getUser, getUserMyself, getUserProfile, updatePrivacy, uploadAvatar} from '../api'
+import {editUser, followUser, getFans, getFollows, getPost, getUser, getUserMyself, getUserProfile, updatePrivacy, uploadAvatar} from '../api'
 import {AuthContext} from '../context/AuthContext'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { useFetchWithCleanup } from '../hooks/useRequestUtils'
-import { isAllowedImageFile, getMaxUploadSize, formatMaxUploadSize } from '../utils/uploadConstraints'
+import { getBase64, beforeUpload } from '../utils/upload'
+import { copyToClipboard } from '../utils/clipboard'
+import { logError } from '../utils/logger'
+import { useProfileTabs } from './UserProfile/useProfileTabs'
 import PostDetailModal from '../components/PostDetailModal'
 import CreateEditPostModal from '../components/CreateEditPostModal'
 import PostCard from '../components/shared/PostCard'
@@ -53,7 +56,6 @@ function UserProfile() {
   const [loading, setLoading] = useState(true)
   const [userData, setUserData] = useState(null)
   const [isFollowed, setIsFollowed] = useState(false)
-  const [activeTab, setActiveTab] = useState('notes')
   const [avatarVisible, setAvatarVisible] = useState(false)
   const [editModalVisible, setEditModalVisible] = useState(false)
   const [editForm] = Form.useForm()
@@ -69,15 +71,11 @@ function UserProfile() {
   })
   const hasFetchedRef = useRef(false)
 
-  const [tabState, setTabState] = useState({
-    notes: { items: [], hasMore: true, loaded: false, loading: false },
-    favorites: { items: [], hasMore: true, loaded: false, loading: false },
-    likes: { items: [], hasMore: true, loaded: false, loading: false },
-  })
-  const [counts, setCounts] = useState({ notes: 0, favorites: 0, likes: 0, follows: 0, fans: 0 })
-  const pageRefs = useRef({ notes: 1, favorites: 1, likes: 1 })
-  const loadingMoreRef = useRef(false)
-  const [loadingMore, setLoadingMore] = useState(false)
+  const {
+    activeTab, setActiveTab, tabState, counts, setCounts,
+    loadingMore, fetchTabData, resetTabState,
+  } = useProfileTabs({ isOwnProfile, profileUserId })
+
   const [postDetailModalOpen, setPostDetailModalOpen] = useState(false)
   const [postDetail, setPostDetail] = useState(null)
   const [postDetailLoading, setPostDetailLoading] = useState(false)
@@ -88,73 +86,6 @@ function UserProfile() {
   const [followListModalType, setFollowListModalType] = useState('follows')
 
   const { createSignal } = useFetchWithCleanup()
-
-  const apiMap = { notes: getMyPosts, favorites: getMyCollects, likes: getMyLikes }
-
-  const fetchTabData = useCallback(async (tabKey, page = 1, append = false, signal) => {
-    if (append) {
-      loadingMoreRef.current = true
-      setLoadingMore(true)
-    } else {
-      setTabState(prev => ({
-        ...prev,
-        [tabKey]: { ...prev[tabKey], loading: true },
-      }))
-    }
-
-    try {
-      let result
-      if (!isOwnProfile && tabKey === 'notes') {
-        result = await getPostList({ userId: Number(profileUserId), current: page, pageSize: 20 }, signal ? { signal } : {})
-      } else {
-        const fetchFn = apiMap[tabKey]
-        if (!fetchFn) return
-        result = await fetchFn({ current: page, pageSize: 20 }, signal ? { signal } : {})
-      }
-      const records = result.records || []
-      const totalPages = result.pages || 0
-      const hasMore = page < totalPages
-
-      if (append) {
-        setTabState(prev => {
-          const existing = prev[tabKey]
-          const existingIds = new Set(existing.items.map(p => p.id))
-          const newRecords = records.filter(p => !existingIds.has(p.id))
-          return {
-            ...prev,
-            [tabKey]: {
-              ...existing,
-              items: [...existing.items, ...newRecords],
-              hasMore,
-              loading: false,
-            },
-          }
-        })
-      } else {
-        setTabState(prev => ({
-          ...prev,
-          [tabKey]: { items: records, hasMore, loaded: true, loading: false },
-        }))
-      }
-
-      setCounts(prev => ({ ...prev, [tabKey]: result.total || 0 }))
-      pageRefs.current[tabKey] = page
-    } catch (error) {
-      if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
-      message.error(error.message || '获取数据失败')
-      if (!append) {
-        setTabState(prev => ({
-          ...prev,
-          [tabKey]: { ...prev[tabKey], loading: false },
-        }))
-      }
-    } finally {
-      if (append) {
-        loadingMoreRef.current = false
-        setLoadingMore(false)
-      }
-    }
-  }, [message, isOwnProfile, profileUserId])
 
   const fetchUserInfo = async () => {
     try {
@@ -202,8 +133,8 @@ function UserProfile() {
         follows: followsResult?.total || 0,
         fans: fansResult?.total || 0,
       }))
-    } catch {
-      // ignore count fetch errors
+    } catch (error) {
+      logError('fetchCounts', error)
     }
   }
 
@@ -229,15 +160,7 @@ function UserProfile() {
       return
     }
 
-    // Reset state when switching between profiles
-    setTabState({
-      notes: { items: [], hasMore: true, loaded: false, loading: false },
-      favorites: { items: [], hasMore: true, loaded: false, loading: false },
-      likes: { items: [], hasMore: true, loaded: false, loading: false },
-    })
-    setCounts({ notes: 0, favorites: 0, likes: 0, follows: 0, fans: 0 })
-    setActiveTab('notes')
-    pageRefs.current = { notes: 1, favorites: 1, likes: 1 }
+    resetTabState()
     hasFetchedRef.current = false
 
     setLoading(true)
@@ -246,32 +169,6 @@ function UserProfile() {
     })
     fetchFollowCounts()
   }, [profileUserId, isAuthenticated])
-
-  useEffect(() => {
-    if (!tabState[activeTab].loading) {
-      const signal = createSignal()
-      fetchTabData(activeTab, 1, false, signal)
-    }
-  }, [activeTab])
-
-  useEffect(() => {
-    const handleScroll = () => {
-      const currentTab = activeTab
-      if (loadingMoreRef.current || !tabState[currentTab]?.hasMore) return
-
-      const scrollTop = document.documentElement.scrollTop || document.body.scrollTop
-      const scrollHeight = document.documentElement.scrollHeight || document.body.scrollHeight
-      const clientHeight = document.documentElement.clientHeight || window.innerHeight
-
-      if (scrollTop + clientHeight >= scrollHeight - 200) {
-        const signal = createSignal()
-        fetchTabData(currentTab, pageRefs.current[currentTab] + 1, true, signal)
-      }
-    }
-
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [activeTab, tabState, fetchTabData, createSignal])
 
   useEffect(() => {
     if (!editModalVisible) return
@@ -347,24 +244,9 @@ function UserProfile() {
 
   const handleCopyUsername = async () => {
     if (userData?.username) {
-      try {
-        await navigator.clipboard.writeText(userData.username)
-        message.success('已复制账号')
-      } catch {
-        try {
-          const textarea = document.createElement('textarea')
-          textarea.value = userData.username
-          textarea.style.position = 'fixed'
-          textarea.style.opacity = '0'
-          document.body.appendChild(textarea)
-          textarea.select()
-          document.execCommand('copy')
-          document.body.removeChild(textarea)
-          message.success('已复制账号')
-        } catch {
-          message.error('复制失败')
-        }
-      }
+      const ok = await copyToClipboard(userData.username)
+      if (ok) message.success('已复制账号')
+      else message.error('复制失败')
     }
   }
 
@@ -464,29 +346,6 @@ function UserProfile() {
     setUploadedAvatarUrl(null)
     setAvatarPreviewUrl(null)
     setShowPasswordSection(false)
-  }
-
-  const getBase64 = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.addEventListener('load', () => resolve(reader.result))
-      reader.addEventListener('error', reject)
-      reader.readAsDataURL(file)
-    })
-  }
-
-  const beforeUpload = (file) => {
-    const maxSize = getMaxUploadSize()
-    const maxSizeText = formatMaxUploadSize()
-    const isAllowedImage = isAllowedImageFile(file)
-    if (!isAllowedImage) {
-      message.error('只能上传图片文件（JPEG、PNG、JPG、GIF、WebP、HEIC）！')
-    }
-    const isLtSize = file.size <= maxSize
-    if (!isLtSize) {
-      message.error(`图片大小不能超过${maxSizeText}！`)
-    }
-    return isAllowedImage && isLtSize
   }
 
   const handleAvatarChange = async (info) => {

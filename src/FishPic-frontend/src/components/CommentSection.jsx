@@ -4,6 +4,7 @@ import { DeleteOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons'
 import { getCommentList, createComment, deleteComment, reviewComment, adminDeleteComment } from '../api'
 import { AuthContext } from '../context/AuthContext'
 import { formatTime } from '../utils/constants'
+import { logError } from '../utils/logger'
 import './CommentSection.css'
 
 const PAGE_SIZE = 10
@@ -204,8 +205,8 @@ export default function CommentSection({ postId, onCommentCountChange, totalComm
       }
       setTotal(totalCount)
       setCurrentPage(pageNum)
-    } catch {
-      // ignore
+    } catch (error) {
+      logError('fetchComments', error)
     } finally {
       setLoading(false)
     }
@@ -310,6 +311,7 @@ export default function CommentSection({ postId, onCommentCountChange, totalComm
             <textarea
               className="comment-input-textarea"
               placeholder="写下你的评论..."
+              aria-label="写下你的评论"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               maxLength={500}

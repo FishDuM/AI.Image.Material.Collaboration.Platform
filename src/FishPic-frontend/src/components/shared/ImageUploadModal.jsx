@@ -1,13 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Modal, Upload, Button, Space, App, Tabs, Input, Image, Empty } from 'antd'
+import { Modal, Upload, Button, App, Tabs, Input, Image, Empty } from 'antd'
 import {
-  InboxOutlined, RotateLeftOutlined, RotateRightOutlined,
-  ZoomInOutlined, ZoomOutOutlined, LinkOutlined, ImportOutlined, EyeOutlined,
+  InboxOutlined, LinkOutlined, ImportOutlined, EyeOutlined,
 } from '@ant-design/icons'
-import Cropper from 'cropperjs'
-import 'cropperjs/dist/cropper.css'
 import { uploadPicture, savePictureByUrl } from '../../api'
 import { isAllowedImageFile, getMaxUploadSize, formatMaxUploadSize, BROWSER_RENDERABLE_TYPES } from '../../utils/uploadConstraints'
+import CropperEditor from './CropperEditor'
 import './ImageUploadModal.css'
 
 /** 从文件名推断扩展名 */
@@ -29,7 +27,6 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
   const [activeTab, setActiveTab] = useState('upload') // 'upload' | 'url'
   const [selectedFile, setSelectedFile] = useState(null)
   const [uploading, setUploading] = useState(false)
-  const imgRef = useRef(null)
   const cropperRef = useRef(null)
   const objectUrlRef = useRef('')
   const maxSize = getMaxUploadSize()
@@ -47,12 +44,7 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
     setActiveTab('upload')
     setSelectedFile(null)
     setUploading(false)
-    cropperRef.current?.destroy()
-    cropperRef.current = null
-    if (objectUrlRef.current) {
-      URL.revokeObjectURL(objectUrlRef.current)
-      objectUrlRef.current = ''
-    }
+    objectUrlRef.current = ''
     setUrl('')
     setPreviewUrl('')
     setPreviewError(false)
@@ -62,22 +54,6 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
   useEffect(() => {
     if (!open) resetState()
   }, [open, resetState])
-
-  // 初始化 Cropper
-  useEffect(() => {
-    if (step !== 'crop' || !imgRef.current || !objectUrlRef.current) return
-    cropperRef.current?.destroy()
-    cropperRef.current = new Cropper(imgRef.current, {
-      viewMode: 1,
-      autoCropArea: 1,
-      dragMode: 'crop',
-      background: false,
-    })
-    return () => {
-      cropperRef.current?.destroy()
-      cropperRef.current = null
-    }
-  }, [step])
 
   const directUpload = async (file) => {
     setUploading(true)
@@ -115,16 +91,8 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
     return false
   }, [message, maxSize, maxSizeText])
 
-  const handleRotate = (degree) => {
-    const cropper = cropperRef.current
-    if (!cropper) return
-    const { x, y, width, height } = cropper.getData()
-    cropper.rotate(degree)
-    cropper.setData({ x, y, width, height })
-  }
-
   const handleCropUpload = async () => {
-    const cropper = cropperRef.current
+    const cropper = cropperRef.current?.getCropper()
     if (!cropper) return
     setUploading(true)
     try {
@@ -146,12 +114,7 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
   const handleBack = () => {
     setStep('select')
     setSelectedFile(null)
-    cropperRef.current?.destroy()
-    cropperRef.current = null
-    if (objectUrlRef.current) {
-      URL.revokeObjectURL(objectUrlRef.current)
-      objectUrlRef.current = ''
-    }
+    objectUrlRef.current = ''
   }
 
   const handlePaste = async () => {
@@ -214,17 +177,7 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
         destroyOnHidden
       >
         <div className="image-cropper-body">
-          <div className="image-cropper-container">
-            <img ref={imgRef} src={objectUrlRef.current} alt="裁剪预览" />
-          </div>
-          <div className="image-cropper-toolbar">
-            <Space>
-              <Button icon={<ZoomOutOutlined />} onClick={() => cropperRef.current?.zoom(-0.1)} size="small" title="缩小" />
-              <Button icon={<ZoomInOutlined />} onClick={() => cropperRef.current?.zoom(0.1)} size="small" title="放大" />
-              <Button icon={<RotateLeftOutlined />} onClick={() => handleRotate(-90)} size="small" title="左旋转" />
-              <Button icon={<RotateRightOutlined />} onClick={() => handleRotate(90)} size="small" title="右旋转" />
-            </Space>
-          </div>
+          <CropperEditor ref={cropperRef} src={objectUrlRef.current} />
           <div className="image-cropper-actions">
             <Button onClick={handleBack}>重新选择</Button>
             <Button type="primary" loading={uploading} onClick={handleCropUpload}>

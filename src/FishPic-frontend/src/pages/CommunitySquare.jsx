@@ -8,6 +8,7 @@ import PostDetailModal from '../components/PostDetailModal'
 import CreateEditPostModal from '../components/CreateEditPostModal'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { useFetchWithCleanup, useSystemTypes } from '../hooks/useRequestUtils'
+import { PAGE_SIZE, LOAD_MORE_THRESHOLD } from '../utils/constants'
 import SearchBar from '../components/shared/SearchBar.jsx'
 import PostCard from '../components/shared/PostCard.jsx'
 import CategoryBar from '../components/shared/CategoryBar.jsx'
@@ -32,10 +33,11 @@ function CommunitySquare() {
   const [searchText, setSearchText] = useState('')
   const [currentHotPost, setCurrentHotPost] = useState(true)
   const [hasMore, setHasMore] = useState(true)
+  const hasMoreRef = useRef(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [createEditModalOpen, setCreateEditModalOpen] = useState(false)
   const [editingPostDetail, setEditingPostDetail] = useState(null)
-  const pageSize = 20
+  const pageSize = PAGE_SIZE
   const loadMoreRef = useRef(null)
   const currentPageRef = useRef(1)
   const loadingMoreRef = useRef(false)
@@ -166,13 +168,15 @@ function CommunitySquare() {
     doFetchPostList({ text: searchText, hotPost: currentHotPost, page: 1, append: false })
   }, []) 
 
+  useEffect(() => { hasMoreRef.current = hasMore }, [hasMore])
+
   useEffect(() => {
     const handleScroll = () => {
-      if (loadingMoreRef.current || !hasMore) return
+      if (loadingMoreRef.current || !hasMoreRef.current) return
       const scrollTop = document.documentElement.scrollTop || document.body.scrollTop
       const scrollHeight = document.documentElement.scrollHeight || document.body.scrollHeight
       const clientHeight = document.documentElement.clientHeight || window.innerHeight
-      if (scrollTop + clientHeight >= scrollHeight - 200) {
+      if (scrollTop + clientHeight >= scrollHeight - LOAD_MORE_THRESHOLD) {
         const { text, hotPost, tag, recommend } = committedSearchRef.current
         const signal = createSignal()
         fetchPostList({
@@ -187,7 +191,7 @@ function CommunitySquare() {
     }
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
-  }, [fetchPostList, hasMore, createSignal])
+  }, [fetchPostList, createSignal])
 
   useEffect(() => {
     fetchSystemTypes().then((result) => {

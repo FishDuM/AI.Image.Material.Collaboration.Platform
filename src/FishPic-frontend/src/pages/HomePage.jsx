@@ -4,6 +4,7 @@ import { Carousel, Masonry, Image as AntImage, Spin, Form } from 'antd'
 import { getPictureList, getRecommendPictures } from '../api'
 import { useAuthModal } from '../hooks/useAuthModal.js'
 import { useFetchWithCleanup, useSystemTypes, useMarquee } from '../hooks/useRequestUtils'
+import { PAGE_SIZE } from '../utils/constants'
 import AuthModals from '../components/shared/AuthModals.jsx'
 import SearchBar from '../components/shared/SearchBar.jsx'
 import CategoryBar from '../components/shared/CategoryBar.jsx'
@@ -26,9 +27,7 @@ function HomePage() {
   const [hasMore, setHasMore] = useState(true)
   const carouselRef = useRef(null)
   const loadMoreRef = useRef(null)
-  const isFirstRender = useRef(true)
   const requestIdRef = useRef(0)
-  const PAGE_SIZE = 20
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia('(min-width: 1025px)').matches)
   const [coverflowIndex, setCoverflowIndex] = useState(0)
   const [coverflowTick, setCoverflowTick] = useState(0)
@@ -103,21 +102,10 @@ function HomePage() {
     }
   }, [createSignal, searchTag, selectedCategory])
 
-  // 组件挂载时加载首屏图片（默认 searchTag = '热门'）
+  // searchTag/selectedCategory 变化时重新加载
   useEffect(() => {
     loadPictures(1)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // searchTag 变化时重新加载（跳过首次挂载，避免与上方效果重复）
-  useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false
-      return
-    }
-    loadPictures(1)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTag, selectedCategory])
+  }, [searchTag, selectedCategory, loadPictures])
 
   useEffect(() => {
     if (!hasMore || pictureLoading) return
@@ -236,8 +224,8 @@ function HomePage() {
 
             {marqueeImages.length > 1 && (
               <>
-                <button type="button" className="carousel-arrow-btn carousel-arrow-left" onClick={useCoverflow ? handleCoverflowPrev : handlePrev}>&lsaquo;</button>
-                <button type="button" className="carousel-arrow-btn carousel-arrow-right" onClick={useCoverflow ? handleCoverflowNext : handleNext}>&rsaquo;</button>
+                <button type="button" className="carousel-arrow-btn carousel-arrow-left" aria-label="上一张" onClick={useCoverflow ? handleCoverflowPrev : handlePrev}>&lsaquo;</button>
+                <button type="button" className="carousel-arrow-btn carousel-arrow-right" aria-label="下一张" onClick={useCoverflow ? handleCoverflowNext : handleNext}>&rsaquo;</button>
               </>
             )}
 
@@ -273,7 +261,7 @@ function HomePage() {
       <div className="home-masonry-section">
         {masonryItems.length > 0 && (
           <Masonry columns={{ xs: 2, sm: 3, md: 4, lg: 5 }} gutter={[12, 12]} fresh items={masonryItems} itemRender={(item) => (
-            <div className="home-masonry-item"><AntImage src={item.data.url} alt="" className="home-masonry-image" fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzJhMmEyYSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iYXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM2NjYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj7lm77niYfliqDovb3lpLHotKU8L3RleHQ+PC9zdmc+" /></div>
+            <div className="home-masonry-item"><AntImage src={item.data.url} alt={item.data.pictureName || '图片'} className="home-masonry-image" fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzJhMmEyYSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iYXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM2NjYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj7lm77niYfliqDovb3lpLHotKU8L3RleHQ+PC9zdmc+" /></div>
           )} />
         )}
         {hasMore && <div ref={loadMoreRef} className="home-load-more" />}

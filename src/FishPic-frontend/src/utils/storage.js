@@ -29,7 +29,8 @@ export const removeUserInfo = () => {
 
 export const saveToken = (token) => {
   try {
-    localStorage.setItem(TOKEN_KEY, token)
+    sessionStorage.setItem(TOKEN_KEY, token)
+    localStorage.removeItem(TOKEN_KEY)
   } catch (error) {
     console.error('保存Token失败', error)
   }
@@ -37,7 +38,7 @@ export const saveToken = (token) => {
 
 export const getToken = () => {
   try {
-    return localStorage.getItem(TOKEN_KEY)
+    return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY)
   } catch (error) {
     console.error('读取Token失败', error)
     return null
@@ -46,6 +47,7 @@ export const getToken = () => {
 
 export const removeToken = () => {
   try {
+    sessionStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(TOKEN_KEY)
   } catch (error) {
     console.error('清除Token失败', error)

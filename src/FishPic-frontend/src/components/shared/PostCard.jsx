@@ -1,3 +1,4 @@
+import React from 'react'
 import { LikeOutlined, HeartFilled, HeartOutlined } from '@ant-design/icons'
 import { Image as AntImage } from 'antd'
 
@@ -67,4 +68,4 @@ function PostCard({ post, onClick, variant = 'community' }) {
   )
 }
 
-export default PostCard
+export default React.memo(PostCard)

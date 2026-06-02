@@ -388,7 +388,7 @@ function TeamSpaceDetail() {
                   className={`tsd-masonry-item ${batchMode ? 'batch-mode' : ''}`}
                   onClick={batchMode ? () => toggleSelect(item.data.id) : undefined}
                 >
-                  <AntImage src={item.data.url} alt="" preview={!batchMode} className="tsd-masonry-image" />
+                  <AntImage src={item.data.url} alt={item.data.pictureName || '图片'} preview={!batchMode} className="tsd-masonry-image" />
                   {batchMode && (
                     <div className="tsd-masonry-select">
                       <div className={`tsd-masonry-checkbox ${isSelected ? 'checked' : ''}`}>
@@ -500,7 +500,7 @@ function TeamSpaceDetail() {
           <div className="edit-picture-left">
             {(() => {
               const first = pictures.find(p => selectedIds.includes(p.id))
-              return first ? <img src={first.url} alt="" className="edit-picture-img" /> : null
+              return first ? <img src={first.url} alt="编辑中的图片" className="edit-picture-img" /> : null
             })()}
           </div>
           <div className="edit-picture-right">

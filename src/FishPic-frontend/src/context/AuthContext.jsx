@@ -80,7 +80,7 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
-  const login = (data) => {
+  const login = useCallback((data) => {
     if (data.token) {
       saveToken(data.token)
       const { token: _token, ...userData } = data
@@ -91,19 +91,18 @@ export function AuthProvider({ children }) {
       setUserInfo(data)
     }
     setIsAuthenticated(true)
-    // 登录成功后建立 WebSocket 连接
     createConnection()
-  }
+  }, [])
 
-  const logout = () => {
+  const logout = useCallback(() => {
     destroyConnection()
     clearAuth()
     setUserInfo(null)
     setIsAuthenticated(false)
     setAuthLoading(false)
-  }
+  }, [])
 
-  const updateUserInfo = (updater) => {
+  const updateUserInfo = useCallback((updater) => {
     setUserInfo(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater
       if (next) {
@@ -114,7 +113,7 @@ export function AuthProvider({ children }) {
       }
       return next
     })
-  }
+  }, [])
 
   return (
     <AuthContext.Provider value={{ userInfo, isAuthenticated, authLoading, login, logout, updateUserInfo }}>

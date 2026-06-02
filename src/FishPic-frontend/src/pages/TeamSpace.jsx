@@ -5,18 +5,10 @@ import { TeamOutlined, EditOutlined, PlusOutlined, PictureOutlined, CloudServerO
 import { createSpace, updateSpace, listSpace } from '../api'
 import { ThemeContext } from '../context/ThemeContext'
 import { useFetchWithCleanup } from '../hooks/useRequestUtils'
-import { LEVEL_MAP } from '../utils/constants'
+import { LEVEL_MAP, formatStorage } from '../utils/constants'
 import './TeamSpace.css'
 
 const { Title, Text } = Typography
-
-const formatSize = (bytes) => {
-  if (!bytes || bytes <= 0) return '0 B'
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
-  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
-}
 
 function TeamSpace() {
   const { message } = AntApp.useApp()
@@ -154,7 +146,7 @@ function TeamSpace() {
               <CloudServerOutlined className="ts-list-stat-icon" />
               <Text type="secondary" className="ts-list-stat-label">存储</Text>
               <Text type="secondary" className="ts-list-stat-value">
-                {formatSize(space.size || 0)} / {formatSize(space.storageSize || 0)}
+                {formatStorage(space.size || 0)} / {formatStorage(space.storageSize || 0)}
               </Text>
             </div>
 

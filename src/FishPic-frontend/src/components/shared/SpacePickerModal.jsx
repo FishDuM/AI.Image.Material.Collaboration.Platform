@@ -264,7 +264,7 @@ function SpacePickerModal({ open, onClose, onConfirm, currentImageCount, existin
                               className={`space-image-item${isSelected ? ' space-image-selected' : ''}${isInCarousel ? ' space-image-in-carousel' : ''}`}
                               onClick={() => toggleImage(img)}
                             >
-                              <img src={img.url} alt="" className="space-image-thumb" />
+                              <img src={img.url} alt={img.pictureName || '图片'} className="space-image-thumb" />
                               <div className="space-image-check">
                                 {isSelected ? (
                                   <span className="space-order-badge">{orderIndex + 1}</span>
@@ -358,7 +358,7 @@ function SpacePickerModal({ open, onClose, onConfirm, currentImageCount, existin
                                     className={`space-image-item${isSelected ? ' space-image-selected' : ''}${isInCarousel ? ' space-image-in-carousel' : ''}`}
                                     onClick={() => handleTeamSpaceImageToggle(img)}
                                   >
-                                    <img src={img.url} alt="" className="space-image-thumb" />
+                                    <img src={img.url} alt={img.pictureName || '图片'} className="space-image-thumb" />
                                     <div className="space-image-check">
                                       {isSelected ? (
                                         <span className="space-order-badge">{orderIndex + 1}</span>

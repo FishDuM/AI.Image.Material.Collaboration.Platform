@@ -83,7 +83,7 @@ export default function PostLayout({
         {!showAddSlide && currentIndex < images.length && (
           <AntImage
             src={images[currentIndex]}
-            alt=""
+            alt="轮播图片"
             className="carousel-main-image"
             preview={true}
           />

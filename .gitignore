@@ -7,3 +7,6 @@
 .gstack/
 /.claude/
 /.vscode/
+.env
+.env.local
+.env.*.local

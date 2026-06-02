@@ -4,6 +4,7 @@ import { App as AntApp, Card, Typography, Tag, Input, Button, Space, Spin, Empty
 import { PlusOutlined, ReloadOutlined, TagOutlined, PictureOutlined, DeleteOutlined, EyeOutlined } from '@ant-design/icons'
 import { AuthContext } from '../context/AuthContext.jsx'
 import api, { getAdminPictureList, getMarquee, getSystemTypes } from '../api'
+import { logError } from '../utils/logger'
 import { PAGINATION_LOCALE } from '../utils/constants'
 import './SystemManagement.css'
 
@@ -65,7 +66,8 @@ function SystemManagement() {
       if (Array.isArray(result)) {
         setMarqueeUrls(result)
       }
-    } catch {
+    } catch (error) {
+      logError('fetchMarquee', error)
       setMarqueeUrls([])
     } finally {
       setMarqueeLoading(false)

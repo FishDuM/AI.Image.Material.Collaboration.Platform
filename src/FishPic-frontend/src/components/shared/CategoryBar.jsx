@@ -62,13 +62,14 @@ function CategoryBar({ items, selected, onSelect, className = '' }) {
       {canScrollLeft && btn('left')}
       <div className={`category-bar ${className}`} ref={scrollRef}>
         {items.map((cat) => (
-          <span
+          <button
             key={cat}
+            type="button"
             className={`category-tag ${selected === cat ? 'category-tag-active' : ''}`}
             onClick={() => onSelect?.(cat)}
           >
             {cat}
-          </span>
+          </button>
         ))}
       </div>
       {canScrollRight && btn('right')}

@@ -1,9 +1,10 @@
 import axios from 'axios'
 import { getToken, clearAuth } from '../utils/storage'
+import { TIMEOUT_DEFAULT, TIMEOUT_AVATAR, TIMEOUT_AI, TIMEOUT_PICTURE } from '../utils/constants'
 
 const api = axios.create({
   baseURL: '/api',
-  timeout: 10000,
+  timeout: TIMEOUT_DEFAULT,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -121,7 +122,7 @@ export const editUser = (data) => api.post('/user/editUser', data)
 
 export const uploadAvatar = (formData, onProgress) => api.post('/picture/avatar', formData, {
   headers: { 'Content-Type': 'multipart/form-data' },
-  timeout: 60000,
+  timeout: TIMEOUT_AVATAR,
   onUploadProgress: (progressEvent) => {
     if (onProgress && progressEvent.total) {
       onProgress({ percent: Math.round((progressEvent.loaded * 100) / progressEvent.total) })
@@ -223,16 +224,19 @@ export const reviewPost = (id, status) => api.post('/post/admin/review', { id, s
 export const adminDeletePost = (id) => api.post('/post/admin/delete', { id })
 
 // AI 相关 API
-const AI_TIMEOUT = 60000
 export const submitAiTag = (id) => api.post('/ai/tags', { id })
 export const getAiTagResult = (taskId) => api.get(`/ai/tags/result/${taskId}`)
-export const pollAiTagResult = async (taskId, interval = 2000, timeout = 60000) => {
+export const pollAiTagResult = async (taskId, { interval = 2000, timeout = TIMEOUT_AI, signal } = {}) => {
   const start = Date.now()
   while (Date.now() - start < timeout) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
     const task = await getAiTagResult(taskId)
     if (task.status === 'DONE') return JSON.parse(task.result)
     if (task.status === 'FAILED') throw new Error(task.errorMsg || 'AI识别失败')
-    await new Promise(r => setTimeout(r, interval))
+    await new Promise((r, j) => {
+      const timer = setTimeout(r, interval)
+      signal?.addEventListener('abort', () => { clearTimeout(timer); j(new DOMException('Aborted', 'AbortError')) }, { once: true })
+    })
   }
   throw new Error('AI识别超时')
 }
@@ -240,7 +244,7 @@ export const getAiTasks = (data) => api.post('/ai/admin/tasks', data)
 export const getAiStats = () => api.get('/ai/admin/stats')
 export const getAiConfig = () => api.get('/ai/admin/config')
 export const updateAiConfig = (data) => api.post('/ai/admin/config', data)
-export const submitAiGenerate = (data, config = {}) => api.post('/ai/draw', data, { timeout: AI_TIMEOUT, ...config })
+export const submitAiGenerate = (data, config = {}) => api.post('/ai/draw', data, { timeout: TIMEOUT_AI, ...config })
 export const submitAiDraw = (data) => api.post('/ai/draw/submit', data)
 export const getAiDrawResult = (taskId) => api.get(`/ai/draw/result/${taskId}`)
 
@@ -255,7 +259,7 @@ export const uploadPicture = (formData, targetSpaceId) => {
   }
   return api.post('/picture/upload', fd, {
     headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 120000,
+    timeout: TIMEOUT_PICTURE,
   })
 }
 

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Spin, Popover, QRCode, App } from 'antd'
 import { LikeOutlined, LikeFilled, StarFilled, StarOutlined, MessageOutlined, ShareAltOutlined, CopyOutlined, SendOutlined } from '@ant-design/icons'
 import MobilePageWrapper from './MobilePageWrapper'
+import { copyToClipboard } from '../utils/clipboard'
 import PostModal from './shared/PostModal'
 import PostLayout from './shared/PostLayout'
 import CommentSection from './CommentSection'
@@ -98,18 +99,9 @@ function PostDetailModal({
     : window.location.href
 
   const handleCopyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(currentUrl)
-      message.success('链接已复制到剪贴板')
-    } catch {
-      const textarea = document.createElement('textarea')
-      textarea.value = currentUrl
-      document.body.appendChild(textarea)
-      textarea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textarea)
-      message.success('链接已复制到剪贴板')
-    }
+    const ok = await copyToClipboard(currentUrl)
+    if (ok) message.success('链接已复制到剪贴板')
+    else message.error('复制失败')
   }
 
   const handleSendToFriend = () => {

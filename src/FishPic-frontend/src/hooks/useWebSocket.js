@@ -1,4 +1,5 @@
 import { getToken } from '../utils/storage'
+import { WS_RECONNECT_INTERVAL } from '../utils/constants'
 
 let ws = null
 let reconnectTimer = null
@@ -23,7 +24,7 @@ function connect() {
   const token = getToken()
   if (!token) return
 
-  const url = getWsUrl()
+  const url = `${getWsUrl()}?token=${encodeURIComponent(token)}`
 
   try {
     ws = new WebSocket(url)
@@ -33,8 +34,6 @@ function connect() {
   }
 
   ws.onopen = () => {
-    // 通过握手消息发送 Token，而不是在 URL 中暴露
-    ws.send(JSON.stringify({ type: 'auth', token }))
     notifyListeners({ type: '__WS_OPEN__' })
   }
 
@@ -63,7 +62,7 @@ function scheduleReconnect() {
   if (reconnectTimer) clearTimeout(reconnectTimer)
   reconnectTimer = setTimeout(() => {
     if (!isDestroyed) connect()
-  }, 3000)
+  }, WS_RECONNECT_INTERVAL)
 }
 
 export function createConnection() {
