@@ -2,15 +2,12 @@ package hk.ljx.fishpicsbackend.space.service;
 import hk.ljx.fishpicsbackend.space.entity.Space;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import hk.ljx.fishpicsbackend.space.dto.CreateSpace;
-import hk.ljx.fishpicsbackend.space.dto.SpaceAdminUpdateRequest;
-import hk.ljx.fishpicsbackend.space.dto.SpacePictureList;
-import hk.ljx.fishpicsbackend.space.dto.SpaceQueryWrapper;
-import hk.ljx.fishpicsbackend.space.dto.UpdateSpace;
+import hk.ljx.fishpicsbackend.space.dto.*;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 import hk.ljx.fishpicsbackend.user.entity.User;
 import hk.ljx.fishpicsbackend.picture.vo.PicturePageVO;
+import hk.ljx.fishpicsbackend.space.vo.SpaceMemberVO;
 import hk.ljx.fishpicsbackend.space.vo.SpaceVO;
 
 import java.util.List;
@@ -82,4 +79,24 @@ public interface SpaceService extends IService<Space> {
      * 管理员设置空间状态
      */
     Boolean adminSetStatus(Long id, Integer status);
+
+    /**
+     * 获取团队空间成员列表
+     */
+    List<SpaceMemberVO> teamMemberList(Long spaceId);
+
+    /**
+     * 邀请成员加入团队空间
+     */
+    Boolean teamInvite(TeamInviteRequest request);
+
+    /**
+     * 从团队空间移除成员
+     */
+    Boolean teamRemove(TeamRemoveRequest request);
+
+    /**
+     * 变更团队成员角色
+     */
+    Boolean teamChangeRole(TeamChangeRoleRequest request);
 }

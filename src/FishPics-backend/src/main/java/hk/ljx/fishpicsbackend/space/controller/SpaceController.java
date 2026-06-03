@@ -12,6 +12,7 @@ import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.picture.vo.PicturePageVO;
 import hk.ljx.fishpicsbackend.space.dto.*;
 import hk.ljx.fishpicsbackend.space.service.SpaceService;
+import hk.ljx.fishpicsbackend.space.vo.SpaceMemberVO;
 import hk.ljx.fishpicsbackend.space.vo.SpaceVO;
 import hk.ljx.fishpicsbackend.user.entity.User;
 import jakarta.annotation.Resource;
@@ -121,5 +122,32 @@ public class SpaceController {
     public Response<Boolean> adminSetStatus(@RequestBody SpaceSetStatusRequest request) {
         ExcUtils.throwIfTrue(request.getId() == null || request.getStatus() == null, ExceptionCode.PARAMETER_ERROR);
         return ResUtils.success(spaceService.adminSetStatus(request.getId(), request.getStatus()));
+    }
+
+    @GetMapping("/team/members")
+    public Response<List<SpaceMemberVO>> teamMemberList(@RequestParam("spaceId") Long spaceId) {
+        ExcUtils.throwIfTrue(spaceId == null, ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
+        return ResUtils.success(spaceService.teamMemberList(spaceId));
+    }
+
+    @PostMapping("/team/invite")
+    public Response<Boolean> teamInvite(@RequestBody TeamInviteRequest request) {
+        ExcUtils.throwIfTrue(request.getSpaceId() == null || request.getUserId() == null || request.getRoleId() == null,
+                ExceptionCode.PARAMETER_ERROR, "参数不能为空");
+        return ResUtils.success(spaceService.teamInvite(request));
+    }
+
+    @PostMapping("/team/remove")
+    public Response<Boolean> teamRemove(@RequestBody TeamRemoveRequest request) {
+        ExcUtils.throwIfTrue(request.getSpaceId() == null || request.getUserId() == null,
+                ExceptionCode.PARAMETER_ERROR, "参数不能为空");
+        return ResUtils.success(spaceService.teamRemove(request));
+    }
+
+    @PostMapping("/team/changeRole")
+    public Response<Boolean> teamChangeRole(@RequestBody TeamChangeRoleRequest request) {
+        ExcUtils.throwIfTrue(request.getSpaceId() == null || request.getUserId() == null || request.getRoleId() == null,
+                ExceptionCode.PARAMETER_ERROR, "参数不能为空");
+        return ResUtils.success(spaceService.teamChangeRole(request));
     }
 }
