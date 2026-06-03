@@ -14,6 +14,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import hk.ljx.fishpicsbackend.common.cache.MultiLevelCacheManager;
 import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
@@ -95,6 +96,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
     @Resource
     private PermissionService permissionService;
+
+    @Resource
+    private MultiLevelCacheManager cacheManager;
 
     @Override
     public String getCheckCode(String str, Integer len, Integer minute) {
@@ -273,6 +277,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         // 更新redis
         stringRedisTemplate.opsForValue().set(RedisConstants.getUserInfoKey(userId), JSONUtil.toJsonStr(user), 1,
                 TimeUnit.DAYS);
+        // 清除L1缓存
+        cacheManager.userInfoCache.evict(String.valueOf(userId));
         // 清除权限缓存
         permissionService.clearUserPermissionCache(userId);
         return i > 0;
@@ -316,6 +322,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
             }
             // 统一清除权限缓存（一次操作）
             stringRedisTemplate.delete("USER_PERMISSIONS:" + id);
+            cacheManager.userPermCache.evict(String.valueOf(id));
         }
 
         String userInfoKey = RedisConstants.getUserInfoKey(id);
@@ -325,6 +332,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
             stringRedisTemplate.opsForValue().set(userInfoKey, JSONUtil.toJsonStr(freshUser), 1,
                     TimeUnit.DAYS);
         }
+        // 清除用户信息L1缓存
+        cacheManager.userInfoCache.evict(String.valueOf(id));
 
         return true;
     }
@@ -384,6 +393,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         // 更新 redis 缓存
         stringRedisTemplate.opsForValue().set(RedisConstants.getUserInfoKey(id), JSONUtil.toJsonStr(user), 1,
                 TimeUnit.DAYS);
+        // 清除L1缓存
+        cacheManager.userInfoCache.evict(String.valueOf(id));
         return true;
     }
 
@@ -396,6 +407,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         ExcUtils.throwIfTrue(!result, ExceptionCode.DATABASE_ERROR, "更新失败");
         stringRedisTemplate.opsForValue().set(RedisConstants.getUserInfoKey(user.getId()), JSONUtil.toJsonStr(user), 1,
                 TimeUnit.DAYS);
+        // 清除L1缓存
+        cacheManager.userInfoCache.evict(String.valueOf(user.getId()));
         return true;
     }
 

@@ -1,9 +1,8 @@
 package hk.ljx.fishpicsbackend.permission.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.util.StrUtil;
-import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import hk.ljx.fishpicsbackend.common.cache.MultiLevelCacheManager;
 import hk.ljx.fishpicsbackend.mapper.*;
 import hk.ljx.fishpicsbackend.permission.entity.SysPermission;
 import hk.ljx.fishpicsbackend.permission.entity.SysRolePermission;
@@ -16,11 +15,11 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -48,31 +47,27 @@ public class PermissionServiceImpl implements PermissionService {
     @Resource
     private StringRedisTemplate stringRedisTemplate;
 
+    @Resource
+    private MultiLevelCacheManager cacheManager;
+
     // ========== 系统级权限 ==========
 
     @Override
+    @SuppressWarnings("unchecked")
     public Set<String> getUserPermissions(Long userId) {
-        String cacheKey = "USER_PERMISSIONS:" + userId;
+        String key = String.valueOf(userId);
 
-        // 尝试从缓存获取
-        try {
-            String cached = stringRedisTemplate.opsForValue().get(cacheKey);
-            if (StrUtil.isNotBlank(cached)) {
-                return new HashSet<>(JSONUtil.toList(JSONUtil.parseArray(cached), String.class));
-            }
-        } catch (Exception e) {
-            log.warn("获取权限缓存失败，直接查询数据库", e);
+        // 多级缓存拿权限码，从缓存取出来的是JSONArray要转成Set
+        Object cached = cacheManager.userPermCache.get(key);
+        if (cached instanceof Collection) {
+            return Set.copyOf((Collection<String>) cached);
         }
 
-        // 查询数据库
+        // 缓存miss，查数据库
         Set<String> permissions = queryPermissionsFromDB(userId);
 
-        // 写入缓存，过期时间1小时
-        try {
-            stringRedisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(permissions), 1, TimeUnit.HOURS);
-        } catch (Exception e) {
-            log.warn("设置权限缓存失败", e);
-        }
+        // 写入多级缓存
+        cacheManager.userPermCache.put(key, new HashSet<>(permissions));
 
         return permissions;
     }
@@ -118,14 +113,9 @@ public class PermissionServiceImpl implements PermissionService {
     }
 
     @Override
-    // 清除用户权限缓存
+    // 清除用户权限缓存（同时清L1和L2）
     public void clearUserPermissionCache(Long userId) {
-        String cacheKey = "USER_PERMISSIONS:" + userId;
-        try {
-            stringRedisTemplate.delete(cacheKey);
-        } catch (Exception e) {
-            log.warn("清除权限缓存失败", e);
-        }
+        cacheManager.userPermCache.evict(String.valueOf(userId));
     }
 
     // 递归收集角色继承链上的角色ID

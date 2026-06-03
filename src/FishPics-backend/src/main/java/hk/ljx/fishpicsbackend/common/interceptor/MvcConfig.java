@@ -1,5 +1,6 @@
 package hk.ljx.fishpicsbackend.common.interceptor;
 
+import hk.ljx.fishpicsbackend.common.cache.MultiLevelCacheManager;
 import jakarta.annotation.Resource;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -11,6 +12,9 @@ public class MvcConfig implements WebMvcConfigurer {
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
+
+    @Resource
+    private MultiLevelCacheManager multiLevelCacheManager;
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
@@ -34,6 +38,6 @@ public class MvcConfig implements WebMvcConfigurer {
                         "/ai/**")
                 .order(1);
         // 刷新token有效期
-        registry.addInterceptor(new RefreshTokenInterceptor(stringRedisTemplate)).order(0);
+        registry.addInterceptor(new RefreshTokenInterceptor(stringRedisTemplate, multiLevelCacheManager)).order(0);
     }
 }

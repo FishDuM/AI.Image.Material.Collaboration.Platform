@@ -47,11 +47,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -175,10 +171,11 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         Long storageSize = space.getStorageSize();
         if (storageSize != null) {
             // 使用原子 SQL 增量更新空间大小，确保不超过配额（防止竞态条件）
+            // COALESCE处理size为NULL的情况
             UpdateWrapper<Space> updateWrapper = new UpdateWrapper<>();
             updateWrapper.eq("id", space.getId())
-                    .setSql("size = size + " + size)
-                    .le("size + " + size, storageSize);  // 确保更新后不超过配额
+                    .setSql("size = COALESCE(size, 0) + " + size)
+                    .le("COALESCE(size, 0) + " + size, storageSize);  // 确保更新后不超过配额
             Boolean update = spaceService.update(updateWrapper);
             ExcUtils.throwIfFalse(update, ExceptionCode.PARAMETER_ERROR, "空间容量不足");
         } else {
@@ -264,10 +261,11 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             Long storageSize = space.getStorageSize();
             if (storageSize != null) {
                 // 使用原子 SQL 增量更新空间大小，确保不超过配额
+                // COALESCE处理size为NULL的情况
                 UpdateWrapper<Space> updateWrapper = new UpdateWrapper<>();
                 updateWrapper.eq("id", space.getId())
-                        .setSql("size = size + " + size)
-                        .le("size + " + size, storageSize);  // 确保更新后不超过配额
+                        .setSql("size = COALESCE(size, 0) + " + size)
+                        .le("COALESCE(size, 0) + " + size, storageSize);  // 确保更新后不超过配额
                 Boolean update = spaceService.update(updateWrapper);
                 if (!update) {
                     cosService.deletePicture(key);
@@ -394,6 +392,23 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
         int i = pictureMapper.delete(new QueryWrapper<Picture>().in("id", ids));
         ExcUtils.throwIfTrue(i == 0, "删除失败");
+        // 扣减空间已用大小
+        Map<Long, Long> spaceSizeMap = new java.util.HashMap<>();
+        pictureList.forEach(picture -> {
+            if (picture.getSpaceId() != null && picture.getSize() != null) {
+                spaceSizeMap.merge(picture.getSpaceId(), picture.getSize(), Long::sum);
+            }
+        });
+        spaceSizeMap.forEach((spaceId, deletedSize) -> {
+            Space space = spaceService.getById(spaceId);
+            if (space != null) {
+                long newSize = Math.max(0, space.getSize() - deletedSize);
+                Space update = new Space();
+                update.setId(spaceId);
+                update.setSize(newSize);
+                spaceService.updateById(update);
+            }
+        });
         // 同步删除 COS 对象
         pictureList.forEach(picture -> cosService.deletePictureByUrl(picture.getUrl()));
         return !count.isEmpty() ? "删除成功，但有" + count.size() + "个图片为帖子封面无法删除" : "删除成功";

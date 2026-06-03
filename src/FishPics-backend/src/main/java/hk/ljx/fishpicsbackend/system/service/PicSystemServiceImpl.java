@@ -4,6 +4,7 @@ import hk.ljx.fishpicsbackend.system.entity.PicSystem;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import hk.ljx.fishpicsbackend.common.cache.MultiLevelCacheManager;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.mapper.PicSystemMapper;
@@ -33,14 +34,29 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
     @Resource
     private PictureMapper pictureMapper;
 
+    @Resource
+    private MultiLevelCacheManager cacheManager;
+
     @Override
+    @SuppressWarnings("unchecked")
     public List<String> getTypeList() {
+        // 多级缓存：L1(Caffeine) → L2(Redis)
+        Object cached = cacheManager.sysConfigCache.get(TYPE_LIST_KEY);
+        if (cached instanceof List) {
+            return (List<String>) cached;
+        }
+
+        // 缓存miss，查数据库
         QueryWrapper<PicSystem> queryWrapper = new QueryWrapper<PicSystem>().eq("syskey", TYPE_LIST_KEY);
         List<PicSystem> list = baseMapper.selectList(queryWrapper);
         ExcUtils.throwIfTrue(list == null || list.isEmpty(), "标签不存在");
         PicSystem picSystem = list.get(0);
         ExcUtils.throwIfTrue(picSystem.getSysvalue() == null, "标签不存在");
-        return JSONUtil.toList(picSystem.getSysvalue(), String.class);
+        List<String> result = JSONUtil.toList(picSystem.getSysvalue(), String.class);
+
+        // 写入多级缓存
+        cacheManager.sysConfigCache.put(TYPE_LIST_KEY, result);
+        return result;
     }
 
     @Override
@@ -63,6 +79,8 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
             }
         }
         this.saveOrUpdate(picSystem);
+        // 清除缓存
+        cacheManager.sysConfigCache.evict(TYPE_LIST_KEY);
     }
 
     @Override
@@ -78,10 +96,20 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         ExcUtils.throwIfTrue(!removed, ExceptionCode.NOT_FOUND, "标签不存在");
         picSystem.setSysvalue(JSONUtil.toJsonStr(typeList));
         this.saveOrUpdate(picSystem);
+        // 清除缓存
+        cacheManager.sysConfigCache.evict(TYPE_LIST_KEY);
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public List<String> getMarquess() {
+        // 多级缓存：L1(Caffeine) → L2(Redis)
+        Object cached = cacheManager.sysConfigCache.get(MARQUESS_KEY);
+        if (cached instanceof List) {
+            return (List<String>) cached;
+        }
+
+        // 缓存miss，查数据库
         QueryWrapper<PicSystem> queryWrapper = new QueryWrapper<PicSystem>().eq("syskey", MARQUESS_KEY);
         List<PicSystem> list = baseMapper.selectList(queryWrapper);
         if (list == null || list.isEmpty()) {
@@ -91,7 +119,11 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         if (picSystem.getSysvalue() == null) {
             return List.of();
         }
-        return JSONUtil.toList(picSystem.getSysvalue(), String.class);
+        List<String> result = JSONUtil.toList(picSystem.getSysvalue(), String.class);
+
+        // 写入多级缓存
+        cacheManager.sysConfigCache.put(MARQUESS_KEY, result);
+        return result;
     }
 
     @Override
@@ -124,6 +156,8 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
             }
         }
         this.saveOrUpdate(picSystem);
+        // 清除缓存
+        cacheManager.sysConfigCache.evict(MARQUESS_KEY);
     }
 
     @Override
@@ -139,6 +173,8 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         ExcUtils.throwIfTrue(!removed, ExceptionCode.NOT_FOUND, "该图片不在跑马灯列表中");
         picSystem.setSysvalue(JSONUtil.toJsonStr(marquess));
         this.saveOrUpdate(picSystem);
+        // 清除缓存
+        cacheManager.sysConfigCache.evict(MARQUESS_KEY);
     }
 }
 

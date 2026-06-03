@@ -16,6 +16,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.CollectionUtils;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import hk.ljx.fishpicsbackend.common.cache.MultiLevelCacheManager;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
@@ -108,6 +109,9 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
     @Resource
     private PermissionService permissionService;
+
+    @Resource
+    private MultiLevelCacheManager cacheManager;
 
     @Resource
     private hk.ljx.fishpicsbackend.mapper.SpaceTeamMemberMapper spaceTeamMemberMapper;
@@ -309,18 +313,23 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public IPage<PostListVO> getPostList(PostQueryRequest postQueryRequest) {
         // 1. 构建缓存键
         String cacheKey = buildPostListCacheKey(postQueryRequest);
 
-        // 2. 先查缓存
-        String cachedJson = stringRedisTemplate.opsForValue().get(cacheKey);
-        if (cachedJson != null) {
-            log.debug("命中帖子列表缓存: {}", cacheKey);
-            return JSONUtil.toBean(cachedJson, new cn.hutool.core.lang.TypeReference<Page<PostListVO>>() {}, false);
+        // 2. 先查多级缓存
+        Object l1Cached = cacheManager.postListCache.get(cacheKey);
+        if (l1Cached instanceof IPage) {
+            log.debug("命中帖子列表L1缓存: {}", cacheKey);
+            return (IPage<PostListVO>) l1Cached;
+        } else if (l1Cached instanceof cn.hutool.json.JSONObject json) {
+            // 从Redis取出来的是JSONObject，转成IPage
+            log.debug("命中帖子列表L2缓存: {}", cacheKey);
+            return convertCachedJson(json);
         }
 
-        // 3. 缓存未命中，尝试获取分布式锁防击穿
+        // 4. 缓存未命中，尝试获取分布式锁防击穿
         String lockKey = POST_LIST_LOCK_KEY + cacheKey;
         RLock lock = redissonClient.getLock(lockKey);
         boolean locked = false;
@@ -330,10 +339,13 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
             if (locked) {
                 log.debug("获取锁成功，查询数据库: {}", cacheKey);
                 // 再次检查缓存（双重检查）
-                cachedJson = stringRedisTemplate.opsForValue().get(cacheKey);
-                if (cachedJson != null) {
+                Object doubleCheck = cacheManager.postListCache.get(cacheKey);
+                if (doubleCheck instanceof IPage) {
                     log.debug("再次命中缓存: {}", cacheKey);
-                    return JSONUtil.toBean(cachedJson, new cn.hutool.core.lang.TypeReference<Page<PostListVO>>() {}, false);
+                    return (IPage<PostListVO>) doubleCheck;
+                } else if (doubleCheck instanceof cn.hutool.json.JSONObject json) {
+                    log.debug("再次命中缓存: {}", cacheKey);
+                    return convertCachedJson(json);
                 }
                 // 查数据库
                 Page<Post> page = new Page<>(postQueryRequest.getCurrent(), postQueryRequest.getPageSize());
@@ -342,23 +354,21 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
                 IPage<Post> postPage = baseMapper.selectPage(page, newQueryWrapper(queryWrapper));
                 IPage<PostListVO> result = convertToPostListVO(postPage);
 
-                // 写入缓存
-                try {
-                    stringRedisTemplate.opsForValue().set(cacheKey, JSONUtil.toJsonStr(result), POST_LIST_CACHE_TTL, TimeUnit.MINUTES);
-                    log.debug("写入帖子列表缓存: {}", cacheKey);
-                } catch (Exception e) {
-                    log.warn("写入帖子列表缓存失败: {}", cacheKey, e);
-                }
+                // 写多级缓存
+                cacheManager.postListCache.put(cacheKey, result);
                 return result;
             } else {
-                // 4. 未获取到锁，循环等待读缓存（最多25次，每次100ms，共2.5秒）
+                // 5. 未获取到锁，循环等待读缓存（最多25次，每次100ms，共2.5秒）
                 log.debug("未获取到锁，等待缓存写入: {}", cacheKey);
                 for (int i = 0; i < 25; i++) {
                     Thread.sleep(100);
-                    cachedJson = stringRedisTemplate.opsForValue().get(cacheKey);
-                    if (cachedJson != null) {
+                    Object waited = cacheManager.postListCache.get(cacheKey);
+                    if (waited instanceof IPage) {
                         log.debug("等待后命中缓存: {}", cacheKey);
-                        return JSONUtil.toBean(cachedJson, new cn.hutool.core.lang.TypeReference<Page<PostListVO>>() {}, false);
+                        return (IPage<PostListVO>) waited;
+                    } else if (waited instanceof cn.hutool.json.JSONObject json) {
+                        log.debug("等待后命中缓存: {}", cacheKey);
+                        return convertCachedJson(json);
                     }
                 }
                 // 超时返回空数据（兜底）
@@ -374,6 +384,13 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
                 lock.unlock();
             }
         }
+    }
+
+    // 把缓存里的JSONObject转成IPage
+    @SuppressWarnings("unchecked")
+    private IPage<PostListVO> convertCachedJson(cn.hutool.json.JSONObject json) {
+        return JSONUtil.toBean(json,
+                new cn.hutool.core.lang.TypeReference<Page<PostListVO>>() {}, false);
     }
 
     @Override
@@ -880,6 +897,9 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
      * 在帖子发布、审核、删除时调用
      */
     public void clearPostListCache() {
+        // 清除L1(Caffeine)
+        cacheManager.postListCache.evictAllL1();
+        // 清除L2(Redis)
         try {
             // 使用 SCAN 命令替代 keys，避免阻塞 Redis
             ScanOptions options = ScanOptions.scanOptions()
@@ -894,10 +914,10 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
             }
             if (!keys.isEmpty()) {
                 stringRedisTemplate.delete(keys);
-                log.info("清除帖子列表缓存，共 {} 个", keys.size());
+                log.info("清除帖子列表L2缓存，共 {} 个", keys.size());
             }
         } catch (Exception e) {
-            log.warn("清除帖子列表缓存失败", e);
+            log.warn("清除帖子列表L2缓存失败", e);
         }
     }
 }

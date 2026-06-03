@@ -53,7 +53,8 @@ create table picture
     is_private   tinyint  default 0                 not null comment '0-不公开到首页，1-公开到首页',
     space_id     bigint                             null comment '空间Id',
     introduction varchar(256)                       null comment '图片介绍',
-    tags varchar(512) null comment '标签 (Json)'
+    tags varchar(512) null comment '标签 (Json)',
+    type varchar(32) null comment '图片格式'
 )
     comment '图片表';
 
@@ -133,7 +134,7 @@ create table space
     storage_size  bigint  default 536870912 not null comment '空间存储大小(Byte)：512MB-5G-10G-30G-50G',
     level         tinyint default 0         not null comment '空间级别：普通-VIP-SVIP',
     name          varchar(246)              not null comment '空间名',
-    size          bigint                    null comment '现在使用大小',
+    size          bigint       default 0    null comment '现在使用大小',
     status        tinyint default 1         not null comment '0=禁用, 1=正常'
 )
     comment '空间表';
