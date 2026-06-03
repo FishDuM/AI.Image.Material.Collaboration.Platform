@@ -119,23 +119,44 @@ function GlobalLayout({ children }) {
       items.push({ key: '/login', icon: <LoginOutlined />, label: '登录', onClick: () => { handleLoginButtonClick(); setSidebarVisible(false) } })
     }
 
-    if (userInfo?.role === 'admin') {
+    const hasAdminAccess = userInfo?.permissions?.includes('user:manage') || userInfo?.permissions?.includes('user:list') || false;
+    if (hasAdminAccess) {
       items.push({ type: 'divider' })
-      items.push({
-        key: 'admin',
-        icon: <SettingOutlined />,
-        label: '管理页面',
-        children: [
-          { key: '/admin/users', icon: <UserOutlined />, label: '用户管理', onClick: () => handleSidebarMenuClick('/admin/users') },
-          { key: '/admin/pictures', icon: <PictureOutlined />, label: '图片管理', onClick: () => handleSidebarMenuClick('/admin/pictures') },
-          { key: '/admin/comments', icon: <CommentOutlined />, label: '评论审核', onClick: () => handleSidebarMenuClick('/admin/comments') },
-          { key: '/admin/posts', icon: <MessageOutlined />, label: '帖子审核', onClick: () => handleSidebarMenuClick('/admin/posts') },
-          { key: '/admin/spaces', icon: <AppstoreOutlined />, label: '空间管理', onClick: () => handleSidebarMenuClick('/admin/spaces') },
-          { key: '/admin/teams', icon: <TeamOutlined />, label: '团队管理', onClick: () => handleSidebarMenuClick('/admin/teams') },
-          { key: '/admin/ai', icon: <RobotOutlined />, label: 'AI 管理', onClick: () => handleSidebarMenuClick('/admin/ai') },
-          { key: '/admin/system', icon: <ToolOutlined />, label: '系统管理', onClick: () => handleSidebarMenuClick('/admin/system') },
-        ],
-      })
+      const adminChildren = [];
+
+      if (userInfo?.permissions?.includes('user:list') || userInfo?.permissions?.includes('user:manage')) {
+        adminChildren.push({ key: '/admin/users', icon: <UserOutlined />, label: '用户管理', onClick: () => handleSidebarMenuClick('/admin/users') });
+      }
+      if (userInfo?.permissions?.includes('picture:list') || userInfo?.permissions?.includes('picture:review')) {
+        adminChildren.push({ key: '/admin/pictures', icon: <PictureOutlined />, label: '图片管理', onClick: () => handleSidebarMenuClick('/admin/pictures') });
+      }
+      if (userInfo?.permissions?.includes('comment:list') || userInfo?.permissions?.includes('comment:review')) {
+        adminChildren.push({ key: '/admin/comments', icon: <CommentOutlined />, label: '评论审核', onClick: () => handleSidebarMenuClick('/admin/comments') });
+      }
+      if (userInfo?.permissions?.includes('post:list') || userInfo?.permissions?.includes('post:review')) {
+        adminChildren.push({ key: '/admin/posts', icon: <MessageOutlined />, label: '帖子审核', onClick: () => handleSidebarMenuClick('/admin/posts') });
+      }
+      if (userInfo?.permissions?.includes('space:list') || userInfo?.permissions?.includes('space:manage')) {
+        adminChildren.push({ key: '/admin/spaces', icon: <AppstoreOutlined />, label: '空间管理', onClick: () => handleSidebarMenuClick('/admin/spaces') });
+      }
+      if (userInfo?.permissions?.includes('team:member_manage')) {
+        adminChildren.push({ key: '/admin/teams', icon: <TeamOutlined />, label: '团队管理', onClick: () => handleSidebarMenuClick('/admin/teams') });
+      }
+      if (userInfo?.permissions?.includes('ai:tasks') || userInfo?.permissions?.includes('ai:stats')) {
+        adminChildren.push({ key: '/admin/ai', icon: <RobotOutlined />, label: 'AI 管理', onClick: () => handleSidebarMenuClick('/admin/ai') });
+      }
+      if (userInfo?.permissions?.includes('user:manage')) {
+        adminChildren.push({ key: '/admin/system', icon: <ToolOutlined />, label: '系统管理', onClick: () => handleSidebarMenuClick('/admin/system') });
+      }
+
+      if (adminChildren.length > 0) {
+        items.push({
+          key: 'admin',
+          icon: <SettingOutlined />,
+          label: '管理页面',
+          children: adminChildren,
+        });
+      }
     }
 
     return items
@@ -146,16 +167,36 @@ function GlobalLayout({ children }) {
     { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', onClick: handleLogout },
   ], [navigate, handleLogout])
 
-  const adminMenuItems = useMemo(() => [
-    { key: 'user-management', icon: <UserOutlined />, label: '用户管理', onClick: () => navigate('/admin/users') },
-    { key: 'picture-management', icon: <PictureOutlined />, label: '图片管理', onClick: () => navigate('/admin/pictures') },
-    { key: 'comment-management', icon: <CommentOutlined />, label: '评论审核', onClick: () => navigate('/admin/comments') },
-    { key: 'post-management', icon: <MessageOutlined />, label: '帖子审核', onClick: () => navigate('/admin/posts') },
-    { key: 'space-management', icon: <AppstoreOutlined />, label: '空间管理', onClick: () => navigate('/admin/spaces') },
-    { key: 'team-management', icon: <TeamOutlined />, label: '团队管理', onClick: () => navigate('/admin/teams') },
-    { key: 'ai-management', icon: <RobotOutlined />, label: 'AI 管理', onClick: () => navigate('/admin/ai') },
-    { key: 'system-management', icon: <ToolOutlined />, label: '系统管理', onClick: () => navigate('/admin/system') },
-  ], [navigate])
+  const adminMenuItems = useMemo(() => {
+    const items = [];
+
+    if (userInfo?.permissions?.includes('user:list') || userInfo?.permissions?.includes('user:manage')) {
+      items.push({ key: 'user-management', icon: <UserOutlined />, label: '用户管理', onClick: () => navigate('/admin/users') });
+    }
+    if (userInfo?.permissions?.includes('picture:list') || userInfo?.permissions?.includes('picture:review')) {
+      items.push({ key: 'picture-management', icon: <PictureOutlined />, label: '图片管理', onClick: () => navigate('/admin/pictures') });
+    }
+    if (userInfo?.permissions?.includes('comment:list') || userInfo?.permissions?.includes('comment:review')) {
+      items.push({ key: 'comment-management', icon: <CommentOutlined />, label: '评论审核', onClick: () => navigate('/admin/comments') });
+    }
+    if (userInfo?.permissions?.includes('post:list') || userInfo?.permissions?.includes('post:review')) {
+      items.push({ key: 'post-management', icon: <MessageOutlined />, label: '帖子审核', onClick: () => navigate('/admin/posts') });
+    }
+    if (userInfo?.permissions?.includes('space:list') || userInfo?.permissions?.includes('space:manage')) {
+      items.push({ key: 'space-management', icon: <AppstoreOutlined />, label: '空间管理', onClick: () => navigate('/admin/spaces') });
+    }
+    if (userInfo?.permissions?.includes('team:member_manage')) {
+      items.push({ key: 'team-management', icon: <TeamOutlined />, label: '团队管理', onClick: () => navigate('/admin/teams') });
+    }
+    if (userInfo?.permissions?.includes('ai:tasks') || userInfo?.permissions?.includes('ai:stats')) {
+      items.push({ key: 'ai-management', icon: <RobotOutlined />, label: 'AI 管理', onClick: () => navigate('/admin/ai') });
+    }
+    if (userInfo?.permissions?.includes('user:manage')) {
+      items.push({ key: 'system-management', icon: <ToolOutlined />, label: '系统管理', onClick: () => navigate('/admin/system') });
+    }
+
+    return items;
+  }, [navigate, userInfo?.permissions])
 
   const navActiveClass = (path) => location.pathname === path ? ' nav-btn-active' : ''
 
@@ -173,7 +214,7 @@ function GlobalLayout({ children }) {
             {userInfo && (
               <Button type="text" size="large" icon={<RobotOutlined />} onClick={() => navigate('/ai-tools')} className={`desktop-only${navActiveClass('/ai-tools')}`}>AI 工具</Button>
             )}
-            {userInfo?.role === 'admin' && (
+            {(userInfo?.permissions?.includes('user:manage') || userInfo?.permissions?.includes('user:list') || userInfo?.permissions?.includes('picture:list') || userInfo?.permissions?.includes('comment:list') || userInfo?.permissions?.includes('post:list')) && (
               <Dropdown menu={{ items: adminMenuItems }} placement="bottomLeft" className="desktop-only">
                 <Button type="text" size="large" className="system-management-btn desktop-only"><SettingOutlined /><span>管理页面</span></Button>
               </Dropdown>

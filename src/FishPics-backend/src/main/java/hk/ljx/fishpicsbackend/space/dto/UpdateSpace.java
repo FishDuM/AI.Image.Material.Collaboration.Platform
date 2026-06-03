@@ -12,12 +12,12 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class UpdateSpace {
 
-    /** 空间ID，必填 */
+    // 空间ID，必填
     private Long id;
 
-    /** 新空间名称，必填 */
+    // 新空间名称，必填
     private String name;
 
-    /** 新空间介绍 */
+    // 新空间介绍
     private String introduction;
 }

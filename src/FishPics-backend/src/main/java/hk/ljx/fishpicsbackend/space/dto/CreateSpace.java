@@ -13,14 +13,12 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class CreateSpace {
 
-    /** 空间名称，不能为空，最大20字符 */
+    // 空间名称，不能为空，最大20字符
     private String name;
 
-    /** 空间介绍，最大200字符 */
+    // 空间介绍，最大200字符
     private String introduction;
 
-    /**
-     * 空间类型：0-私人空间（每人限1个），1-团队空间（按等级限数量）
-     */
+    // 空间类型：0-私人空间（每人限1个），1-团队空间（按等级限数量）
     private Integer type;
 }

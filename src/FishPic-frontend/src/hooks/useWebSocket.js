@@ -5,6 +5,8 @@ let ws = null
 let reconnectTimer = null
 const listeners = new Set()
 let isDestroyed = false
+let reconnectAttempts = 0
+const MAX_RECONNECT_ATTEMPTS = 10
 
 function getWsUrl() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -34,6 +36,7 @@ function connect() {
   }
 
   ws.onopen = () => {
+    reconnectAttempts = 0
     notifyListeners({ type: '__WS_OPEN__' })
   }
 
@@ -59,19 +62,28 @@ function connect() {
 
 function scheduleReconnect() {
   if (isDestroyed) return
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    console.warn('[WebSocket] 已达最大重连次数，停止重连')
+    return
+  }
   if (reconnectTimer) clearTimeout(reconnectTimer)
+  // 指数退避：3s, 6s, 12s, 24s ... 最大60s
+  const delay = Math.min(WS_RECONNECT_INTERVAL * Math.pow(2, reconnectAttempts), 60000)
+  reconnectAttempts++
   reconnectTimer = setTimeout(() => {
     if (!isDestroyed) connect()
-  }, WS_RECONNECT_INTERVAL)
+  }, delay)
 }
 
 export function createConnection() {
   isDestroyed = false
+  reconnectAttempts = 0
   connect()
 }
 
 export function destroyConnection() {
   isDestroyed = true
+  reconnectAttempts = 0
   if (reconnectTimer) {
     clearTimeout(reconnectTimer)
     reconnectTimer = null

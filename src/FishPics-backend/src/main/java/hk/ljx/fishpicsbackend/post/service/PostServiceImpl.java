@@ -39,6 +39,7 @@ import hk.ljx.fishpicsbackend.user.service.UserPostLikesService;
 import hk.ljx.fishpicsbackend.user.service.UserService;
 import hk.ljx.fishpicsbackend.user.entity.UserInterestProfile;
 import hk.ljx.fishpicsbackend.user.service.UserInterestProfileService;
+import hk.ljx.fishpicsbackend.permission.service.PermissionService;
 import com.alibaba.fastjson.JSON;
 import hk.ljx.fishpicsbackend.picture.vo.PictureListByEditPostVO;
 import hk.ljx.fishpicsbackend.picture.vo.PictureListVO;
@@ -68,8 +69,6 @@ import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.LIKE_POST_K
 import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.POST_LIST_CACHE_KEY;
 import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.POST_LIST_LOCK_KEY;
 import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.POST_LIST_CACHE_TTL;
-import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
-
 /**
  * @author 30574
  * @description 针对表【post(帖子表)】的数据库操作Service实现
@@ -106,6 +105,12 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
     @Resource
     private UserInterestProfileService userInterestProfileService;
+
+    @Resource
+    private PermissionService permissionService;
+
+    @Resource
+    private hk.ljx.fishpicsbackend.mapper.SpaceTeamMemberMapper spaceTeamMemberMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -224,7 +229,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         // 查找该帖子
         Post post = baseMapper.selectById(id);
         ExcUtils.throwIfTrue(post == null || post.getUserId() == null, ExceptionCode.PARAMETER_ERROR, "帖子不存在");
-        ExcUtils.throwIfFalse(user.getId().equals(post.getUserId()) || user.getRole().equals(ADMIN),
+        ExcUtils.throwIfFalse(user.getId().equals(post.getUserId()) || permissionService.hasPermission(user.getId(), "post:review"),
                 ExceptionCode.PARAMETER_ERROR, "只能修改自己的帖子");
 
         // 判断是不是自己的图片并返回原图id
@@ -256,10 +261,24 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
      */
     @Override
     public List<Picture> isMyPicture(Long userId, List<Long> imageId) {
-        QueryWrapper<Space> spaceQueryWrapper = new QueryWrapper<>();
-        spaceQueryWrapper.eq("user_id", userId).or().eq("type", 1).like("team_users_id", userId);
-        List<Long> spaceIds = spaceService.list(spaceQueryWrapper).stream().map(Space::getId)
+        // 1. 用户作为创建者的空间
+        QueryWrapper<Space> ownedQuery = new QueryWrapper<>();
+        ownedQuery.eq("user_id", userId);
+        List<Long> spaceIds = spaceService.list(ownedQuery).stream().map(Space::getId)
                 .collect(Collectors.toList());
+
+        // 2. 用户作为团队成员的空间
+        List<Long> teamSpaceIds = spaceTeamMemberMapper.selectList(
+                new QueryWrapper<hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember>()
+                        .eq("user_id", userId)
+                        .select("space_id")
+        ).stream().map(hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember::getSpaceId)
+                .collect(Collectors.toList());
+        // 合并并去重
+        spaceIds = new java.util.ArrayList<>(new java.util.HashSet<>(spaceIds));
+        spaceIds.addAll(teamSpaceIds);
+        spaceIds = new java.util.ArrayList<>(new java.util.LinkedHashSet<>(spaceIds));
+
         // 校验图片是否存在
         LambdaQueryWrapper<Picture> pictureQueryWrapper = new LambdaQueryWrapper<>();
         pictureQueryWrapper.in(Picture::getId, imageId).in(Picture::getSpaceId, spaceIds);

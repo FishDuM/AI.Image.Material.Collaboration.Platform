@@ -61,11 +61,6 @@ public class User implements Serializable {
     private Integer isDelete;
 
     /**
-     * 用户的权限
-     */
-    private String role;
-
-    /**
      * 创建时间
      */
     private Date createTime;

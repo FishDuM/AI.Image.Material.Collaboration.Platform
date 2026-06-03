@@ -2,6 +2,7 @@ package hk.ljx.fishpicsbackend.space.controller;
 
 import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import hk.ljx.fishpicsbackend.common.annotation.AuditLog;
 import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
@@ -18,8 +19,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-
-import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
 /**
  * 空间控制器，提供空间管理的REST API
@@ -94,28 +93,31 @@ public class SpaceController {
         return ResUtils.success(spaceService.pictureList(spacePictureList));
     }
 
-    @AuthCheck(role = ADMIN)
+    @AuthCheck(permission = "space:list")
     @PostMapping("/admin/list")
     public Response<IPage<SpaceVO>> adminList(@RequestBody SpaceQueryWrapper wrapper) {
         return ResUtils.success(spaceService.adminList(wrapper));
     }
 
-    @AuthCheck(role = ADMIN)
+    @AuthCheck(permission = "space:manage")
     @PostMapping("/admin/update")
+    @AuditLog(module = "空间管理", operation = "更新空间")
     public Response<Boolean> adminUpdate(@RequestBody SpaceAdminUpdateRequest request) {
         ExcUtils.throwIfTrue(ObjectUtil.isNull(request), ExceptionCode.PARAMETER_ERROR);
         return ResUtils.success(spaceService.adminUpdate(request));
     }
 
-    @AuthCheck(role = ADMIN)
+    @AuthCheck(permission = "space:manage")
     @PostMapping("/admin/delete")
+    @AuditLog(module = "空间管理", operation = "删除空间")
     public Response<Boolean> adminDelete(@RequestBody SpaceDeleteRequest request) {
         ExcUtils.throwIfTrue(request.getId() == null, ExceptionCode.PARAMETER_ERROR);
         return ResUtils.success(spaceService.adminDelete(request.getId()));
     }
 
-    @AuthCheck(role = ADMIN)
+    @AuthCheck(permission = "space:status")
     @PostMapping("/admin/setStatus")
+    @AuditLog(module = "空间管理", operation = "空间状态变更")
     public Response<Boolean> adminSetStatus(@RequestBody SpaceSetStatusRequest request) {
         ExcUtils.throwIfTrue(request.getId() == null || request.getStatus() == null, ExceptionCode.PARAMETER_ERROR);
         return ResUtils.success(spaceService.adminSetStatus(request.getId(), request.getStatus()));

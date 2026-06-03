@@ -72,7 +72,7 @@ function AIManagement() {
   }, [])
 
   useEffect(() => {
-    if (!userInfo || userInfo.role !== 'admin') {
+    if (!userInfo || !userInfo?.permissions?.includes('ai:tasks')) {
       antMsg.error('无权访问，正在跳转到 404 页面...')
       setTimeout(() => navigate('/404', { replace: true }), 500)
       return
@@ -179,7 +179,7 @@ function AIManagement() {
     },
   ]
 
-  if (!userInfo || userInfo.role !== 'admin') {
+  if (!userInfo || !userInfo?.permissions?.includes('ai:tasks')) {
     return (
       <main className="ai-management-container">
         <div style={{ textAlign: 'center', padding: '100px 0' }}>

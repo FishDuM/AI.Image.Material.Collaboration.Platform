@@ -48,9 +48,9 @@ public class AdminGetUserVO implements Serializable {
     private Integer status;
 
     /**
-     * 用户的权限
+     * 用户角色ID列表（仅管理端查看用）
      */
-    private String role;
+    private java.util.List<Long> roleIds;
 
     /**
      * 0-普通，1-VIP，2-SVIP

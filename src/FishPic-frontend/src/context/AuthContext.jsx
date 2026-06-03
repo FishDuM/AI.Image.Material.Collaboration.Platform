@@ -80,6 +80,23 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
+  // 定期刷新权限（每5分钟）
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    const interval = setInterval(async () => {
+      try {
+        const latestUserInfo = await getUser({ noDedup: true })
+        saveUserInfo(latestUserInfo)
+        setUserInfo(latestUserInfo)
+      } catch {
+        // 静默失败，不影响用户体验
+      }
+    }, 5 * 60 * 1000) // 5分钟
+
+    return () => clearInterval(interval)
+  }, [isAuthenticated])
+
   const login = useCallback((data) => {
     if (data.token) {
       saveToken(data.token)

@@ -12,7 +12,7 @@ function SpaceManagement() {
   const { userInfo } = useContext(AuthContext)
 
   useEffect(() => {
-    if (!userInfo || userInfo.role !== 'admin') {
+    if (!userInfo || !userInfo?.permissions?.includes('space:list')) {
       message.error('无权访问，正在跳转到 404 页面...')
       setTimeout(() => {
         navigate('/404', { replace: true })
@@ -21,7 +21,7 @@ function SpaceManagement() {
     }
   }, [navigate, userInfo])
 
-  if (!userInfo || userInfo.role !== 'admin') {
+  if (!userInfo || !userInfo?.permissions?.includes('space:list')) {
     return (
       <main className="space-management-container">
         <div style={{ textAlign: 'center', padding: '100px 0' }}>

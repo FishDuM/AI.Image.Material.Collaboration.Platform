@@ -12,7 +12,6 @@ public class SpaceVO {
     private String name;
     private String introduction;
     private Integer type;
-    private String teamUsersId;
     private Long userId;
     private Long storageSize;
     private Integer level;

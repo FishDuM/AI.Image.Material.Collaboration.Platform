@@ -62,8 +62,7 @@ import hk.ljx.fishpicsbackend.user.entity.UserPostLikes;
 import hk.ljx.fishpicsbackend.user.service.UserPostLikesService;
 import hk.ljx.fishpicsbackend.user.entity.UserPostCollect;
 import hk.ljx.fishpicsbackend.user.service.UserPostCollectService;
-
-import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
+import hk.ljx.fishpicsbackend.permission.service.PermissionService;
 
 /**
  * @author 30574
@@ -105,12 +104,15 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     @Resource
     private UserPostCollectService userPostCollectService;
 
+    @Resource
+    private PermissionService permissionService;
+
     @Override
     public String uploadAvatar(MultipartFile file, Long id) {
         User userLogin = UserHolder.getUser();
         ExcUtils.throwIfTrue(ObjUtil.isEmpty(userLogin), ExceptionCode.NOT_LOGIN);
         // 只有自己或管理员可以修改头像
-        ExcUtils.throwIfTrue(!userLogin.getId().equals(id) && !userLogin.getRole().equals(ADMIN), "没有权限");
+        ExcUtils.throwIfTrue(!userLogin.getId().equals(id) && !permissionService.hasPermission(userLogin.getId(), "picture:review"), "没有权限");
         User user;
         if (id != null && !id.equals(userLogin.getId())) {
             user = userService.getById(id);
@@ -188,7 +190,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         }
         picture.setSpaceId(space.getId());
         // 管理员上传直接通过，普通用户上传需要审核
-        if (ADMIN.equals(userLogin.getRole())) {
+        if (permissionService.hasPermission(userLogin.getId(), "picture:review")) {
             picture.setStatus(1);
         } else {
             picture.setStatus(2);
@@ -281,7 +283,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             picture.setSpaceId(space.getId());
 
             // 管理员上传直接通过，普通用户上传需要审核
-            if (ADMIN.equals(userLogin.getRole())) {
+            if (permissionService.hasPermission(userLogin.getId(), "picture:review")) {
                 picture.setStatus(1);
             } else {
                 picture.setStatus(2);
@@ -369,7 +371,6 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         ExcUtils.throwIfTrue(CollUtil.isEmpty(ids), "图片id不能为空");
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(ObjUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
-        String role = user.getRole();
         // 帖子封面图禁止删除
         List<Post> posts = postService.list(new QueryWrapper<Post>().in("cover", ids));
         Set<Long> count = posts.stream().map(Post::getCover).collect(Collectors.toSet());
@@ -387,7 +388,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         Set<Long> userIds = new HashSet<>();
         pictureList.forEach(picture -> userIds.add(picture.getUserId()));
         // 判断是否为图片的主人或者管理员
-        ExcUtils.throwIfFalse(role.equals(ADMIN)
+        ExcUtils.throwIfFalse(permissionService.hasPermission(user.getId(), "picture:review")
                 || (userIds.size() == 1 && userIds.contains(user.getId())),
                 ExceptionCode.UNAUTHORIZED, "没有权限删除图片");
 
@@ -406,7 +407,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         ExcUtils.throwIfTrue(user == null || user.getId() == null, ExceptionCode.UNAUTHORIZED, "用户未登录");
         Picture picture = pictureMapper.selectById(id);
         ExcUtils.throwIfTrue(picture == null || picture.getUserId() == null, ExceptionCode.NOT_FOUND, "图片不存在");
-        ExcUtils.throwIfFalse(picture.getUserId().equals(user.getId()) || user.getRole().equals(ADMIN), ExceptionCode.UNAUTHORIZED, "没有权限编辑图片");
+        ExcUtils.throwIfFalse(picture.getUserId().equals(user.getId()) || permissionService.hasPermission(user.getId(), "picture:review"), ExceptionCode.UNAUTHORIZED, "没有权限编辑图片");
 
         String pictureName = request.getPictureName();
         String introduction = request.getIntroduction();
@@ -442,7 +443,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         ExcUtils.throwIfTrue(user == null || user.getId() == null, ExceptionCode.NOT_LOGIN);
         Picture picture = pictureMapper.selectById(id);
         ExcUtils.throwIfTrue(picture == null || picture.getUserId() == null, ExceptionCode.NOT_FOUND, "图片不存在");
-        ExcUtils.throwIfTrue(!picture.getUserId().equals(user.getId()) && !user.getRole().equals(ADMIN), ExceptionCode.FORBIDDEN, "无权限");
+        ExcUtils.throwIfTrue(!picture.getUserId().equals(user.getId()) && !permissionService.hasPermission(user.getId(), "picture:review"), ExceptionCode.FORBIDDEN, "无权限");
         PictureEditVO pictureEditVO = new PictureEditVO();
         pictureEditVO.setPictureName(picture.getPictureName());
         pictureEditVO.setIntroduction(picture.getIntroduction());

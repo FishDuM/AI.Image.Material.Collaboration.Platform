@@ -472,7 +472,7 @@ function UserProfile() {
         <div className="profile-nickname-row">
           <h1 className="profile-nickname">
             {userData.nickname || userData.username}
-            {userData.role === 'admin' && (
+            {userData?.permissions?.includes('user:manage') && (
               <span className="admin-badge" title="这个网站伟大的管理员">管理员</span>
             )}
           </h1>

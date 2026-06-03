@@ -1,47 +1,74 @@
 package hk.ljx.fishpicsbackend.common.aop;
 
+import cn.hutool.core.util.StrUtil;
 import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
+import hk.ljx.fishpicsbackend.permission.service.PermissionService;
 import hk.ljx.fishpicsbackend.user.entity.User;
-import hk.ljx.fishpicsbackend.common.enums.UserRoleEnum;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.springframework.stereotype.Component;
 
+import jakarta.annotation.Resource;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
+/**
+ * 权限拦截器（AOP）
+ * 基于权限码校验，替代旧的基于角色名校验
+ */
 @Aspect
 @Component
 public class AuthInterceptor {
 
-    /**
-     * 执行拦截
-     *
-     * @param joinPoint 切入点
-     * @param authCheck 权限校验注解
-     */
+    @Resource
+    private PermissionService permissionService;
+
+    // 执行拦截
     @Around("@annotation(authCheck)")
     public Object doInterceptor(ProceedingJoinPoint joinPoint, AuthCheck authCheck) throws Throwable {
-        String mustRole = authCheck.role();
+        // 1. 检查登录状态
         User user = UserHolder.getUser();
-        // 如果用户为空则为未登录或登陆过期
-        ExcUtils.throwIfTrue(user == null || user.getId() == null || user.getRole() == null, ExceptionCode.NOT_LOGIN, "未登录或登录过期");
+        ExcUtils.throwIfTrue(user == null || user.getId() == null, ExceptionCode.NOT_LOGIN, "未登录或登录过期");
 
-        UserRoleEnum mustRoleEnum = UserRoleEnum.getEnumByRole(mustRole);
-        // 不需要权限，放行
-        if (mustRoleEnum == null) {
+        // 2. 获取注解中的权限配置
+        String permissionStr = authCheck.permission();
+        if (StrUtil.isBlank(permissionStr)) {
+            // 没有权限要求，已登录即可放行
             return joinPoint.proceed();
         }
-        // 以下为：必须有该权限才通过
-        // 获取当前用户具有的权限
-        UserRoleEnum userRoleEnum = UserRoleEnum.getEnumByRole(user.getRole());
-        // 没有权限，拒绝
-        ExcUtils.throwIfTrue(userRoleEnum == null, ExceptionCode.UNAUTHORIZED);
-        // 要求必须有管理员权限，但用户没有管理员权限，拒绝
-        ExcUtils.throwIfTrue(UserRoleEnum.ADMIN.equals(mustRoleEnum) && !UserRoleEnum.ADMIN.equals(userRoleEnum), ExceptionCode.UNAUTHORIZED);
-        // 通过权限校验，放行
+
+        // 3. 解析权限码（支持逗号分隔多个权限）
+        List<String> requiredPermissions = Arrays.stream(permissionStr.split(","))
+                .map(String::trim)
+                .filter(StrUtil::isNotBlank)
+                .collect(Collectors.toList());
+
+        if (requiredPermissions.isEmpty()) {
+            return joinPoint.proceed();
+        }
+
+        // 4. 获取用户的系统级权限
+        Set<String> userPermissions = permissionService.getUserPermissions(user.getId());
+
+        // 5. 权限校验
+        boolean hasPermission;
+        if (authCheck.mode() == AuthCheck.MatchMode.AND) {
+            // 需要所有权限
+            hasPermission = userPermissions.containsAll(requiredPermissions);
+        } else {
+            // 拥有任一即可
+            hasPermission = requiredPermissions.stream().anyMatch(userPermissions::contains);
+        }
+
+        ExcUtils.throwIfTrue(!hasPermission, ExceptionCode.UNAUTHORIZED, "无权限执行此操作");
+
+        // 6. 通过
         return joinPoint.proceed();
     }
 }

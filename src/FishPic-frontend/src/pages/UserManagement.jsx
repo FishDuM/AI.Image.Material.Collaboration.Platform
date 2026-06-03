@@ -30,6 +30,7 @@ function UserManagement() {
   const [previewAvatar, setPreviewAvatar] = useState(null)
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(null)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [roleList, setRoleList] = useState([])
 
 
 
@@ -58,7 +59,7 @@ function UserManagement() {
   }, [navigate, message])
 
   useEffect(() => {
-    if (!userInfo || userInfo.role !== 'admin') {
+    if (!userInfo || !userInfo?.permissions?.includes('user:manage')) {
       message.error('无权访问')
       navigate('/', { replace: true })
       return
@@ -68,6 +69,28 @@ function UserManagement() {
     hasFetchedRef.current = true
     fetchUserList(1, 20)
   }, [fetchUserList, userInfo])
+
+  // 获取角色列表
+  useEffect(() => {
+    const fetchRoleList = async () => {
+      try {
+        const result = await api.get('/permission/roles')
+        if (result && Array.isArray(result)) {
+          setRoleList(result)
+        }
+      } catch {
+        // 如果获取失败，使用默认角色列表
+        setRoleList([
+          { id: 1, name: '超级管理员' },
+          { id: 2, name: '管理员' },
+          { id: 3, name: '内容审核员' },
+          { id: 4, name: '内容编辑' },
+          { id: 5, name: '数据分析员' },
+        ])
+      }
+    }
+    fetchRoleList()
+  }, [])
 
   const handleSetStatus = async (userId) => {
     if (userInfo && userInfo.id === userId) {
@@ -100,7 +123,6 @@ function UserManagement() {
       username: values.username || null,
       phone: values.phone || null,
       nickname: values.nickname || null,
-      role: values.role || null,
       status: values.status || null,
     }
     fetchUserList(1, pagination.pageSize, newParams)
@@ -121,7 +143,7 @@ function UserManagement() {
           nickname: editingUser.nickname,
           email: editingUser.email,
           phone: editingUser.phone,
-          role: editingUser.role,
+          roleIds: editingUser.roleIds || [],
           level: editingUser.level,
         })
       })
@@ -147,7 +169,7 @@ function UserManagement() {
         email: values.email || null,
         phone: values.phone || null,
         nickname: values.nickname || null,
-        role: values.role,
+        roleIds: values.roleIds || [],
         level: values.level,
       }
 
@@ -277,13 +299,27 @@ function UserManagement() {
     },
     {
       title: '角色',
-      dataIndex: 'role',
+      dataIndex: 'roleIds',
       key: 'role',
-      render: (role) => (
-        <Tag color={role === 'admin' ? 'orange' : 'green'}>
-          {role === 'admin' ? '管理员' : '普通用户'}
-        </Tag>
-      ),
+      render: (_, record) => {
+        const roleIds = record.roleIds || []
+        if (roleIds.includes(1)) {
+          return <Tag color="red">超级管理员</Tag>
+        }
+        if (roleIds.includes(2)) {
+          return <Tag color="orange">管理员</Tag>
+        }
+        if (roleIds.includes(3)) {
+          return <Tag color="blue">内容审核员</Tag>
+        }
+        if (roleIds.includes(4)) {
+          return <Tag color="green">内容编辑</Tag>
+        }
+        if (roleIds.includes(5)) {
+          return <Tag color="purple">数据分析员</Tag>
+        }
+        return <Tag color="default">普通用户</Tag>
+      },
     },
     {
       title: '状态',
@@ -342,7 +378,7 @@ function UserManagement() {
     },
   ]
 
-  if (!userInfo || userInfo.role !== 'admin') {
+  if (!userInfo || !userInfo?.permissions?.includes('user:manage')) {
     return (
       <main className="user-management-container">
         <div style={{ textAlign: 'center', padding: '100px 0' }}>
@@ -385,14 +421,6 @@ function UserManagement() {
               <Col xs={24} sm={12} md={8}>
                 <Form.Item name="nickname" label="昵称">
                   <Input placeholder="请输入昵称" allowClear />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12} md={8}>
-                <Form.Item name="role" label="角色">
-                  <Select placeholder="请选择角色" allowClear>
-                    <Select.Option value="user">普通用户</Select.Option>
-                    <Select.Option value="admin">管理员</Select.Option>
-                  </Select>
                 </Form.Item>
               </Col>
               <Col xs={24} sm={12} md={8}>
@@ -557,13 +585,13 @@ function UserManagement() {
               </Col>
               <Col xs={24} sm={12}>
                 <Form.Item
-                  name="role"
+                  name="roleIds"
                   label="角色"
-                  rules={[{ required: true, message: '请选择角色' }]}
                 >
-                  <Select placeholder="请选择角色">
-                    <Select.Option value="user">普通用户</Select.Option>
-                    <Select.Option value="admin">管理员</Select.Option>
+                  <Select mode="multiple" placeholder="请选择角色（不选则无系统角色）">
+                    {roleList.map(role => (
+                      <Select.Option key={role.id} value={role.id}>{role.name}</Select.Option>
+                    ))}
                   </Select>
                 </Form.Item>
               </Col>

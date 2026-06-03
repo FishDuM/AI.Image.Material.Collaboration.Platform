@@ -14,7 +14,6 @@
             <result property="nickname" column="nickname" />
             <result property="status" column="status" />
             <result property="isDelete" column="is_delete" />
-            <result property="role" column="role" />
             <result property="createTime" column="create_time" />
             <result property="updateTime" column="update_time" />
             <result property="likeNum" column="like_num" />
@@ -28,7 +27,7 @@
 
     <sql id="Base_Column_List">
         id,username,password,avatar,email,phone,
-        nickname,status,is_delete,role,create_time,
+        nickname,status,is_delete,create_time,
         update_time,like_num,collect_num,is_private_follows,is_private_post_collect,
         is_private_likes,is_private_fans,level
     </sql>

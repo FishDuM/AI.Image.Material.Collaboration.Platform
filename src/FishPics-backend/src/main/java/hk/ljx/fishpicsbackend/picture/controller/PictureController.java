@@ -4,6 +4,7 @@ import hk.ljx.fishpicsbackend.picture.service.PictureService;
 
 import cn.hutool.core.util.ObjUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import hk.ljx.fishpicsbackend.common.annotation.AuditLog;
 import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
 import hk.ljx.fishpicsbackend.common.dto.PageRequest;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
@@ -24,8 +25,6 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-
-import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
 @RestController
 @RequestMapping("/picture")
@@ -106,14 +105,15 @@ public class PictureController {
         return ResUtils.success(pictureService.getPictureEditMessage(id));
     }
 
-    @AuthCheck(role = ADMIN)
+    @AuthCheck(permission = "picture:list")
     @PostMapping("/admin/list")
     public Response<IPage<PictureAdminVO>> getPictureListAdmin(@RequestBody AdminPictureListDTO dto) {
         return ResUtils.success(pictureService.getAdminPictureList(dto));
     }
 
-    @AuthCheck(role = ADMIN)
+    @AuthCheck(permission = "picture:review")
     @PostMapping("/admin/review")
+    @AuditLog(module = "图片管理", operation = "图片审核")
     public Response<Boolean> reviewPicture(@RequestBody ReviewPictureDTO dto) {
         pictureService.reviewPicture(dto.getPictureId(), dto.getStatus(), dto.getSelected());
         return ResUtils.success(true);

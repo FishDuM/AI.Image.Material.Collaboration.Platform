@@ -1,7 +1,9 @@
 package hk.ljx.fishpicsbackend.websocket;
 
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
+import hk.ljx.fishpicsbackend.user.entity.User;
 import jakarta.annotation.Resource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.server.ServerHttpRequest;
@@ -38,7 +40,19 @@ public class WebSocketAuthInterceptor implements HandshakeInterceptor {
             return false;
         }
 
-        attributes.put("userId", Long.parseLong(userIdStr));
+        Long userId = Long.parseLong(userIdStr);
+
+        // 检查用户状态，禁用用户不允许建立 WebSocket 连接
+        String userKey = RedisConstants.getUserInfoKey(userId);
+        String userJson = stringRedisTemplate.opsForValue().get(userKey);
+        if (StrUtil.isNotBlank(userJson)) {
+            User user = JSONUtil.toBean(userJson, User.class);
+            if (user != null && user.getStatus() != null && user.getStatus() == 0) {
+                return false;
+            }
+        }
+
+        attributes.put("userId", userId);
         return true;
     }
 

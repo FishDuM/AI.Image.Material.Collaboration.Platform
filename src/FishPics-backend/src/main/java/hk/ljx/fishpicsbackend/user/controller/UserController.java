@@ -6,6 +6,7 @@ import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import hk.ljx.fishpicsbackend.common.annotation.AuditLog;
 import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
 import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
 import hk.ljx.fishpicsbackend.common.constants.UserConstants;
@@ -26,8 +27,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
-import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
-
 @RestController
 @RequestMapping("/user")
 @Slf4j
@@ -46,6 +45,7 @@ public class UserController {
     private UserFansService userFansService;
 
     @PostMapping("/login")
+    @AuditLog(module = "用户管理", operation = "用户登录")
     public Response<UserLoginVO> userLogin(@RequestBody UserLoginRequest userLoginRequest) {
         ExcUtils.throwIfTrue(userLoginRequest == null, ExceptionCode.PARAMETER_ERROR, "参数错误");
         return userService.userLogin(userLoginRequest);
@@ -85,12 +85,17 @@ public class UserController {
         return ResUtils.success(userMessageVO);
     }
 
+    @Resource
+    private hk.ljx.fishpicsbackend.permission.service.PermissionService permissionService;
+
     @GetMapping("/getUser")
     public Response<UserLoginVO> getUser() {
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         UserLoginVO userLoginVO = new UserLoginVO();
         BeanUtil.copyProperties(user, userLoginVO);
+        userLoginVO.setPermissions(
+                new java.util.ArrayList<>(permissionService.getUserPermissions(user.getId())));
         return ResUtils.success(userLoginVO);
     }
 
@@ -101,6 +106,7 @@ public class UserController {
     }
 
     @PostMapping("/logout")
+    @AuditLog(module = "用户管理", operation = "用户登出")
     public Response<?> logout(HttpServletRequest request) {
         UserHolder.removeUser();
         String token = request.getHeader("Authorization");
@@ -141,7 +147,7 @@ public class UserController {
         return ResUtils.success(userService.getUserProfile(userId));
     }
 
-    @AuthCheck(role = ADMIN)
+    @AuthCheck(permission = "user:list")
     @PostMapping("/admin/getUser")
     public Response<AdminGetUserVO> adminGetUser(@RequestBody UserIdRequest userIdRequest) {
         Long userId = userIdRequest.getUserId();
@@ -149,10 +155,11 @@ public class UserController {
         User user = userMapper.selectById(userId);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user) || user.getId() == null, ExceptionCode.DATABASE_ERROR);
         AdminGetUserVO adminGetUserVO = BeanUtil.copyProperties(user, AdminGetUserVO.class);
+        adminGetUserVO.setRoleIds(permissionService.getUserRoleIds(userId));
         return ResUtils.success(adminGetUserVO);
     }
 
-    @AuthCheck(role = ADMIN)
+    @AuthCheck(permission = "user:list")
     @PostMapping("/admin/userList")
     public Response<IPage<AdminGetUserVO>> getUserList(@RequestBody UserQueryWrapper userQueryWrapper) {
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(userQueryWrapper), ExceptionCode.PARAMETER_ERROR);
@@ -162,16 +169,18 @@ public class UserController {
         return ResUtils.success(userList);
     }
 
-    @AuthCheck(role = ADMIN)
+    @AuthCheck(permission = "user:status")
     @PostMapping("/admin/setStatus")
+    @AuditLog(module = "用户管理", operation = "用户状态变更")
     public Response<Boolean> setStatus(@RequestBody UserIdRequest userIdRequest) {
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(userIdRequest), ExceptionCode.PARAMETER_ERROR);
         Long userId = userIdRequest.getUserId();
         return ResUtils.success(userService.setStatus(userId));
     }
 
-    @AuthCheck(role = ADMIN)
+    @AuthCheck(permission = "user:manage")
     @PostMapping("/admin/editUser")
+    @AuditLog(module = "用户管理", operation = "编辑用户")
     public Response<Boolean> editUser(@RequestBody UserEditByAdminRequest userEditByAdminRequest) {
         ExcUtils.throwIfTrue(ObjectUtil.isNull(userEditByAdminRequest), ExceptionCode.PARAMETER_ERROR);
         return ResUtils.success(userService.editUser(userEditByAdminRequest));

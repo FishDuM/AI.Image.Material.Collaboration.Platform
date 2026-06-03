@@ -20,13 +20,12 @@ import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.picture.entity.Picture;
 import hk.ljx.fishpicsbackend.picture.service.PictureService;
 import hk.ljx.fishpicsbackend.user.entity.User;
+import hk.ljx.fishpicsbackend.permission.service.PermissionService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
-
-import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
 @Slf4j
 @Service
@@ -41,13 +40,16 @@ public class AiServiceImpl implements AiService {
     @Resource
     private PictureService pictureService;
 
+    @Resource
+    private PermissionService permissionService;
+
     @Override
     public String submitTagTask(Long pictureId) {
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_LOGIN);
         Picture picture = pictureService.getById(pictureId);
         ExcUtils.throwIfTrue(picture == null, "图片不存在");
-        ExcUtils.throwIfTrue(!picture.getUserId().equals(user.getId()) && !user.getRole().equals(ADMIN), ExceptionCode.UNAUTHORIZED);
+        ExcUtils.throwIfTrue(!picture.getUserId().equals(user.getId()) && !permissionService.hasPermission(user.getId(), "ai:config"), ExceptionCode.UNAUTHORIZED);
 
         return taskService.submitTask("ai_tag", String.valueOf(pictureId), null, user.getId());
     }

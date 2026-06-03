@@ -33,8 +33,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
-
 @RestController
 @RequestMapping("/ai")
 @Slf4j
@@ -89,7 +87,7 @@ public class AiController {
 
     // ==================== 管理后台接口 ====================
 
-    @AuthCheck(role = ADMIN)
+    @AuthCheck(permission = "ai:tasks")
     @PostMapping("/admin/tasks")
     public Response<IPage<AiTaskVO>> getTasks(@RequestBody AiTaskQueryDTO queryDTO) {
         Page<Task> page = new Page<>(queryDTO.getCurrent(), queryDTO.getPageSize());
@@ -152,7 +150,7 @@ public class AiController {
         return ResUtils.success(result);
     }
 
-    @AuthCheck(role = ADMIN)
+    @AuthCheck(permission = "ai:stats")
     @GetMapping("/admin/stats")
     public Response<AiStatsVO> getStats() {
         AiStatsVO stats = new AiStatsVO();
@@ -175,7 +173,7 @@ public class AiController {
         return ResUtils.success(stats);
     }
 
-    @AuthCheck(role = ADMIN)
+    @AuthCheck(permission = "ai:config")
     @GetMapping("/admin/config")
     public Response<AiConfigDTO> getConfig() {
         QueryWrapper<PicSystem> wrapper = new QueryWrapper<PicSystem>()
@@ -196,7 +194,7 @@ public class AiController {
         return ResUtils.success(config);
     }
 
-    @AuthCheck(role = ADMIN)
+    @AuthCheck(permission = "ai:config")
     @PostMapping("/admin/config")
     public Response<Boolean> updateConfig(@RequestBody AiConfigDTO configDTO) {
         // 读取现有配置

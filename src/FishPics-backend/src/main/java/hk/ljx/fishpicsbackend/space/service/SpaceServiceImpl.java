@@ -5,7 +5,6 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjectUtil;
-import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -27,6 +26,9 @@ import hk.ljx.fishpicsbackend.space.dto.UpdateSpace;
 import hk.ljx.fishpicsbackend.space.vo.SpaceMemberVO;
 import hk.ljx.fishpicsbackend.space.vo.SpaceVO;
 import hk.ljx.fishpicsbackend.user.entity.User;
+import hk.ljx.fishpicsbackend.permission.service.PermissionService;
+import hk.ljx.fishpicsbackend.mapper.SpaceTeamMemberMapper;
+import hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,7 +38,6 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static hk.ljx.fishpicsbackend.common.constants.SpaceConstants.*;
-import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
 /** 空间服务实现类 */
 @Service
@@ -48,6 +49,12 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
 
     @Resource
     private UserMapper userMapper;
+
+    @Resource
+    private PermissionService permissionService;
+
+    @Resource
+    private SpaceTeamMemberMapper spaceTeamMemberMapper;
 
     /**
      * 创建空间，根据用户等级和空间类型分配存储配额
@@ -116,10 +123,13 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         space.setIntroduction(introduction);
         space.setType(type);
         space.setUserId(user.getId());
-        if (type == 1) {
-            space.setTeamUsersId(JSONUtil.toJsonStr(Collections.singletonList(user.getId())));
-        }
         int insert = baseMapper.insert(space);
+        if (type == 1) {
+            SpaceTeamMember teamMember = new SpaceTeamMember();
+            teamMember.setSpaceId(space.getId());
+            teamMember.setUserId(user.getId());
+            spaceTeamMemberMapper.insert(teamMember);
+        }
         ExcUtils.throwIfTrue(insert <= 0, "创建空间失败");
         return true;
     }
@@ -148,7 +158,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
             if (space.getUserId() != null) {
                 allUserIds.add(space.getUserId());
             }
-            parseTeamUserIds(space.getTeamUsersId()).forEach(allUserIds::add);
+            spaceTeamMemberMapper.selectList(new QueryWrapper<SpaceTeamMember>().eq("space_id", space.getId())).stream().map(SpaceTeamMember::getUserId).forEach(allUserIds::add);
         }
         Map<Long, User> userMap = new HashMap<>();
         if (!allUserIds.isEmpty()) {
@@ -180,7 +190,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
                 vo.setUserAvatar(creator.getAvatar());
             }
             if (type == 1) {
-                List<Long> memberIds = parseTeamUserIds(space.getTeamUsersId());
+                List<Long> memberIds = spaceTeamMemberMapper.selectList(new QueryWrapper<SpaceTeamMember>().eq("space_id", space.getId())).stream().map(SpaceTeamMember::getUserId).collect(Collectors.toList());
                 List<SpaceMemberVO> members = memberIds.stream()
                         .limit(10)
                         .map(userMap::get)
@@ -213,7 +223,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         boolean isCreator = Objects.equals(space.getUserId(), userId);
         boolean isTeamMember = false;
         if (space.getType() == 1) {
-            List<Long> memberIds = parseTeamUserIds(space.getTeamUsersId());
+            List<Long> memberIds = spaceTeamMemberMapper.selectList(new QueryWrapper<SpaceTeamMember>().eq("space_id", space.getId())).stream().map(SpaceTeamMember::getUserId).collect(Collectors.toList());
             isTeamMember = memberIds.contains(userId);
         }
         ExcUtils.throwIfTrue(!isCreator && !isTeamMember, ExceptionCode.PARAMETER_ERROR, "无权限访问该空间");
@@ -224,7 +234,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         Set<Long> userIds = new HashSet<>();
         if (space.getUserId() != null)
             userIds.add(space.getUserId());
-        parseTeamUserIds(space.getTeamUsersId()).forEach(userIds::add);
+        spaceTeamMemberMapper.selectList(new QueryWrapper<SpaceTeamMember>().eq("space_id", space.getId())).stream().map(SpaceTeamMember::getUserId).forEach(userIds::add);
         Map<Long, User> userMap = new HashMap<>();
         if (!userIds.isEmpty()) {
             userMap = userMapper.selectByIds(userIds)
@@ -248,7 +258,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         vo.setPictureCount(picCount);
 
         if (space.getType() == 1) {
-            List<Long> memberIds = parseTeamUserIds(space.getTeamUsersId());
+            List<Long> memberIds = spaceTeamMemberMapper.selectList(new QueryWrapper<SpaceTeamMember>().eq("space_id", space.getId())).stream().map(SpaceTeamMember::getUserId).collect(Collectors.toList());
             List<SpaceMemberVO> members = memberIds.stream()
                     .limit(10)
                     .map(userMap::get)
@@ -259,17 +269,6 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         }
 
         return vo;
-    }
-
-    private List<Long> parseTeamUserIds(String teamUsersId) {
-        if (teamUsersId == null || teamUsersId.trim().isEmpty() || "[]".equals(teamUsersId.trim())) {
-            return new ArrayList<>();
-        }
-        try {
-            return JSONUtil.toList(teamUsersId, Long.class);
-        } catch (Exception e) {
-            return new ArrayList<>();
-        }
     }
 
     /**
@@ -293,7 +292,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         Space space = baseMapper.selectById(id);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
         // 2. 权限校验：仅空间创建者或管理员可修改
-        ExcUtils.throwIfFalse(space.getUserId().equals(userId) || user.getRole().equals(ADMIN),
+        ExcUtils.throwIfFalse(space.getUserId().equals(userId) || permissionService.hasPermission(user.getId(), "space:manage"),
                 ExceptionCode.PARAMETER_ERROR, "无权限修改空间信息");
         // 3. 更新空间信息
         space.setName(name);
@@ -324,7 +323,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         Space space = baseMapper.selectById(spaceId);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在或无权限");
         boolean isCreator = Objects.equals(space.getUserId(), userId);
-        boolean isTeamMember = space.getType() == 1 && parseTeamUserIds(space.getTeamUsersId()).contains(userId);
+        boolean isTeamMember = space.getType() == 1 && spaceTeamMemberMapper.selectList(new QueryWrapper<SpaceTeamMember>().eq("space_id", spaceId)).stream().anyMatch(m -> m.getUserId().equals(userId));
         ExcUtils.throwIfTrue(!isCreator && !isTeamMember, ExceptionCode.PARAMETER_ERROR, "空间不存在或无权限");
         // 2. 分页查询图片列表
         Page<Picture> picturePage = new Page<>(current, pageSize);
@@ -365,7 +364,6 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         Long id = spaceQueryWrapper.getId();
         String introduction = spaceQueryWrapper.getIntroduction();
         Integer type = spaceQueryWrapper.getType();
-        String teamUsersId = spaceQueryWrapper.getTeamUsersId();
         Long userId = spaceQueryWrapper.getUserId();
         Long storageSize = spaceQueryWrapper.getStorageSize();
         Integer level = spaceQueryWrapper.getLevel();
@@ -381,7 +379,6 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         queryWrapper.eq(!ObjectUtil.isEmpty(id), "id", id);
         queryWrapper.eq(!ObjectUtil.isEmpty(introduction), "introduction", introduction);
         queryWrapper.eq(!ObjectUtil.isEmpty(type), "type", type);
-        queryWrapper.eq(!ObjectUtil.isEmpty(teamUsersId), "team_users_id", teamUsersId);
         queryWrapper.eq(!ObjectUtil.isEmpty(userId), "user_id", userId);
         queryWrapper.eq(!ObjectUtil.isEmpty(storageSize), "storage_size", storageSize);
         queryWrapper.eq(!ObjectUtil.isEmpty(level), "level", level);
@@ -404,7 +401,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         Set<Long> allUserIds = new HashSet<>();
         for (Space space : spaceList) {
             if (space.getUserId() != null) allUserIds.add(space.getUserId());
-            parseTeamUserIds(space.getTeamUsersId()).forEach(allUserIds::add);
+            spaceTeamMemberMapper.selectList(new QueryWrapper<SpaceTeamMember>().eq("space_id", space.getId())).stream().map(SpaceTeamMember::getUserId).forEach(allUserIds::add);
         }
         Map<Long, User> userMap = new HashMap<>();
         if (!allUserIds.isEmpty()) {
@@ -434,7 +431,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
                 vo.setUserAvatar(creator.getAvatar());
             }
             if (space.getType() != null && space.getType() == 1) {
-                List<Long> memberIds = parseTeamUserIds(space.getTeamUsersId());
+                List<Long> memberIds = spaceTeamMemberMapper.selectList(new QueryWrapper<SpaceTeamMember>().eq("space_id", space.getId())).stream().map(SpaceTeamMember::getUserId).collect(Collectors.toList());
                 List<SpaceMemberVO> members = memberIds.stream()
                         .limit(10)
                         .map(userMap::get)

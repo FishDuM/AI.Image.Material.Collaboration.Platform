@@ -5,10 +5,6 @@ package hk.ljx.fishpicsbackend.common.constants;
  */
 public interface UserConstants {
 
-    // 权限类
-    String USER = "user";
-    String ADMIN = "admin";
-
     // 密码加密盐值
     String SALT = "fish";
 

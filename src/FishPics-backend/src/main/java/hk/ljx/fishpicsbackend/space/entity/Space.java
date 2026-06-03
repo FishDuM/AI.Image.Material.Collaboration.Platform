@@ -32,11 +32,6 @@ public class Space implements Serializable {
     private Integer type;
 
     /**
-     * 团队空间的用户id
-     */
-    private String teamUsersId;
-
-    /**
      * 创建的用户Id
      */
     private Long userId;

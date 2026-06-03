@@ -16,8 +16,6 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
-
 @RestController
 @RequestMapping("/system")
 @Slf4j
@@ -32,7 +30,7 @@ public class SystemController {
         return ResUtils.success(list);
     }
 
-    @AuthCheck(role = ADMIN)
+    @AuthCheck(permission = "system:type")
     @PostMapping("/addList")
     public Response<Boolean> addList(@RequestBody AddSysPicType addSysPicType) {
         ExcUtils.throwIfTrue(addSysPicType == null, ExceptionCode.PARAMETER_ERROR, "type不能为空");
@@ -40,7 +38,7 @@ public class SystemController {
         return ResUtils.success(true);
     }
 
-    @AuthCheck(role = ADMIN)
+    @AuthCheck(permission = "system:type")
     @PostMapping("/deleteType")
     public Response<Boolean> deleteType(@RequestBody DeleteTypeRequest request) {
         ExcUtils.throwIfTrue(request.getValue() == null || request.getValue().isEmpty(), ExceptionCode.PARAMETER_ERROR, "type不能为空");
@@ -54,7 +52,7 @@ public class SystemController {
         return ResUtils.success(urls);
     }
 
-    @AuthCheck(role = ADMIN)
+    @AuthCheck(permission = "system:marquee")
     @PostMapping("/addMarquee")
     public Response<Boolean> addMarquee(@RequestBody AddSysMarquee addSysMarquee) {
         ExcUtils.throwIfTrue(addSysMarquee == null, ExceptionCode.PARAMETER_ERROR, "url不能为空");
@@ -62,7 +60,7 @@ public class SystemController {
         return ResUtils.success(true);
     }
 
-    @AuthCheck(role = ADMIN)
+    @AuthCheck(permission = "system:marquee")
     @PostMapping("/deleteMarquee")
     public Response<Boolean> deleteMarquee(@RequestBody DeleteMarqueeRequest request) {
         ExcUtils.throwIfTrue(request.getUrl() == null || request.getUrl().isEmpty(), ExceptionCode.PARAMETER_ERROR, "url不能为空");

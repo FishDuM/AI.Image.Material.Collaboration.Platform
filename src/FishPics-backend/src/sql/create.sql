@@ -129,7 +129,6 @@ create table space
         primary key,
     introduction  varchar(256)              null comment '空间介绍',
     type          tinyint                   null comment '0-私人空间，1-团队空间',
-    team_users_id varchar(1024)             null comment '团队空间的用户id',
     user_id       bigint                    null comment '创建的用户Id',
     storage_size  bigint  default 536870912 not null comment '空间存储大小(Byte)：512MB-5G-10G-30G-50G',
     level         tinyint default 0         not null comment '空间级别：普通-VIP-SVIP',
@@ -157,7 +156,6 @@ create table user
     nickname                varchar(32)                           null comment '昵称（展示用）',
     status                  tinyint     default 1                 null comment '状态 1-正常 0-禁用 2-待审核',
     is_delete               tinyint     default 0                 not null comment '0-逻辑未删除, 1-逻辑删除',
-    role                    varchar(32) default 'user'            null comment '用户的权限',
     create_time             datetime    default CURRENT_TIMESTAMP not null comment '创建时间',
     update_time             datetime    default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
     like_num                bigint                                null,
@@ -254,4 +252,210 @@ create table user_interest_profile
         unique (user_id, tag)
 )
     comment '用户兴趣画像表';
+
+-- ============================================================
+-- 权限体系 (RBAC + ABAC 三级权限)
+-- ============================================================
+
+-- 1. 权限点表：定义系统中所有可授予的权限
+create table sys_permission
+(
+    id          bigint auto_increment comment '主键'
+        primary key,
+    code        varchar(128)                       not null comment '权限码, 如 post:review',
+    name        varchar(64)                        not null comment '权限名称, 如 帖子审核',
+    module      varchar(32)                        not null comment '所属模块: post/user/space/comment/picture/ai/system',
+    scope       tinyint  default 0                 not null comment '0=系统级 1=团队级 2=资源级',
+    sort_order  int      default 0                 null comment '排序',
+    create_time datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    update_time datetime default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
+    is_delete   tinyint  default 0                 not null comment '0=未删除 1=已删除',
+    constraint uk_permission_code
+        unique (code)
+)
+    comment '权限点表';
+
+create index idx_permission_module
+    on sys_permission (module);
+
+create index idx_permission_scope
+    on sys_permission (scope);
+
+-- 2. 角色表：系统级角色和团队级角色共用
+create table sys_role
+(
+    id               bigint auto_increment comment '主键'
+        primary key,
+    code             varchar(64)                        not null comment '角色编码, 如 super_admin, team_admin',
+    name             varchar(64)                        not null comment '角色显示名称',
+    scope            tinyint  default 0                 not null comment '0=系统级 1=团队级',
+    is_system        tinyint  default 0                 not null comment '系统预置角色不可删除 0=否 1=是',
+    inherit_role_id  bigint                             null comment '继承的角色ID（角色权限合并）',
+    create_time      datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    update_time      datetime default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
+    is_delete        tinyint  default 0                 not null comment '0=未删除 1=已删除',
+    constraint uk_role_code
+        unique (code)
+)
+    comment '角色表';
+
+-- 3. 角色-权限关联表
+create table sys_role_permission
+(
+    id            bigint auto_increment comment '主键'
+        primary key,
+    role_id       bigint not null comment '角色ID',
+    permission_id bigint not null comment '权限ID',
+    constraint uk_role_permission
+        unique (role_id, permission_id)
+)
+    comment '角色-权限关联表';
+
+-- 4. 用户-系统角色关联表（用户可拥有多个系统级角色，权限取并集）
+create table sys_user_role
+(
+    id      bigint auto_increment comment '主键'
+        primary key,
+    user_id bigint not null comment '用户ID',
+    role_id bigint not null comment '角色ID',
+    constraint uk_user_role
+        unique (user_id, role_id)
+)
+    comment '用户-系统角色关联表';
+
+create index idx_user_role_user_id
+    on sys_user_role (user_id);
+
+-- 5. 团队空间成员表（替代 space.team_users_id）
+create table space_team_member
+(
+    id        bigint auto_increment comment '主键'
+        primary key,
+    space_id  bigint                             not null comment '团队空间ID',
+    user_id   bigint                             not null comment '用户ID',
+    role_id   bigint                             not null comment '团队内角色ID, 关联 sys_role',
+    joined_at datetime default CURRENT_TIMESTAMP null comment '加入时间',
+    constraint uk_space_team_member
+        unique (space_id, user_id)
+)
+    comment '团队空间成员表';
+
+create index idx_space_team_member_space_id
+    on space_team_member (space_id);
+
+create index idx_space_team_member_user_id
+    on space_team_member (user_id);
+
+-- ============================================================
+-- 初始权限数据
+-- ============================================================
+
+-- 系统级权限点
+INSERT INTO sys_permission (code, name, module, scope, sort_order) VALUES
+-- 用户管理
+('user:list',      '用户列表查看',   'user',    0, 1),
+('user:manage',    '用户信息编辑',   'user',    0, 2),
+('user:status',    '用户状态变更',   'user',    0, 3),
+('user:role',      '用户角色分配',   'user',    0, 4),
+-- 帖子管理
+('post:list',      '帖子管理列表',   'post',    0, 5),
+('post:review',    '帖子审核',       'post',    0, 6),
+('post:delete',    '帖子删除',       'post',    0, 7),
+-- 图片管理
+('picture:list',   '图片管理列表',   'picture', 0, 8),
+('picture:review', '图片审核',       'picture', 0, 9),
+-- 评论管理
+('comment:list',   '评论管理列表',   'comment', 0, 10),
+('comment:review', '评论审核',        'comment', 0, 11),
+('comment:delete', '评论删除',        'comment', 0, 12),
+-- 空间管理
+('space:list',     '空间管理列表',   'space',   0, 13),
+('space:manage',   '空间编辑删除',   'space',   0, 14),
+('space:status',   '空间状态变更',   'space',   0, 15),
+-- AI 管理
+('ai:tasks',       'AI任务查看',     'ai',      0, 16),
+('ai:stats',       'AI统计查看',     'ai',      0, 17),
+('ai:config',      'AI配置管理',     'ai',      0, 18),
+-- 系统配置
+('system:type',    '帖子标签管理',    'system',  0, 19),
+('system:marquee', '轮播图管理',      'system',  0, 20);
+
+-- 团队级权限点
+INSERT INTO sys_permission (code, name, module, scope, sort_order) VALUES
+('team:member_manage', '团队成员管理', 'space', 1, 21),
+('team:space_edit',    '空间信息编辑', 'space', 1, 22),
+('team:upload',        '空间内上传',   'space', 1, 23),
+('team:delete',        '空间内删除',   'space', 1, 24);
+
+-- 资源级权限点
+INSERT INTO sys_permission (code, name, module, scope, sort_order) VALUES
+('resource:edit',   '编辑他人资源', 'resource', 2, 25),
+('resource:delete', '删除他人资源', 'resource', 2, 26);
+
+-- ============================================================
+-- 初始角色数据
+-- ============================================================
+
+INSERT INTO sys_role (code, name, scope, is_system) VALUES
+('super_admin', '超级管理员', 0, 1),
+('admin',       '管理员',     0, 1),
+('reviewer',    '内容审核员',  0, 1),
+('editor',      '内容编辑',    0, 1),
+('analyst',     '数据分析员',  0, 1);
+
+INSERT INTO sys_role (code, name, scope, is_system) VALUES
+('team_admin',  '团队管理员',  1, 1),
+('team_member', '团队成员',    1, 1),
+('team_viewer', '团队访客',    1, 1);
+
+-- ============================================================
+-- 角色-权限关联
+-- ============================================================
+
+-- super_admin: 所有系统级权限
+INSERT INTO sys_role_permission (role_id, permission_id)
+SELECT r.id, p.id FROM sys_role r, sys_permission p
+WHERE r.code = 'super_admin' AND p.scope = 0;
+
+-- admin: 所有系统级权限（与 super_admin 相同，但后续可被移除）
+INSERT INTO sys_role_permission (role_id, permission_id)
+SELECT r.id, p.id FROM sys_role r, sys_permission p
+WHERE r.code = 'admin' AND p.scope = 0;
+
+-- reviewer: 内容审核相关
+INSERT INTO sys_role_permission (role_id, permission_id)
+SELECT r.id, p.id FROM sys_role r, sys_permission p
+WHERE r.code = 'reviewer' AND p.code IN (
+    'post:review', 'picture:review', 'comment:review',
+    'post:list', 'picture:list', 'comment:list'
+);
+
+-- editor: 内容编删
+INSERT INTO sys_role_permission (role_id, permission_id)
+SELECT r.id, p.id FROM sys_role r, sys_permission p
+WHERE r.code = 'editor' AND p.code IN (
+    'post:list', 'comment:list', 'comment:delete', 'post:delete',
+    'picture:list', 'picture:review'
+);
+
+-- analyst: 只读统计
+INSERT INTO sys_role_permission (role_id, permission_id)
+SELECT r.id, p.id FROM sys_role r, sys_permission p
+WHERE r.code = 'analyst' AND p.code IN ('ai:tasks', 'ai:stats');
+
+-- 团队角色权限
+-- team_admin: 团队管理权限
+INSERT INTO sys_role_permission (role_id, permission_id)
+SELECT r.id, p.id FROM sys_role r, sys_permission p
+WHERE r.code = 'team_admin' AND p.code IN (
+    'team:member_manage', 'team:space_edit', 'team:upload', 'team:delete'
+);
+
+-- team_member: 上传和查看
+INSERT INTO sys_role_permission (role_id, permission_id)
+SELECT r.id, p.id FROM sys_role r, sys_permission p
+WHERE r.code = 'team_member' AND p.code IN ('team:upload');
+
+-- team_viewer: 无操作权限（纯查看，由代码逻辑控制）
+-- 不需要关联任何权限点
 

@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
+import java.util.List;
 
 /**
  * 用户登录 VO
@@ -16,48 +17,30 @@ import java.io.Serializable;
 @Builder
 public class UserLoginVO implements Serializable {
 
-    /**
-     * 用户ID
-     */
+    // 用户ID
     private Long id;
 
-    /**
-     * 账号（登录用）
-     */
+    // 账号（登录用）
     private String username;
 
-    /**
-     * 头像URL
-     */
+    // 头像URL
     private String avatar;
 
-    /**
-     * 邮箱
-     */
+    // 邮箱
     private String email;
 
-    /**
-     * 手机号
-     */
+    // 手机号
     private String phone;
 
-    /**
-     * 用户的权限
-     */
-    private String role;
-
-    /**
-     * 用户等级 0-普通 1-VIP 2-SVIP
-     */
+    // 用户等级 0-普通 1-VIP 2-SVIP
     private Integer level;
 
-    /**
-     * 昵称（展示用）
-     */
+    // 昵称（展示用）
     private String nickname;
 
-    /**
-     * token
-     */
+    // token
     private String token;
+
+    // 拥有的权限码列表（前端用于控制菜单/按钮显示）
+    private List<String> permissions;
 }

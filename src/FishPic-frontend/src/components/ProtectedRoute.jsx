@@ -3,7 +3,11 @@ import { Navigate, useLocation } from 'react-router-dom'
 import { Spin, message } from 'antd'
 import { AuthContext } from '../context/AuthContext'
 
-function ProtectedRoute({ children, requireAdmin = false }) {
+/**
+ * 路由守卫组件
+ * 支持 permission 属性：要求用户拥有指定权限码才可访问
+ */
+function ProtectedRoute({ children, requireAdmin = false, permission }) {
   const auth = useContext(AuthContext)
   const location = useLocation()
   const hasPrompted = useRef(false)
@@ -24,8 +28,22 @@ function ProtectedRoute({ children, requireAdmin = false }) {
     return <Navigate to="/" replace state={{ from: location }} />
   }
 
-  if (requireAdmin && auth.userInfo?.role !== 'admin') {
-    return <Navigate to="/" replace />
+  // 兼容旧版 requireAdmin（已废弃，建议使用 permission 属性）
+  if (requireAdmin) {
+    const perms = auth.userInfo?.permissions || []
+    if (!perms.includes('user:manage') && !perms.includes('user:list')) {
+      return <Navigate to="/" replace />
+    }
+  }
+
+  // 新版：按权限码控制
+  if (permission) {
+    const perms = auth.userInfo?.permissions || []
+    const required = Array.isArray(permission) ? permission : [permission]
+    const hasPermission = required.some(p => perms.includes(p))
+    if (!hasPermission) {
+      return <Navigate to="/" replace />
+    }
   }
 
   return children

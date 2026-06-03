@@ -17,9 +17,9 @@ import java.io.Serializable;
 @NoArgsConstructor
 public class SpacePictureList extends PageRequest implements Serializable {
 
-    /** 空间ID，必填 */
+    // 空间ID，必填
     private Long spaceId;
 
-    /** 搜索关键词，可选，模糊匹配图片名称和介绍 */
+    // 搜索关键词，可选，模糊匹配图片名称和介绍
     private String keyword;
 }

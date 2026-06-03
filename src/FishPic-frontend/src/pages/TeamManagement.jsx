@@ -30,7 +30,7 @@ function TeamManagement() {
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    if (!userInfo || userInfo.role !== 'admin') {
+    if (!userInfo || !userInfo?.permissions?.includes('team:member_manage')) {
       message.error('无权访问，正在跳转到 404 页面...')
       setTimeout(() => navigate('/404', { replace: true }), 500)
     }
@@ -53,7 +53,7 @@ function TeamManagement() {
   }, [current, pageSize, searchName, searchType, message])
 
   useEffect(() => {
-    if (userInfo?.role === 'admin') fetchData()
+    if (userInfo?.permissions?.includes('team:member_manage')) fetchData()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSearch = () => {
@@ -122,7 +122,7 @@ function TeamManagement() {
     return bytes + ' B'
   }
 
-  if (!userInfo || userInfo.role !== 'admin') {
+  if (!userInfo || !userInfo?.permissions?.includes('team:member_manage')) {
     return (
       <main className="team-management-container">
         <div style={{ textAlign: 'center', padding: '100px 0' }}>

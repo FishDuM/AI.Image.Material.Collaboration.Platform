@@ -44,11 +44,6 @@ public class UserQueryWrapper extends PageRequest implements Serializable {
     private Integer status;
 
     /**
-     * 用户的权限
-     */
-    private String role;
-
-    /**
      * 创建时间
      */
     private Date createTime;

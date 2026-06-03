@@ -23,6 +23,7 @@ import hk.ljx.fishpicsbackend.user.entity.User;
 import hk.ljx.fishpicsbackend.mapper.CommentMapper;
 import hk.ljx.fishpicsbackend.post.service.PostService;
 import hk.ljx.fishpicsbackend.user.service.UserService;
+import hk.ljx.fishpicsbackend.permission.service.PermissionService;
 import hk.ljx.fishpicsbackend.comment.vo.CommentVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,8 +31,6 @@ import org.springframework.transaction.annotation.Transactional;
 import jakarta.annotation.Resource;
 import java.util.*;
 import java.util.stream.Collectors;
-
-import static hk.ljx.fishpicsbackend.common.constants.UserConstants.ADMIN;
 
 /**
 * @author 30574
@@ -48,6 +47,9 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment>
 
     @Resource
     private PostService postService;
+
+    @Resource
+    private PermissionService permissionService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -94,7 +96,7 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment>
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(req.getPostId()), "帖子ID不能为空");
 
         User currentUser = UserHolder.getUser();
-        boolean isNotAdmin = currentUser == null || !ADMIN.equals(currentUser.getRole());
+        boolean isNotAdmin = currentUser == null || !permissionService.hasPermission(currentUser.getId(), "comment:review");
         Long currentUserId = currentUser != null ? currentUser.getId() : null;
 
         // 分页查询一级评论（parentId IS NULL）
@@ -187,7 +189,7 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment>
     public void reviewComment(Long commentId, Integer status) {
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
-        ExcUtils.throwIfTrue(!ADMIN.equals(user.getRole()), ExceptionCode.FORBIDDEN, "无权操作");
+        ExcUtils.throwIfTrue(!permissionService.hasPermission(user.getId(), "comment:review"), ExceptionCode.FORBIDDEN, "无权操作");
         ExcUtils.throwIfTrue(!status.equals(1) && !status.equals(0), "状态值无效");
 
         Comment comment = baseMapper.selectById(commentId);
@@ -216,7 +218,7 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment>
     public void adminDeleteComment(Long commentId) {
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
-        ExcUtils.throwIfTrue(!ADMIN.equals(user.getRole()), ExceptionCode.FORBIDDEN, "无权操作");
+        ExcUtils.throwIfTrue(!permissionService.hasPermission(user.getId(), "comment:review"), ExceptionCode.FORBIDDEN, "无权操作");
 
         Comment comment = baseMapper.selectById(commentId);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(comment), "评论不存在");

@@ -68,7 +68,7 @@ function AdminPostManagement() {
   }, [message])
 
   useEffect(() => {
-    if (!userInfo || userInfo.role !== 'admin') {
+    if (!userInfo || !userInfo?.permissions?.includes('post:list')) {
       message.error('无权访问，正在跳转到 404 页面...')
       setTimeout(() => navigate('/404', { replace: true }), 500)
       return

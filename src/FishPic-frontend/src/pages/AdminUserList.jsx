@@ -48,7 +48,7 @@ function AdminUserList() {
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (!userInfo || userInfo.role !== 'admin') {
+    if (!userInfo || !userInfo?.permissions?.includes('user:manage')) {
       message.error('无权访问，正在跳转到 404 页面...')
       setTimeout(() => {
         navigate('/404', { replace: true })
@@ -102,15 +102,15 @@ function AdminUserList() {
       title: '角色',
       dataIndex: 'role',
       key: 'role',
-      render: (role) => (
-        <Tag color={role === 'admin' ? 'orange' : 'green'}>
-          {role === 'admin' ? '管理员' : '普通用户'}
+      render: (_, record) => (
+        <Tag color={record?.permissions?.includes('user:manage') ? 'orange' : 'green'}>
+          {record?.permissions?.includes('user:manage') ? '管理员' : '普通用户'}
         </Tag>
       ),
     },
   ]
 
-  if (!userInfo || userInfo.role !== 'admin') {
+  if (!userInfo || !userInfo?.permissions?.includes('user:manage')) {
     return null
   }
 

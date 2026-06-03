@@ -42,6 +42,12 @@ public class RefreshTokenInterceptor implements HandlerInterceptor {
             user = JSONUtil.toBean(userJSon, User.class);
         }
         if (user != null) {
+            // 检查用户状态，禁用用户不允许访问
+            if (user.getStatus() != null && user.getStatus() == 0) {
+                // 用户已被禁用，清除Token
+                stringRedisTemplate.delete(tokenKey);
+                return false;
+            }
             // 将用户信息存入线程中并刷新redis有效期
             UserHolder.setUser(user);
             stringRedisTemplate.expire(tokenKey, 1, TimeUnit.DAYS);

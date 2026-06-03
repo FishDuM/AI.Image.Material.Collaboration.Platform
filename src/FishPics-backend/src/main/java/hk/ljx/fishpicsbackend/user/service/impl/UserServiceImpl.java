@@ -21,10 +21,13 @@ import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.mapper.PostMapper;
+import hk.ljx.fishpicsbackend.mapper.SysUserRoleMapper;
 import hk.ljx.fishpicsbackend.mapper.UserFansMapper;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
 import hk.ljx.fishpicsbackend.mapper.UserPostCollectMapper;
 import hk.ljx.fishpicsbackend.mapper.UserPostLikesMapper;
+import hk.ljx.fishpicsbackend.permission.entity.SysUserRole;
+import hk.ljx.fishpicsbackend.permission.service.PermissionService;
 import hk.ljx.fishpicsbackend.post.entity.Post;
 import hk.ljx.fishpicsbackend.space.service.SpaceService;
 import hk.ljx.fishpicsbackend.space.dto.CreateSpace;
@@ -50,8 +53,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.annotation.Resource;
 
-import java.awt.*;
+import java.awt.Font;
 import java.util.Date;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -84,7 +88,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     private UserFansMapper userFansMapper;
 
     @Resource
+    private SysUserRoleMapper sysUserRoleMapper;
+
+    @Resource
     private SpaceService spaceService;
+
+    @Resource
+    private PermissionService permissionService;
 
     @Override
     public String getCheckCode(String str, Integer len, Integer minute) {
@@ -197,8 +207,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         stringRedisTemplate.delete(checkCodeKeyByLogin);
 
         // 查到用户数据返回封装类
-        UserLoginVO userLoginVO = BeanUtil.copyProperties(user, UserLoginVO.class);
+        UserLoginVO userLoginVO = new UserLoginVO();
+        BeanUtil.copyProperties(user, userLoginVO, CopyOptions.create().setIgnoreProperties("password"));
         userLoginVO.setToken(token);
+        // 加载用户权限列表
+        List<String> permissions = new java.util.ArrayList<>(permissionService.getUserPermissions(user.getId()));
+        userLoginVO.setPermissions(permissions);
         return ResUtils.success(userLoginVO);
     }
 
@@ -209,14 +223,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         String email = userQueryWrapper.getEmail();
         String phone = userQueryWrapper.getPhone();
         String nickname = userQueryWrapper.getNickname();
-        String role = userQueryWrapper.getRole();
         Integer status = userQueryWrapper.getStatus();
         Date createTime = userQueryWrapper.getCreateTime();
         String sortField = userQueryWrapper.getSortField();
         String sortOrder = userQueryWrapper.getSortOrder();
 
         // 排序字段白名单，防止 SQL 注入
-        Set<String> allowedSortFields = Set.of("id", "username", "email", "phone", "nickname", "role", "status", "level", "create_time", "update_time");
+        Set<String> allowedSortFields = Set.of("id", "username", "email", "phone", "nickname", "status", "level", "create_time", "update_time");
         boolean isSortFieldValid = sortField != null && allowedSortFields.contains(sortField);
 
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
@@ -225,7 +238,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         queryWrapper.like(ObjectUtil.isNotNull(email), "email", email);
         queryWrapper.like(ObjectUtil.isNotNull(phone), "phone", phone);
         queryWrapper.like(ObjectUtil.isNotNull(nickname), "nickname", nickname);
-        queryWrapper.eq(ObjectUtil.isNotNull(role), "role", role);
         queryWrapper.eq(ObjectUtil.isNotNull(status), "status", status);
         queryWrapper.eq(ObjectUtil.isNotNull(createTime), "create_time", createTime);
 
@@ -243,6 +255,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         return userPage.convert(user -> {
             AdminGetUserVO vo = new AdminGetUserVO();
             BeanUtil.copyProperties(user, vo);
+            vo.setRoleIds(permissionService.getUserRoleIds(user.getId()));
             return vo;
         });
     }
@@ -251,11 +264,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     public Boolean setStatus(Long userId) {
         User user = baseMapper.selectById(userId);
         ExcUtils.throwIfTrue(ObjectUtil.isNull(user), ExceptionCode.NOT_FOUND, "未找到该用户");
+        // 超级管理员保护：不能禁用超级管理员
+        if (isSuperAdmin(userId)) {
+            throw new RuntimeException("不能禁用超级管理员");
+        }
         user.setStatus(user.getStatus() == 1 ? 0 : 1);
         int i = baseMapper.updateById(user);
         // 更新redis
         stringRedisTemplate.opsForValue().set(RedisConstants.getUserInfoKey(userId), JSONUtil.toJsonStr(user), 1,
                 TimeUnit.DAYS);
+        // 清除权限缓存
+        permissionService.clearUserPermissionCache(userId);
         return i > 0;
     }
 
@@ -277,6 +296,27 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
         int rows = baseMapper.updateById(user);
         ExcUtils.throwIfTrue(rows != 1, ExceptionCode.DATABASE_ERROR, "更新用户失败");
+
+        // 更新用户角色
+        List<Long> newRoleIds = userEditByAdminRequest.getRoleIds();
+        if (newRoleIds != null) {
+            // 超级管理员保护：不能修改超级管理员角色
+            if (isSuperAdmin(id) && !newRoleIds.contains(1L)) {
+                throw new RuntimeException("不能移除超级管理员角色");
+            }
+            // 批量删除所有旧角色（一次SQL）
+            sysUserRoleMapper.delete(
+                    new QueryWrapper<SysUserRole>().eq("user_id", id));
+            // 批量插入新角色
+            for (Long roleId : newRoleIds) {
+                SysUserRole userRole = new SysUserRole();
+                userRole.setUserId(id);
+                userRole.setRoleId(roleId);
+                sysUserRoleMapper.insert(userRole);
+            }
+            // 统一清除权限缓存（一次操作）
+            stringRedisTemplate.delete("USER_PERMISSIONS:" + id);
+        }
 
         String userInfoKey = RedisConstants.getUserInfoKey(id);
         if (stringRedisTemplate.hasKey(userInfoKey)) {
@@ -364,6 +404,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         return user.getId().equals(id);
+    }
+
+    /**
+     * 判断用户是否为超级管理员
+     */
+    private boolean isSuperAdmin(Long userId) {
+        List<Long> roleIds = permissionService.getUserRoleIds(userId);
+        return roleIds.contains(1L); // 超级管理员角色ID=1
     }
 
     @Override

@@ -102,15 +102,15 @@ function App() {
               <Route path="/team-space/:id" element={<RouteWithBoundary><ProtectedRoute><TeamSpaceDetail /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/notifications" element={<RouteWithBoundary><ProtectedRoute><Notifications /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/ai-tools" element={<RouteWithBoundary><ProtectedRoute><AIImageTools /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/admin/users" element={<RouteWithBoundary><ProtectedRoute requireAdmin><UserManagement /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/admin/pictures" element={<RouteWithBoundary><ProtectedRoute requireAdmin><AdminPictureManagement /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/admin/comments" element={<RouteWithBoundary><ProtectedRoute requireAdmin><AdminCommentManagement /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/admin/posts" element={<RouteWithBoundary><ProtectedRoute requireAdmin><AdminPostManagement /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/admin/spaces" element={<RouteWithBoundary><ProtectedRoute requireAdmin><SpaceManagement /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/admin/teams" element={<RouteWithBoundary><ProtectedRoute requireAdmin><TeamManagement /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/admin/ai" element={<RouteWithBoundary><ProtectedRoute requireAdmin><AIManagement /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/admin/system" element={<RouteWithBoundary><ProtectedRoute requireAdmin><SystemManagement /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/admin/user-list" element={<RouteWithBoundary><ProtectedRoute requireAdmin><AdminUserList /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/users" element={<RouteWithBoundary><ProtectedRoute permission="user:list"><UserManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/pictures" element={<RouteWithBoundary><ProtectedRoute permission="picture:list"><AdminPictureManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/comments" element={<RouteWithBoundary><ProtectedRoute permission="comment:list"><AdminCommentManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/posts" element={<RouteWithBoundary><ProtectedRoute permission="post:list"><AdminPostManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/spaces" element={<RouteWithBoundary><ProtectedRoute permission="space:list"><SpaceManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/teams" element={<RouteWithBoundary><ProtectedRoute permission="team:member_manage"><TeamManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/ai" element={<RouteWithBoundary><ProtectedRoute permission="ai:tasks"><AIManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/system" element={<RouteWithBoundary><ProtectedRoute permission="user:manage"><SystemManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/user-list" element={<RouteWithBoundary><ProtectedRoute permission="user:list"><AdminUserList /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/404" element={<RouteWithBoundary><NotFound /></RouteWithBoundary>} />
               <Route path="*" element={<RouteWithBoundary><NotFound /></RouteWithBoundary>} />
             </Routes>
