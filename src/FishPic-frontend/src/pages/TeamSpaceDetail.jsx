@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useContext, useMemo } from 'react'
+import { useState, useEffect, useCallback, useContext, useMemo, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { App as AntApp, Typography, Button, Modal, Form, Input, Select, Pagination, Masonry, Image as AntImage, Spin, Empty, Popconfirm, Progress, Popover, Avatar, Tooltip, Tag } from 'antd'
-import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowLeftOutlined, TeamOutlined, UserOutlined, EditOutlined, CloudUploadOutlined, ArrowUpOutlined } from '@ant-design/icons'
-import { getSpace, updateSpace, spaceListPicture, deletePicture, updatePicture, getSystemTypes, getPictureEditMessage, submitAiTag } from '../api'
+import { App as AntApp, Typography, Button, Modal, Form, Input, Select, Pagination, Masonry, Image as AntImage, Spin, Empty, Popconfirm, Progress, Popover, Avatar, Tooltip, Tag, List } from 'antd'
+import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowLeftOutlined, TeamOutlined, UserOutlined, EditOutlined, CloudUploadOutlined, ArrowUpOutlined, UserAddOutlined, SettingOutlined } from '@ant-design/icons'
+import { getSpace, updateSpace, spaceListPicture, deletePicture, updatePicture, getSystemTypes, getPictureEditMessage, submitAiTag, searchUsers, getTeamMembers, teamInvite, teamRemove, teamChangeRole } from '../api'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { ThemeContext } from '../context/ThemeContext'
 import { AuthContext } from '../context/AuthContext'
@@ -14,6 +14,13 @@ import './TeamSpaceDetail.css'
 import './PrivateSpace.css'
 
 const { Title } = Typography
+
+const TEAM_ROLES = [
+  { value: 3, label: '团队管理员' },
+  { value: 4, label: '团队成员' },
+  { value: 5, label: '团队观察者' },
+]
+const ROLE_MAP = { 3: '团队管理员', 4: '团队成员', 5: '团队观察者' }
 
 function TeamSpaceDetail() {
   const { id } = useParams()
@@ -45,6 +52,16 @@ function TeamSpaceDetail() {
   const [updateLoading, setUpdateLoading] = useState(false)
   const [editForm] = Form.useForm()
   const [showUpgrade, setShowUpgrade] = useState(false)
+
+  const [showTeamManage, setShowTeamManage] = useState(false)
+  const [teamMembers, setTeamMembers] = useState([])
+  const [teamLoading, setTeamLoading] = useState(false)
+  const [inviteModalOpen, setInviteModalOpen] = useState(false)
+  const [searchResults, setSearchResults] = useState([])
+  const [searching, setSearching] = useState(false)
+  const [inviteForm] = Form.useForm()
+  const [inviting, setInviting] = useState(false)
+  const searchTimerRef = useRef(null)
 
   const fetchSpace = useCallback(async () => {
     setLoading(true)
@@ -235,6 +252,84 @@ function TeamSpaceDetail() {
     }
   }
 
+  const fetchTeamMembers = useCallback(async () => {
+    if (!spaceInfo?.id) return
+    setTeamLoading(true)
+    try {
+      const result = await getTeamMembers(spaceInfo.id)
+      setTeamMembers(Array.isArray(result) ? result : [])
+    } catch (e) {
+      message.error(e.message || '获取成员列表失败')
+    } finally {
+      setTeamLoading(false)
+    }
+  }, [spaceInfo?.id, message])
+
+  const handleOpenTeamManage = () => {
+    setShowTeamManage(true)
+    fetchTeamMembers()
+  }
+
+  const handleSearchUser = useCallback((keyword) => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    if (!keyword || keyword.trim().length < 1) {
+      setSearchResults([])
+      return
+    }
+    searchTimerRef.current = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const result = await searchUsers(keyword.trim())
+        setSearchResults(Array.isArray(result) ? result : [])
+      } catch {
+        setSearchResults([])
+      } finally {
+        setSearching(false)
+      }
+    }, 300)
+  }, [])
+
+  const handleInvite = async (values) => {
+    setInviting(true)
+    try {
+      await teamInvite({ spaceId: spaceInfo.id, userId: values.userId, roleId: values.roleId })
+      message.success('邀请成功')
+      setInviteModalOpen(false)
+      inviteForm.resetFields()
+      setSearchResults([])
+      fetchTeamMembers()
+      fetchSpace()
+    } catch (e) {
+      message.error(e.message || '邀请失败')
+    } finally {
+      setInviting(false)
+    }
+  }
+
+  const handleRemove = async (userId) => {
+    try {
+      await teamRemove({ spaceId: spaceInfo.id, userId })
+      message.success('移除成功')
+      fetchTeamMembers()
+      fetchSpace()
+    } catch (e) {
+      message.error(e.message || '移除失败')
+    }
+  }
+
+  const handleChangeRole = async (userId, roleId) => {
+    try {
+      await teamChangeRole({ spaceId: spaceInfo.id, userId, roleId })
+      message.success('角色变更成功')
+      fetchTeamMembers()
+    } catch (e) {
+      message.error(e.message || '角色变更失败')
+    }
+  }
+
+  const isCreator = spaceInfo?.userId === userInfo?.id
+  const hasMemberManagePerm = isCreator || userInfo?.permissions?.includes('team:member_manage')
+
   const masonryItems = useMemo(() => pictures.map((pic) => ({ key: `pic-${pic.id}`, data: pic })), [pictures])
   const levelInfo = LEVEL_MAP[spaceInfo?.level] || LEVEL_MAP[0]
   const members = spaceInfo?.teamMembers || []
@@ -333,6 +428,9 @@ function TeamSpaceDetail() {
             />
           </Popover>
           <Button onClick={handleEditOpen}>修改空间</Button>
+          {hasMemberManagePerm && (
+            <Button icon={<SettingOutlined />} onClick={handleOpenTeamManage}>管理成员</Button>
+          )}
           <Button icon={<ArrowUpOutlined />} className="tsd-upgrade-btn" onClick={() => isMobile ? navigate('/mobile/upgrade') : setShowUpgrade(true)}>
             升级空间
           </Button>
@@ -564,6 +662,100 @@ function TeamSpaceDetail() {
         onSuccess={handleUploadSuccess}
         onClose={() => setShowImageEditor(false)}
       />
+
+      <Modal
+        title="团队成员管理"
+        open={showTeamManage}
+        onCancel={() => setShowTeamManage(false)}
+        footer={null}
+        width={520}
+      >
+        <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end' }}>
+          <Button type="primary" icon={<UserAddOutlined />} onClick={() => setInviteModalOpen(true)}>
+            邀请成员
+          </Button>
+        </div>
+        <List
+          loading={teamLoading}
+          dataSource={teamMembers}
+          locale={{ emptyText: '暂无成员' }}
+          renderItem={(item) => (
+            <List.Item
+              actions={
+                hasMemberManagePerm && item.id !== spaceInfo?.userId
+                  ? [
+                      <Select
+                        key="role"
+                        size="small"
+                        value={item.roleId}
+                        onChange={(val) => handleChangeRole(item.id, val)}
+                        options={TEAM_ROLES}
+                        style={{ width: 120 }}
+                      />,
+                      <Popconfirm
+                        key="remove"
+                        title="确认移除"
+                        description={`确定要移除 ${item.nickname} 吗？`}
+                        onConfirm={() => handleRemove(item.id)}
+                        okText="移除"
+                        cancelText="取消"
+                        okButtonProps={{ danger: true }}
+                      >
+                        <Button size="small" danger>移除</Button>
+                      </Popconfirm>,
+                    ]
+                  : item.id === spaceInfo?.userId
+                    ? [<Tag key="tag" color="blue">创建者</Tag>]
+                    : []
+              }
+            >
+              <List.Item.Meta
+                avatar={<Avatar src={item.avatar} icon={<UserOutlined />} />}
+                title={item.nickname}
+                description={ROLE_MAP[item.roleId] || '未知角色'}
+              />
+            </List.Item>
+          )}
+        />
+
+        <Modal
+          title="邀请成员"
+          open={inviteModalOpen}
+          onCancel={() => { setInviteModalOpen(false); inviteForm.resetFields(); setSearchResults([]) }}
+          footer={null}
+          width={420}
+          destroyOnClose
+        >
+          <Form form={inviteForm} layout="vertical" onFinish={handleInvite} style={{ marginTop: 16 }}>
+            <Form.Item name="userId" label="选择用户" rules={[{ required: true, message: '请选择要邀请的用户' }]}>
+              <Select
+                showSearch
+                filterOption={false}
+                onSearch={handleSearchUser}
+                loading={searching}
+                placeholder="输入用户名或昵称搜索"
+                notFoundContent={searching ? '搜索中...' : '无匹配结果'}
+                options={searchResults.map(u => ({
+                  value: u.id,
+                  label: (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Avatar size={20} src={u.avatar} icon={<UserOutlined />} />
+                      <span>{u.nickname}</span>
+                    </div>
+                  ),
+                }))}
+              />
+            </Form.Item>
+            <Form.Item name="roleId" label="分配角色" rules={[{ required: true, message: '请选择角色' }]}>
+              <Select placeholder="请选择角色" options={TEAM_ROLES} />
+            </Form.Item>
+            <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+              <Button onClick={() => { setInviteModalOpen(false); inviteForm.resetFields(); setSearchResults([]) }} style={{ marginRight: 8 }}>取消</Button>
+              <Button type="primary" htmlType="submit" loading={inviting}>邀请</Button>
+            </Form.Item>
+          </Form>
+        </Modal>
+      </Modal>
     </main>
   )
 }

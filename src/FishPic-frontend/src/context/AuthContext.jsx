@@ -1,6 +1,6 @@
 import { createContext, useState, useEffect, useCallback } from 'react'
 import { getUserInfo, saveUserInfo, saveToken, getToken, clearAuth } from '../utils/storage'
-import { getUser } from '../api'
+import { getUser, logout as logoutApi } from '../api'
 import { createConnection, destroyConnection } from '../hooks/useWebSocket'
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -16,14 +16,12 @@ export function AuthProvider({ children }) {
     return !!(token && getUserInfo())
   })
   const [authLoading, setAuthLoading] = useState(() => !!getToken())
-
-  const initWsConnection = useCallback(() => {
+  useCallback(() => {
     const token = getToken()
     if (token) {
       createConnection()
     }
-  }, [])
-
+  }, []);
   const cleanupWs = useCallback(() => {
     destroyConnection()
   }, [])
@@ -111,7 +109,8 @@ export function AuthProvider({ children }) {
     createConnection()
   }, [])
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try { await logoutApi() } catch { /* 忽略，确保本地清理 */ }
     destroyConnection()
     clearAuth()
     setUserInfo(null)

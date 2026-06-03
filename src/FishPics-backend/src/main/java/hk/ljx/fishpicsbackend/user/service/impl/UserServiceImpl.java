@@ -47,6 +47,7 @@ import hk.ljx.fishpicsbackend.user.vo.AdminGetUserVO;
 import hk.ljx.fishpicsbackend.user.vo.UserLoginVO;
 import hk.ljx.fishpicsbackend.user.vo.UserMessageVO;
 import hk.ljx.fishpicsbackend.user.vo.UserPublicProfileVO;
+import hk.ljx.fishpicsbackend.user.vo.UserSearchVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -55,10 +56,12 @@ import org.springframework.transaction.annotation.Transactional;
 import jakarta.annotation.Resource;
 
 import java.awt.Font;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.DEFAULT_NICK_NAME;
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.SALT;
@@ -490,5 +493,20 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         }
 
         return vo;
+    }
+
+    @Override
+    public List<UserSearchVO> searchUsers(String keyword) {
+        if (StrUtil.isBlank(keyword)) {
+            return new ArrayList<>();
+        }
+        QueryWrapper<User> qw = new QueryWrapper<>();
+        qw.and(w -> w.like("username", keyword).or().like("nickname", keyword));
+        qw.eq("status", 1);
+        qw.last("LIMIT 20");
+        List<User> users = baseMapper.selectList(qw);
+        return users.stream()
+                .map(u -> new UserSearchVO(u.getId(), u.getNickname(), u.getAvatar()))
+                .collect(Collectors.toList());
     }
 }

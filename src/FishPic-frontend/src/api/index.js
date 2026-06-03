@@ -251,6 +251,12 @@ export const getAiDrawResult = (taskId) => api.get(`/ai/draw/result/${taskId}`)
 export const savePictureByUrl = (url, targetSpaceId) =>
   api.post('/picture/save-by-url', { url, targetSpaceId })
 
+export const searchUsers = (keyword) => api.get('/user/search', { params: { keyword } })
+export const getTeamMembers = (spaceId) => api.get('/space/team/members', { params: { spaceId } })
+export const teamInvite = (data) => api.post('/space/team/invite', data)
+export const teamRemove = (data) => api.post('/space/team/remove', data)
+export const teamChangeRole = (data) => api.post('/space/team/changeRole', data)
+
 export const uploadPicture = (formData, targetSpaceId) => {
   const fd = new FormData()
   fd.append('file', formData.get('file'))

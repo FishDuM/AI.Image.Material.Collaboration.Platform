@@ -21,6 +21,8 @@ import hk.ljx.fishpicsbackend.user.entity.User;
 import hk.ljx.fishpicsbackend.user.service.UserFansService;
 import hk.ljx.fishpicsbackend.user.service.UserService;
 import hk.ljx.fishpicsbackend.user.vo.*;
+
+import java.util.List;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -145,6 +147,13 @@ public class UserController {
     public Response<UserPublicProfileVO> getUserProfile(@RequestParam Long userId) {
         ExcUtils.throwIfTrue(userId == null, ExceptionCode.PARAMETER_ERROR);
         return ResUtils.success(userService.getUserProfile(userId));
+    }
+
+    @GetMapping("/search")
+    public Response<List<UserSearchVO>> searchUsers(@RequestParam(required = false) String keyword) {
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
+        return ResUtils.success(userService.searchUsers(keyword));
     }
 
     @AuthCheck(permission = "user:list")

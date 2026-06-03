@@ -10,6 +10,9 @@ import hk.ljx.fishpicsbackend.user.vo.AdminGetUserVO;
 import hk.ljx.fishpicsbackend.user.vo.UserLoginVO;
 import hk.ljx.fishpicsbackend.user.vo.UserMessageVO;
 import hk.ljx.fishpicsbackend.user.vo.UserPublicProfileVO;
+import hk.ljx.fishpicsbackend.user.vo.UserSearchVO;
+
+import java.util.List;
 
 /**
 * @author 30574
@@ -108,4 +111,11 @@ public interface UserService extends IService<User> {
      * @return 修改结果
      */
     Boolean updatePrivacy(UserPrivacyRequest request);
+
+    /**
+     * 按用户名或昵称搜索用户
+     * @param keyword 搜索关键词
+     * @return 匹配的用户列表
+     */
+    List<UserSearchVO> searchUsers(String keyword);
 }
