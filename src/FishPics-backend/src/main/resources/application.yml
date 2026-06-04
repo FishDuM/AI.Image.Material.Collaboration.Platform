@@ -27,7 +27,7 @@ spring:
     active: local
 
 rocketmq:
-  name-server: 127.0.0.1:9876 # name server 地址
+  name-server: localhost:9876
   producer:
     group: fish-pics-producer-group
     send-message-timeout: 3000 # 消息发送超时时间，默认 3s

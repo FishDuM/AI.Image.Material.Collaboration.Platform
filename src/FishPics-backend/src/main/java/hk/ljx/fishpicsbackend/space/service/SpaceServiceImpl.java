@@ -649,4 +649,41 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         permissionService.addTeamMember(spaceId, userId, roleId);
         return true;
     }
+
+    @Override
+    public List<SpaceVO> saveableSpaces() {
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
+        Long userId = user.getId();
+
+        List<SpaceVO> result = new ArrayList<>();
+
+        // 1. 私人空间（每人最多一个）
+        Space privateSpace = baseMapper.selectOne(
+                new QueryWrapper<Space>().eq("user_id", userId).eq("type", 0).last("LIMIT 1"));
+        if (privateSpace != null) {
+            SpaceVO vo = new SpaceVO();
+            BeanUtil.copyProperties(privateSpace, vo);
+            result.add(vo);
+        }
+
+        // 2. 有上传权限的团队空间（roleId=3 team_admin 或 roleId=4 team_member）
+        List<SpaceTeamMember> memberships = spaceTeamMemberMapper.selectList(
+                new QueryWrapper<SpaceTeamMember>().eq("user_id", userId)
+                        .in("role_id", List.of(3, 4)));
+        if (!memberships.isEmpty()) {
+            Set<Long> teamSpaceIds = memberships.stream()
+                    .map(SpaceTeamMember::getSpaceId)
+                    .collect(Collectors.toSet());
+            // 排除用户作为创建者的私人空间（已包含）
+            List<Space> teamSpaces = baseMapper.selectBatchIds(teamSpaceIds);
+            for (Space space : teamSpaces) {
+                SpaceVO vo = new SpaceVO();
+                BeanUtil.copyProperties(space, vo);
+                result.add(vo);
+            }
+        }
+
+        return result;
+    }
 }

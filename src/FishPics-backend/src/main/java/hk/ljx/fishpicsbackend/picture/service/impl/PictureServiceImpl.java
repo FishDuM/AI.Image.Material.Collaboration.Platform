@@ -304,8 +304,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 .ne("url", "")
                 .orderByDesc("create_time");
 
-        // 当 tag 参数不为空时，模糊搜索 tags 字段
-        // TODO: "热门" 标签后续实现热门排序/筛选逻辑，当前返回全部数据
+        // 当 tag 参数不为空时，模糊搜索 tags 字段；"热门"标签按默认排序（create_time DESC）
         if (StrUtil.isNotBlank(pictureQueryRequest.getTag())
                 && !"热门".equals(pictureQueryRequest.getTag())) {
             queryWrapper.like("tags", pictureQueryRequest.getTag());

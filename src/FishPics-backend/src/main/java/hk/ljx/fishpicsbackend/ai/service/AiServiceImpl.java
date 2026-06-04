@@ -83,6 +83,7 @@ public class AiServiceImpl implements AiService {
         parameters.put("size", size);
 
         String apikey = dashScopeConnectionProperties.getApiKey();
+        ExcUtils.throwIfTrue(apikey == null || apikey.isBlank(), ExceptionCode.SERVICE_UNAVAILABLE, "AI服务未配置API Key");
         MultiModalConversationParam param = MultiModalConversationParam.builder()
                 .apiKey(apikey)
                 .model("qwen-image-2.0-pro")
@@ -93,13 +94,13 @@ public class AiServiceImpl implements AiService {
         try {
             result = conv.call(param);
         } catch (NoApiKeyException e) {
-            log.error("生图失败，apiKey无效");
-            ExcUtils.error(ExceptionCode.SERVICE_UNAVAILABLE);
-            return null;
+            log.error("生图失败，apiKey无效", e);
+            throw new hk.ljx.fishpicsbackend.common.exception.BaseException(
+                    ExceptionCode.SERVICE_UNAVAILABLE.getCode(), "AI服务apiKey无效");
         } catch (UploadFileException e) {
-            log.error("生图失败，上传文件失败");
-            ExcUtils.error(ExceptionCode.SERVICE_UNAVAILABLE);
-            return null;
+            log.error("生图失败，上传文件失败", e);
+            throw new hk.ljx.fishpicsbackend.common.exception.BaseException(
+                    ExceptionCode.SERVICE_UNAVAILABLE.getCode(), "AI服务文件上传失败");
         }
         String url = result.getOutput().getChoices().getFirst().getMessage().getContent().getFirst().get("image").toString();
         log.info("生图成功: {}", url);
@@ -110,6 +111,8 @@ public class AiServiceImpl implements AiService {
     public String submitDrawTask(AiDrawPictureDTO drawPictureDTO, Long userId) {
         ExcUtils.throwIfTrue(drawPictureDTO == null || drawPictureDTO.getDescription() == null,
                 "画面描述不能为空");
+        String apikey = dashScopeConnectionProperties.getApiKey();
+        ExcUtils.throwIfTrue(apikey == null || apikey.isBlank(), ExceptionCode.SERVICE_UNAVAILABLE, "AI服务未配置，无法提交任务");
         String paramJson = JSONUtil.toJsonStr(drawPictureDTO);
         return taskService.submitTask("ai_draw", null, paramJson, userId);
     }

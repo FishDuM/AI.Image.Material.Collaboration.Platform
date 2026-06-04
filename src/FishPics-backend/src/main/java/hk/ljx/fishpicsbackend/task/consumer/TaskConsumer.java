@@ -9,8 +9,6 @@ import hk.ljx.fishpicsbackend.task.message.TaskMessage;
 import hk.ljx.fishpicsbackend.websocket.WebSocketHandler;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
-import org.apache.rocketmq.spring.core.RocketMQListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -21,12 +19,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Component
-@RocketMQMessageListener(
-        topic = "task-topic",
-        consumerGroup = "fish-pics-consumer-group",
-        selectorExpression = "*"
-)
-public class TaskConsumer implements RocketMQListener<TaskMessage> {
+public class TaskConsumer {
 
     @Resource
     private TaskMapper taskMapper;
@@ -44,7 +37,6 @@ public class TaskConsumer implements RocketMQListener<TaskMessage> {
                 .collect(Collectors.toMap(TaskHandler::getBizType, Function.identity()));
     }
 
-    @Override
     public void onMessage(TaskMessage message) {
         String taskId = message.getTaskId();
         Task task = taskMapper.selectOne(
@@ -55,10 +47,19 @@ public class TaskConsumer implements RocketMQListener<TaskMessage> {
             return;
         }
 
-        // 幂等检查：已处理或处理中的任务直接跳过
-        if ("DONE".equals(task.getStatus()) || "PROCESSING".equals(task.getStatus())) {
-            log.warn("task already processed, skipping: taskId={}, status={}", taskId, task.getStatus());
+        // 幂等检查：已完成的任务直接跳过
+        if ("DONE".equals(task.getStatus())) {
+            log.warn("task already done, skipping: taskId={}", taskId);
             return;
+        }
+        // 处理中的任务：如果超过5分钟认为consumer崩溃，允许重新处理
+        if ("PROCESSING".equals(task.getStatus())) {
+            long elapsed = System.currentTimeMillis() - task.getUpdateTime().getTime();
+            if (elapsed < 5 * 60 * 1000) {
+                log.warn("task is processing, skipping: taskId={}, elapsed={}ms", taskId, elapsed);
+                return;
+            }
+            log.warn("task stuck in PROCESSING超过5分钟，重新处理: taskId={}", taskId);
         }
 
         task.setStatus("PROCESSING");

@@ -257,6 +257,9 @@ export const teamInvite = (data) => api.post('/space/team/invite', data)
 export const teamRemove = (data) => api.post('/space/team/remove', data)
 export const teamChangeRole = (data) => api.post('/space/team/changeRole', data)
 
+export const getSystemStats = () => api.get('/system/stats')
+export const getAuditLogs = (params) => api.post('/system/audit-log/list', params)
+
 export const uploadPicture = (formData, targetSpaceId) => {
   const fd = new FormData()
   fd.append('file', formData.get('file'))

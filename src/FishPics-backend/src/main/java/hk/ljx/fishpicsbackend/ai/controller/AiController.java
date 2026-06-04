@@ -59,7 +59,12 @@ public class AiController {
 
     @GetMapping("/tags/result/{taskId}")
     public Response<Task> getTagResult(@PathVariable String taskId) {
-        return ResUtils.success(aiService.getTagResult(taskId));
+        Task task = aiService.getTagResult(taskId);
+        // 校验任务归属：只能查看自己的任务
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_LOGIN);
+        ExcUtils.throwIfTrue(task != null && !user.getId().equals(task.getUserId()), ExceptionCode.UNAUTHORIZED);
+        return ResUtils.success(task);
     }
 
     @PostMapping("/draw")
@@ -82,7 +87,12 @@ public class AiController {
 
     @GetMapping("/draw/result/{taskId}")
     public Response<Task> getDrawResult(@PathVariable String taskId) {
-        return ResUtils.success(aiService.getDrawResult(taskId));
+        Task task = aiService.getDrawResult(taskId);
+        // 校验任务归属：只能查看自己的任务
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_LOGIN);
+        ExcUtils.throwIfTrue(task != null && !user.getId().equals(task.getUserId()), ExceptionCode.UNAUTHORIZED);
+        return ResUtils.success(task);
     }
 
     // ==================== 管理后台接口 ====================

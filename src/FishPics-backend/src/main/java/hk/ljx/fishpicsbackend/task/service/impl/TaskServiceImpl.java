@@ -5,7 +5,6 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.task.entity.Task;
 import hk.ljx.fishpicsbackend.task.service.TaskService;
 import hk.ljx.fishpicsbackend.mapper.TaskMapper;
-import hk.ljx.fishpicsbackend.task.message.TaskMessage;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
@@ -33,7 +32,8 @@ public class TaskServiceImpl extends ServiceImpl<TaskMapper, Task>
         task.setStatus("PENDING");
         taskMapper.insert(task);
 
-        rocketMQTemplate.convertAndSend("task-topic", new TaskMessage(task.getTaskId()));
+        // 直接发送taskId，SimpleMessageConverter会转为原始字节，不做额外编码
+        rocketMQTemplate.syncSend("task-topic", task.getTaskId());
         log.info("task submitted: taskId={}, bizType={}, bizId={}", task.getTaskId(), bizType, bizId);
         return task.getTaskId();
     }

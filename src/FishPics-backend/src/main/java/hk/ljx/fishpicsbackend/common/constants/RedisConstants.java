@@ -12,12 +12,6 @@ public interface RedisConstants {
     String USER_ID_KEY = "USER_ID:";
     String USER_MESSAGE_KEY = "USER_MESSAGE:";
 
-    // 点赞类
-    String LIKE_POST_KEY = "LIKE_POST";
-
-    // 收藏类
-    String COLLECT_POST_KEY = "COLLECT_POST";
-
     // ==================== 帖子列表缓存 ====================
     // 帖子列表缓存键前缀
     String POST_LIST_CACHE_KEY = "post:list:";

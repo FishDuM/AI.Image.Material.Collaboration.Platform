@@ -17,13 +17,18 @@ public class MultiLevelCacheManager {
     private StringRedisTemplate stringRedisTemplate;
 
     // 用户信息缓存
-    public MultiLevelCache<Object> userInfoCache;
+    private MultiLevelCache<Object> userInfoCache;
     // 用户权限缓存
-    public MultiLevelCache<Object> userPermCache;
+    private MultiLevelCache<Object> userPermCache;
     // 帖子列表缓存
-    public MultiLevelCache<Object> postListCache;
+    private MultiLevelCache<Object> postListCache;
     // 系统配置缓存
-    public MultiLevelCache<Object> sysConfigCache;
+    private MultiLevelCache<Object> sysConfigCache;
+
+    public MultiLevelCache<Object> getUserInfoCache() { return userInfoCache; }
+    public MultiLevelCache<Object> getUserPermCache() { return userPermCache; }
+    public MultiLevelCache<Object> getPostListCache() { return postListCache; }
+    public MultiLevelCache<Object> getSysConfigCache() { return sysConfigCache; }
 
     @PostConstruct
     public void init() {
@@ -34,7 +39,8 @@ public class MultiLevelCacheManager {
                         .build(),
                 stringRedisTemplate,
                 CacheConstants.USER_INFO,
-                CacheConstants.L2_USER_INFO
+                CacheConstants.L2_USER_INFO,
+                Object.class
         );
 
         userPermCache = new MultiLevelCache<>(
@@ -44,7 +50,8 @@ public class MultiLevelCacheManager {
                         .build(),
                 stringRedisTemplate,
                 CacheConstants.USER_PERMISSIONS,
-                CacheConstants.L2_USER_PERMISSIONS
+                CacheConstants.L2_USER_PERMISSIONS,
+                Object.class
         );
 
         postListCache = new MultiLevelCache<>(
@@ -54,7 +61,8 @@ public class MultiLevelCacheManager {
                         .build(),
                 stringRedisTemplate,
                 CacheConstants.POST_LIST,
-                CacheConstants.L2_POST_LIST
+                CacheConstants.L2_POST_LIST,
+                Object.class
         );
 
         sysConfigCache = new MultiLevelCache<>(
@@ -64,7 +72,8 @@ public class MultiLevelCacheManager {
                         .build(),
                 stringRedisTemplate,
                 CacheConstants.SYSTEM_CONFIG,
-                CacheConstants.L2_SYSTEM_CONFIG
+                CacheConstants.L2_SYSTEM_CONFIG,
+                Object.class
         );
     }
 }

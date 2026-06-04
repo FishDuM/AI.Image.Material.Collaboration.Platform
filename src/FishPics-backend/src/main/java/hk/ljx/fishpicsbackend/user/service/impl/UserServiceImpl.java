@@ -281,7 +281,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         stringRedisTemplate.opsForValue().set(RedisConstants.getUserInfoKey(userId), JSONUtil.toJsonStr(user), 1,
                 TimeUnit.DAYS);
         // 清除L1缓存
-        cacheManager.userInfoCache.evict(String.valueOf(userId));
+        cacheManager.getUserInfoCache().evict(String.valueOf(userId));
         // 清除权限缓存
         permissionService.clearUserPermissionCache(userId);
         return i > 0;
@@ -325,7 +325,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
             }
             // 统一清除权限缓存（一次操作）
             stringRedisTemplate.delete("USER_PERMISSIONS:" + id);
-            cacheManager.userPermCache.evict(String.valueOf(id));
+            cacheManager.getUserPermCache().evict(String.valueOf(id));
         }
 
         String userInfoKey = RedisConstants.getUserInfoKey(id);
@@ -336,7 +336,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
                     TimeUnit.DAYS);
         }
         // 清除用户信息L1缓存
-        cacheManager.userInfoCache.evict(String.valueOf(id));
+        cacheManager.getUserInfoCache().evict(String.valueOf(id));
 
         return true;
     }
@@ -397,7 +397,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         stringRedisTemplate.opsForValue().set(RedisConstants.getUserInfoKey(id), JSONUtil.toJsonStr(user), 1,
                 TimeUnit.DAYS);
         // 清除L1缓存
-        cacheManager.userInfoCache.evict(String.valueOf(id));
+        cacheManager.getUserInfoCache().evict(String.valueOf(id));
         return true;
     }
 
@@ -411,7 +411,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         stringRedisTemplate.opsForValue().set(RedisConstants.getUserInfoKey(user.getId()), JSONUtil.toJsonStr(user), 1,
                 TimeUnit.DAYS);
         // 清除L1缓存
-        cacheManager.userInfoCache.evict(String.valueOf(user.getId()));
+        cacheManager.getUserInfoCache().evict(String.valueOf(user.getId()));
         return true;
     }
 

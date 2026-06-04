@@ -99,4 +99,9 @@ public interface SpaceService extends IService<Space> {
      * 变更团队成员角色
      */
     Boolean teamChangeRole(TeamChangeRoleRequest request);
+
+    /**
+     * 获取当前用户可保存图片的空间列表（私人空间 + 有上传权限的团队空间）
+     */
+    List<SpaceVO> saveableSpaces();
 }

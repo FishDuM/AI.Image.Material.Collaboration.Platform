@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { App as AntApp, Card, Typography, Button, Input, Select, Space, Row, Col, Image, Tooltip } from 'antd'
 import {
   RobotOutlined,
@@ -6,8 +7,11 @@ import {
   RedoOutlined, SaveOutlined, TeamOutlined,
 } from '@ant-design/icons'
 import { submitAiDraw, getAiDrawResult, savePictureByUrl } from '../api'
+import { TIMEOUT_AI } from '../utils/constants'
 import { onMessage, offMessage, getConnectionStatus } from '../hooks/useWebSocket'
 import { logError } from '../utils/logger'
+import { useIsMobile } from '../hooks/useIsMobile'
+import SaveToSpaceModal from '../components/shared/SaveToSpaceModal'
 import './AIImageTools.css'
 
 const { Title, Text } = Typography
@@ -36,6 +40,9 @@ const DRAW_SIZE_OPTIONS = [
 
 function AIImageTools() {
   const { message } = AntApp.useApp()
+  const navigate = useNavigate()
+  const isMobile = useIsMobile()
+  const [saveModalOpen, setSaveModalOpen] = useState(false)
 
   const [genPrompt, setGenPrompt] = useState('')
   const [genNegative, setGenNegative] = useState('')
@@ -97,10 +104,19 @@ function AIImageTools() {
     return () => stopPolling()
   }, [])
 
-  // 轮询兜底
+  // 轮询兜底，带超时
   const startPolling = useCallback((taskId) => {
     stopPolling()
+    const startTime = Date.now()
     pollTimerRef.current = setInterval(async () => {
+      // 超时停止轮询
+      if (Date.now() - startTime > TIMEOUT_AI) {
+        setGenStateAndRef('failed')
+        setGenError('生成超时，请重试')
+        message.error('生成超时，请重试')
+        stopPolling()
+        return
+      }
       try {
         const task = await getAiDrawResult(taskId)
         if (task.status === 'DONE') {
@@ -196,9 +212,13 @@ function AIImageTools() {
     }
   }
 
-  const handleSaveToTeam = () => {
+  const handleSaveToSpace = () => {
     if (!genResults?.url) return
-    message.info('团队空间功能待实现')
+    if (isMobile) {
+      navigate('/mobile/save-to-space', { state: { imageUrl: genResults.url } })
+    } else {
+      setSaveModalOpen(true)
+    }
   }
 
   const renderResultArea = () => {
@@ -245,8 +265,8 @@ function AIImageTools() {
             <Button icon={<SaveOutlined />} onClick={handleSaveToPrivate}>
               保存到私人空间
             </Button>
-            <Button icon={<TeamOutlined />} onClick={handleSaveToTeam}>
-              保存到团队空间
+            <Button icon={<TeamOutlined />} onClick={handleSaveToSpace}>
+              保存到空间
             </Button>
           </div>
         </div>
@@ -327,6 +347,11 @@ function AIImageTools() {
           </Card>
         </Col>
       </Row>
+      <SaveToSpaceModal
+        open={saveModalOpen}
+        onClose={() => setSaveModalOpen(false)}
+        imageUrl={genResults?.url}
+      />
     </main>
   )
 }

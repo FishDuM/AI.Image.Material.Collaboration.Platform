@@ -150,4 +150,12 @@ public class SpaceController {
                 ExceptionCode.PARAMETER_ERROR, "参数不能为空");
         return ResUtils.success(spaceService.teamChangeRole(request));
     }
+
+    /**
+     * 获取当前用户可保存图片的空间列表（私人空间 + 有上传权限的团队空间）
+     */
+    @GetMapping("/saveable")
+    public Response<List<SpaceVO>> saveableSpaces() {
+        return ResUtils.success(spaceService.saveableSpaces());
+    }
 }

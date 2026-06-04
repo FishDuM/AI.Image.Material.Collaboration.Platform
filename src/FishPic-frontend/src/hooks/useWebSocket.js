@@ -26,10 +26,11 @@ function connect() {
   const token = getToken()
   if (!token) return
 
-  const url = `${getWsUrl()}?token=${encodeURIComponent(token)}`
+  // 通过Sec-WebSocket-Protocol传递token，避免token出现在URL和服务器日志中
+  const url = getWsUrl()
 
   try {
-    ws = new WebSocket(url)
+    ws = new WebSocket(url, ['access_token', token])
   } catch {
     scheduleReconnect()
     return

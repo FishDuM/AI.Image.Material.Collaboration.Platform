@@ -44,13 +44,13 @@ public interface PostService extends IService<Post> {
     void editPost(EditPostRequest editPostRequest);
 
     /**
-     * 判断是否是自己的图片并返回原图
+     * 校验图片归属权：图片必须属于用户创建的空间或用户加入的团队空间
      *
      * @param userId  用户ID
      * @param imageId 图片ID列表
      * @return 图片列表
      */
-    List<Picture> isMyPicture(Long userId, List<Long> imageId);
+    List<Picture> validatePictureOwnership(Long userId, List<Long> imageId);
 
     /**
      * 批量保存子图片

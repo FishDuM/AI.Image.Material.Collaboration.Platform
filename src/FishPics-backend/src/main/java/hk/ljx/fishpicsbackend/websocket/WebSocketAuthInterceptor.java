@@ -28,12 +28,14 @@ public class WebSocketAuthInterceptor implements HandshakeInterceptor {
             return false;
         }
 
-        String token = servletRequest.getServletRequest().getParameter("token");
+        String token = extractTokenFromProtocols(request);
+        if (StrUtil.isBlank(token)) {
+            token = servletRequest.getServletRequest().getParameter("token");
+        }
         if (StrUtil.isBlank(token)) {
             return false;
         }
 
-        // 基于 Redis 验证 token 并获取用户 ID
         String tokenKey = RedisConstants.getUserIdKey(token);
         String userIdStr = stringRedisTemplate.opsForValue().get(tokenKey);
         if (StrUtil.isBlank(userIdStr)) {
@@ -42,7 +44,6 @@ public class WebSocketAuthInterceptor implements HandshakeInterceptor {
 
         Long userId = Long.parseLong(userIdStr);
 
-        // 检查用户状态，禁用用户不允许建立 WebSocket 连接
         String userKey = RedisConstants.getUserInfoKey(userId);
         String userJson = stringRedisTemplate.opsForValue().get(userKey);
         if (StrUtil.isNotBlank(userJson)) {
@@ -53,11 +54,37 @@ public class WebSocketAuthInterceptor implements HandshakeInterceptor {
         }
 
         attributes.put("userId", userId);
+
+        String protocols = request.getHeaders().getFirst("Sec-WebSocket-Protocol");
+        if (StrUtil.isNotBlank(protocols)) {
+            response.getHeaders().set("Sec-WebSocket-Protocol", "access_token");
+        }
+
         return true;
     }
 
     @Override
     public void afterHandshake(ServerHttpRequest request, ServerHttpResponse response,
                                WebSocketHandler wsHandler, Exception exception) {
+    }
+
+    /**
+     * 从 Sec-WebSocket-Protocol 头提取 token
+     * 协议格式：access_token,<actual-token>
+     * @return token，未找到返回null
+     */
+    private String extractTokenFromProtocols(ServerHttpRequest request) {
+        String protocols = request.getHeaders().getFirst("Sec-WebSocket-Protocol");
+        if (StrUtil.isBlank(protocols)) {
+            return null;
+        }
+        String[] parts = protocols.split(",");
+        for (String part : parts) {
+            String trimmed = part.trim();
+            if (!trimmed.equalsIgnoreCase("access_token") && !trimmed.isEmpty()) {
+                return trimmed;
+            }
+        }
+        return null;
     }
 }

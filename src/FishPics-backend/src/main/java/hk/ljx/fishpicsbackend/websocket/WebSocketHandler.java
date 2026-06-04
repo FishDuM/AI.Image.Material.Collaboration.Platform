@@ -2,6 +2,7 @@ package hk.ljx.fishpicsbackend.websocket;
 
 import cn.hutool.json.JSONUtil;
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RTopic;
@@ -22,6 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class WebSocketHandler extends TextWebSocketHandler {
 
     private final ConcurrentHashMap<Long, WebSocketSession> userSessions = new ConcurrentHashMap<>();
+    private volatile int listenerId = -1;
 
     @Resource
     private RedissonClient redissonClient;
@@ -29,7 +31,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
     @PostConstruct
     public void init() {
         RTopic topic = redissonClient.getTopic("websocket:notify");
-        topic.addListener(WebSocketNotifyMessage.class, (channel, msg) -> {
+        listenerId = topic.addListener(WebSocketNotifyMessage.class, (channel, msg) -> {
             WebSocketSession session = userSessions.get(msg.getUserId());
             if (session != null && session.isOpen()) {
                 try {
@@ -39,6 +41,25 @@ public class WebSocketHandler extends TextWebSocketHandler {
                 }
             }
         });
+    }
+
+    @PreDestroy
+    public void destroy() {
+        if (listenerId >= 0) {
+            redissonClient.getTopic("websocket:notify").removeListener(listenerId);
+            log.info("WebSocket Pub/Sub listener 已注销");
+        }
+        // 关闭所有本地 session
+        userSessions.values().forEach(session -> {
+            try {
+                if (session.isOpen()) {
+                    session.close();
+                }
+            } catch (IOException e) {
+                log.warn("关闭 WebSocket session 失败", e);
+            }
+        });
+        userSessions.clear();
     }
 
     @Override

@@ -58,7 +58,7 @@ public class PermissionServiceImpl implements PermissionService {
         String key = String.valueOf(userId);
 
         // 多级缓存拿权限码，从缓存取出来的是JSONArray要转成Set
-        Object cached = cacheManager.userPermCache.get(key);
+        Object cached = cacheManager.getUserPermCache().get(key);
         if (cached instanceof Collection) {
             return Set.copyOf((Collection<String>) cached);
         }
@@ -67,7 +67,7 @@ public class PermissionServiceImpl implements PermissionService {
         Set<String> permissions = queryPermissionsFromDB(userId);
 
         // 写入多级缓存
-        cacheManager.userPermCache.put(key, new HashSet<>(permissions));
+        cacheManager.getUserPermCache().put(key, new HashSet<>(permissions));
 
         return permissions;
     }
@@ -115,7 +115,7 @@ public class PermissionServiceImpl implements PermissionService {
     @Override
     // 清除用户权限缓存（同时清L1和L2）
     public void clearUserPermissionCache(Long userId) {
-        cacheManager.userPermCache.evict(String.valueOf(userId));
+        cacheManager.getUserPermCache().evict(String.valueOf(userId));
     }
 
     // 递归收集角色继承链上的角色ID

@@ -1,15 +1,15 @@
-.space-management-container {
+.audit-log-container {
   max-width: 1200px;
   margin: 0 auto;
   padding: 24px;
 }
 
-.space-management-header {
+.audit-log-header {
   margin-bottom: 24px;
   text-align: center;
 }
 
-.space-management-header h2 {
+.audit-log-header h2 {
   color: var(--text-primary);
   margin-bottom: 8px !important;
 }
@@ -20,26 +20,26 @@
   margin: 0;
 }
 
-.space-content-card {
+.audit-log-card {
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.space-content-card .ant-card-body {
+.audit-log-card .ant-card-body {
   padding: 24px;
   border-radius: 12px;
 }
 
-.space-filter-bar {
+.audit-log-filter-bar {
   margin-bottom: 16px;
 }
 
 @media (max-width: 768px) {
-  .space-management-container {
+  .audit-log-container {
     padding: 16px;
   }
 
-  .space-management-header h2 {
+  .audit-log-header h2 {
     font-size: 20px;
   }
 }

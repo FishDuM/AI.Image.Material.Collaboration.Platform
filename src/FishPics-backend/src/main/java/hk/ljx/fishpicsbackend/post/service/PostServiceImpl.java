@@ -8,7 +8,6 @@ import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
@@ -65,11 +64,22 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.COLLECT_POST_KEY;
-import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.LIKE_POST_KEY;
 import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.POST_LIST_CACHE_KEY;
 import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.POST_LIST_LOCK_KEY;
 import static hk.ljx.fishpicsbackend.common.constants.RedisConstants.POST_LIST_CACHE_TTL;
+
+// 帖子业务常量
+import static hk.ljx.fishpicsbackend.common.constants.SysConstants.POST_MAX_PICTURE_COUNT;
+import static hk.ljx.fishpicsbackend.common.constants.SysConstants.POST_STATUS_DRAFT;
+import static hk.ljx.fishpicsbackend.common.constants.SysConstants.POST_STATUS_PENDING;
+import static hk.ljx.fishpicsbackend.common.constants.SysConstants.POST_STATUS_PUBLISHED;
+import static hk.ljx.fishpicsbackend.common.constants.SysConstants.POST_STATUS_REJECTED;
+import static hk.ljx.fishpicsbackend.common.constants.SysConstants.POST_DEFAULT_COVER;
+import static hk.ljx.fishpicsbackend.common.constants.SysConstants.CACHE_RETRY_MAX_POLLS;
+import static hk.ljx.fishpicsbackend.common.constants.SysConstants.CACHE_RETRY_INTERVAL_MS;
+import static hk.ljx.fishpicsbackend.common.constants.SysConstants.LOCK_WAIT_SECONDS;
+import static hk.ljx.fishpicsbackend.common.constants.SysConstants.LOCK_LEASE_SECONDS;
+
 /**
  * @author 30574
  * @description 针对表【post(帖子表)】的数据库操作Service实现
@@ -127,7 +137,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         Integer isPrivate = uploadPostRequest.getIsPrivate();
 
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(imageId), "图片不能为空");
-        ExcUtils.throwIfTrue(imageId.size() > 15, "最多只能上传 15 张图片");
+        ExcUtils.throwIfTrue(imageId.size() > POST_MAX_PICTURE_COUNT, "最多只能上传 15 张图片");
         ExcUtils.throwIfTrue(ObjectUtil.isAllEmpty(title, content, cover, isPrivate), "参数不能为空");
         ExcUtils.throwIfTrue(imageId.size() < cover + 1 || imageId.get(cover) == null, "封面图片不存在");
         // 获取用户信息
@@ -136,7 +146,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         Long userId = user.getId();
 
         // 判断是否为自己的图片并返回原图
-        List<Picture> pictures = isMyPicture(userId, imageId);
+        List<Picture> pictures = validatePictureOwnership(userId, imageId);
 
         // 保存帖子
         Post post = Post.builder().userId(userId).title(title).content(content).cover(imageId.get(cover))
@@ -222,7 +232,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
                 "标题、内容、是否私密不能为空");
         ExcUtils.throwIfTrue(id == null, ExceptionCode.PARAMETER_ERROR, "帖子ID不能为空");
         ExcUtils.throwIfTrue(imageId == null || imageId.isEmpty(), ExceptionCode.PARAMETER_ERROR, "图片不能为空");
-        ExcUtils.throwIfTrue(imageId.size() > 15, ExceptionCode.PARAMETER_ERROR, "图片数量不能超过15张");
+        ExcUtils.throwIfTrue(imageId.size() > POST_MAX_PICTURE_COUNT, ExceptionCode.PARAMETER_ERROR, "图片数量不能超过15张");
         ExcUtils.throwIfTrue(imageId.size() < cover + 1 || imageId.get(cover) == null, "封面图片不存在");
 
         // 判断是否是自己的帖子 || 是否为管理员
@@ -237,11 +247,9 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
                 ExceptionCode.PARAMETER_ERROR, "只能修改自己的帖子");
 
         // 判断是不是自己的图片并返回原图id
-        List<Picture> pictures = isMyPicture(userId, imageId);
-        // 批量删除旧图片
-        boolean remove = pictureChildService
-                .remove(new LambdaQueryWrapper<PictureChild>().eq(PictureChild::getPostId, id));
-        ExcUtils.throwIfFalse(remove, ExceptionCode.DATABASE_ERROR, "旧图片删除失败");
+        List<Picture> pictures = validatePictureOwnership(userId, imageId);
+        // 批量删除旧图片（帖子可能没有子图片，不检查返回值）
+        pictureChildService.remove(new LambdaQueryWrapper<PictureChild>().eq(PictureChild::getPostId, id));
         // 批量插入新图片
         savePictureChildBatch(pictures, id);
 
@@ -264,24 +272,22 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
      * @return 图片列表
      */
     @Override
-    public List<Picture> isMyPicture(Long userId, List<Long> imageId) {
+    public List<Picture> validatePictureOwnership(Long userId, List<Long> imageId) {
         // 1. 用户作为创建者的空间
         QueryWrapper<Space> ownedQuery = new QueryWrapper<>();
         ownedQuery.eq("user_id", userId);
-        List<Long> spaceIds = spaceService.list(ownedQuery).stream().map(Space::getId)
-                .collect(Collectors.toList());
+        Set<Long> allSpaceIds = new HashSet<>(spaceService.list(ownedQuery).stream()
+                .map(Space::getId).collect(Collectors.toList()));
 
-        // 2. 用户作为团队成员的空间
+        // 2. 用户作为团队成员的空间，合并去重
         List<Long> teamSpaceIds = spaceTeamMemberMapper.selectList(
                 new QueryWrapper<hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember>()
                         .eq("user_id", userId)
                         .select("space_id")
         ).stream().map(hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember::getSpaceId)
                 .collect(Collectors.toList());
-        // 合并并去重
-        spaceIds = new java.util.ArrayList<>(new java.util.HashSet<>(spaceIds));
-        spaceIds.addAll(teamSpaceIds);
-        spaceIds = new java.util.ArrayList<>(new java.util.LinkedHashSet<>(spaceIds));
+        allSpaceIds.addAll(teamSpaceIds);
+        List<Long> spaceIds = new ArrayList<>(allSpaceIds);
 
         // 校验图片是否存在
         LambdaQueryWrapper<Picture> pictureQueryWrapper = new LambdaQueryWrapper<>();
@@ -319,14 +325,10 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         String cacheKey = buildPostListCacheKey(postQueryRequest);
 
         // 2. 先查多级缓存
-        Object l1Cached = cacheManager.postListCache.get(cacheKey);
+        Object l1Cached = cacheManager.getPostListCache().get(cacheKey);
         if (l1Cached instanceof IPage) {
-            log.debug("命中帖子列表L1缓存: {}", cacheKey);
+            log.debug("命中帖子列表缓存: {}", cacheKey);
             return (IPage<PostListVO>) l1Cached;
-        } else if (l1Cached instanceof cn.hutool.json.JSONObject json) {
-            // 从Redis取出来的是JSONObject，转成IPage
-            log.debug("命中帖子列表L2缓存: {}", cacheKey);
-            return convertCachedJson(json);
         }
 
         // 4. 缓存未命中，尝试获取分布式锁防击穿
@@ -339,13 +341,10 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
             if (locked) {
                 log.debug("获取锁成功，查询数据库: {}", cacheKey);
                 // 再次检查缓存（双重检查）
-                Object doubleCheck = cacheManager.postListCache.get(cacheKey);
+                Object doubleCheck = cacheManager.getPostListCache().get(cacheKey);
                 if (doubleCheck instanceof IPage) {
                     log.debug("再次命中缓存: {}", cacheKey);
                     return (IPage<PostListVO>) doubleCheck;
-                } else if (doubleCheck instanceof cn.hutool.json.JSONObject json) {
-                    log.debug("再次命中缓存: {}", cacheKey);
-                    return convertCachedJson(json);
                 }
                 // 查数据库
                 Page<Post> page = new Page<>(postQueryRequest.getCurrent(), postQueryRequest.getPageSize());
@@ -355,20 +354,17 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
                 IPage<PostListVO> result = convertToPostListVO(postPage);
 
                 // 写多级缓存
-                cacheManager.postListCache.put(cacheKey, result);
+                cacheManager.getPostListCache().put(cacheKey, result);
                 return result;
             } else {
                 // 5. 未获取到锁，循环等待读缓存（最多25次，每次100ms，共2.5秒）
                 log.debug("未获取到锁，等待缓存写入: {}", cacheKey);
                 for (int i = 0; i < 25; i++) {
                     Thread.sleep(100);
-                    Object waited = cacheManager.postListCache.get(cacheKey);
+                    Object waited = cacheManager.getPostListCache().get(cacheKey);
                     if (waited instanceof IPage) {
                         log.debug("等待后命中缓存: {}", cacheKey);
                         return (IPage<PostListVO>) waited;
-                    } else if (waited instanceof cn.hutool.json.JSONObject json) {
-                        log.debug("等待后命中缓存: {}", cacheKey);
-                        return convertCachedJson(json);
                     }
                 }
                 // 超时返回空数据（兜底）
@@ -384,13 +380,6 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
                 lock.unlock();
             }
         }
-    }
-
-    // 把缓存里的JSONObject转成IPage
-    @SuppressWarnings("unchecked")
-    private IPage<PostListVO> convertCachedJson(cn.hutool.json.JSONObject json) {
-        return JSONUtil.toBean(json,
-                new cn.hutool.core.lang.TypeReference<Page<PostListVO>>() {}, false);
     }
 
     @Override
@@ -453,9 +442,10 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean likePost(Long id) {
-        // 获取帖子 id
+        // 先校验参数，再查数据库
+        ExcUtils.throwIfTrue(id == null, ExceptionCode.PARAMETER_ERROR, "帖子ID不能为空");
         Post post = baseMapper.selectById(id);
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(post) || id == null, ExceptionCode.DATABASE_ERROR, "帖子不存在");
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(post), ExceptionCode.DATABASE_ERROR, "帖子不存在");
 
         // 获取用户
         User user = UserHolder.getUser();
@@ -463,28 +453,29 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         Long userId = user.getId();
         Long postId = post.getId();
 
-        // 获取 Redis 锁
-        Boolean lock = stringRedisTemplate.opsForValue().setIfAbsent(LIKE_POST_KEY + userId, "1", 10, TimeUnit.SECONDS);
-        // 获取锁失败
-        ExcUtils.throwIfTrue(Boolean.FALSE.equals(lock), "操作频繁，请稍后再试");
-        // 成功则继续执行
-        Long likesNum = post.getLikesNum();
+        // Redisson 分布式锁，key 粒度：用户+帖子
+        RLock lock = redissonClient.getLock("lock:like:" + postId + ":" + userId);
+        boolean locked = false;
+        try {
+            locked = lock.tryLock(0, 10, TimeUnit.SECONDS);
+            ExcUtils.throwIfTrue(!locked, "操作频繁，请稍后再试");
 
-        // 获取用户是否点赞过
-        QueryWrapper<UserPostLikes> queryWrapper = new QueryWrapper<UserPostLikes>().eq("user_id", userId).eq("post_id",
-                postId);
-        UserPostLikes userPostLikes = userPostLikesService.getOne(queryWrapper);
-        boolean liked;
-        if (ObjectUtil.isEmpty(userPostLikes) || userPostLikes.getId() == null) {
-            // 没点赞过，添加点赞
-            UserPostLikes userPostLike = new UserPostLikes();
-            userPostLike.setUserId(userId);
-            userPostLike.setPostId(postId);
-            // 查入数据
-            boolean insert = userPostLikesService.save(userPostLike);
-            ExcUtils.throwIfTrue(!insert, "点赞失败");
+            Long likesNum = post.getLikesNum();
 
-            try {
+            // 获取用户是否点赞过
+            QueryWrapper<UserPostLikes> queryWrapper = new QueryWrapper<UserPostLikes>().eq("user_id", userId).eq("post_id",
+                    postId);
+            UserPostLikes userPostLikes = userPostLikesService.getOne(queryWrapper);
+            boolean liked;
+            if (ObjectUtil.isEmpty(userPostLikes) || userPostLikes.getId() == null) {
+                // 没点赞过，添加点赞
+                UserPostLikes userPostLike = new UserPostLikes();
+                userPostLike.setUserId(userId);
+                userPostLike.setPostId(postId);
+                // 查入数据
+                boolean insert = userPostLikesService.save(userPostLike);
+                ExcUtils.throwIfTrue(!insert, "点赞失败");
+
                 QueryWrapper<Post> postQueryWrapper = new QueryWrapper<>();
                 postQueryWrapper.eq("id", postId);
                 postQueryWrapper.eq("likes_num", likesNum);
@@ -494,14 +485,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
                 ExcUtils.throwIfTrue(i != 1, "点赞失败，数据库错误");
 
                 liked = true;
-            } finally {
-                // 释放锁
-                stringRedisTemplate.delete(LIKE_POST_KEY + userId);
-            }
-
-        } else {
-            // 点赞过，删除点赞
-            try {
+            } else {
+                // 点赞过，删除点赞
                 boolean delete = userPostLikesService.removeById(userPostLikes.getId());
                 ExcUtils.throwIfTrue(!delete, "取消点赞失败");
 
@@ -513,47 +498,54 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
                 ExcUtils.throwIfTrue(i != 1, "取消点赞失败，数据库错误");
 
                 liked = false;
-            } finally {
-                // 释放锁
-                stringRedisTemplate.delete(LIKE_POST_KEY + userId);
+            }
+            return liked;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("获取锁被中断: like:{}:{}", postId, userId);
+            throw new RuntimeException("操作被中断", e);
+        } finally {
+            if (locked && lock.isHeldByCurrentThread()) {
+                lock.unlock();
             }
         }
-
-        return liked;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean collectPost(Long id) {
+        ExcUtils.throwIfTrue(id == null, ExceptionCode.PARAMETER_ERROR, "帖子ID不能为空");
         Post post = baseMapper.selectById(id);
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(post) || id == null, ExceptionCode.DATABASE_ERROR, "帖子不存在");
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(post), ExceptionCode.DATABASE_ERROR, "帖子不存在");
 
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user) || user.getId() == null, "用户不存在");
         Long userId = user.getId();
         Long postId = post.getId();
 
-        // 获取 Redis 分布式锁
-        Boolean lock = stringRedisTemplate.opsForValue().setIfAbsent(COLLECT_POST_KEY + userId, "1", 10, TimeUnit.SECONDS);
-        ExcUtils.throwIfTrue(Boolean.FALSE.equals(lock), "操作频繁，请稍后再试");
+        // Redisson 分布式锁，key 粒度：用户+帖子
+        RLock lock = redissonClient.getLock("lock:collect:" + postId + ":" + userId);
+        boolean locked = false;
+        try {
+            locked = lock.tryLock(0, 10, TimeUnit.SECONDS);
+            ExcUtils.throwIfTrue(!locked, "操作频繁，请稍后再试");
 
-        Long collectsNum = post.getCollectsNum();
+            Long collectsNum = post.getCollectsNum();
 
-        // 查询用户是否已收藏
-        QueryWrapper<UserPostCollect> queryWrapper = new QueryWrapper<UserPostCollect>()
-                .eq("user_id", userId).eq("post_id", postId);
-        UserPostCollect userPostCollect = userPostCollectService.getOne(queryWrapper);
-        boolean collected;
+            // 查询用户是否已收藏
+            QueryWrapper<UserPostCollect> queryWrapper = new QueryWrapper<UserPostCollect>()
+                    .eq("user_id", userId).eq("post_id", postId);
+            UserPostCollect userPostCollect = userPostCollectService.getOne(queryWrapper);
+            boolean collected;
 
-        if (ObjectUtil.isEmpty(userPostCollect) || userPostCollect.getId() == null) {
-            // 未收藏，添加收藏
-            UserPostCollect newCollect = new UserPostCollect();
-            newCollect.setUserId(userId);
-            newCollect.setPostId(postId);
-            boolean insert = userPostCollectService.save(newCollect);
-            ExcUtils.throwIfTrue(!insert, "收藏失败");
+            if (ObjectUtil.isEmpty(userPostCollect) || userPostCollect.getId() == null) {
+                // 未收藏，添加收藏
+                UserPostCollect newCollect = new UserPostCollect();
+                newCollect.setUserId(userId);
+                newCollect.setPostId(postId);
+                boolean insert = userPostCollectService.save(newCollect);
+                ExcUtils.throwIfTrue(!insert, "收藏失败");
 
-            try {
                 QueryWrapper<Post> postQueryWrapper = new QueryWrapper<>();
                 postQueryWrapper.eq("id", postId);
                 postQueryWrapper.eq("collects_num", collectsNum);
@@ -562,12 +554,8 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
                 ExcUtils.throwIfTrue(i != 1, "收藏失败，数据库错误");
 
                 collected = true;
-            } finally {
-                stringRedisTemplate.delete(COLLECT_POST_KEY + userId);
-            }
-        } else {
-            // 已收藏，取消收藏
-            try {
+            } else {
+                // 已收藏，取消收藏
                 boolean delete = userPostCollectService.removeById(userPostCollect.getId());
                 ExcUtils.throwIfTrue(!delete, "取消收藏失败");
 
@@ -579,12 +567,17 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
                 ExcUtils.throwIfTrue(i != 1, "取消收藏失败，数据库错误");
 
                 collected = false;
-            } finally {
-                stringRedisTemplate.delete(COLLECT_POST_KEY + userId);
+            }
+            return collected;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("获取锁被中断: collect:{}:{}", postId, userId);
+            throw new RuntimeException("操作被中断", e);
+        } finally {
+            if (locked && lock.isHeldByCurrentThread()) {
+                lock.unlock();
             }
         }
-
-        return collected;
     }
 
     /**
@@ -606,58 +599,59 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         return convertToPostListVO(postPage);
     }
 
-    // getMyCollects方法修改
     @Override
     public IPage<PostListVO> getMyCollects(PageRequest pageRequest) {
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         Long userId = user.getId();
 
-        // 第一步：查询用户的收藏帖子ID列表
-        List<Long> collectPostIds = userPostCollectService.list(
-                new QueryWrapper<UserPostCollect>().eq("user_id", userId)).stream()
-                .map(UserPostCollect::getPostId)
-                .collect(Collectors.toList());
+        Page<UserPostCollect> collectPage = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
+        IPage<UserPostCollect> collectResult = userPostCollectService.page(collectPage,
+                new QueryWrapper<UserPostCollect>()
+                        .eq("user_id", userId)
+                        .orderByDesc("create_time"));
 
-        // 如果没有收藏，直接返回空分页
-        if (CollectionUtils.isEmpty(collectPostIds)) {
+        if (collectResult.getRecords().isEmpty()) {
             return new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize()).convert(p -> new PostListVO());
         }
 
-        // 第二步：查询这些帖子
-        Page<Post> page = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
-        QueryWrapper<Post> queryWrapper = new QueryWrapper<>();
-        queryWrapper.in("id", collectPostIds); // 使用in方法，参数安全
-        queryWrapper.orderByDesc("create_time");
+        List<Long> postIds = collectResult.getRecords().stream()
+                .map(UserPostCollect::getPostId).collect(Collectors.toList());
+        Map<Long, Post> postMap = baseMapper.selectBatchIds(postIds).stream()
+                .collect(Collectors.toMap(Post::getId, p -> p));
+        List<Post> posts = postIds.stream()
+                .map(postMap::get).filter(Objects::nonNull).collect(Collectors.toList());
 
-        IPage<Post> postPage = baseMapper.selectPage(page, queryWrapper);
+        Page<Post> postPage = new Page<>(collectResult.getCurrent(), collectResult.getSize(), collectResult.getTotal());
+        postPage.setRecords(posts);
         return convertToPostListVO(postPage);
     }
 
-    // getMyLikes方法同理
     @Override
     public IPage<PostListVO> getMyLikes(PageRequest pageRequest) {
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         Long userId = user.getId();
 
-        // 第一步：查询用户的点赞帖子ID列表
-        List<Long> likePostIds = userPostLikesService.list(
-                new QueryWrapper<UserPostLikes>().eq("user_id", userId)).stream()
-                .map(UserPostLikes::getPostId)
-                .collect(Collectors.toList());
+        Page<UserPostLikes> likesPage = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
+        IPage<UserPostLikes> likesResult = userPostLikesService.page(likesPage,
+                new QueryWrapper<UserPostLikes>()
+                        .eq("user_id", userId)
+                        .orderByDesc("create_time"));
 
-        if (CollectionUtils.isEmpty(likePostIds)) {
+        if (likesResult.getRecords().isEmpty()) {
             return new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize()).convert(p -> new PostListVO());
         }
 
-        // 第二步：查询这些帖子
-        Page<Post> page = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
-        QueryWrapper<Post> queryWrapper = new QueryWrapper<>();
-        queryWrapper.in("id", likePostIds);
-        queryWrapper.orderByDesc("create_time");
+        List<Long> postIds = likesResult.getRecords().stream()
+                .map(UserPostLikes::getPostId).collect(Collectors.toList());
+        Map<Long, Post> postMap = baseMapper.selectBatchIds(postIds).stream()
+                .collect(Collectors.toMap(Post::getId, p -> p));
+        List<Post> posts = postIds.stream()
+                .map(postMap::get).filter(Objects::nonNull).collect(Collectors.toList());
 
-        IPage<Post> postPage = baseMapper.selectPage(page, queryWrapper);
+        Page<Post> postPage = new Page<>(likesResult.getCurrent(), likesResult.getSize(), likesResult.getTotal());
+        postPage.setRecords(posts);
         return convertToPostListVO(postPage);
     }
 
@@ -712,6 +706,10 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
 
     @Override
     public void reviewPost(Long id, Integer status) {
+        ExcUtils.throwIfTrue(id == null, ExceptionCode.PARAMETER_ERROR, "帖子ID不能为空");
+        ExcUtils.throwIfTrue(status == null
+                || (status != POST_STATUS_DRAFT && status != POST_STATUS_PUBLISHED && status != POST_STATUS_REJECTED),
+                ExceptionCode.PARAMETER_ERROR, "状态值不合法");
         Post post = baseMapper.selectById(id);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(post) || post.getId() == null, ExceptionCode.NOT_FOUND, "帖子不存在");
         post.setStatus(status);
@@ -746,7 +744,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         if (CollectionUtils.isEmpty(topProfiles)) {
             Page<Post> page = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
             return convertToPostListVO(baseMapper.selectPage(page, new LambdaQueryWrapper<Post>()
-                    .eq(Post::getStatus, 1)
+                    .eq(Post::getStatus, POST_STATUS_PUBLISHED)
                     .orderByDesc(Post::getHot)));
         }
 
@@ -756,41 +754,19 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
                 .collect(Collectors.toList());
         String tagsJson = JSON.toJSONString(tags);
 
-        // 4. 排除自己的帖子
-        List<Long> myPostIds = baseMapper.selectList(
-                new LambdaQueryWrapper<Post>().select(Post::getId).eq(Post::getUserId, userId))
-                .stream().map(Post::getId).toList();
-
-        // 5. 排除已点赞/收藏的帖子
-        Set<Long> interactedIds = new HashSet<>();
-        List<Long> likedIds = userPostLikesService.list(
-                new LambdaQueryWrapper<UserPostLikes>().select(UserPostLikes::getPostId)
-                        .eq(UserPostLikes::getUserId, userId))
-                .stream().map(UserPostLikes::getPostId).toList();
-        List<Long> collectedIds = userPostCollectService.list(
-                new LambdaQueryWrapper<UserPostCollect>().select(UserPostCollect::getPostId)
-                        .eq(UserPostCollect::getUserId, userId))
-                .stream().map(UserPostCollect::getPostId).toList();
-        interactedIds.addAll(likedIds);
-        interactedIds.addAll(collectedIds);
-
-        List<Long> excludeIds = new ArrayList<>(myPostIds);
-        excludeIds.addAll(interactedIds);
-
-        // 6. 查询推荐帖子（标签匹配筛选 + 热度排序）
         Page<Post> page = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
 
         LambdaQueryWrapper<Post> lqw = new LambdaQueryWrapper<Post>()
-                .eq(Post::getStatus, 1)
+                .eq(Post::getStatus, POST_STATUS_PUBLISHED)
                 .apply("id IN (SELECT DISTINCT pc.post_id FROM picture_child pc "
                         + "JOIN picture pic ON pc.picture_id = pic.id "
                         + "WHERE pic.tags IS NOT NULL AND pic.tags != '' "
                         + "AND JSON_OVERLAPS(pic.tags, {0}))", tagsJson)
+                .and(w -> w
+                        .notInSql(Post::getId, "SELECT id FROM post WHERE user_id = " + userId)
+                        .notInSql(Post::getId, "SELECT post_id FROM user_post_likes WHERE user_id = " + userId)
+                        .notInSql(Post::getId, "SELECT post_id FROM user_post_collect WHERE user_id = " + userId))
                 .orderByDesc(Post::getHot);
-
-        if (CollUtil.isNotEmpty(excludeIds)) {
-            lqw.notIn(Post::getId, excludeIds);
-        }
 
         return convertToPostListVO(baseMapper.selectPage(page, lqw));
     }
@@ -847,14 +823,12 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         return postPage.convert(post -> {
             PostListVO vo = new PostListVO();
             BeanUtil.copyProperties(post, vo);
-            // 帖子关联的用户可能已被删除，需要做空指针保护
             User postUser = finalUserMap.get(post.getUserId());
             if (postUser != null) {
                 vo.setUsername(postUser.getUsername());
                 vo.setAvatar(postUser.getAvatar());
             }
-            // 帖子关联的封面图片可能已被删除，使用 getOrDefault 避免空指针
-            vo.setUrl(finalCoverUrlMap.getOrDefault(post.getCover(), null));
+            vo.setUrl(finalCoverUrlMap.get(post.getCover()));
             // 当前用户是否已收藏
             vo.setIsCollected(finalCollectedPostIds.contains(post.getId()));
             return vo;
@@ -897,11 +871,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
      * 在帖子发布、审核、删除时调用
      */
     public void clearPostListCache() {
-        // 清除L1(Caffeine)
-        cacheManager.postListCache.evictAllL1();
-        // 清除L2(Redis)
         try {
-            // 使用 SCAN 命令替代 keys，避免阻塞 Redis
             ScanOptions options = ScanOptions.scanOptions()
                     .match(POST_LIST_CACHE_KEY + "*")
                     .count(100)
@@ -919,5 +889,6 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post>
         } catch (Exception e) {
             log.warn("清除帖子列表L2缓存失败", e);
         }
+        cacheManager.getPostListCache().evictAllL1();
     }
 }

@@ -41,7 +41,7 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
     @SuppressWarnings("unchecked")
     public List<String> getTypeList() {
         // 多级缓存：L1(Caffeine) → L2(Redis)
-        Object cached = cacheManager.sysConfigCache.get(TYPE_LIST_KEY);
+        Object cached = cacheManager.getSysConfigCache().get(TYPE_LIST_KEY);
         if (cached instanceof List) {
             return (List<String>) cached;
         }
@@ -55,7 +55,7 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         List<String> result = JSONUtil.toList(picSystem.getSysvalue(), String.class);
 
         // 写入多级缓存
-        cacheManager.sysConfigCache.put(TYPE_LIST_KEY, result);
+        cacheManager.getSysConfigCache().put(TYPE_LIST_KEY, result);
         return result;
     }
 
@@ -80,7 +80,7 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         }
         this.saveOrUpdate(picSystem);
         // 清除缓存
-        cacheManager.sysConfigCache.evict(TYPE_LIST_KEY);
+        cacheManager.getSysConfigCache().evict(TYPE_LIST_KEY);
     }
 
     @Override
@@ -97,14 +97,14 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         picSystem.setSysvalue(JSONUtil.toJsonStr(typeList));
         this.saveOrUpdate(picSystem);
         // 清除缓存
-        cacheManager.sysConfigCache.evict(TYPE_LIST_KEY);
+        cacheManager.getSysConfigCache().evict(TYPE_LIST_KEY);
     }
 
     @Override
     @SuppressWarnings("unchecked")
     public List<String> getMarquess() {
         // 多级缓存：L1(Caffeine) → L2(Redis)
-        Object cached = cacheManager.sysConfigCache.get(MARQUESS_KEY);
+        Object cached = cacheManager.getSysConfigCache().get(MARQUESS_KEY);
         if (cached instanceof List) {
             return (List<String>) cached;
         }
@@ -122,7 +122,7 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         List<String> result = JSONUtil.toList(picSystem.getSysvalue(), String.class);
 
         // 写入多级缓存
-        cacheManager.sysConfigCache.put(MARQUESS_KEY, result);
+        cacheManager.getSysConfigCache().put(MARQUESS_KEY, result);
         return result;
     }
 
@@ -157,7 +157,7 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         }
         this.saveOrUpdate(picSystem);
         // 清除缓存
-        cacheManager.sysConfigCache.evict(MARQUESS_KEY);
+        cacheManager.getSysConfigCache().evict(MARQUESS_KEY);
     }
 
     @Override
@@ -174,7 +174,7 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         picSystem.setSysvalue(JSONUtil.toJsonStr(marquess));
         this.saveOrUpdate(picSystem);
         // 清除缓存
-        cacheManager.sysConfigCache.evict(MARQUESS_KEY);
+        cacheManager.getSysConfigCache().evict(MARQUESS_KEY);
     }
 }
 

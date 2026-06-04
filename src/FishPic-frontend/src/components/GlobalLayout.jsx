@@ -23,6 +23,8 @@ import {
   ReloadOutlined,
   UpOutlined,
   PlusOutlined,
+  DashboardOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons'
 import { AuthContext } from '../context/AuthContext.jsx'
 import { logout } from '../api'
@@ -136,11 +138,14 @@ function GlobalLayout({ children }) {
       if (userInfo?.permissions?.includes('post:list') || userInfo?.permissions?.includes('post:review')) {
         adminChildren.push({ key: '/admin/posts', icon: <MessageOutlined />, label: '帖子审核', onClick: () => handleSidebarMenuClick('/admin/posts') });
       }
+      if (userInfo?.permissions?.includes('user:manage')) {
+        adminChildren.push({ key: '/admin/dashboard', icon: <DashboardOutlined />, label: '数据概览', onClick: () => handleSidebarMenuClick('/admin/dashboard') });
+      }
       if (userInfo?.permissions?.includes('space:list') || userInfo?.permissions?.includes('space:manage')) {
         adminChildren.push({ key: '/admin/spaces', icon: <AppstoreOutlined />, label: '空间管理', onClick: () => handleSidebarMenuClick('/admin/spaces') });
       }
-      if (userInfo?.permissions?.includes('team:member_manage')) {
-        adminChildren.push({ key: '/admin/teams', icon: <TeamOutlined />, label: '团队管理', onClick: () => handleSidebarMenuClick('/admin/teams') });
+      if (userInfo?.permissions?.includes('user:manage')) {
+        adminChildren.push({ key: '/admin/audit-logs', icon: <FileTextOutlined />, label: '审计日志', onClick: () => handleSidebarMenuClick('/admin/audit-logs') });
       }
       if (userInfo?.permissions?.includes('ai:tasks') || userInfo?.permissions?.includes('ai:stats')) {
         adminChildren.push({ key: '/admin/ai', icon: <RobotOutlined />, label: 'AI 管理', onClick: () => handleSidebarMenuClick('/admin/ai') });
@@ -182,11 +187,14 @@ function GlobalLayout({ children }) {
     if (userInfo?.permissions?.includes('post:list') || userInfo?.permissions?.includes('post:review')) {
       items.push({ key: 'post-management', icon: <MessageOutlined />, label: '帖子审核', onClick: () => navigate('/admin/posts') });
     }
+    if (userInfo?.permissions?.includes('user:manage')) {
+      items.push({ key: 'dashboard', icon: <DashboardOutlined />, label: '数据概览', onClick: () => navigate('/admin/dashboard') });
+    }
     if (userInfo?.permissions?.includes('space:list') || userInfo?.permissions?.includes('space:manage')) {
       items.push({ key: 'space-management', icon: <AppstoreOutlined />, label: '空间管理', onClick: () => navigate('/admin/spaces') });
     }
-    if (userInfo?.permissions?.includes('team:member_manage')) {
-      items.push({ key: 'team-management', icon: <TeamOutlined />, label: '团队管理', onClick: () => navigate('/admin/teams') });
+    if (userInfo?.permissions?.includes('user:manage')) {
+      items.push({ key: 'audit-log', icon: <FileTextOutlined />, label: '审计日志', onClick: () => navigate('/admin/audit-logs') });
     }
     if (userInfo?.permissions?.includes('ai:tasks') || userInfo?.permissions?.includes('ai:stats')) {
       items.push({ key: 'ai-management', icon: <RobotOutlined />, label: 'AI 管理', onClick: () => navigate('/admin/ai') });
@@ -214,7 +222,7 @@ function GlobalLayout({ children }) {
             {userInfo && (
               <Button type="text" size="large" icon={<RobotOutlined />} onClick={() => navigate('/ai-tools')} className={`desktop-only${navActiveClass('/ai-tools')}`}>AI 工具</Button>
             )}
-            {(userInfo?.permissions?.includes('user:manage') || userInfo?.permissions?.includes('user:list') || userInfo?.permissions?.includes('picture:list') || userInfo?.permissions?.includes('comment:list') || userInfo?.permissions?.includes('post:list')) && (
+            {(userInfo?.permissions?.includes('user:manage') || userInfo?.permissions?.includes('user:list') || userInfo?.permissions?.includes('picture:list') || userInfo?.permissions?.includes('comment:list') || userInfo?.permissions?.includes('post:list') || userInfo?.permissions?.includes('space:list')) && (
               <Dropdown menu={{ items: adminMenuItems }} placement="bottomLeft" className="desktop-only">
                 <Button type="text" size="large" className="system-management-btn desktop-only"><SettingOutlined /><span>管理页面</span></Button>
               </Dropdown>

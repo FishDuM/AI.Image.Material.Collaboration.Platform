@@ -16,15 +16,18 @@ public class MultiLevelCache<V> {
     private final StringRedisTemplate redis;
     private final String cacheName;
     private final long l2TtlMinutes;
+    private final Class<V> valueType;
 
     public MultiLevelCache(Cache<String, V> caffeineCache,
                            StringRedisTemplate redis,
                            String cacheName,
-                           long l2TtlMinutes) {
+                           long l2TtlMinutes,
+                           Class<V> valueType) {
         this.caffeineCache = caffeineCache;
         this.redis = redis;
         this.cacheName = cacheName;
         this.l2TtlMinutes = l2TtlMinutes;
+        this.valueType = valueType;
     }
 
     // 读缓存，L1没命中再查L2
@@ -39,7 +42,6 @@ public class MultiLevelCache<V> {
         try {
             String json = redis.opsForValue().get(buildRedisKey(key));
             if (StrUtil.isNotBlank(json)) {
-                // parse比toBean兼容性更好，对象和数组都能处理
                 V parsed = (V) JSONUtil.parse(json);
                 caffeineCache.put(key, parsed);
                 return parsed;

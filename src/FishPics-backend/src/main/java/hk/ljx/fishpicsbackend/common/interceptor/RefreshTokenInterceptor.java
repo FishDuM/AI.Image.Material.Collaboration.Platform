@@ -1,7 +1,6 @@
 package hk.ljx.fishpicsbackend.common.interceptor;
 
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import hk.ljx.fishpicsbackend.common.cache.MultiLevelCacheManager;
 import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
@@ -41,12 +40,9 @@ public class RefreshTokenInterceptor implements HandlerInterceptor {
 
         // 多级缓存拿用户信息，都没有就回退到直接读Redis
         User user = null;
-        Object cached = cacheManager.userInfoCache.get(String.valueOf(userId));
+        Object cached = cacheManager.getUserInfoCache().get(String.valueOf(userId));
         if (cached instanceof User u) {
             user = u;
-        } else if (cached instanceof JSONObject json) {
-            // Redis里拿出来的是JSONObject，转成User对象
-            user = json.toBean(User.class);
         } else {
             // 缓存没命中，去Redis里找登录时写入的用户信息
             String userKey = RedisConstants.getUserInfoKey(userId);
@@ -54,7 +50,7 @@ public class RefreshTokenInterceptor implements HandlerInterceptor {
             if (StrUtil.isNotBlank(userJson)) {
                 user = JSONUtil.toBean(userJson, User.class);
                 // 写进缓存下次就不用再查Redis了
-                cacheManager.userInfoCache.put(String.valueOf(userId), user);
+                cacheManager.getUserInfoCache().put(String.valueOf(userId), user);
             }
         }
 
@@ -63,7 +59,7 @@ public class RefreshTokenInterceptor implements HandlerInterceptor {
             if (user.getStatus() != null && user.getStatus() == 0) {
                 // 用户已被禁用，清除Token和L1缓存
                 stringRedisTemplate.delete(tokenKey);
-                cacheManager.userInfoCache.evict(String.valueOf(userId));
+                cacheManager.getUserInfoCache().evict(String.valueOf(userId));
                 return false;
             }
             // 将用户信息存入线程中并刷新redis有效期

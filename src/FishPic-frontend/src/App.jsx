@@ -10,13 +10,13 @@ import './App.css'
 const HomePage = lazy(() => import('./pages/HomePage'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 const UserManagement = lazy(() => import('./pages/UserManagement'))
-const AdminUserList = lazy(() => import('./pages/AdminUserList'))
 const UserProfile = lazy(() => import('./pages/UserProfile'))
 const SpaceManagement = lazy(() => import('./pages/SpaceManagement'))
-const TeamManagement = lazy(() => import('./pages/TeamManagement'))
 const AIImageTools = lazy(() => import('./pages/AIImageTools'))
 const AIManagement = lazy(() => import('./pages/AIManagement'))
 const SystemManagement = lazy(() => import('./pages/SystemManagement'))
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
+const AuditLogManagement = lazy(() => import('./pages/AuditLogManagement'))
 const AdminPictureManagement = lazy(() => import('./pages/AdminPictureManagement'))
 const AdminCommentManagement = lazy(() => import('./pages/AdminCommentManagement'))
 const AdminPostManagement = lazy(() => import('./pages/AdminPostManagement'))
@@ -34,6 +34,7 @@ const MobileEditProfilePage = lazy(() => import('./pages/MobileEditProfilePage')
 const MobileUpgradePage = lazy(() => import('./pages/MobileUpgradePage'))
 const MobileFollowListPage = lazy(() => import('./pages/MobileFollowListPage'))
 const MobileUserProfilePage = lazy(() => import('./pages/MobileUserProfilePage'))
+const MobileSaveToSpacePage = lazy(() => import('./pages/MobileSaveToSpacePage'))
 
 function PageLoading() {
   return (
@@ -89,6 +90,7 @@ function App() {
         <Route path="/mobile/upgrade" element={<RouteWithBoundary><ProtectedRoute><MobileUpgradePage /></ProtectedRoute></RouteWithBoundary>} />
         <Route path="/mobile/follow-list" element={<RouteWithBoundary><ProtectedRoute><MobileFollowListPage /></ProtectedRoute></RouteWithBoundary>} />
         <Route path="/mobile/profile" element={<RouteWithBoundary><ProtectedRoute><MobileUserProfilePage /></ProtectedRoute></RouteWithBoundary>} />
+        <Route path="/mobile/save-to-space" element={<RouteWithBoundary><ProtectedRoute><MobileSaveToSpacePage /></ProtectedRoute></RouteWithBoundary>} />
 
         {/* 桌面端页面 - 使用路由级错误边界 */}
         <Route path="*" element={
@@ -107,10 +109,10 @@ function App() {
               <Route path="/admin/comments" element={<RouteWithBoundary><ProtectedRoute permission="comment:list"><AdminCommentManagement /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/admin/posts" element={<RouteWithBoundary><ProtectedRoute permission="post:list"><AdminPostManagement /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/admin/spaces" element={<RouteWithBoundary><ProtectedRoute permission="space:list"><SpaceManagement /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/admin/teams" element={<RouteWithBoundary><ProtectedRoute permission="team:member_manage"><TeamManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/dashboard" element={<RouteWithBoundary><ProtectedRoute permission="user:manage"><AdminDashboard /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/audit-logs" element={<RouteWithBoundary><ProtectedRoute permission="user:manage"><AuditLogManagement /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/admin/ai" element={<RouteWithBoundary><ProtectedRoute permission="ai:tasks"><AIManagement /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/admin/system" element={<RouteWithBoundary><ProtectedRoute permission="user:manage"><SystemManagement /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/admin/user-list" element={<RouteWithBoundary><ProtectedRoute permission="user:list"><AdminUserList /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/404" element={<RouteWithBoundary><NotFound /></RouteWithBoundary>} />
               <Route path="*" element={<RouteWithBoundary><NotFound /></RouteWithBoundary>} />
             </Routes>
