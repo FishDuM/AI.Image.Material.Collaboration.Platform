@@ -9,15 +9,16 @@
 | 参与者 | 说明 |
 | --- | --- |
 | 访客 | 可查看公开配置、获取验证码、注册、登录、浏览公开内容 |
-| 登录用户 | 可维护个人资料、上传图片、管理空间、发布帖子、互动、评论、关注 |
+| 登录用户 | 可维护个人资料、上传图片、管理空间、发布帖子、互动、评论、关注、搜索用户 |
 | VIP/SVIP 用户 | 继承登录用户能力，并可使用 AI 标注和文生图能力（异步任务模式） |
-| 管理员 | 可管理用户、图片、帖子、评论、空间、系统配置、AI 任务和配置 |
+| 管理员 | 可管理用户、图片、帖子、评论、空间、系统配置、AI 任务和配置、审计日志 |
 | AI Provider | DashScope / 阿里云模型服务，执行视觉理解和图像生成 |
 | COS 对象存储 | 保存头像和图片文件 |
-| Redis | 保存验证码、Token、用户缓存、系统配置缓存 |
+| Redis | 保存验证码、Token、用户缓存、系统配置缓存、多级缓存 L2 |
+| Caffeine | 本地缓存 L1，覆盖用户信息、权限、帖子列表和系统配置 |
 | MySQL | 保存业务主数据 |
 | RocketMQ | 异步任务消息队列 |
-| WebSocket | 实时任务通知 |
+| WebSocket | 实时任务完成通知（支持跨实例 Redis Pub/Sub） |
 
 ### 1.2 用例图
 
@@ -45,6 +46,9 @@ flowchart LR
     User --> UC8["发布/编辑帖子"]
     User --> UC9["点赞/收藏/评论"]
     User --> UC10["关注/查看粉丝"]
+    User --> UC22["搜索用户"]
+    User --> UC23["URL 保存图片"]
+    User --> UC24["查看推荐内容"]
 
     Vip --> UC11["提交 AI 标注任务"]
     Vip --> UC12["提交 AI 文生图任务"]
@@ -58,6 +62,8 @@ flowchart LR
     Admin --> UC19["系统配置管理"]
     Admin --> UC20["AI 任务管理"]
     Admin --> UC21["AI 配置管理"]
+    Admin --> UC25["审计日志查询"]
+    Admin --> UC26["系统统计概览"]
 
     UC1 --> Redis
     UC3 --> Redis
@@ -224,6 +230,67 @@ classDiagram
         Date updateTime
     }
 
+    class SpaceTeamMember {
+        Long id
+        Long spaceId
+        Long userId
+        Long roleId
+        Date joinedAt
+    }
+
+    class SysRole {
+        Long id
+        String code
+        String name
+        Integer scope
+        Integer isSystem
+        Long inheritRoleId
+        Date createTime
+        Date updateTime
+        Integer isDelete
+    }
+
+    class SysPermission {
+        Long id
+        String code
+        String name
+        String module
+        Integer scope
+        Integer sortOrder
+        Date createTime
+        Date updateTime
+        Integer isDelete
+    }
+
+    class SysRolePermission {
+        Long id
+        Long roleId
+        Long permissionId
+    }
+
+    class SysUserRole {
+        Long id
+        Long userId
+        Long roleId
+    }
+
+    class SysAuditLog {
+        Long id
+        Long userId
+        String username
+        String operation
+        String module
+        String detail
+        String method
+        String url
+        String params
+        Integer result
+        String errorMsg
+        String ip
+        LocalDateTime createTime
+        Integer isDelete
+    }
+
     User "1" --> "0..*" Space : creates
     User "1" --> "0..*" Picture : uploads
     User "1" --> "0..*" Post : publishes
@@ -242,6 +309,15 @@ classDiagram
     User "1" --> "0..*" UserPostLikes : likes
     Picture "0..1" --> "0..*" Task : processed by
     UserInterestProfile "1" --> "0..*" tags : contains
+    Space "1" --> "0..*" SpaceTeamMember : has members
+    User "1" --> "0..*" SpaceTeamMember : joins
+    SysRole "1" --> "0..*" SpaceTeamMember : assigned to
+    SysRole "1" --> "0..*" SysRolePermission : has permissions
+    SysPermission "1" --> "0..*" SysRolePermission : granted to roles
+    User "1" --> "0..*" SysUserRole : has roles
+    SysRole "1" --> "0..*" SysUserRole : assigned to users
+    SysRole "0..1" --> "0..*" SysRole : inherits from
+    User "1" --> "0..*" SysAuditLog : generates
 ```
 
 ## 3. 数据库 ER 图
@@ -257,8 +333,12 @@ erDiagram
     USER ||--o{ USER_FANS : has_fans
     USER ||--o{ USER_POST_COLLECT : collects
     USER ||--o{ USER_POST_LIKES : likes
+    USER ||--o{ SPACE_TEAM_MEMBER : joins
+    USER ||--o{ SYS_USER_ROLE : has_roles
+    USER ||--o{ SYS_AUDIT_LOG : generates
 
     SPACE ||--o{ PICTURE : stores
+    SPACE ||--o{ SPACE_TEAM_MEMBER : has_members
     POST ||--o{ PICTURE_CHILD : has_ordered_images
     PICTURE ||--o{ PICTURE_CHILD : belongs_to_posts
     POST ||--o{ COMMENT : has
@@ -266,6 +346,12 @@ erDiagram
     POST ||--o{ USER_POST_COLLECT : collected
     POST ||--o{ USER_POST_LIKES : liked
     PICTURE ||--o{ TASK : processed_by
+
+    SYS_ROLE ||--o{ SPACE_TEAM_MEMBER : assigned_to
+    SYS_ROLE ||--o{ SYS_ROLE_PERMISSION : has_permissions
+    SYS_PERMISSION ||--o{ SYS_ROLE_PERMISSION : granted_to_roles
+    SYS_ROLE ||--o{ SYS_USER_ROLE : assigned_to_users
+    SYS_ROLE ||--o{ SYS_ROLE : inherits_from
 
     USER {
         bigint id PK
@@ -404,6 +490,67 @@ erDiagram
         datetime create_time
         datetime update_time
     }
+
+    SPACE_TEAM_MEMBER {
+        bigint id PK
+        bigint space_id
+        bigint user_id
+        bigint role_id
+        datetime joined_at
+    }
+
+    SYS_ROLE {
+        bigint id PK
+        varchar code UK
+        varchar name
+        tinyint scope
+        tinyint is_system
+        bigint inherit_role_id
+        datetime create_time
+        datetime update_time
+        tinyint is_delete
+    }
+
+    SYS_PERMISSION {
+        bigint id PK
+        varchar code UK
+        varchar name
+        varchar module
+        tinyint scope
+        int sort_order
+        datetime create_time
+        datetime update_time
+        tinyint is_delete
+    }
+
+    SYS_ROLE_PERMISSION {
+        bigint id PK
+        bigint role_id
+        bigint permission_id
+    }
+
+    SYS_USER_ROLE {
+        bigint id PK
+        bigint user_id
+        bigint role_id
+    }
+
+    SYS_AUDIT_LOG {
+        bigint id PK
+        bigint user_id
+        varchar username
+        varchar operation
+        varchar module
+        varchar detail
+        varchar method
+        varchar url
+        text params
+        tinyint result
+        varchar error_msg
+        varchar ip
+        datetime create_time
+        tinyint is_delete
+    }
 ```
 
 ## 4. 控制器接口模型
@@ -422,13 +569,14 @@ erDiagram
 | `POST` | `/user/logout` | `Authorization` | 空响应 | 登录 |
 | `POST` | `/user/privacy` | `UserPrivacyRequest` | `Boolean` | 登录 |
 | `POST` | `/user/follow` | `UserIdRequest` | `Boolean` | 登录 |
-| `GET` | `/user/fans` | `userId,current,pageSize` | `IPage<FollowUserVO>` | 登录 |
-| `GET` | `/user/follows` | `userId,current,pageSize` | `IPage<FollowUserVO>` | 登录 |
-| `GET` | `/user/profile` | `userId` | `UserPublicProfileVO` | 登录 |
-| `POST` | `/user/admin/getUser` | `UserIdRequest` | `AdminGetUserVO` | 管理员 |
-| `POST` | `/user/admin/userList` | `UserQueryWrapper` | `IPage<User>` | 管理员 |
-| `POST` | `/user/admin/setStatus` | `UserIdRequest` | `Boolean` | 管理员 |
-| `POST` | `/user/admin/editUser` | `UserEditByAdminRequest` | `Boolean` | 管理员 |
+| `POST` | `/user/fans` | `FollowQueryDTO` | `IPage<FollowUserVO>` | 登录 |
+| `POST` | `/user/follows` | `FollowQueryDTO` | `IPage<FollowUserVO>` | 登录 |
+| `GET` | `/user/profile` | `userId` | `UserPublicProfileVO` | 公开 |
+| `GET` | `/user/search` | `keyword` | `List<UserSearchVO>` | 登录 |
+| `POST` | `/user/admin/getUser` | `UserIdRequest` | `AdminGetUserVO` | `user:list` |
+| `POST` | `/user/admin/userList` | `UserQueryWrapper` | `IPage<User>` | `user:list` |
+| `POST` | `/user/admin/setStatus` | `UserIdRequest` | `Boolean` | `user:status` |
+| `POST` | `/user/admin/editUser` | `UserEditByAdminRequest` | `Boolean` | `user:manage` |
 
 ### 4.2 PictureController
 
@@ -436,41 +584,44 @@ erDiagram
 | --- | --- | --- | --- | --- |
 | `POST` | `/picture/avatar` | `file,id` | `String` | 登录 |
 | `POST` | `/picture/upload` | `file,targetSpaceId?` | `PictureListVO` | 登录 |
+| `POST` | `/picture/save-by-url` | `SavePictureByUrlRequest` | `PictureListVO` | 登录 |
 | `POST` | `/picture/list` | `PictureQueryRequest` | `IPage<PictureListVO>` | 公开 |
+| `POST` | `/picture/recommend` | `PageRequest` | `IPage<PictureListVO>` | 登录 |
 | `DELETE` | `/picture/delete` | `DeleteByIdList` | `String` | 登录 |
 | `PUT` | `/picture/update` | `PictureUpdateRequest` | `Boolean` | 登录 |
 | `GET` | `/picture/pictureEditMessage` | `id` | `PictureEditVO` | 登录 |
-| `POST` | `/picture/admin/list` | `PageRequest,status?` | `IPage<PictureAdminVO>` | 管理员 |
-| `POST` | `/picture/admin/review` | `pictureId,status,selected` | `Boolean` | 管理员；`selected` 写入 `is_private`，表示是否公开到首页 |
+| `POST` | `/picture/admin/list` | `AdminPictureListDTO` | `IPage<PictureAdminVO>` | `picture:list` |
+| `POST` | `/picture/admin/review` | `ReviewPictureDTO` | `Boolean` | `picture:review`；`selected` 写入 `is_private`，表示是否公开到首页 |
 
 ### 4.3 PostController
 
 | 方法 | 路径 | 入参 | 出参 | 权限 |
 | --- | --- | --- | --- | --- |
 | `POST` | `/post/post` | `UploadPostRequest` | `Boolean` | 登录 |
-| `GET` | `/post/getPost` | `id` | `PostDetailVO` | 白名单路径；当前仅按 ID 查询，未强制校验 `status` 或 `is_private` |
+| `GET` | `/post/getPost` | `id` | `PostDetailVO` | 白名单路径；原子递增 `views_num` |
 | `POST` | `/post/editPost` | `EditPostRequest` | `Boolean` | 作者 |
-| `POST` | `/post/postList` | `PostQueryRequest` | `IPage<PostListVO>` | 白名单路径；默认筛 `status=1`，不默认筛 `is_private=0` |
-| `POST` | `/post/like` | `id` | `Boolean` | 登录 |
-| `POST` | `/post/collect` | `id` | `Boolean` | 登录 |
+| `POST` | `/post/postList` | `PostQueryRequest` | `IPage<PostListVO>` | 白名单路径；默认筛 `status=1`，多级缓存 + 分布式锁 |
+| `POST` | `/post/like` | `id` | `Boolean` | 登录；Redisson 分布式锁 |
+| `POST` | `/post/collect` | `id` | `Boolean` | 登录；Redisson 分布式锁 |
 | `POST` | `/post/pictureList` | `GetPictureBySpaceRequest` | `Map<String,Object>` | 登录 |
 | `POST` | `/post/myPosts` | `PageRequest` | `IPage<PostListVO>` | 登录 |
 | `POST` | `/post/myCollects` | `PageRequest` | `IPage<PostListVO>` | 登录 |
 | `POST` | `/post/myLikes` | `PageRequest` | `IPage<PostListVO>` | 登录 |
-| `POST` | `/post/admin/list` | `PostQueryRequest` | `IPage<PostListVO>` | 管理员 |
-| `POST` | `/post/admin/review` | `id,status` | `Boolean` | 管理员 |
-| `POST` | `/post/admin/delete` | `id` | `Boolean` | 管理员 |
+| `POST` | `/post/recommend` | `PageRequest` | `IPage<PostListVO>` | 登录 |
+| `POST` | `/post/admin/list` | `PostQueryRequest` | `IPage<PostListVO>` | `post:list` |
+| `POST` | `/post/admin/review` | `ReviewPostDTO` | `Boolean` | `post:review` |
+| `POST` | `/post/admin/delete` | `id` | `Boolean` | `post:delete` |
 
 ### 4.4 CommentController
 
 | 方法 | 路径 | 入参 | 出参 | 权限 |
 | --- | --- | --- | --- | --- |
-| `POST` | `/comment/create` | `CreateCommentRequest` | `Long` | 登录 |
-| `POST` | `/comment/list` | `CommentQueryRequest` | `IPage<CommentVO>` | 公开 |
-| `POST` | `/comment/delete` | `id` | `Boolean` | 登录 |
-| `POST` | `/comment/admin/list` | `CommentQueryRequest` | `IPage<CommentVO>` | 管理员 |
-| `POST` | `/comment/review` | `id,status` | `Boolean` | 管理员 |
-| `POST` | `/comment/adminDelete` | `id` | `Boolean` | 管理员 |
+| `POST` | `/comment/create` | `CreateCommentRequest` | `Long` | 登录；XSS 过滤，status=待审核 |
+| `POST` | `/comment/list` | `CommentQueryRequest` | `IPage<CommentVO>` | 公开；非管理员仅见已审核评论 |
+| `POST` | `/comment/delete` | `id` | `Boolean` | 登录；软删除 |
+| `POST` | `/comment/admin/list` | `CommentQueryRequest` | `IPage<CommentVO>` | `comment:list` |
+| `POST` | `/comment/review` | `ReviewCommentDTO` | `Boolean` | `comment:review` |
+| `POST` | `/comment/adminDelete` | `id` | `Boolean` | `comment:delete`；硬删除含子回复 |
 
 ### 4.5 SpaceController
 
@@ -481,21 +632,34 @@ erDiagram
 | `GET` | `/space/getSpace` | `id` | `SpaceVO` | 登录/成员 |
 | `POST` | `/space/update` | `UpdateSpace` | `Boolean` | 拥有者/管理员 |
 | `POST` | `/space/pictureList` | `SpacePictureList` | `PicturePageVO` | 登录/成员 |
-| `POST` | `/space/admin/list` | `SpaceQueryWrapper` | `IPage<SpaceVO>` | 管理员 |
-| `POST` | `/space/admin/update` | `SpaceAdminUpdateRequest` | `Boolean` | 管理员 |
-| `POST` | `/space/admin/delete` | `SpaceDeleteRequest` | `Boolean` | 管理员 |
-| `POST` | `/space/admin/setStatus` | `SpaceSetStatusRequest` | `Boolean` | 管理员 |
+| `GET` | `/space/saveable` | - | `List<SpaceVO>` | 登录 |
+| `GET` | `/space/team/members` | `spaceId` | `List<SpaceMemberVO>` | 登录/成员 |
+| `POST` | `/space/team/invite` | `TeamInviteRequest` | `Boolean` | `team:member_manage` |
+| `POST` | `/space/team/remove` | `TeamRemoveRequest` | `Boolean` | `team:member_manage` |
+| `POST` | `/space/team/changeRole` | `TeamChangeRoleRequest` | `Boolean` | `team:member_manage` |
+| `POST` | `/space/admin/list` | `SpaceQueryWrapper` | `IPage<SpaceVO>` | `space:list` |
+| `POST` | `/space/admin/update` | `SpaceAdminUpdateRequest` | `Boolean` | `space:manage` |
+| `POST` | `/space/admin/delete` | `SpaceDeleteRequest` | `Boolean` | `space:manage` |
+| `POST` | `/space/admin/setStatus` | `SpaceSetStatusRequest` | `Boolean` | `space:status` |
 
 ### 4.6 SystemController
 
 | 方法 | 路径 | 入参 | 出参 | 权限 |
 | --- | --- | --- | --- | --- |
 | `GET` | `/system/list` | - | `List<String>` | 公开 |
-| `POST` | `/system/addList` | `AddSysPicType` | `Boolean` | 管理员 |
-| `POST` | `/system/deleteType` | `DeleteTypeRequest` | `Boolean` | 管理员 |
+| `POST` | `/system/addList` | `AddSysPicType` | `Boolean` | `system:type` |
+| `POST` | `/system/deleteType` | `DeleteTypeRequest` | `Boolean` | `system:type` |
 | `GET` | `/system/marquee` | - | `List<String>` | 公开 |
-| `POST` | `/system/addMarquee` | `AddSysMarquee` | `Boolean` | 管理员 |
-| `POST` | `/system/deleteMarquee` | `DeleteMarqueeRequest` | `Boolean` | 管理员 |
+| `POST` | `/system/addMarquee` | `AddSysMarquee` | `Boolean` | `system:marquee` |
+| `POST` | `/system/deleteMarquee` | `DeleteMarqueeRequest` | `Boolean` | `system:marquee` |
+| `POST` | `/system/audit-log/list` | `AuditLogQueryRequest` | `IPage<SysAuditLog>` | `user:manage` |
+| `GET` | `/system/stats` | - | `SystemStatsVO` | `user:manage` |
+
+### 4.8 PermissionController
+
+| 方法 | 路径 | 入参 | 出参 | 权限 |
+| --- | --- | --- | --- | --- |
+| `GET` | `/permission/roles` | - | `List<SysRole>` | `user:manage` |
 
 ### 4.7 AiController
 
@@ -649,11 +813,21 @@ sequenceDiagram
 | `PictureQueryRequest` | `tag,current,pageSize` | 图片列表查询 |
 | `PictureUpdateRequest` | `ids,pictureName,introduction,pictureUrl` | 图片信息编辑 |
 | `DeleteByIdList` | `ids` | 批量删除图片 |
-| `AddSysPicType` | `typeList` | 添加分类标签 |
-| `AddSysMarquee` | `marqueeList` | 添加跑马灯 |
+| `AddSysPicType` | `value` | 添加分类标签 |
+| `AddSysMarquee` | `url` | 添加跑马灯 |
 | `DeleteTypeRequest` | `value` | 删除分类标签 |
 | `DeleteMarqueeRequest` | `url` | 删除跑马灯 |
-| `AiDrawPictureDTO` | `description,exclusion,style,width,height` | AI 文生图 |
+| `SavePictureByUrlRequest` | `url,targetSpaceId` | URL 保存图片 |
+| `AdminPictureListDTO` | `status,current,pageSize` | 管理员图片列表 |
+| `ReviewPictureDTO` | `pictureId,status,selected` | 管理员审核图片 |
+| `ReviewPostDTO` | `id,status` | 管理员审核帖子 |
+| `ReviewCommentDTO` | `id,status` | 管理员审核评论 |
+| `FollowQueryDTO` | `userId,current,pageSize` | 粉丝/关注列表查询 |
+| `TeamInviteRequest` | `spaceId,userId,roleId` | 邀请团队成员 |
+| `TeamRemoveRequest` | `spaceId,userId` | 移除团队成员 |
+| `TeamChangeRoleRequest` | `spaceId,userId,roleId` | 变更团队角色 |
+| `AuditLogQueryRequest` | `current,pageSize+filters` | 审计日志查询 |
+| `AiDrawPictureDTO` | `description,exclusion,style,size` | AI 文生图 |
 | `AiTaskQueryDTO` | `type,status,current,pageSize` | AI 任务查询 |
 | `AiConfigDTO` | `taggingEnabled,editingEnabled,generationEnabled,recommendationEnabled` | AI 功能配置 |
 | `PageRequest` | `current,pageSize,sortField,sortOrder` | 通用分页查询 |
@@ -662,25 +836,27 @@ sequenceDiagram
 
 | VO | 用途 |
 | --- | --- |
-| `UserLoginVO` | 登录态用户信息和 Token |
+| `UserLoginVO` | 登录态用户信息、Token 和权限列表 |
 | `UserMessageVO` | 个人主页聚合信息 |
-| `UserPublicProfileVO` | 用户公开主页 |
+| `UserPublicProfileVO` | 用户公开主页（含关注/粉丝/帖子数） |
+| `UserSearchVO` | 用户搜索结果（id、昵称、头像） |
 | `FollowUserVO` | 粉丝/关注列表项 |
 | `CheckCodeVO` | 验证码图片与 key |
 | `PictureListVO` | 图片列表基础项 |
 | `PictureAdminVO` | 后台图片管理项 |
 | `PictureEditVO` | 图片编辑信息 |
 | `PicturePageVO` | 空间图片分页 |
-| `PostListVO` | 帖子列表项 |
-| `PostDetailVO` | 帖子详情聚合 |
-| `CommentVO` | 评论展示项 |
-| `SpaceVO` | 空间展示项 |
-| `SpaceMemberVO` | 团队成员展示项 |
+| `PostListVO` | 帖子列表项（含作者信息和收藏状态） |
+| `PostDetailVO` | 帖子详情聚合（含图片列表、互动状态） |
+| `CommentVO` | 评论展示项（含嵌套回复和用户信息） |
+| `SpaceVO` | 空间展示项（含图片数、成员列表） |
+| `SpaceMemberVO` | 团队成员展示项（含角色信息） |
+| `SystemStatsVO` | 系统统计概览 |
 | `AiPictureMessage` | AI 标注结果（名称、描述、标签列表） |
 | `AiTaskSubmitVO` | AI 任务提交返回（taskId, status） |
 | `AiTaskVO` | AI 任务详情（管理后台） |
 | `AiStatsVO` | AI 任务统计（管理后台） |
-| `AdminGetUserVO` | 管理员查看用户详情 |
+| `AdminGetUserVO` | 管理员查看用户详情（含角色 ID 列表） |
 
 ## 7. 状态与约束
 
@@ -690,7 +866,7 @@ sequenceDiagram
 | --- | --- | --- |
 | `User` | `status` | `0` 禁用，`1` 正常，`2` 待审核 |
 | `Picture` | `status` | `0` 禁用，`1` 正常，`2` 待审核 |
-| `Post` | `status` | `0` 禁用，`1` 正常，`2` 待审核 |
+| `Post` | `status` | `0` 草稿，`1` 已发布，`2` 待审核，`3` 已拒绝 |
 | `Comment` | `status` | `0` 禁用，`1` 正常，`2` 待审核 |
 | `Space` | `status` | `0` 禁用，`1` 正常 |
 | `Task` | `status` | `PENDING` 待处理，`PROCESSING` 处理中，`DONE` 成功，`FAILED` 失败 |
@@ -703,14 +879,17 @@ sequenceDiagram
 - `picture_child` 对 `picture_id + post_id` 建立唯一索引。
 - `user_interest_profile` 对 `user_id + tag` 建立唯一索引。
 - `task.task_id` 唯一索引。
+- `sys_role.code` 唯一。
+- `sys_permission.code` 唯一。
 - 帖子图片顺序必须依赖 `picture_child.sort_num`。
 - `picture.is_private` 当前承担首页公开标记含义：`0` 不公开到首页，`1` 公开到首页；管理员图片审核接口的 `selected` 参数会写入该字段。
-- `picture.tags` 存储 AI 标签，格式为 JSON 数组（如 `["人物","风景"]`）。注意：代码中存在 JSON 序列化和逗号分割两种读取方式。
-- `picture.type` 存储图片格式类型，仅 Java 实体和 XML Mapper 中存在，对应 `create.sql` 缺少该列。
-- `comment.to_user_id` 在 Java 实体中为 `Long`，SQL DDL 中已修正为 `bigint`。
+- `picture.tags` 存储 AI 标签，格式为 JSON 数组（如 `["人物","风景"]`）。
+- `picture.type` 存储图片格式类型，`create.sql` 中已包含该列。
 - 普通用户不能调用 AI 能力，必须 `level >= 1`。
 - 热度定时任务（`HotScoreScheduler`）每 10 分钟执行一次：`hot = likes_num * 3 + collects_num * 3 + comment_num * 2 + views_num * 2`。
 - 用户画像定时任务（`UserProfileScheduler`）每 30 分钟执行一次，根据点赞（权重+3）和收藏（权重+5）行为刷新用户兴趣标签权重。
+- 角色支持继承：`sys_role.inheritRoleId` 指向父角色，子角色自动拥有父角色权限。
+- 审计日志通过 `@AuditLog` 注解自动记录，包含操作模块、方法、URL、参数、IP 和用户信息。
 
 ## 8. 包依赖视图
 
@@ -723,15 +902,18 @@ flowchart TD
     DTO["dto"]
     VO["vo"]
     Common["common"]
+    Cache["cache"]
     Scheduled["scheduled"]
     AI["ai"]
     Task["task"]
+    Permission["permission"]
+    WS["websocket"]
     DB["MySQL"]
     Redis["Redis"]
+    Caffeine["Caffeine"]
     COS["COS"]
     DashScope["DashScope"]
     MQ["RocketMQ"]
-    WS["WebSocket"]
 
     Controller --> DTO
     Controller --> Service
@@ -741,10 +923,15 @@ flowchart TD
     Service --> Entity
     Service --> Common
     Service --> Task
+    Service --> Cache
+    Permission --> Mapper
+    Permission --> Cache
     Mapper --> DB
     Common --> Redis
     Common --> COS
     Common --> WS
+    Cache --> Caffeine
+    Cache --> Redis
     AI --> DashScope
     AI --> Service
     AI --> Task
@@ -752,4 +939,5 @@ flowchart TD
     Scheduled --> Service
     Task --> MQ
     Task --> Service
+    WS --> Redis
 ```
