@@ -1,7 +1,7 @@
 package hk.ljx.fishpicsbackend.system.controller;
 import hk.ljx.fishpicsbackend.system.service.PicSystemService;
 
-import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
+import hk.ljx.fishpicsbackend.common.annotation.RequirePerm;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
@@ -30,7 +30,7 @@ public class SystemController {
         return ResUtils.success(list);
     }
 
-    @AuthCheck(permission = "system:type")
+    @RequirePerm("system:config")
     @PostMapping("/addList")
     public Response<Boolean> addList(@RequestBody AddSysPicType addSysPicType) {
         ExcUtils.throwIfTrue(addSysPicType == null, ExceptionCode.PARAMETER_ERROR, "type不能为空");
@@ -38,7 +38,7 @@ public class SystemController {
         return ResUtils.success(true);
     }
 
-    @AuthCheck(permission = "system:type")
+    @RequirePerm("system:config")
     @PostMapping("/deleteType")
     public Response<Boolean> deleteType(@RequestBody DeleteTypeRequest request) {
         ExcUtils.throwIfTrue(request.getValue() == null || request.getValue().isEmpty(), ExceptionCode.PARAMETER_ERROR, "type不能为空");
@@ -52,7 +52,7 @@ public class SystemController {
         return ResUtils.success(urls);
     }
 
-    @AuthCheck(permission = "system:marquee")
+    @RequirePerm("system:config")
     @PostMapping("/addMarquee")
     public Response<Boolean> addMarquee(@RequestBody AddSysMarquee addSysMarquee) {
         ExcUtils.throwIfTrue(addSysMarquee == null, ExceptionCode.PARAMETER_ERROR, "url不能为空");
@@ -60,7 +60,7 @@ public class SystemController {
         return ResUtils.success(true);
     }
 
-    @AuthCheck(permission = "system:marquee")
+    @RequirePerm("system:config")
     @PostMapping("/deleteMarquee")
     public Response<Boolean> deleteMarquee(@RequestBody DeleteMarqueeRequest request) {
         ExcUtils.throwIfTrue(request.getUrl() == null || request.getUrl().isEmpty(), ExceptionCode.PARAMETER_ERROR, "url不能为空");

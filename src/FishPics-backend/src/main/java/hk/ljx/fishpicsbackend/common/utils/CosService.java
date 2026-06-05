@@ -8,7 +8,6 @@ import com.qcloud.cos.model.*;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.picture.dto.PictureMessage;
-import hk.ljx.fishpicsbackend.user.entity.User;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -36,71 +35,37 @@ public class CosService {
     private String url;
 
     /**
-     * 普通最大文件大小 5MB
-     */
-    private static final long PT_MAX_SIZE = 5 * 1024 * 1024L;
-
-    /**
-     * VIP 最大单文件大小 10MB
-     */
-    private static final long VIP_MAX_SIZE = 10 * 1024 * 1024L;
-
-    /**
-     * SVIP 最大单文件大小 50MB
-     */
-    private static final long SVIP_MAX_SIZE = 50 * 1024 * 1024L;
-
-    /**
      * 上传路径前缀
      */
     private static final String UPLOAD_PREFIX = "picture/";
 
     /**
+     * 生成唯一的 COS key
+     */
+    public String generateKey() {
+        return UPLOAD_PREFIX + System.currentTimeMillis() + "_" + UUID.randomUUID().toString(true) + ".webp";
+    }
+
+    /**
      * 上传图片到腾讯云COS（MultipartFile 上传）
+     * 纯 COS 操作，不含业务校验
      *
      * @param file 前端上传的文件
      * @return cos文件唯一key
      */
     public String uploadPicture(MultipartFile file) {
-        User user = UserHolder.getUser();
-        ExcUtils.throwIfTrue(user == null || user.getLevel() == null, ExceptionCode.NOT_LOGIN);
+        ExcUtils.throwIfTrue(file == null || file.isEmpty(), "上传文件不能为空");
 
-        // 校验文件
-        ExcUtils.throwIfTrue(file.isEmpty(), "上传文件不能为空");
-        String validFileType = FileTypeUtils.getValidFileType(file);
-        ExcUtils.throwIfTrue(validFileType == null, "上传文件格式不正确");
+        String key = generateKey();
 
-        // 生成唯一文件路径
-        String key = UPLOAD_PREFIX + System.currentTimeMillis() + "_" + UUID.randomUUID().toString(true) + ".webp";
-
-        Integer level = user.getLevel();
-        long size;
-        switch (level) {
-            case 1:
-                size = VIP_MAX_SIZE;
-                break;
-            case 2:
-                size = SVIP_MAX_SIZE;
-                break;
-            default:
-                size = PT_MAX_SIZE;
-        }
-        ExcUtils.throwIfTrue(file.getSize() > size, "上传文件大小不能超过" + size + "字节");
-
-        // 流式上传到 COS
-        try (InputStream inputStream = file.getInputStream()){
+        try (InputStream inputStream = file.getInputStream()) {
             ObjectMetadata metadata = new ObjectMetadata();
             metadata.setContentLength(file.getSize());
 
-            PutObjectResult result = cosClient.putObject(
-                    bucket,
-                    key,
-                    inputStream,
-                    metadata
-            );
+            PutObjectResult result = cosClient.putObject(bucket, key, inputStream, metadata);
             ExcUtils.throwIfTrue(result == null, "上传文件失败");
-        }catch (Exception e) {
-            log.error("上传文件失败{}", e.getMessage());
+        } catch (Exception e) {
+            log.error("上传文件失败: {}", e.getMessage());
             ExcUtils.error(ExceptionCode.INTERNAL_SERVER_ERROR, "上传文件失败");
         }
         return key;
@@ -184,7 +149,7 @@ public class CosService {
 
     /**
      * 根据 key 获取图片信息
-     * 
+     *
      * @param key 文件唯一标识
      * @return 图片信息
      */
@@ -224,5 +189,56 @@ public class CosService {
         pictureMessage.setUrl(url);
         pictureMessage.setPictureName(name[0]);
         return pictureMessage;
+    }
+
+    // ==================== 分片上传方法 ====================
+
+    /**
+     * 初始化分片上传
+     *
+     * @param cosKey COS 存储路径
+     * @return uploadId
+     */
+    public String initiateMultipartUpload(String cosKey) {
+        InitiateMultipartUploadRequest request = new InitiateMultipartUploadRequest(bucket, cosKey);
+        InitiateMultipartUploadResult result = cosClient.initiateMultipartUpload(request);
+        return result.getUploadId();
+    }
+
+    /**
+     * 上传单个分片
+     *
+     * @param cosKey      COS 存储路径
+     * @param uploadId    分片上传 ID
+     * @param partNumber  分片编号（从 1 开始）
+     * @param inputStream 分片数据流
+     * @param partSize    分片大小
+     * @return ETag
+     */
+    public String uploadPart(String cosKey, String uploadId, int partNumber,
+                             InputStream inputStream, long partSize) {
+        UploadPartRequest request = new UploadPartRequest();
+        request.setBucketName(bucket);
+        request.setKey(cosKey);
+        request.setUploadId(uploadId);
+        request.setPartNumber(partNumber);
+        request.setInputStream(inputStream);
+        request.setPartSize(partSize);
+        UploadPartResult result = cosClient.uploadPart(request);
+        return result.getETag();
+    }
+
+    /**
+     * 完成分片上传（合并分片）
+     *
+     * @param cosKey      COS 存储路径
+     * @param uploadId    分片上传 ID
+     * @param partETags   分片 ETag 列表（需按分片编号排序）
+     */
+    public void completeMultipartUpload(String cosKey, String uploadId,
+                                        List<PartETag> partETags) {
+        CompleteMultipartUploadRequest request = new CompleteMultipartUploadRequest(
+                bucket, cosKey, uploadId, partETags);
+        cosClient.completeMultipartUpload(request);
     }
 }

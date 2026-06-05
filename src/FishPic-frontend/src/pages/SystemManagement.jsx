@@ -28,7 +28,7 @@ function SystemManagement() {
   const [pickerSelectedIds, setPickerSelectedIds] = useState([])
 
   useEffect(() => {
-    if (!userInfo || !userInfo?.permissions?.includes('user:manage')) {
+    if (!userInfo || !userInfo?.permissions?.includes('system:config')) {
       antMessage.error('无权访问，正在跳转到 404 页面...')
       setTimeout(() => {
         navigate('/404', { replace: true })
@@ -53,7 +53,7 @@ function SystemManagement() {
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (userInfo?.permissions?.includes('user:manage')) {
+    if (userInfo?.permissions?.includes('system:config')) {
       fetchTypeList()
     }
   }, [userInfo, fetchTypeList])
@@ -76,7 +76,7 @@ function SystemManagement() {
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (userInfo?.permissions?.includes('user:manage')) {
+    if (userInfo?.permissions?.includes('system:config')) {
       fetchMarquee()
     }
   }, [userInfo, fetchMarquee])
@@ -173,7 +173,7 @@ function SystemManagement() {
     }
   }
 
-  if (!userInfo || !userInfo?.permissions?.includes('user:manage')) {
+  if (!userInfo || !userInfo?.permissions?.includes('system:config')) {
     return (
       <main className="system-management-container">
         <div style={{ textAlign: 'center', padding: '100px 0' }}>

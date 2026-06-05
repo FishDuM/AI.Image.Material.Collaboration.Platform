@@ -12,7 +12,7 @@ import hk.ljx.fishpicsbackend.ai.vo.AiStatsVO;
 import hk.ljx.fishpicsbackend.ai.vo.AiTaskSubmitVO;
 import hk.ljx.fishpicsbackend.ai.vo.AiTaskVO;
 import hk.ljx.fishpicsbackend.common.dto.IdRequest;
-import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
+import hk.ljx.fishpicsbackend.common.annotation.RequirePerm;
 import hk.ljx.fishpicsbackend.common.constants.SysConstants;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
@@ -97,7 +97,7 @@ public class AiController {
 
     // ==================== 管理后台接口 ====================
 
-    @AuthCheck(permission = "ai:tasks")
+    @RequirePerm("system:ai:manage")
     @PostMapping("/admin/tasks")
     public Response<IPage<AiTaskVO>> getTasks(@RequestBody AiTaskQueryDTO queryDTO) {
         Page<Task> page = new Page<>(queryDTO.getCurrent(), queryDTO.getPageSize());
@@ -160,7 +160,7 @@ public class AiController {
         return ResUtils.success(result);
     }
 
-    @AuthCheck(permission = "ai:stats")
+    @RequirePerm("system:ai:manage")
     @GetMapping("/admin/stats")
     public Response<AiStatsVO> getStats() {
         AiStatsVO stats = new AiStatsVO();
@@ -183,7 +183,7 @@ public class AiController {
         return ResUtils.success(stats);
     }
 
-    @AuthCheck(permission = "ai:config")
+    @RequirePerm("system:ai:manage")
     @GetMapping("/admin/config")
     public Response<AiConfigDTO> getConfig() {
         QueryWrapper<PicSystem> wrapper = new QueryWrapper<PicSystem>()
@@ -204,7 +204,7 @@ public class AiController {
         return ResUtils.success(config);
     }
 
-    @AuthCheck(permission = "ai:config")
+    @RequirePerm("system:ai:manage")
     @PostMapping("/admin/config")
     public Response<Boolean> updateConfig(@RequestBody AiConfigDTO configDTO) {
         // 读取现有配置

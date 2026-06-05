@@ -24,13 +24,11 @@ import {
   UserOutlined,
   LoadingOutlined,
 } from '@ant-design/icons'
-import { editUser, followUser, getFans, getFollows, getUser, getUserMyself, getUserProfile, updatePrivacy, uploadAvatar } from '../api'
+import { editUser, getUser, getUserMyself, uploadAvatar } from '../api'
 import { AuthContext } from '../context/AuthContext'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { getBase64, beforeUpload } from '../utils/upload'
 import { copyToClipboard } from '../utils/clipboard'
-import { logError } from '../utils/logger'
-import FollowUserList from '../components/FollowUserList'
 import './UserProfile.css'
 
 function UserProfile() {
@@ -45,7 +43,6 @@ function UserProfile() {
 
   const [loading, setLoading] = useState(true)
   const [userData, setUserData] = useState(null)
-  const [isFollowed, setIsFollowed] = useState(false)
   const [avatarVisible, setAvatarVisible] = useState(false)
   const [editModalVisible, setEditModalVisible] = useState(false)
   const [editForm] = Form.useForm()
@@ -53,55 +50,18 @@ function UserProfile() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(null)
   const [showPasswordSection, setShowPasswordSection] = useState(false)
-  const [privacySettings, setPrivacySettings] = useState({
-    isPrivateFollows: 0,
-    isPrivateFans: 0,
-  })
-  const [followListModalOpen, setFollowListModalOpen] = useState(false)
-  const [followListModalType, setFollowListModalType] = useState('follows')
-  const [counts, setCounts] = useState({ follows: 0, fans: 0 })
 
   const fetchUserInfo = async () => {
     try {
-      if (isOwnProfile) {
-        const data = await getUserMyself()
-        setUserData(data)
-        setPrivacySettings({
-          isPrivateFollows: data.isPrivateFollows ?? 0,
-          isPrivateFans: data.isPrivateFans ?? 0,
-        })
-        if (userInfo) {
-          const updatedUserInfo = { ...userInfo, ...data }
-          authLogin(updatedUserInfo)
-        }
-      } else {
-        const data = await getUserProfile(profileUserId)
-        setUserData(data)
-        setIsFollowed(data.isFollowed ?? false)
-        setCounts({
-          follows: data.followsCount ?? 0,
-          fans: data.fansCount ?? 0,
-        })
+      const data = await getUserMyself()
+      setUserData(data)
+      if (userInfo) {
+        const updatedUserInfo = { ...userInfo, ...data }
+        authLogin(updatedUserInfo)
       }
     } catch (error) {
       if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
       message.error(error.message || '获取个人信息失败')
-    }
-  }
-
-  const fetchFollowCounts = async () => {
-    if (!isOwnProfile) return
-    try {
-      const [followsResult, fansResult] = await Promise.all([
-        getFollows({ current: 1, pageSize: 1 }),
-        getFans({ current: 1, pageSize: 1 }),
-      ])
-      setCounts({
-        follows: followsResult?.total || 0,
-        fans: fansResult?.total || 0,
-      })
-    } catch (error) {
-      logError('fetchCounts', error)
     }
   }
 
@@ -127,7 +87,6 @@ function UserProfile() {
     }
     setLoading(true)
     fetchUserInfo().finally(() => setLoading(false))
-    fetchFollowCounts()
   }, [profileUserId, isAuthenticated])
 
   useEffect(() => {
@@ -185,33 +144,6 @@ function UserProfile() {
     }
   }
 
-  const handleProfileFollow = async () => {
-    if (!profileUserId) return
-    try {
-      const result = await followUser(Number(profileUserId))
-      setIsFollowed(result)
-      message.success(result ? '已关注' : '已取消关注')
-    } catch (error) {
-      message.error(error.message || '操作失败')
-    }
-  }
-
-  const handleStatClick = (type) => {
-    if (isMobile) {
-      const userIdParam = isOwnProfile ? '' : `&userId=${profileUserId}`
-      navigate(`/mobile/follow-list?type=${type}${userIdParam}`)
-      return
-    }
-    setFollowListModalType(type)
-    setFollowListModalOpen(true)
-  }
-
-  const handleFollowListUserClick = (userId) => {
-    setFollowListModalOpen(false)
-    const path = isMobile ? '/mobile/profile' : '/profile'
-    navigate(`${path}?userId=${userId}`)
-  }
-
   const handleAvatarClick = () => {
     if (userData?.avatar) {
       setAvatarVisible(true)
@@ -233,8 +165,6 @@ function UserProfile() {
           email: userData.email,
           phone: userData.phone,
           nickname: userData.nickname,
-          isPrivateFollows: privacySettings.isPrivateFollows,
-          isPrivateFans: privacySettings.isPrivateFans,
         })
       })
     }
@@ -255,10 +185,6 @@ function UserProfile() {
         submitData.originalPassword = values.originalPassword
       }
       await editUser(submitData)
-      await updatePrivacy({
-        isPrivateFollows: values.isPrivateFollows,
-        isPrivateFans: values.isPrivateFans,
-      })
       editForm.resetFields()
       message.success('修改成功')
       setEditModalVisible(false)
@@ -349,24 +275,13 @@ function UserProfile() {
         <div className="profile-nickname-row">
           <h1 className="profile-nickname">
             {userData.nickname || userData.username}
-            {userData?.permissions?.includes('user:manage') && (
+            {userData?.permissions?.includes('system:user:manage') && (
               <span className="admin-badge" title="这个网站伟大的管理员">管理员</span>
             )}
           </h1>
           <span className="profile-username" onClick={handleCopyUsername}>
             @{userData.username}
           </span>
-        </div>
-
-        <div className="profile-stats-row">
-          <div className="stat-item stat-item-clickable" onClick={() => handleStatClick('follows')}>
-            <span className="stat-value">{counts.follows}</span>
-            <span className="stat-label">关注</span>
-          </div>
-          <div className="stat-item stat-item-clickable" onClick={() => handleStatClick('fans')}>
-            <span className="stat-value">{counts.fans}</span>
-            <span className="stat-label">粉丝</span>
-          </div>
         </div>
 
         <div className="profile-meta-row">
@@ -394,7 +309,7 @@ function UserProfile() {
           </div>
         )}
 
-        {isOwnProfile ? (
+        {isOwnProfile && (
           <Button
             type="primary"
             icon={<EditOutlined />}
@@ -402,14 +317,6 @@ function UserProfile() {
             onClick={handleEditProfileClick}
           >
             修改信息
-          </Button>
-        ) : (
-          <Button
-            type={isFollowed ? 'default' : 'primary'}
-            className={isFollowed ? 'follow-btn-following profile-follow-btn' : 'follow-btn-tofollow profile-follow-btn'}
-            onClick={handleProfileFollow}
-          >
-            {isFollowed ? '已关注' : '关注'}
           </Button>
         )}
 
@@ -422,17 +329,6 @@ function UserProfile() {
           width={600}
         >
           {userData?.avatar && <img src={userData.avatar} alt="avatar" />}
-        </Modal>
-
-        <Modal
-          className="follow-list-modal"
-          open={followListModalOpen}
-          onCancel={() => setFollowListModalOpen(false)}
-          footer={null}
-          width={480}
-          title={followListModalType === 'fans' ? '粉丝' : '关注'}
-        >
-          <FollowUserList type={followListModalType} targetUserId={isOwnProfile ? undefined : profileUserId} onUserClick={handleFollowListUserClick} />
         </Modal>
 
         <Modal
@@ -530,37 +426,6 @@ function UserProfile() {
             <Form.Item label="手机号" name="phone" rules={[{ pattern: /^1[3-9]\d{9}$/, message: '请输入有效的手机号' }]}>
               <Input prefix={<PhoneOutlined />} placeholder="请输入手机号" />
             </Form.Item>
-
-            <Form.Item name="isPrivateFollows" hidden><Input /></Form.Item>
-            <Form.Item name="isPrivateFans" hidden><Input /></Form.Item>
-
-            <div className="privacy-section">
-              <div className="privacy-section-header">
-                <span className="privacy-section-label">
-                  <LockOutlined className="privacy-section-icon" />
-                  隐私设置
-                </span>
-              </div>
-              <div className="privacy-section-items">
-                {[
-                  { key: 'isPrivateFollows', label: '关注列表不公开' },
-                  { key: 'isPrivateFans', label: '粉丝列表不公开' },
-                ].map(({ key, label }) => (
-                  <div key={key} className="privacy-item">
-                    <span>{label}</span>
-                    <Switch
-                      size="small"
-                      checked={privacySettings[key] === 1}
-                      onChange={(checked) => {
-                        const val = checked ? 1 : 0
-                        setPrivacySettings((prev) => ({ ...prev, [key]: val }))
-                        editForm.setFieldsValue({ [key]: val })
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
           </Form>
         </Modal>
       </>

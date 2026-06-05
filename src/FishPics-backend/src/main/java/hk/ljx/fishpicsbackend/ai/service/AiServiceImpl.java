@@ -49,7 +49,8 @@ public class AiServiceImpl implements AiService {
         ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_LOGIN);
         Picture picture = pictureService.getById(pictureId);
         ExcUtils.throwIfTrue(picture == null, "图片不存在");
-        ExcUtils.throwIfTrue(!picture.getUserId().equals(user.getId()) && !permissionService.hasPermission(user.getId(), "ai:config"), ExceptionCode.UNAUTHORIZED);
+        hk.ljx.fishpicsbackend.common.context.LoginContext ctx = UserHolder.getLoginContext();
+        ExcUtils.throwIfTrue(!picture.getUserId().equals(user.getId()) && (ctx == null || !ctx.hasSystemPerm("system:ai:manage")), ExceptionCode.UNAUTHORIZED);
 
         return taskService.submitTask("ai_tag", String.valueOf(pictureId), null, user.getId());
     }

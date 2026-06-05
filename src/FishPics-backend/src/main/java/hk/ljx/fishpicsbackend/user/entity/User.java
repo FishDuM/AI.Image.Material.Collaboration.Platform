@@ -55,6 +55,11 @@ public class User implements Serializable {
     private Integer status;
 
     /**
+     * 用户等级 0=普通 1=VIP 2=SVIP
+     */
+    private Integer level;
+
+    /**
      * 0-逻辑未删除, 1-逻辑删除
      */
     @TableLogic
@@ -69,41 +74,6 @@ public class User implements Serializable {
      * 更新时间
      */
     private Date updateTime;
-
-    /**
-     * 
-     */
-    private Long likeNum;
-
-    /**
-     * 
-     */
-    private Long collectNum;
-
-    /**
-     * 0-公开关注列表，1-不公开关注列表
-     */
-    private Integer isPrivateFollows;
-
-    /**
-     * 0-公开帖子列表，1-不公开帖子列表
-     */
-    private Integer isPrivatePostCollect;
-
-    /**
-     * 0-公开点赞帖子列表，1-不公开点赞帖子列表
-     */
-    private Integer isPrivateLikes;
-
-    /**
-     * 0-公开粉丝列表，1-不公开粉丝列表
-     */
-    private Integer isPrivateFans;
-
-    /**
-     * 0-普通，1-VIP，2-SVIP
-     */
-    private Integer level;
 
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;

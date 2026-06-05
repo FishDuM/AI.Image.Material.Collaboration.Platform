@@ -35,12 +35,12 @@ const ALLOWED_EXTENSIONS = [
 ]
 
 const LEVEL_SIZE_MAP = {
-  0: 3 * 1024 * 1024,   // 普通用户 3MB
-  1: 5 * 1024 * 1024,   // VIP 5MB
-  2: 20 * 1024 * 1024,  // SVIP 20MB
+  0: 10 * 1024 * 1024,       // 普通用户 10MB
+  1: 1 * 1024 * 1024 * 1024, // VIP 1GB
+  2: 10 * 1024 * 1024 * 1024, // SVIP 10GB
 }
 
-const DEFAULT_MAX_SIZE = 5 * 1024 * 1024 // 默认 5MB
+const DEFAULT_MAX_SIZE = 10 * 1024 * 1024 // 默认 10MB
 
 export function getMaxUploadSize() {
   const user = getUserInfo()
@@ -50,6 +50,9 @@ export function getMaxUploadSize() {
 
 export function formatMaxUploadSize() {
   const bytes = getMaxUploadSize()
+  if (bytes >= 1024 * 1024 * 1024) {
+    return `${Math.round(bytes / 1024 / 1024 / 1024)}GB`
+  }
   return `${Math.round(bytes / 1024 / 1024)}MB`
 }
 

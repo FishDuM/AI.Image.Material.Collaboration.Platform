@@ -2,32 +2,28 @@ package hk.ljx.fishpicsbackend.common.constants;
 
 /**
  * 空间相关常量定义（存储大小单位：字节）
- * 私人空间：普通512MB / VIP 5GB / SVIP 10GB
- * 团队空间：普通512MB / VIP 30GB / SVIP 50GB
+ * 私人空间：普通512MB / VIP 50GB / SVIP 100GB
+ * 团队空间：普通512MB / VIP 50GB / SVIP 100GB
  */
 public interface SpaceConstants {
 
-    // 普通用户私人空间：512MB
-    Long DEFAULT_STORAGE_SIZE = 536870912L;
+    // ==================== 私人空间存储配额 ====================
+    Long DEFAULT_STORAGE_SIZE = 536870912L;       // 普通 512MB
+    Long VIP_STORAGE_SIZE     = 53687091200L;     // VIP 50GB
+    Long SVIP_STORAGE_SIZE    = 107374182400L;    // SVIP 100GB
 
-    // VIP私人空间：5GB
-    Long VIP_STORAGE_SIZE = 5368709120L;
+    // ==================== 团队空间存储配额（每个空间独立） ====================
+    Long TEAM_DEFAULT_STORAGE_SIZE = 536870912L;       // 普通 512MB
+    Long TEAM_VIP_STORAGE_SIZE     = 53687091200L;     // VIP 50GB
+    Long TEAM_SVIP_STORAGE_SIZE    = 107374182400L;    // SVIP 100GB
 
-    // SVIP私人空间：10GB
-    Long SVIP_STORAGE_SIZE = 10737418240L;
+    // ==================== 团队空间数量上限 ====================
+    int TEAM_MAX_COUNT_LEVEL0 = 1;     // 普通 1 个
+    int TEAM_MAX_COUNT_LEVEL1 = 2;     // VIP 2 个
+    int TEAM_MAX_COUNT_LEVEL2 = 5;     // SVIP 5 个
 
-    // VIP团队空间：30GB
-    Long TEAM_VIP_STORAGE_SIZE = 32212254720L;
-
-    // SVIP团队空间：50GB
-    Long TEAM_SVIP_STORAGE_SIZE = 53687091200L;
-
-    // 普通用户团队空间数量上限
-    int TEAM_MAX_COUNT_LEVEL0 = 1;
-
-    // VIP团队空间数量上限
-    int TEAM_MAX_COUNT_LEVEL1 = 5;
-
-    // SVIP团队空间数量上限
-    int TEAM_MAX_COUNT_LEVEL2 = 10;
+    // ==================== 上传文件大小限制 ====================
+    Long UPLOAD_MAX_SIZE_NORMAL = 10485760L;      // 普通 10MB
+    Long UPLOAD_MAX_SIZE_VIP    = 1073741824L;    // VIP 1GB
+    Long UPLOAD_MAX_SIZE_SVIP   = 10737418240L;   // SVIP 10GB
 }

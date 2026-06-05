@@ -31,7 +31,7 @@ function ProtectedRoute({ children, requireAdmin = false, permission }) {
   // 兼容旧版 requireAdmin（已废弃，建议使用 permission 属性）
   if (requireAdmin) {
     const perms = auth.userInfo?.permissions || []
-    if (!perms.includes('user:manage') && !perms.includes('user:list')) {
+    if (!perms.includes('system:user:manage')) {
       return <Navigate to="/" replace />
     }
   }

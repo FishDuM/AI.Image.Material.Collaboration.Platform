@@ -4,7 +4,6 @@ import cn.hutool.captcha.CaptchaUtil;
 import cn.hutool.captcha.CircleCaptcha;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
-import cn.hutool.core.lang.UUID;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
@@ -16,20 +15,20 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.cache.MultiLevelCacheManager;
 import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
+import hk.ljx.fishpicsbackend.common.context.LoginContext;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
+import hk.ljx.fishpicsbackend.common.utils.JwtUtils;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.mapper.SysUserRoleMapper;
-import hk.ljx.fishpicsbackend.mapper.UserFansMapper;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
 import hk.ljx.fishpicsbackend.permission.entity.SysUserRole;
 import hk.ljx.fishpicsbackend.permission.service.PermissionService;
 import hk.ljx.fishpicsbackend.space.service.SpaceService;
 import hk.ljx.fishpicsbackend.space.dto.CreateSpace;
 import hk.ljx.fishpicsbackend.user.entity.User;
-import hk.ljx.fishpicsbackend.user.entity.UserFans;
 import hk.ljx.fishpicsbackend.user.dto.UserEditByAdminRequest;
 import hk.ljx.fishpicsbackend.user.dto.UserEditRequest;
 import hk.ljx.fishpicsbackend.user.dto.UserLoginRequest;
@@ -74,9 +73,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
     private StringRedisTemplate stringRedisTemplate;
 
     @Resource
-    private UserFansMapper userFansMapper;
-
-    @Resource
     private SysUserRoleMapper sysUserRoleMapper;
 
     @Resource
@@ -84,6 +80,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
     @Resource
     private PermissionService permissionService;
+
+    @Resource
+    private JwtUtils jwtUtils;
 
     @Resource
     private MultiLevelCacheManager cacheManager;
@@ -147,7 +146,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         User user = new User();
         user.setUsername(username);
         user.setPassword(password);
-        user.setLevel(0);
         user.setNickname(DEFAULT_NICK_NAME + RandomUtil.randomString(6));
         // 默认头像
         user.setAvatar("https://avatars.githubusercontent.com/u/179127403?v=4");
@@ -188,22 +186,37 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         ExcUtils.throwIfTrue(user.getStatus() == null || user.getStatus() != 1, ExceptionCode.PARAMETER_ERROR,
                 "账号已被禁用");
 
-        // 查询到则存入 redis
-        String token = UUID.randomUUID().toString(true);
-        stringRedisTemplate.opsForValue().set(RedisConstants.getUserIdKey(token), user.getId().toString(), 1,
-                TimeUnit.DAYS);
-        stringRedisTemplate.opsForValue().set(RedisConstants.getUserInfoKey(user.getId()), JSONUtil.toJsonStr(user), 1,
-                TimeUnit.DAYS);
+        // 签发 JWT
+        String jwt = jwtUtils.sign(user.getId());
 
-        // 删除已登陆的验证码
+        // 将用户基本信息写入 Redis（7天）
+        stringRedisTemplate.opsForValue().set(
+                RedisConstants.getUserInfoKey(user.getId()),
+                JSONUtil.toJsonStr(user),
+                RedisConstants.USER_PERM_CTX_TTL, TimeUnit.DAYS);
+
+        // 构建权限上下文并写入 Redis
+        LoginContext loginContext = permissionService.buildLoginContext(
+                user.getId(), user.getUsername(), user.getNickname(),
+                user.getAvatar(), user.getStatus(), user.getLevel());
+        stringRedisTemplate.opsForValue().set(
+                RedisConstants.getUserPermCtxKey(user.getId()),
+                JSONUtil.toJsonStr(loginContext),
+                RedisConstants.USER_PERM_CTX_TTL, TimeUnit.DAYS);
+
+        // 删除已登录的验证码
         stringRedisTemplate.delete(checkCodeKeyByLogin);
 
-        // 查到用户数据返回封装类
+        // 返回用户信息
         UserLoginVO userLoginVO = new UserLoginVO();
         BeanUtil.copyProperties(user, userLoginVO, CopyOptions.create().setIgnoreProperties("password"));
-        userLoginVO.setToken(token);
-        // 加载用户权限列表
-        List<String> permissions = new java.util.ArrayList<>(permissionService.getUserPermissions(user.getId()));
+        userLoginVO.setToken(jwt);
+        // 加载用户权限列表（系统权限 + VIP 权限）
+        List<String> permissions = new java.util.ArrayList<>(
+                loginContext.getSystemPerms() != null ? loginContext.getSystemPerms() : List.of());
+        if (loginContext.getVipPerms() != null) {
+            permissions.addAll(loginContext.getVipPerms());
+        }
         userLoginVO.setPermissions(permissions);
         return ResUtils.success(userLoginVO);
     }
@@ -305,7 +318,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
             for (Long roleId : newRoleIds) {
                 SysUserRole userRole = new SysUserRole();
                 userRole.setUserId(id);
-                userRole.setRoleId(roleId);
+                userRole.setRoleId(roleId != null ? roleId.intValue() : null);
                 sysUserRoleMapper.insert(userRole);
             }
             // 统一清除权限缓存（一次操作）
@@ -431,28 +444,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         vo.setUsername(targetUser.getUsername());
         vo.setNickname(targetUser.getNickname());
         vo.setAvatar(targetUser.getAvatar());
-        vo.setLevel(targetUser.getLevel());
         vo.setCreateTime(targetUser.getCreateTime());
-
-        // isFollowed: check if current user follows target
-        QueryWrapper<UserFans> fw = new QueryWrapper<>();
-        fw.eq("user_id", userId);
-        fw.eq("fan_id", currentUser.getId());
-        vo.setIsFollowed(userFansMapper.selectCount(fw) > 0);
-
-        // follows count
-        if (isMe || targetUser.getIsPrivateFollows() == null || targetUser.getIsPrivateFollows() == 0) {
-            QueryWrapper<UserFans> foqw = new QueryWrapper<>();
-            foqw.eq("fan_id", userId);
-            vo.setFollowsCount(userFansMapper.selectCount(foqw));
-        }
-
-        // fans count
-        if (isMe || targetUser.getIsPrivateFans() == null || targetUser.getIsPrivateFans() == 0) {
-            QueryWrapper<UserFans> faqw = new QueryWrapper<>();
-            faqw.eq("user_id", userId);
-            vo.setFansCount(userFansMapper.selectCount(faqw));
-        }
 
         return vo;
     }

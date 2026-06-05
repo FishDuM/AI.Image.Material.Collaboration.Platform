@@ -1,12 +1,18 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Modal, Upload, Button, App, Tabs, Input, Image, Empty } from 'antd'
+import { Modal, Upload, Button, App, Tabs, Input, Image, Empty, Progress } from 'antd'
 import {
   InboxOutlined, LinkOutlined, ImportOutlined, EyeOutlined,
 } from '@ant-design/icons'
-import { uploadPicture, savePictureByUrl } from '../../api'
+import SparkMD5 from 'spark-md5'
+import { uploadPicture, savePictureByUrl, checkUpload, uploadChunk, mergeChunks } from '../../api'
 import { isAllowedImageFile, getMaxUploadSize, formatMaxUploadSize, BROWSER_RENDERABLE_TYPES } from '../../utils/uploadConstraints'
 import CropperEditor from './CropperEditor'
 import './ImageUploadModal.css'
+
+/** 分片大小 2MB */
+const CHUNK_SIZE = 2 * 1024 * 1024
+/** 最大并发上传分片数 */
+const MAX_CONCURRENT = 5
 
 /** 从文件名推断扩展名 */
 function getExt(file) {
@@ -19,6 +25,35 @@ function canBrowserRender(file) {
   if (BROWSER_RENDERABLE_TYPES.includes(file.type)) return true
   const ext = getExt(file)
   return BROWSER_RENDERABLE_TYPES.some(t => t === `image/${ext}`)
+}
+
+/** 计算文件 MD5（流式，支持大文件） */
+function computeFileMD5(file) {
+  return new Promise((resolve, reject) => {
+    const blobSlice = File.prototype.slice
+    const chunks = Math.ceil(file.size / CHUNK_SIZE)
+    const spark = new SparkMD5.ArrayBuffer()
+    const reader = new FileReader()
+    let currentChunk = 0
+
+    reader.onload = (e) => {
+      spark.append(e.target.result)
+      currentChunk++
+      if (currentChunk < chunks) {
+        loadNext()
+      } else {
+        resolve(spark.end())
+      }
+    }
+    reader.onerror = () => reject(new Error('MD5 计算失败'))
+
+    function loadNext() {
+      const start = currentChunk * CHUNK_SIZE
+      const end = Math.min(start + CHUNK_SIZE, file.size)
+      reader.readAsArrayBuffer(blobSlice.call(file, start, end))
+    }
+    loadNext()
+  })
 }
 
 export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) {
@@ -38,6 +73,10 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
   const [previewError, setPreviewError] = useState(false)
   const [urlResolved, setUrlResolved] = useState(false)
 
+  // 分片上传进度
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadStatus, setUploadStatus] = useState('') // 'md5' | 'uploading' | 'duplicate' | ''
+
   // 重置所有状态
   const resetState = useCallback(() => {
     setStep('select')
@@ -49,25 +88,119 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
     setPreviewUrl('')
     setPreviewError(false)
     setUrlResolved(false)
+    setUploadProgress(0)
+    setUploadStatus('')
   }, [])
 
   useEffect(() => {
     if (!open) resetState()
   }, [open, resetState])
 
-  const directUpload = async (file) => {
+  /**
+   * 分片上传大文件
+   */
+  const chunkUpload = async (file) => {
     setUploading(true)
+    setUploadStatus('md5')
+    setUploadProgress(0)
     try {
-      const fd = new FormData()
-      fd.append('file', file)
-      const result = await uploadPicture(fd, spaceId)
+      // 1. 计算 MD5
+      const md5 = await computeFileMD5(file)
+      setUploadStatus('')
+
+      // 2. 秒传校验
+      const checkResult = await checkUpload({ md5, size: file.size, targetSpaceId: spaceId })
+
+      if (checkResult.status === 'duplicate') {
+        setUploadStatus('duplicate')
+        message.success('秒传成功！')
+        onSuccess?.({ url: checkResult.picture.url, id: checkResult.picture.id })
+        onClose()
+        return
+      }
+
+      setUploadStatus('uploading')
+      const cosKey = checkResult.cosKey
+      const totalChunks = Math.ceil(file.size / CHUNK_SIZE)
+      let uploadedChunks = new Set(checkResult.uploadedChunks || [])
+
+      // 3. 并发分片上传
+      const pending = []
+      for (let i = 0; i < totalChunks; i++) {
+        if (uploadedChunks.has(i)) continue
+        pending.push(i)
+      }
+
+      // 并发上传（最多 MAX_CONCURRENT 个）
+      const results = new Array(totalChunks)
+      let completed = uploadedChunks.size
+
+      const updateProgress = () => {
+        setUploadProgress(Math.round((completed / totalChunks) * 100))
+      }
+      updateProgress()
+
+      const uploadSingleChunk = async (index) => {
+        const start = index * CHUNK_SIZE
+        const end = Math.min(start + CHUNK_SIZE, file.size)
+        const chunk = file.slice(start, end)
+        const chunkFile = new File([chunk], `chunk_${index}`, { type: file.type })
+        const fd = new FormData()
+        fd.append('file', chunkFile)
+        const result = await uploadChunk(fd, md5, index, cosKey)
+        results[index] = result
+        completed++
+        updateProgress()
+      }
+
+      // 分批并发
+      for (let i = 0; i < pending.length; i += MAX_CONCURRENT) {
+        const batch = pending.slice(i, i + MAX_CONCURRENT)
+        await Promise.all(batch.map(idx => uploadSingleChunk(idx)))
+      }
+
+      // 4. 合并分片
+      const mergeResult = await mergeChunks({
+        md5,
+        size: file.size,
+        cosKey,
+        totalChunks,
+        targetSpaceId: spaceId,
+      })
+
       message.success('上传成功')
-      onSuccess?.({ url: result.url, id: result.id })
+      onSuccess?.({ url: mergeResult.url, id: mergeResult.id })
       onClose()
     } catch (error) {
       message.error(error.message || '上传失败')
     } finally {
       setUploading(false)
+      setUploadStatus('')
+      setUploadProgress(0)
+    }
+  }
+
+  /**
+   * 统一上传入口：小文件走直接上传，大文件走分片
+   */
+  const directUpload = async (file) => {
+    // 小于等于 CHUNK_SIZE 的文件直接上传
+    if (file.size <= CHUNK_SIZE) {
+      setUploading(true)
+      try {
+        const fd = new FormData()
+        fd.append('file', file)
+        const result = await uploadPicture(fd, spaceId)
+        message.success('上传成功')
+        onSuccess?.({ url: result.url, id: result.id })
+        onClose()
+      } catch (error) {
+        message.error(error.message || '上传失败')
+      } finally {
+        setUploading(false)
+      }
+    } else {
+      await chunkUpload(file)
     }
   }
 
@@ -208,6 +341,19 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
             label: '文件上传',
             children: (
               <div className="image-upload-modal-body">
+                {uploading && (
+                  <div style={{ marginBottom: 16 }}>
+                    {uploadStatus === 'md5' && (
+                      <div style={{ textAlign: 'center', color: '#1890ff' }}>正在计算文件指纹...</div>
+                    )}
+                    {uploadStatus === 'duplicate' && (
+                      <div style={{ textAlign: 'center', color: '#52c41a' }}>秒传成功！</div>
+                    )}
+                    {uploadStatus === 'uploading' && (
+                      <Progress percent={uploadProgress} status="active" strokeColor={{ from: '#108ee9', to: '#87d068' }} />
+                    )}
+                  </div>
+                )}
                 <Upload.Dragger
                   className="image-upload-dragger"
                   beforeUpload={beforeUpload}

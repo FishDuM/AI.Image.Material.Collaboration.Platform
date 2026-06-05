@@ -42,7 +42,7 @@ function AuditLogManagement() {
   const [filterResult, setFilterResult] = useState(undefined)
 
   useEffect(() => {
-    if (!userInfo || !userInfo?.permissions?.includes('user:manage')) {
+    if (!userInfo || !userInfo?.permissions?.includes('system:log:manage')) {
       message.error('无权访问，正在跳转...')
       setTimeout(() => navigate('/404', { replace: true }), 500)
     }
@@ -66,7 +66,7 @@ function AuditLogManagement() {
   }, [current, pageSize, searchUsername, filterOperation, filterResult, message])
 
   useEffect(() => {
-    if (userInfo?.permissions?.includes('user:manage') && !hasFetchedRef.current) {
+    if (userInfo?.permissions?.includes('system:log:manage') && !hasFetchedRef.current) {
       hasFetchedRef.current = true
       fetchData()
     }
@@ -97,7 +97,7 @@ function AuditLogManagement() {
     return new Date(t).toLocaleString('zh-CN')
   }
 
-  if (!userInfo || !userInfo?.permissions?.includes('user:manage')) {
+  if (!userInfo || !userInfo?.permissions?.includes('system:log:manage')) {
     return (
       <main className="audit-log-container">
         <div style={{ textAlign: 'center', padding: '100px 0' }}>

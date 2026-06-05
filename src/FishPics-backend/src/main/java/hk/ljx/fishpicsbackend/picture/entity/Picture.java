@@ -77,6 +77,11 @@ public class Picture implements Serializable {
     private Long spaceId;
 
     /**
+     * 关联file_resource.id（文件去重）
+     */
+    private Long resourceId;
+
+    /**
      * 图片介绍
      */
     private String introduction;

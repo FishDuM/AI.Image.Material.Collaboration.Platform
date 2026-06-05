@@ -1,7 +1,7 @@
 package hk.ljx.fishpicsbackend.system.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
+import hk.ljx.fishpicsbackend.common.annotation.RequirePerm;
 import hk.ljx.fishpicsbackend.common.entity.SysAuditLog;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
@@ -26,7 +26,7 @@ public class AuditLogController {
     /**
      * 分页查询审计日志
      */
-    @AuthCheck(permission = "user:manage")
+    @RequirePerm("system:log:manage")
     @PostMapping("/audit-log/list")
     public Response<IPage<SysAuditLog>> auditLogList(@RequestBody AuditLogQueryRequest request) {
         return ResUtils.success(auditLogService.pageQuery(request));
@@ -35,7 +35,7 @@ public class AuditLogController {
     /**
      * 获取系统统计概览
      */
-    @AuthCheck(permission = "user:manage")
+    @RequirePerm("system:log:manage")
     @GetMapping("/stats")
     public Response<SystemStatsVO> stats() {
         return ResUtils.success(auditLogService.getStats());

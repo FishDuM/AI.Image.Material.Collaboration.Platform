@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { getToken, clearAuth } from '../utils/storage'
+import { getToken, saveToken, clearAuth } from '../utils/storage'
 import { TIMEOUT_DEFAULT, TIMEOUT_AVATAR, TIMEOUT_AI, TIMEOUT_PICTURE } from '../utils/constants'
 
 const api = axios.create({
@@ -23,7 +23,7 @@ api.interceptors.request.use(
   (config) => {
     const token = getToken()
     if (token) {
-      config.headers.Authorization = token
+      config.headers.Authorization = `Bearer ${token}`
     }
     if (!config.dedup) {
       return config
@@ -67,12 +67,19 @@ api.interceptors.response.use(
     if (response.config.url && response.config.url.includes('/checkCode/')) {
       return response
     }
+
+    // JWT 自动续签：检查响应头中的新 Token
+    const newToken = response.headers['x-new-token']
+    if (newToken) {
+      saveToken(newToken)
+    }
+
     const responseData = response.data
     if (!responseData || typeof responseData.code === 'undefined') {
       return Promise.reject(new Error('响应格式异常'))
     }
     if (responseData.code !== 1) {
-      if (responseData.code === 40005 || responseData.code === 40002) {
+      if (responseData.code === 40001 || responseData.code === 40005 || responseData.code === 40002) {
         handleAuthExpired()
       }
       return Promise.reject(new Error(responseData.message || '请求失败'))
@@ -173,16 +180,6 @@ export const getPictureEditMessage = (id) => api.get('/picture/pictureEditMessag
 
 export const getRecommendPictures = (data, config = {}) => api.post('/picture/recommend', data, config)
 
-export const followUser = (userId) => api.post('/user/follow', { userId })
-
-export const getUserProfile = (userId, config = {}) => api.get('/user/profile', { params: { userId }, ...config })
-
-export const updatePrivacy = (data) => api.post('/user/privacy', data)
-
-export const getFans = (data, config = {}) => api.post('/user/fans', data, config)
-
-export const getFollows = (data, config = {}) => api.post('/user/follows', data, config)
-
 export const getSystemTypes = () => api.get('/system/list')
 
 // AI 相关 API
@@ -233,5 +230,32 @@ export const uploadPicture = (formData, targetSpaceId) => {
     timeout: TIMEOUT_PICTURE,
   })
 }
+
+// ==================== 分片上传 API ====================
+
+/**
+ * 秒传校验
+ */
+export const checkUpload = (data) => api.post('/picture/check', data)
+
+/**
+ * 分片上传
+ */
+export const uploadChunk = (formData, md5, chunkIndex, cosKey) => {
+  const fd = new FormData()
+  fd.append('file', formData.get ? formData.get('file') : formData)
+  fd.append('md5', md5)
+  fd.append('chunkIndex', chunkIndex)
+  fd.append('cosKey', cosKey)
+  return api.post('/picture/upload-chunk', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: TIMEOUT_PICTURE,
+  })
+}
+
+/**
+ * 合并分片
+ */
+export const mergeChunks = (data) => api.post('/picture/merge', data)
 
 export default api

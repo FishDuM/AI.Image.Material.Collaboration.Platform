@@ -60,7 +60,7 @@ function AdminPictureManagement() {
   }, [message])
 
   useEffect(() => {
-    if (!userInfo || !userInfo?.permissions?.includes('picture:list')) {
+    if (!userInfo || !userInfo?.permissions?.includes('system:user:manage')) {
       message.error('无权访问，正在跳转到 404 页面...')
       setTimeout(() => {
         navigate('/404', { replace: true })

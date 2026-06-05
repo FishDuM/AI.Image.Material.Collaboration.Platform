@@ -3,7 +3,7 @@ package hk.ljx.fishpicsbackend.space.controller;
 import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.common.annotation.AuditLog;
-import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
+import hk.ljx.fishpicsbackend.common.annotation.RequirePerm;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
@@ -94,13 +94,13 @@ public class SpaceController {
         return ResUtils.success(spaceService.pictureList(spacePictureList));
     }
 
-    @AuthCheck(permission = "space:list")
+    @RequirePerm("system:team:manage")
     @PostMapping("/admin/list")
     public Response<IPage<SpaceVO>> adminList(@RequestBody SpaceQueryWrapper wrapper) {
         return ResUtils.success(spaceService.adminList(wrapper));
     }
 
-    @AuthCheck(permission = "space:manage")
+    @RequirePerm("system:team:manage")
     @PostMapping("/admin/update")
     @AuditLog(module = "空间管理", operation = "更新空间")
     public Response<Boolean> adminUpdate(@RequestBody SpaceAdminUpdateRequest request) {
@@ -108,7 +108,7 @@ public class SpaceController {
         return ResUtils.success(spaceService.adminUpdate(request));
     }
 
-    @AuthCheck(permission = "space:manage")
+    @RequirePerm("system:team:manage")
     @PostMapping("/admin/delete")
     @AuditLog(module = "空间管理", operation = "删除空间")
     public Response<Boolean> adminDelete(@RequestBody SpaceDeleteRequest request) {
@@ -116,7 +116,7 @@ public class SpaceController {
         return ResUtils.success(spaceService.adminDelete(request.getId()));
     }
 
-    @AuthCheck(permission = "space:status")
+    @RequirePerm("system:team:manage")
     @PostMapping("/admin/setStatus")
     @AuditLog(module = "空间管理", operation = "空间状态变更")
     public Response<Boolean> adminSetStatus(@RequestBody SpaceSetStatusRequest request) {

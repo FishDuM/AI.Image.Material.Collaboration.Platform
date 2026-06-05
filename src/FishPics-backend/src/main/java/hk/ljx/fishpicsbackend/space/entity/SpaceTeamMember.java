@@ -1,6 +1,8 @@
 package hk.ljx.fishpicsbackend.space.entity;
 
-import com.baomidou.mybatisplus.annotation.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.io.Serializable;
@@ -16,17 +18,25 @@ public class SpaceTeamMember implements Serializable {
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    // 团队空间ID
+    /**
+     * 关联 space.id
+     */
     private Long spaceId;
 
-    // 用户ID
+    /**
+     * 关联 user.id
+     */
     private Long userId;
 
-    // 团队内角色ID，关联 sys_role
-    private Long roleId;
+    /**
+     * 关联 role.id（仅允许 2/3/4）
+     */
+    private Integer roleId;
 
-    private Date joinedAt;
+    /**
+     * 加入时间
+     */
+    private Date createTime;
 
-    @TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }

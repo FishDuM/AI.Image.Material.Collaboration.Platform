@@ -59,7 +59,7 @@ function UserManagement() {
   }, [navigate, message])
 
   useEffect(() => {
-    if (!userInfo || !userInfo?.permissions?.includes('user:manage')) {
+    if (!userInfo || !userInfo?.permissions?.includes('system:user:manage')) {
       message.error('无权访问')
       navigate('/', { replace: true })
       return
@@ -378,7 +378,7 @@ function UserManagement() {
     },
   ]
 
-  if (!userInfo || !userInfo?.permissions?.includes('user:manage')) {
+  if (!userInfo || !userInfo?.permissions?.includes('system:user:manage')) {
     return (
       <main className="user-management-container">
         <div style={{ textAlign: 'center', padding: '100px 0' }}>

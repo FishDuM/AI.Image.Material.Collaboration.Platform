@@ -24,7 +24,7 @@ function AdminDashboard() {
   const [stats, setStats] = useState(null)
 
   useEffect(() => {
-    if (!userInfo || !userInfo?.permissions?.includes('user:manage')) {
+    if (!userInfo || !userInfo?.permissions?.includes('system:user:manage')) {
       message.error('无权访问，正在跳转...')
       setTimeout(() => navigate('/404', { replace: true }), 500)
       return
@@ -44,7 +44,7 @@ function AdminDashboard() {
     fetchStats()
   }, [userInfo, navigate, message])
 
-  if (!userInfo || !userInfo?.permissions?.includes('user:manage')) {
+  if (!userInfo || !userInfo?.permissions?.includes('system:user:manage')) {
     return (
       <main className="dashboard-container">
         <div style={{ textAlign: 'center', padding: '100px 0' }}>

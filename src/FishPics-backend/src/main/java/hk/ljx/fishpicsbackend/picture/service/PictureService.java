@@ -5,7 +5,9 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 import hk.ljx.fishpicsbackend.common.dto.PageRequest;
 import hk.ljx.fishpicsbackend.picture.dto.AdminPictureListDTO;
+import hk.ljx.fishpicsbackend.picture.dto.CheckUploadRequest;
 import hk.ljx.fishpicsbackend.picture.dto.DeleteByIdList;
+import hk.ljx.fishpicsbackend.picture.dto.MergeChunksRequest;
 import hk.ljx.fishpicsbackend.picture.dto.PictureQueryRequest;
 import hk.ljx.fishpicsbackend.picture.dto.PictureUpdateRequest;
 import hk.ljx.fishpicsbackend.picture.vo.PictureAdminVO;
@@ -96,4 +98,19 @@ public interface PictureService extends IService<Picture> {
      * 获取推荐图片列表（基于用户兴趣画像标签匹配）
      */
     IPage<PictureListVO> getRecommendPictures(PageRequest pageRequest, Long userId);
+
+    /**
+     * 秒传校验（MD5+size）
+     */
+    Object checkUpload(CheckUploadRequest request);
+
+    /**
+     * 分片上传
+     */
+    Object uploadChunk(MultipartFile file, String md5, Integer chunkIndex, String cosKey);
+
+    /**
+     * 合并分片
+     */
+    PictureListVO mergeChunks(MergeChunksRequest request);
 }

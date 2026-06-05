@@ -31,7 +31,7 @@ function SpaceManagement() {
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    if (!userInfo || !userInfo?.permissions?.includes('space:list')) {
+    if (!userInfo || !userInfo?.permissions?.includes('system:team:manage')) {
       message.error('无权访问，正在跳转...')
       setTimeout(() => navigate('/404', { replace: true }), 500)
     }
@@ -54,7 +54,7 @@ function SpaceManagement() {
   }, [current, pageSize, searchName, searchType, message])
 
   useEffect(() => {
-    if (userInfo?.permissions?.includes('space:list') && !hasFetchedRef.current) {
+    if (userInfo?.permissions?.includes('system:team:manage') && !hasFetchedRef.current) {
       hasFetchedRef.current = true
       fetchData()
     }
@@ -133,7 +133,7 @@ function SpaceManagement() {
     return bytes + ' B'
   }
 
-  if (!userInfo || !userInfo?.permissions?.includes('space:list')) {
+  if (!userInfo || !userInfo?.permissions?.includes('system:team:manage')) {
     return (
       <main className="space-management-container">
         <div style={{ textAlign: 'center', padding: '100px 0' }}>

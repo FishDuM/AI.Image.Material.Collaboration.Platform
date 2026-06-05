@@ -1,18 +1,26 @@
 package hk.ljx.fishpicsbackend.common.interceptor;
 
+import hk.ljx.fishpicsbackend.common.context.LoginContext;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
-import hk.ljx.fishpicsbackend.user.entity.User;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.servlet.HandlerInterceptor;
 
+/**
+ * 登录拦截器
+ * 检查 ThreadLocal 中是否有登录上下文
+ *
+ * 执行顺序：order=1（在 TokenRefreshInterceptor 之后）
+ */
 public class LoginInterceptor implements HandlerInterceptor {
+
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-        // 从线程获取用户信息
-        User user = UserHolder.getUser();
-        if (user == null) {
+        LoginContext ctx = UserHolder.getLoginContext();
+        if (ctx == null || ctx.getUserId() == null) {
             response.setStatus(401);
+            response.setContentType("application/json;charset=UTF-8");
+            response.getWriter().write("{\"code\":40001,\"message\":\"未登录或登录已过期\"}");
             return false;
         }
         return true;

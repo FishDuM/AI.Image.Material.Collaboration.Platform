@@ -13,7 +13,6 @@ import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
-import hk.ljx.fishpicsbackend.mapper.SysRoleMapper;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
 import hk.ljx.fishpicsbackend.picture.entity.Picture;
 import hk.ljx.fishpicsbackend.picture.service.PictureService;
@@ -30,7 +29,6 @@ import hk.ljx.fishpicsbackend.user.entity.User;
 import hk.ljx.fishpicsbackend.permission.service.PermissionService;
 import hk.ljx.fishpicsbackend.mapper.SpaceTeamMemberMapper;
 import hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember;
-import hk.ljx.fishpicsbackend.permission.entity.SysRole;
 import hk.ljx.fishpicsbackend.space.dto.TeamInviteRequest;
 import hk.ljx.fishpicsbackend.space.dto.TeamRemoveRequest;
 import hk.ljx.fishpicsbackend.space.dto.TeamChangeRoleRequest;
@@ -49,6 +47,16 @@ import static hk.ljx.fishpicsbackend.common.constants.SpaceConstants.*;
 public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         implements SpaceService {
 
+    /**
+     * 角色名称映射
+     */
+    private static final Map<Integer, String> ROLE_NAME_MAP = Map.of(
+            1, "系统超级管理员",
+            2, "团队管理员",
+            3, "普通成员",
+            4, "只读成员"
+    );
+
     @Resource
     private PictureService pictureService;
 
@@ -61,12 +69,9 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
     @Resource
     private SpaceTeamMemberMapper spaceTeamMemberMapper;
 
-    @Resource
-    private SysRoleMapper sysRoleMapper;
-
     /**
      * 创建空间，根据用户等级和空间类型分配存储配额
-     * 
+     *
      * @param createSpace 创建空间请求参数
      * @param user        当前登录用户
      * @return 创建成功返回true
@@ -78,54 +83,40 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         String introduction = createSpace.getIntroduction();
         Integer type = createSpace.getType();
         ExcUtils.throwIfTrue(name == null || type == null, "空间名称不能为空");
-        // 获取创建用户
-        Integer level = user.getLevel();
         ExcUtils.throwIfTrue(user == null || user.getId() == null, "用户不存在");
+
+        // 读取用户等级
+        Integer level = user.getLevel() != null ? user.getLevel() : 0;
+
         // 判断空间类型并校验数量限制
-        // 私人空间每人只能有一个，团队空间根据等级有不同上限
         List<Space> spaceList = baseMapper
                 .selectList(new QueryWrapper<Space>().eq("user_id", user.getId()).eq("type", type));
         if (type == 0) {
             // 私人空间：每人限一个
             ExcUtils.throwIfTrue(!spaceList.isEmpty(), "私人空间已存在");
         } else if (type == 1) {
-            // 团队空间：根据用户等级限制数量（普通1个/VIP 5个/SVIP 10个）
-            if (level == 0) {
-                ExcUtils.throwIfTrue(CollUtil.size(spaceList) >= TEAM_MAX_COUNT_LEVEL0, "团队空间已达到上限");
-            } else if (level == 1) {
-                ExcUtils.throwIfTrue(CollUtil.size(spaceList) >= TEAM_MAX_COUNT_LEVEL1, "团队空间已达到上限");
-            } else if (level == 2) {
-                ExcUtils.throwIfTrue(CollUtil.size(spaceList) >= TEAM_MAX_COUNT_LEVEL2, "团队空间已达到上限");
+            // 团队空间：数量上限按等级
+            int maxTeamCount;
+            if (level >= 2) {
+                maxTeamCount = TEAM_MAX_COUNT_LEVEL2;
+            } else if (level >= 1) {
+                maxTeamCount = TEAM_MAX_COUNT_LEVEL1;
+            } else {
+                maxTeamCount = TEAM_MAX_COUNT_LEVEL0;
             }
+            ExcUtils.throwIfTrue(CollUtil.size(spaceList) >= maxTeamCount,
+                    "团队空间已达到上限（最多" + maxTeamCount + "个）");
         }
-        // 根据用户等级和空间类型分配存储配额
-        // 私人空间：普通512MB / VIP 5GB / SVIP 10GB
-        // 团队空间：普通512MB / VIP 30GB / SVIP 50GB
+
+        // 存储配额：按用户等级 + 空间类型
         Space space = new Space();
+        space.setLevel(level);
         if (type == 0) {
-            // 私人空间存储配额
-            if (level == 0) {
-                space.setLevel(0);
-                space.setStorageSize(DEFAULT_STORAGE_SIZE);
-            } else if (level == 1) {
-                space.setLevel(1);
-                space.setStorageSize(VIP_STORAGE_SIZE);
-            } else if (level == 2) {
-                space.setLevel(2);
-                space.setStorageSize(SVIP_STORAGE_SIZE);
-            }
+            // 私人空间
+            space.setStorageSize(getPrivateStorageSize(level));
         } else if (type == 1) {
-            // 团队空间存储配额（比私人空间更大）
-            if (level == 0) {
-                space.setLevel(0);
-                space.setStorageSize(DEFAULT_STORAGE_SIZE);
-            } else if (level == 1) {
-                space.setLevel(1);
-                space.setStorageSize(TEAM_VIP_STORAGE_SIZE);
-            } else if (level == 2) {
-                space.setLevel(2);
-                space.setStorageSize(TEAM_SVIP_STORAGE_SIZE);
-            }
+            // 团队空间
+            space.setStorageSize(getTeamStorageSize(level));
         }
         space.setName(name);
         space.setIntroduction(introduction);
@@ -133,14 +124,11 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         space.setUserId(user.getId());
         int insert = baseMapper.insert(space);
         if (type == 1) {
-            SysRole teamAdminRole = sysRoleMapper.selectOne(
-                    new QueryWrapper<SysRole>().eq("code", "team_admin").eq("scope", 1).eq("is_delete", 0));
+            // 团队空间创建者默认为团队管理员（role_id=2）
             SpaceTeamMember teamMember = new SpaceTeamMember();
             teamMember.setSpaceId(space.getId());
             teamMember.setUserId(user.getId());
-            if (teamAdminRole != null) {
-                teamMember.setRoleId(teamAdminRole.getId());
-            }
+            teamMember.setRoleId(2);
             spaceTeamMemberMapper.insert(teamMember);
         }
         ExcUtils.throwIfTrue(insert <= 0, "创建空间失败");
@@ -205,11 +193,14 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
             if (type == 1) {
                 List<SpaceTeamMember> teamMembers = spaceTeamMemberMapper.selectList(new QueryWrapper<SpaceTeamMember>().eq("space_id", space.getId()));
                 Map<Long, Long> userIdRoleIdMap = teamMembers.stream()
-                        .collect(Collectors.toMap(SpaceTeamMember::getUserId, SpaceTeamMember::getRoleId, (a, b) -> a));
-                List<Long> roleIds = teamMembers.stream().map(SpaceTeamMember::getRoleId).filter(Objects::nonNull).distinct().collect(Collectors.toList());
+                        .collect(Collectors.toMap(SpaceTeamMember::getUserId,
+                                tm -> tm.getRoleId() != null ? tm.getRoleId().longValue() : 0L, (a, b) -> a));
+                List<Long> roleIds = teamMembers.stream()
+                        .map(tm -> tm.getRoleId() != null ? tm.getRoleId().longValue() : null)
+                        .filter(Objects::nonNull).distinct().collect(Collectors.toList());
                 Map<Long, String> roleNameMap = new HashMap<>();
-                if (!roleIds.isEmpty()) {
-                    sysRoleMapper.selectByIds(roleIds).forEach(r -> roleNameMap.put(r.getId(), r.getName()));
+                for (Long roleId : roleIds) {
+                    roleNameMap.put(roleId, ROLE_NAME_MAP.getOrDefault(roleId.intValue(), "未知角色"));
                 }
                 List<SpaceMemberVO> members = teamMembers.stream()
                         .limit(10)
@@ -284,11 +275,14 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         if (space.getType() == 1) {
             List<SpaceTeamMember> teamMembers = spaceTeamMemberMapper.selectList(new QueryWrapper<SpaceTeamMember>().eq("space_id", space.getId()));
             Map<Long, Long> userIdRoleIdMap = teamMembers.stream()
-                    .collect(Collectors.toMap(SpaceTeamMember::getUserId, SpaceTeamMember::getRoleId, (a, b) -> a));
-            List<Long> roleIds = teamMembers.stream().map(SpaceTeamMember::getRoleId).filter(Objects::nonNull).distinct().collect(Collectors.toList());
+                    .collect(Collectors.toMap(SpaceTeamMember::getUserId,
+                            tm -> tm.getRoleId() != null ? tm.getRoleId().longValue() : 0L, (a, b) -> a));
+            List<Long> roleIds = teamMembers.stream()
+                    .map(tm -> tm.getRoleId() != null ? tm.getRoleId().longValue() : null)
+                    .filter(Objects::nonNull).distinct().collect(Collectors.toList());
             Map<Long, String> roleNameMap = new HashMap<>();
-            if (!roleIds.isEmpty()) {
-                sysRoleMapper.selectByIds(roleIds).forEach(r -> roleNameMap.put(r.getId(), r.getName()));
+            for (Long roleId : roleIds) {
+                roleNameMap.put(roleId, ROLE_NAME_MAP.getOrDefault(roleId.intValue(), "未知角色"));
             }
             List<SpaceMemberVO> members = teamMembers.stream()
                     .limit(10)
@@ -327,7 +321,8 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         Space space = baseMapper.selectById(id);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
         // 2. 权限校验：仅空间创建者或管理员可修改
-        ExcUtils.throwIfFalse(space.getUserId().equals(userId) || permissionService.hasPermission(user.getId(), "space:manage"),
+        hk.ljx.fishpicsbackend.common.context.LoginContext ctx = UserHolder.getLoginContext();
+        ExcUtils.throwIfFalse(space.getUserId().equals(userId) || (ctx != null && ctx.hasSystemPerm("system:team:manage")),
                 ExceptionCode.PARAMETER_ERROR, "无权限修改空间信息");
         // 3. 更新空间信息
         space.setName(name);
@@ -468,11 +463,14 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
             if (space.getType() != null && space.getType() == 1) {
                 List<SpaceTeamMember> teamMembers = spaceTeamMemberMapper.selectList(new QueryWrapper<SpaceTeamMember>().eq("space_id", space.getId()));
                 Map<Long, Long> userIdRoleIdMap = teamMembers.stream()
-                        .collect(Collectors.toMap(SpaceTeamMember::getUserId, SpaceTeamMember::getRoleId, (a, b) -> a));
-                List<Long> roleIds = teamMembers.stream().map(SpaceTeamMember::getRoleId).filter(Objects::nonNull).distinct().collect(Collectors.toList());
+                        .collect(Collectors.toMap(SpaceTeamMember::getUserId,
+                                tm -> tm.getRoleId() != null ? tm.getRoleId().longValue() : 0L, (a, b) -> a));
+                List<Long> roleIds = teamMembers.stream()
+                        .map(tm -> tm.getRoleId() != null ? tm.getRoleId().longValue() : null)
+                        .filter(Objects::nonNull).distinct().collect(Collectors.toList());
                 Map<Long, String> roleNameMap = new HashMap<>();
-                if (!roleIds.isEmpty()) {
-                    sysRoleMapper.selectByIds(roleIds).forEach(r -> roleNameMap.put(r.getId(), r.getName()));
+                for (Long roleId : roleIds) {
+                    roleNameMap.put(roleId, ROLE_NAME_MAP.getOrDefault(roleId.intValue(), "未知角色"));
                 }
                 List<SpaceMemberVO> members = teamMembers.stream()
                         .limit(10)
@@ -552,16 +550,18 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         Map<Long, User> userMap = userMapper.selectByIds(userIds)
                 .stream().collect(Collectors.toMap(User::getId, u -> u));
 
-        List<Long> roleIds = teamMembers.stream().map(SpaceTeamMember::getRoleId).filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        List<Long> roleIds = teamMembers.stream().map(tm -> tm.getRoleId() != null ? tm.getRoleId().longValue() : null).filter(Objects::nonNull).distinct().collect(Collectors.toList());
         Map<Long, String> roleNameMap = new HashMap<>();
-        if (!roleIds.isEmpty()) {
-            sysRoleMapper.selectByIds(roleIds).forEach(r -> roleNameMap.put(r.getId(), r.getName()));
+        for (Long roleId : roleIds) {
+            roleNameMap.put(roleId, ROLE_NAME_MAP.getOrDefault(roleId.intValue(), "未知角色"));
         }
 
         return teamMembers.stream().map(tm -> {
             User u = userMap.get(tm.getUserId());
             if (u == null) return null;
-            return new SpaceMemberVO(u.getId(), u.getNickname(), u.getAvatar(), tm.getRoleId(), roleNameMap.getOrDefault(tm.getRoleId(), ""));
+            return new SpaceMemberVO(u.getId(), u.getNickname(), u.getAvatar(),
+                    tm.getRoleId() != null ? tm.getRoleId().longValue() : null,
+                    roleNameMap.getOrDefault(tm.getRoleId() != null ? tm.getRoleId().longValue() : null, ""));
         }).filter(Objects::nonNull).collect(Collectors.toList());
     }
 
@@ -586,8 +586,9 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         User targetUser = userMapper.selectById(userId);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(targetUser), ExceptionCode.PARAMETER_ERROR, "目标用户不存在");
 
-        SysRole role = sysRoleMapper.selectById(roleId);
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(role) || role.getScope() != 1, ExceptionCode.PARAMETER_ERROR, "无效的团队角色");
+        // 验证角色ID（仅允许 2=团队管理员, 3=普通成员, 4=只读）
+        ExcUtils.throwIfTrue(roleId == null || roleId < 2 || roleId > 4,
+                ExceptionCode.PARAMETER_ERROR, "无效的团队角色，仅允许 2/3/4");
 
         permissionService.addTeamMember(spaceId, userId, roleId);
         return true;
@@ -643,8 +644,9 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
                 new QueryWrapper<SpaceTeamMember>().eq("space_id", spaceId).eq("user_id", userId));
         ExcUtils.throwIfTrue(count == 0, ExceptionCode.PARAMETER_ERROR, "该用户不是团队成员");
 
-        SysRole role = sysRoleMapper.selectById(roleId);
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(role) || role.getScope() != 1, ExceptionCode.PARAMETER_ERROR, "无效的团队角色");
+        // 验证角色ID（仅允许 2=团队管理员, 3=普通成员, 4=只读）
+        ExcUtils.throwIfTrue(roleId == null || roleId < 2 || roleId > 4,
+                ExceptionCode.PARAMETER_ERROR, "无效的团队角色，仅允许 2/3/4");
 
         permissionService.addTeamMember(spaceId, userId, roleId);
         return true;
@@ -685,5 +687,27 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         }
 
         return result;
+    }
+
+    /**
+     * 根据用户等级获取私人空间存储配额
+     */
+    private Long getPrivateStorageSize(int level) {
+        return switch (level) {
+            case 1 -> VIP_STORAGE_SIZE;
+            case 2 -> SVIP_STORAGE_SIZE;
+            default -> DEFAULT_STORAGE_SIZE;
+        };
+    }
+
+    /**
+     * 根据用户等级获取团队空间存储配额
+     */
+    private Long getTeamStorageSize(int level) {
+        return switch (level) {
+            case 1 -> TEAM_VIP_STORAGE_SIZE;
+            case 2 -> TEAM_SVIP_STORAGE_SIZE;
+            default -> TEAM_DEFAULT_STORAGE_SIZE;
+        };
     }
 }

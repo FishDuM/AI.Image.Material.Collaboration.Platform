@@ -5,7 +5,7 @@ import hk.ljx.fishpicsbackend.picture.service.PictureService;
 import cn.hutool.core.util.ObjUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.common.annotation.AuditLog;
-import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
+import hk.ljx.fishpicsbackend.common.annotation.RequirePerm;
 import hk.ljx.fishpicsbackend.common.dto.PageRequest;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.user.entity.User;
@@ -13,7 +13,9 @@ import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.picture.dto.AdminPictureListDTO;
+import hk.ljx.fishpicsbackend.picture.dto.CheckUploadRequest;
 import hk.ljx.fishpicsbackend.picture.dto.DeleteByIdList;
+import hk.ljx.fishpicsbackend.picture.dto.MergeChunksRequest;
 import hk.ljx.fishpicsbackend.picture.dto.PictureQueryRequest;
 import hk.ljx.fishpicsbackend.picture.dto.PictureUpdateRequest;
 import hk.ljx.fishpicsbackend.picture.dto.ReviewPictureDTO;
@@ -105,17 +107,48 @@ public class PictureController {
         return ResUtils.success(pictureService.getPictureEditMessage(id));
     }
 
-    @AuthCheck(permission = "picture:list")
+    @RequirePerm("system:user:manage")
     @PostMapping("/admin/list")
     public Response<IPage<PictureAdminVO>> getPictureListAdmin(@RequestBody AdminPictureListDTO dto) {
         return ResUtils.success(pictureService.getAdminPictureList(dto));
     }
 
-    @AuthCheck(permission = "picture:review")
+    @RequirePerm("system:user:manage")
     @PostMapping("/admin/review")
     @AuditLog(module = "图片管理", operation = "图片审核")
     public Response<Boolean> reviewPicture(@RequestBody ReviewPictureDTO dto) {
         pictureService.reviewPicture(dto.getPictureId(), dto.getStatus(), dto.getSelected());
         return ResUtils.success(true);
+    }
+
+    // ==================== 分片上传接口 ====================
+
+    /**
+     * 秒传校验
+     * 检查文件是否已存在（MD5+size），支持秒传和断点续传
+     */
+    @PostMapping("/check")
+    public Response<?> checkUpload(@RequestBody CheckUploadRequest request) {
+        return ResUtils.success(pictureService.checkUpload(request));
+    }
+
+    /**
+     * 分片上传
+     */
+    @PostMapping("/upload-chunk")
+    public Response<?> uploadChunk(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("md5") String md5,
+            @RequestParam("chunkIndex") Integer chunkIndex,
+            @RequestParam("cosKey") String cosKey) {
+        return ResUtils.success(pictureService.uploadChunk(file, md5, chunkIndex, cosKey));
+    }
+
+    /**
+     * 合并分片
+     */
+    @PostMapping("/merge")
+    public Response<PictureListVO> mergeChunks(@RequestBody MergeChunksRequest request) {
+        return ResUtils.success(pictureService.mergeChunks(request));
     }
 }

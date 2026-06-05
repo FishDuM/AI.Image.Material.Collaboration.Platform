@@ -27,7 +27,6 @@ const MobileRegisterPage = lazy(() => import('./pages/MobileRegisterPage'))
 const MobileEditPicturePage = lazy(() => import('./pages/MobileEditPicturePage'))
 const MobileEditProfilePage = lazy(() => import('./pages/MobileEditProfilePage'))
 const MobileUpgradePage = lazy(() => import('./pages/MobileUpgradePage'))
-const MobileFollowListPage = lazy(() => import('./pages/MobileFollowListPage'))
 const MobileUserProfilePage = lazy(() => import('./pages/MobileUserProfilePage'))
 const MobileSaveToSpacePage = lazy(() => import('./pages/MobileSaveToSpacePage'))
 
@@ -81,7 +80,6 @@ function App() {
         <Route path="/mobile/picture/edit" element={<RouteWithBoundary><ProtectedRoute><MobileEditPicturePage /></ProtectedRoute></RouteWithBoundary>} />
         <Route path="/mobile/profile/edit" element={<RouteWithBoundary><ProtectedRoute><MobileEditProfilePage /></ProtectedRoute></RouteWithBoundary>} />
         <Route path="/mobile/upgrade" element={<RouteWithBoundary><ProtectedRoute><MobileUpgradePage /></ProtectedRoute></RouteWithBoundary>} />
-        <Route path="/mobile/follow-list" element={<RouteWithBoundary><ProtectedRoute><MobileFollowListPage /></ProtectedRoute></RouteWithBoundary>} />
         <Route path="/mobile/profile" element={<RouteWithBoundary><ProtectedRoute><MobileUserProfilePage /></ProtectedRoute></RouteWithBoundary>} />
         <Route path="/mobile/save-to-space" element={<RouteWithBoundary><ProtectedRoute><MobileSaveToSpacePage /></ProtectedRoute></RouteWithBoundary>} />
 
@@ -96,13 +94,13 @@ function App() {
               <Route path="/team-space/:id" element={<RouteWithBoundary><ProtectedRoute><TeamSpaceDetail /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/notifications" element={<RouteWithBoundary><ProtectedRoute><Notifications /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/ai-tools" element={<RouteWithBoundary><ProtectedRoute><AIImageTools /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/admin/users" element={<RouteWithBoundary><ProtectedRoute permission="user:list"><UserManagement /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/admin/pictures" element={<RouteWithBoundary><ProtectedRoute permission="picture:list"><AdminPictureManagement /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/admin/spaces" element={<RouteWithBoundary><ProtectedRoute permission="space:list"><SpaceManagement /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/admin/dashboard" element={<RouteWithBoundary><ProtectedRoute permission="user:manage"><AdminDashboard /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/admin/audit-logs" element={<RouteWithBoundary><ProtectedRoute permission="user:manage"><AuditLogManagement /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/admin/ai" element={<RouteWithBoundary><ProtectedRoute permission="ai:tasks"><AIManagement /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/admin/system" element={<RouteWithBoundary><ProtectedRoute permission="user:manage"><SystemManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/users" element={<RouteWithBoundary><ProtectedRoute permission="system:user:manage"><UserManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/pictures" element={<RouteWithBoundary><ProtectedRoute permission="system:user:manage"><AdminPictureManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/spaces" element={<RouteWithBoundary><ProtectedRoute permission="system:team:manage"><SpaceManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/dashboard" element={<RouteWithBoundary><ProtectedRoute permission="system:user:manage"><AdminDashboard /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/audit-logs" element={<RouteWithBoundary><ProtectedRoute permission="system:log:manage"><AuditLogManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/ai" element={<RouteWithBoundary><ProtectedRoute permission="system:ai:manage"><AIManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/system" element={<RouteWithBoundary><ProtectedRoute permission="system:config"><SystemManagement /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/404" element={<RouteWithBoundary><NotFound /></RouteWithBoundary>} />
               <Route path="*" element={<RouteWithBoundary><NotFound /></RouteWithBoundary>} />
             </Routes>

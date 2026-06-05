@@ -7,7 +7,7 @@ import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.common.annotation.AuditLog;
-import hk.ljx.fishpicsbackend.common.annotation.AuthCheck;
+import hk.ljx.fishpicsbackend.common.annotation.RequirePerm;
 import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
 import hk.ljx.fishpicsbackend.common.constants.UserConstants;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
@@ -18,7 +18,6 @@ import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
 import hk.ljx.fishpicsbackend.user.dto.*;
 import hk.ljx.fishpicsbackend.user.entity.User;
-import hk.ljx.fishpicsbackend.user.service.UserFansService;
 import hk.ljx.fishpicsbackend.user.service.UserService;
 import hk.ljx.fishpicsbackend.user.vo.*;
 
@@ -42,9 +41,6 @@ public class UserController {
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
-
-    @Resource
-    private UserFansService userFansService;
 
     @PostMapping("/login")
     @AuditLog(module = "用户管理", operation = "用户登录")
@@ -88,16 +84,28 @@ public class UserController {
     }
 
     @Resource
+    private hk.ljx.fishpicsbackend.common.utils.JwtUtils jwtUtils;
+
+    @Resource
     private hk.ljx.fishpicsbackend.permission.service.PermissionService permissionService;
 
     @GetMapping("/getUser")
     public Response<UserLoginVO> getUser() {
-        User user = UserHolder.getUser();
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
+        hk.ljx.fishpicsbackend.common.context.LoginContext ctx = UserHolder.getLoginContext();
+        ExcUtils.throwIfTrue(ctx == null || ctx.getUserId() == null, ExceptionCode.NOT_LOGIN);
         UserLoginVO userLoginVO = new UserLoginVO();
-        BeanUtil.copyProperties(user, userLoginVO);
-        userLoginVO.setPermissions(
-                new java.util.ArrayList<>(permissionService.getUserPermissions(user.getId())));
+        userLoginVO.setId(ctx.getUserId());
+        userLoginVO.setUsername(ctx.getUsername());
+        userLoginVO.setNickname(ctx.getNickname());
+        userLoginVO.setAvatar(ctx.getAvatar());
+        userLoginVO.setLevel(ctx.getLevel());
+        // 权限列表 = 系统权限 + VIP 权限
+        List<String> allPerms = new java.util.ArrayList<>(
+                ctx.getSystemPerms() != null ? ctx.getSystemPerms() : java.util.List.of());
+        if (ctx.getVipPerms() != null) {
+            allPerms.addAll(ctx.getVipPerms());
+        }
+        userLoginVO.setPermissions(allPerms);
         return ResUtils.success(userLoginVO);
     }
 
@@ -110,11 +118,18 @@ public class UserController {
     @PostMapping("/logout")
     @AuditLog(module = "用户管理", operation = "用户登出")
     public Response<?> logout(HttpServletRequest request) {
-        UserHolder.removeUser();
-        String token = request.getHeader("Authorization");
-        if (StrUtil.isNotBlank(token)) {
-            stringRedisTemplate.delete(RedisConstants.getUserIdKey(token));
+        // 1. 将 JWT 加入黑名单
+        String authHeader = request.getHeader("Authorization");
+        if (StrUtil.isNotBlank(authHeader)) {
+            String jwt = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
+            jwtUtils.addToBlacklist(jwt);
+            // 2. 从 JWT 中获取 userId 并删除 Redis 会话
+            Long userId = jwtUtils.getUserId(jwt);
+            if (userId != null) {
+                stringRedisTemplate.delete(RedisConstants.getUserPermCtxKey(userId));
+            }
         }
+        UserHolder.removeLoginContext();
         return ResUtils.success();
     }
 
@@ -122,25 +137,6 @@ public class UserController {
     public Response<Boolean> updatePrivacy(@RequestBody UserPrivacyRequest request) {
         ExcUtils.throwIfTrue(ObjectUtil.isNull(request), ExceptionCode.PARAMETER_ERROR);
         return ResUtils.success(userService.updatePrivacy(request));
-    }
-
-    @PostMapping("/follow")
-    public Response<Boolean> follow(@RequestBody UserIdRequest userIdRequest) {
-        ExcUtils.throwIfTrue(userIdRequest == null || userIdRequest.getUserId() == null,
-                ExceptionCode.PARAMETER_ERROR);
-        return ResUtils.success(userFansService.follow(userIdRequest.getUserId()));
-    }
-
-    @PostMapping("/fans")
-    public Response<IPage<FollowUserVO>> getFans(@RequestBody FollowQueryDTO dto) {
-        Long queryUserId = dto.getUserId() != null ? dto.getUserId() : UserHolder.getUser().getId();
-        return ResUtils.success(userFansService.getFans(queryUserId, dto.getCurrent(), dto.getPageSize()));
-    }
-
-    @PostMapping("/follows")
-    public Response<IPage<FollowUserVO>> getFollows(@RequestBody FollowQueryDTO dto) {
-        Long queryUserId = dto.getUserId() != null ? dto.getUserId() : UserHolder.getUser().getId();
-        return ResUtils.success(userFansService.getFollows(queryUserId, dto.getCurrent(), dto.getPageSize()));
     }
 
     @GetMapping("/profile")
@@ -156,7 +152,7 @@ public class UserController {
         return ResUtils.success(userService.searchUsers(keyword));
     }
 
-    @AuthCheck(permission = "user:list")
+    @RequirePerm("system:user:manage")
     @PostMapping("/admin/getUser")
     public Response<AdminGetUserVO> adminGetUser(@RequestBody UserIdRequest userIdRequest) {
         Long userId = userIdRequest.getUserId();
@@ -168,7 +164,7 @@ public class UserController {
         return ResUtils.success(adminGetUserVO);
     }
 
-    @AuthCheck(permission = "user:list")
+    @RequirePerm("system:user:manage")
     @PostMapping("/admin/userList")
     public Response<IPage<AdminGetUserVO>> getUserList(@RequestBody UserQueryWrapper userQueryWrapper) {
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(userQueryWrapper), ExceptionCode.PARAMETER_ERROR);
@@ -178,7 +174,7 @@ public class UserController {
         return ResUtils.success(userList);
     }
 
-    @AuthCheck(permission = "user:status")
+    @RequirePerm("system:user:manage")
     @PostMapping("/admin/setStatus")
     @AuditLog(module = "用户管理", operation = "用户状态变更")
     public Response<Boolean> setStatus(@RequestBody UserIdRequest userIdRequest) {
@@ -187,7 +183,7 @@ public class UserController {
         return ResUtils.success(userService.setStatus(userId));
     }
 
-    @AuthCheck(permission = "user:manage")
+    @RequirePerm("system:user:manage")
     @PostMapping("/admin/editUser")
     @AuditLog(module = "用户管理", operation = "编辑用户")
     public Response<Boolean> editUser(@RequestBody UserEditByAdminRequest userEditByAdminRequest) {
