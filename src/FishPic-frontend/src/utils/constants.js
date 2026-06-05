@@ -33,9 +33,6 @@ export const formatStorage = (bytes) => {
 
 export const PAGE_SIZE = 20
 
-// 帖子最大图片数
-export const MAX_POST_IMAGES = 15
-
 // 滚动加载更多阈值（px）
 export const LOAD_MORE_THRESHOLD = 200
 

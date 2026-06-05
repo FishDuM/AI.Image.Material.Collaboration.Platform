@@ -130,12 +130,6 @@ export const uploadAvatar = (formData, onProgress) => api.post('/picture/avatar'
   }
 })
 
-export const getMyPosts = (data, config = {}) => api.post('/post/myPosts', data, config)
-
-export const getMyCollects = (data, config = {}) => api.post('/post/myCollects', data, config)
-
-export const getMyLikes = (data, config = {}) => api.post('/post/myLikes', data, config)
-
 export const getMarquee = () => api.get('/system/marquee')
 
 export const getPictureList = (current = 1, pageSize = 20, config = {}, tag = '') => {
@@ -171,27 +165,11 @@ export const adminUpdateSpace = (data) => api.post('/space/admin/update', data)
 export const adminDeleteSpace = (id) => api.post('/space/admin/delete', { id })
 export const adminSetSpaceStatus = (id, status) => api.post('/space/admin/setStatus', { id, status })
 
-export const postPictureList = (data, config = {}) => api.post('/post/pictureList', data, config)
-
 export const deletePicture = (ids) => api.delete('/picture/delete', { data: { ids } })
 
 export const updatePicture = (data) => api.put('/picture/update', data)
 
 export const getPictureEditMessage = (id) => api.get('/picture/pictureEditMessage', { params: { id } })
-
-export const likePost = (id) => api.post('/post/like', { id })
-
-export const collectPost = (id) => api.post('/post/collect', { id })
-
-export const getPost = (id, config = {}) => api.get('/post/getPost', { params: { id }, ...config })
-
-export const editPost = (data) => api.post('/post/editPost', data)
-
-export const uploadPost = (data) => api.post('/post/post', data)
-
-export const getPostList = (data, config = {}) => api.post('/post/postList', data, config)
-
-export const getRecommendPosts = (data, config = {}) => api.post('/post/recommend', data, config)
 
 export const getRecommendPictures = (data, config = {}) => api.post('/picture/recommend', data, config)
 
@@ -206,22 +184,6 @@ export const getFans = (data, config = {}) => api.post('/user/fans', data, confi
 export const getFollows = (data, config = {}) => api.post('/user/follows', data, config)
 
 export const getSystemTypes = () => api.get('/system/list')
-
-export const createComment = (data) => api.post('/comment/create', data)
-
-export const getCommentList = (data, config = {}) => api.post('/comment/list', data, config)
-
-export const deleteComment = (id) => api.post('/comment/delete', { id })
-
-export const reviewComment = (id, status) => api.post('/comment/review', { id, status })
-
-export const adminDeleteComment = (id) => api.post('/comment/adminDelete', { id })
-
-export const getAdminCommentList = (data) => api.post('/comment/admin/list', data)
-
-export const getAdminPostList = (data) => api.post('/post/admin/list', data)
-export const reviewPost = (id, status) => api.post('/post/admin/review', { id, status })
-export const adminDeletePost = (id) => api.post('/post/admin/delete', { id })
 
 // AI 相关 API
 export const submitAiTag = (id) => api.post('/ai/tags', { id })

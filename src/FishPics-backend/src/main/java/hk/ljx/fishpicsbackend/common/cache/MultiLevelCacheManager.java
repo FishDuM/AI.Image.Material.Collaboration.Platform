@@ -20,14 +20,11 @@ public class MultiLevelCacheManager {
     private MultiLevelCache<Object> userInfoCache;
     // 用户权限缓存
     private MultiLevelCache<Object> userPermCache;
-    // 帖子列表缓存
-    private MultiLevelCache<Object> postListCache;
     // 系统配置缓存
     private MultiLevelCache<Object> sysConfigCache;
 
     public MultiLevelCache<Object> getUserInfoCache() { return userInfoCache; }
     public MultiLevelCache<Object> getUserPermCache() { return userPermCache; }
-    public MultiLevelCache<Object> getPostListCache() { return postListCache; }
     public MultiLevelCache<Object> getSysConfigCache() { return sysConfigCache; }
 
     @PostConstruct
@@ -51,17 +48,6 @@ public class MultiLevelCacheManager {
                 stringRedisTemplate,
                 CacheConstants.USER_PERMISSIONS,
                 CacheConstants.L2_USER_PERMISSIONS,
-                Object.class
-        );
-
-        postListCache = new MultiLevelCache<>(
-                Caffeine.newBuilder()
-                        .maximumSize(100)
-                        .expireAfterWrite(CacheConstants.L1_POST_LIST, TimeUnit.SECONDS)
-                        .build(),
-                stringRedisTemplate,
-                CacheConstants.POST_LIST,
-                CacheConstants.L2_POST_LIST,
                 Object.class
         );
 

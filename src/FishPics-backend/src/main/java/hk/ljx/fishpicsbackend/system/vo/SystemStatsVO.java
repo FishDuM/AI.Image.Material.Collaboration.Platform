@@ -18,12 +18,6 @@ public class SystemStatsVO {
     // 图片总数
     private Long totalPictures;
 
-    // 帖子总数
-    private Long totalPosts;
-
-    // 评论总数
-    private Long totalComments;
-
     // 空间总数
     private Long totalSpaces;
 
@@ -32,7 +26,4 @@ public class SystemStatsVO {
 
     // 今日新增图片数
     private Long todayNewPictures;
-
-    // 今日新增帖子数
-    private Long todayNewPosts;
 }

@@ -18,17 +18,12 @@ const SystemManagement = lazy(() => import('./pages/SystemManagement'))
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
 const AuditLogManagement = lazy(() => import('./pages/AuditLogManagement'))
 const AdminPictureManagement = lazy(() => import('./pages/AdminPictureManagement'))
-const AdminCommentManagement = lazy(() => import('./pages/AdminCommentManagement'))
-const AdminPostManagement = lazy(() => import('./pages/AdminPostManagement'))
-const CommunitySquare = lazy(() => import('./pages/CommunitySquare'))
 const PrivateSpace = lazy(() => import('./pages/PrivateSpace'))
 const TeamSpace = lazy(() => import('./pages/TeamSpace'))
 const TeamSpaceDetail = lazy(() => import('./pages/TeamSpaceDetail'))
 const Notifications = lazy(() => import('./pages/Notifications'))
 const MobileLoginPage = lazy(() => import('./pages/MobileLoginPage'))
 const MobileRegisterPage = lazy(() => import('./pages/MobileRegisterPage'))
-const MobilePostCreatePage = lazy(() => import('./pages/MobilePostCreatePage'))
-const MobilePostDetailPage = lazy(() => import('./pages/MobilePostDetailPage'))
 const MobileEditPicturePage = lazy(() => import('./pages/MobileEditPicturePage'))
 const MobileEditProfilePage = lazy(() => import('./pages/MobileEditProfilePage'))
 const MobileUpgradePage = lazy(() => import('./pages/MobileUpgradePage'))
@@ -83,8 +78,6 @@ function App() {
         {/* 移动端页面 - 使用路由级错误边界 */}
         <Route path="/mobile/login" element={<RouteWithBoundary><MobileLoginPage /></RouteWithBoundary>} />
         <Route path="/mobile/register" element={<RouteWithBoundary><MobileRegisterPage /></RouteWithBoundary>} />
-        <Route path="/mobile/post/create" element={<RouteWithBoundary><ProtectedRoute><MobilePostCreatePage /></ProtectedRoute></RouteWithBoundary>} />
-        <Route path="/mobile/post/detail/:postId" element={<RouteWithBoundary><MobilePostDetailPage /></RouteWithBoundary>} />
         <Route path="/mobile/picture/edit" element={<RouteWithBoundary><ProtectedRoute><MobileEditPicturePage /></ProtectedRoute></RouteWithBoundary>} />
         <Route path="/mobile/profile/edit" element={<RouteWithBoundary><ProtectedRoute><MobileEditProfilePage /></ProtectedRoute></RouteWithBoundary>} />
         <Route path="/mobile/upgrade" element={<RouteWithBoundary><ProtectedRoute><MobileUpgradePage /></ProtectedRoute></RouteWithBoundary>} />
@@ -98,7 +91,6 @@ function App() {
             <Routes>
               <Route path="/" element={<RouteWithBoundary><HomePage /></RouteWithBoundary>} />
               <Route path="/profile" element={<RouteWithBoundary><ProtectedRoute><UserProfile /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/community" element={<RouteWithBoundary><CommunitySquare /></RouteWithBoundary>} />
               <Route path="/private-space" element={<RouteWithBoundary><ProtectedRoute><PrivateSpace /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/team-space" element={<RouteWithBoundary><ProtectedRoute><TeamSpace /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/team-space/:id" element={<RouteWithBoundary><ProtectedRoute><TeamSpaceDetail /></ProtectedRoute></RouteWithBoundary>} />
@@ -106,8 +98,6 @@ function App() {
               <Route path="/ai-tools" element={<RouteWithBoundary><ProtectedRoute><AIImageTools /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/admin/users" element={<RouteWithBoundary><ProtectedRoute permission="user:list"><UserManagement /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/admin/pictures" element={<RouteWithBoundary><ProtectedRoute permission="picture:list"><AdminPictureManagement /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/admin/comments" element={<RouteWithBoundary><ProtectedRoute permission="comment:list"><AdminCommentManagement /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/admin/posts" element={<RouteWithBoundary><ProtectedRoute permission="post:list"><AdminPostManagement /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/admin/spaces" element={<RouteWithBoundary><ProtectedRoute permission="space:list"><SpaceManagement /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/admin/dashboard" element={<RouteWithBoundary><ProtectedRoute permission="user:manage"><AdminDashboard /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/admin/audit-logs" element={<RouteWithBoundary><ProtectedRoute permission="user:manage"><AuditLogManagement /></ProtectedRoute></RouteWithBoundary>} />

@@ -2,6 +2,26 @@ create database FishPics;
 
 use FishPics;
 
+create table comment
+(
+    id          bigint auto_increment comment '主键'
+        primary key,
+    user_id     bigint                             not null comment '关联用户表',
+    post_id     bigint                             not null comment '关联帖子表',
+    content     text                               not null comment '评论内容',
+    parent_id   bigint                             null comment '父评论（支持二级评论 / 回复）',
+    to_user_id  bigint                             null comment '回复给谁',
+    status      tinyint  default 1                 null comment '状态 1-正常 0-禁用 2-待审核',
+    create_time datetime default CURRENT_TIMESTAMP not null comment '创建时间'
+)
+    comment '评论表';
+
+create index idx_post_id
+    on comment (post_id);
+
+create index idx_user_id
+    on comment (user_id);
+
 create table pic_system
 (
     syskey   varchar(256)  not null,
@@ -53,6 +73,57 @@ create index picture_space_id_index
 create index picture_update_time_index
     on picture (update_time);
 
+create table picture_child
+(
+    id         bigint auto_increment comment '主键'
+        primary key,
+    picture_id bigint null comment '关联图片id',
+    post_id    bigint null comment '关联帖子id',
+    sort_num   int    null comment '在帖子中的顺序',
+    constraint picture_child_picture_id_post_id_uindex
+        unique (picture_id, post_id)
+)
+    comment '子图片表';
+
+create index picture_child_picture_id_index
+    on picture_child (picture_id);
+
+create index picture_child_post_id_index
+    on picture_child (post_id);
+
+create table post
+(
+    id           bigint auto_increment comment '主键'
+        primary key,
+    user_id      bigint                             not null comment '关联发帖用户',
+    title        varchar(256)                       not null comment '标题',
+    content      text                               not null comment '内容',
+    status       tinyint  default 1                 not null comment '状态 1-正常 0-禁用 2-待审核',
+    create_time  datetime default CURRENT_TIMESTAMP not null comment '创建时间',
+    update_time  datetime default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
+    is_delete    int      default 0                 not null,
+    likes_num    bigint   default 0                 not null comment '点赞数',
+    collects_num bigint   default 0                 not null comment '收藏数',
+    comment_num  int      default 0                 not null comment '评论数',
+    is_private   tinyint  default 0                 not null comment '0-公开，1-仅自己可见，',
+    cover        bigint                             null comment '封面图片的id（主图）',
+    views_num    bigint   default 0                 not null comment '查看数',
+    hot          int      default 0                 null comment '热度值'
+)
+    comment '帖子表';
+
+create index idx_title
+    on post (title);
+
+create index idx_user_id
+    on post (user_id);
+
+create index post_content_index
+    on post (content(100));
+
+create index post_status_index
+    on post (status);
+
 create table space
 (
     id            bigint auto_increment comment '空间id'
@@ -88,7 +159,11 @@ create table user
     is_delete               tinyint     default 0                 not null comment '0-逻辑未删除, 1-逻辑删除',
     create_time             datetime    default CURRENT_TIMESTAMP not null comment '创建时间',
     update_time             datetime    default CURRENT_TIMESTAMP not null on update CURRENT_TIMESTAMP comment '更新时间',
+    like_num                bigint                                null,
+    collect_num             bigint                                null,
     is_private_follows      tinyint     default 0                 not null comment '0-公开关注列表，1-不公开关注列表',
+    is_private_post_collect tinyint     default 0                 not null comment '0-公开帖子列表，1-不公开帖子列表',
+    is_private_likes        tinyint     default 0                 not null comment '0-公开点赞帖子列表，1-不公开点赞帖子列表',
     is_private_fans         tinyint     default 0                 not null comment '0-公开粉丝列表，1-不公开粉丝列表',
     level                   tinyint     default 0                 not null comment '0-普通，1-VIP，2-SVIP',
     constraint uk_nickname
@@ -109,6 +184,32 @@ create table user_fans
 
 create index user_fans_user_id_fan_id_index
     on user_fans (user_id, fan_id);
+
+create table user_post_collect
+(
+    id          bigint                                 not null
+        primary key,
+    user_id     bigint                                 not null,
+    post_id     bigint                                 not null,
+    create_time datetime default CURRENT_TIMESTAMP     null comment '创建时间'
+)
+    comment '用户帖子收藏表';
+
+create index user_post_collect_user_id_index
+    on user_post_collect (user_id);
+
+create table user_post_likes
+(
+    id          bigint                                 not null
+        primary key,
+    user_id     bigint                                 not null,
+    post_id     bigint                                 not null,
+    create_time datetime default CURRENT_TIMESTAMP     null comment '创建时间'
+)
+    comment '用户点赞帖子表';
+
+create index user_post_likes_user_id_index
+    on user_post_likes (user_id);
 
 create table task
 (
@@ -139,6 +240,20 @@ create index idx_biz_type
 create index idx_status
     on task (status);
 
+create table user_interest_profile
+(
+    id          bigint auto_increment comment '主键ID'
+        primary key,
+    user_id     bigint                             not null comment '用户ID',
+    tag         varchar(64)                        not null comment '标签',
+    weight      int      default 0                 null comment '兴趣权重',
+    create_time datetime default CURRENT_TIMESTAMP null comment '创建时间',
+    update_time datetime default CURRENT_TIMESTAMP null on update CURRENT_TIMESTAMP comment '更新时间',
+    constraint uk_user_tag
+        unique (user_id, tag)
+)
+    comment '用户兴趣画像表';
+
 -- ============================================================
 -- 权限体系 (RBAC + ABAC 三级权限)
 -- ============================================================
@@ -148,9 +263,9 @@ create table sys_permission
 (
     id          bigint auto_increment comment '主键'
         primary key,
-    code        varchar(128)                       not null comment '权限码, 如 picture:review',
-    name        varchar(64)                        not null comment '权限名称, 如 图片审核',
-    module      varchar(32)                        not null comment '所属模块: user/space/picture/ai/system',
+    code        varchar(128)                       not null comment '权限码, 如 post:review',
+    name        varchar(64)                        not null comment '权限名称, 如 帖子审核',
+    module      varchar(32)                        not null comment '所属模块: post/user/space/comment/picture/ai/system',
     scope       tinyint  default 0                 not null comment '0=系统级 1=团队级 2=资源级',
     sort_order  int      default 0                 null comment '排序',
     create_time datetime default CURRENT_TIMESTAMP not null comment '创建时间',
@@ -243,32 +358,40 @@ INSERT INTO sys_permission (code, name, module, scope, sort_order) VALUES
 ('user:manage',    '用户信息编辑',   'user',    0, 2),
 ('user:status',    '用户状态变更',   'user',    0, 3),
 ('user:role',      '用户角色分配',   'user',    0, 4),
+-- 帖子管理
+('post:list',      '帖子管理列表',   'post',    0, 5),
+('post:review',    '帖子审核',       'post',    0, 6),
+('post:delete',    '帖子删除',       'post',    0, 7),
 -- 图片管理
-('picture:list',   '图片管理列表',   'picture', 0, 5),
-('picture:review', '图片审核',       'picture', 0, 6),
+('picture:list',   '图片管理列表',   'picture', 0, 8),
+('picture:review', '图片审核',       'picture', 0, 9),
+-- 评论管理
+('comment:list',   '评论管理列表',   'comment', 0, 10),
+('comment:review', '评论审核',        'comment', 0, 11),
+('comment:delete', '评论删除',        'comment', 0, 12),
 -- 空间管理
-('space:list',     '空间管理列表',   'space',   0, 7),
-('space:manage',   '空间编辑删除',   'space',   0, 8),
-('space:status',   '空间状态变更',   'space',   0, 9),
+('space:list',     '空间管理列表',   'space',   0, 13),
+('space:manage',   '空间编辑删除',   'space',   0, 14),
+('space:status',   '空间状态变更',   'space',   0, 15),
 -- AI 管理
-('ai:tasks',       'AI任务查看',     'ai',      0, 10),
-('ai:stats',       'AI统计查看',     'ai',      0, 11),
-('ai:config',      'AI配置管理',     'ai',      0, 12),
+('ai:tasks',       'AI任务查看',     'ai',      0, 16),
+('ai:stats',       'AI统计查看',     'ai',      0, 17),
+('ai:config',      'AI配置管理',     'ai',      0, 18),
 -- 系统配置
-('system:type',    '分类标签管理',    'system',  0, 13),
-('system:marquee', '轮播图管理',      'system',  0, 14);
+('system:type',    '帖子标签管理',    'system',  0, 19),
+('system:marquee', '轮播图管理',      'system',  0, 20);
 
 -- 团队级权限点
 INSERT INTO sys_permission (code, name, module, scope, sort_order) VALUES
-('team:member_manage', '团队成员管理', 'space', 1, 15),
-('team:space_edit',    '空间信息编辑', 'space', 1, 16),
-('team:upload',        '空间内上传',   'space', 1, 17),
-('team:delete',        '空间内删除',   'space', 1, 18);
+('team:member_manage', '团队成员管理', 'space', 1, 21),
+('team:space_edit',    '空间信息编辑', 'space', 1, 22),
+('team:upload',        '空间内上传',   'space', 1, 23),
+('team:delete',        '空间内删除',   'space', 1, 24);
 
 -- 资源级权限点
 INSERT INTO sys_permission (code, name, module, scope, sort_order) VALUES
-('resource:edit',   '编辑他人资源', 'resource', 2, 19),
-('resource:delete', '删除他人资源', 'resource', 2, 20);
+('resource:edit',   '编辑他人资源', 'resource', 2, 25),
+('resource:delete', '删除他人资源', 'resource', 2, 26);
 
 -- ============================================================
 -- 初始角色数据
@@ -300,17 +423,19 @@ INSERT INTO sys_role_permission (role_id, permission_id)
 SELECT r.id, p.id FROM sys_role r, sys_permission p
 WHERE r.code = 'admin' AND p.scope = 0;
 
--- reviewer: 图片审核相关
+-- reviewer: 内容审核相关
 INSERT INTO sys_role_permission (role_id, permission_id)
 SELECT r.id, p.id FROM sys_role r, sys_permission p
 WHERE r.code = 'reviewer' AND p.code IN (
-    'picture:review', 'picture:list'
+    'post:review', 'picture:review', 'comment:review',
+    'post:list', 'picture:list', 'comment:list'
 );
 
--- editor: 图片管理
+-- editor: 内容编删
 INSERT INTO sys_role_permission (role_id, permission_id)
 SELECT r.id, p.id FROM sys_role r, sys_permission p
 WHERE r.code = 'editor' AND p.code IN (
+    'post:list', 'comment:list', 'comment:delete', 'post:delete',
     'picture:list', 'picture:review'
 );
 

@@ -80,10 +80,6 @@ function GlobalLayout({ children }) {
     window.location.reload()
   }, [])
 
-  const handleCreatePost = useCallback(() => {
-    navigate('/community', { state: { openCreatePost: true } })
-  }, [navigate])
-
   const handleLoginButtonClick = useCallback(() => {
     if (isMobile) {
       navigate('/mobile/login')
@@ -105,7 +101,6 @@ function GlobalLayout({ children }) {
   const sidebarMenuItems = useMemo(() => {
     const items = [
       { key: '/', icon: <HomeOutlined />, label: '首页', onClick: () => handleSidebarMenuClick('/') },
-      { key: '/community', icon: <MessageOutlined />, label: '社区广场', onClick: () => handleSidebarMenuClick('/community') },
       { key: '/private-space', icon: <LockFilled />, label: '私人空间', onClick: () => handleSidebarMenuClick('/private-space') },
       { key: '/team-space', icon: <TeamOutlined />, label: '团队空间', onClick: () => handleSidebarMenuClick('/team-space') },
     ]
@@ -131,12 +126,6 @@ function GlobalLayout({ children }) {
       }
       if (userInfo?.permissions?.includes('picture:list') || userInfo?.permissions?.includes('picture:review')) {
         adminChildren.push({ key: '/admin/pictures', icon: <PictureOutlined />, label: '图片管理', onClick: () => handleSidebarMenuClick('/admin/pictures') });
-      }
-      if (userInfo?.permissions?.includes('comment:list') || userInfo?.permissions?.includes('comment:review')) {
-        adminChildren.push({ key: '/admin/comments', icon: <CommentOutlined />, label: '评论审核', onClick: () => handleSidebarMenuClick('/admin/comments') });
-      }
-      if (userInfo?.permissions?.includes('post:list') || userInfo?.permissions?.includes('post:review')) {
-        adminChildren.push({ key: '/admin/posts', icon: <MessageOutlined />, label: '帖子审核', onClick: () => handleSidebarMenuClick('/admin/posts') });
       }
       if (userInfo?.permissions?.includes('user:manage')) {
         adminChildren.push({ key: '/admin/dashboard', icon: <DashboardOutlined />, label: '数据概览', onClick: () => handleSidebarMenuClick('/admin/dashboard') });
@@ -181,12 +170,6 @@ function GlobalLayout({ children }) {
     if (userInfo?.permissions?.includes('picture:list') || userInfo?.permissions?.includes('picture:review')) {
       items.push({ key: 'picture-management', icon: <PictureOutlined />, label: '图片管理', onClick: () => navigate('/admin/pictures') });
     }
-    if (userInfo?.permissions?.includes('comment:list') || userInfo?.permissions?.includes('comment:review')) {
-      items.push({ key: 'comment-management', icon: <CommentOutlined />, label: '评论审核', onClick: () => navigate('/admin/comments') });
-    }
-    if (userInfo?.permissions?.includes('post:list') || userInfo?.permissions?.includes('post:review')) {
-      items.push({ key: 'post-management', icon: <MessageOutlined />, label: '帖子审核', onClick: () => navigate('/admin/posts') });
-    }
     if (userInfo?.permissions?.includes('user:manage')) {
       items.push({ key: 'dashboard', icon: <DashboardOutlined />, label: '数据概览', onClick: () => navigate('/admin/dashboard') });
     }
@@ -216,7 +199,6 @@ function GlobalLayout({ children }) {
             <Button type="text" size="large" className="mobile-menu-btn" onClick={() => setSidebarVisible(true)} icon={<MenuOutlined />} />
             <h1 className="logo-text" onClick={() => navigate('/')}>FishPics</h1>
             <Button type="text" size="large" icon={<HomeOutlined />} onClick={() => navigate('/')} className={`desktop-only${navActiveClass('/')}`}>首页</Button>
-            <Button type="text" size="large" onClick={() => navigate('/community')} className={`desktop-only${navActiveClass('/community')}`}>社区广场</Button>
             <Button type="text" size="large" onClick={() => navigate('/private-space')} className={`desktop-only${navActiveClass('/private-space')}`}>私人空间</Button>
             <Button type="text" size="large" onClick={() => navigate('/team-space')} className={`desktop-only${navActiveClass('/team-space')}`}>团队空间</Button>
             {userInfo && (
@@ -265,16 +247,6 @@ function GlobalLayout({ children }) {
             onClick={handleScrollToTop}
             className="float-action-btn float-back-top"
             aria-label="返回顶部"
-          />
-        )}
-        {showBackToTop && location.pathname === '/community' && (
-          <Button
-            type="text"
-            shape="circle"
-            icon={<PlusOutlined />}
-            onClick={handleCreatePost}
-            className="float-action-btn float-create-post"
-            aria-label="发帖"
           />
         )}
         {showBackToTop && (

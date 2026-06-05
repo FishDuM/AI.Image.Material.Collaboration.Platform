@@ -21,21 +21,15 @@ import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
-import hk.ljx.fishpicsbackend.mapper.PostMapper;
 import hk.ljx.fishpicsbackend.mapper.SysUserRoleMapper;
 import hk.ljx.fishpicsbackend.mapper.UserFansMapper;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
-import hk.ljx.fishpicsbackend.mapper.UserPostCollectMapper;
-import hk.ljx.fishpicsbackend.mapper.UserPostLikesMapper;
 import hk.ljx.fishpicsbackend.permission.entity.SysUserRole;
 import hk.ljx.fishpicsbackend.permission.service.PermissionService;
-import hk.ljx.fishpicsbackend.post.entity.Post;
 import hk.ljx.fishpicsbackend.space.service.SpaceService;
 import hk.ljx.fishpicsbackend.space.dto.CreateSpace;
 import hk.ljx.fishpicsbackend.user.entity.User;
 import hk.ljx.fishpicsbackend.user.entity.UserFans;
-import hk.ljx.fishpicsbackend.user.entity.UserPostCollect;
-import hk.ljx.fishpicsbackend.user.entity.UserPostLikes;
 import hk.ljx.fishpicsbackend.user.dto.UserEditByAdminRequest;
 import hk.ljx.fishpicsbackend.user.dto.UserEditRequest;
 import hk.ljx.fishpicsbackend.user.dto.UserLoginRequest;
@@ -78,15 +72,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
-
-    @Resource
-    private PostMapper postMapper;
-
-    @Resource
-    private UserPostCollectMapper userPostCollectMapper;
-
-    @Resource
-    private UserPostLikesMapper userPostLikesMapper;
 
     @Resource
     private UserFansMapper userFansMapper;
@@ -454,29 +439,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User>
         fw.eq("user_id", userId);
         fw.eq("fan_id", currentUser.getId());
         vo.setIsFollowed(userFansMapper.selectCount(fw) > 0);
-
-        // post count (only public posts if viewing someone else)
-        QueryWrapper<Post> postQw = new QueryWrapper<>();
-        postQw.eq("user_id", userId);
-        postQw.eq("status", 1);
-        if (!isMe) {
-            postQw.eq("is_private", 0);
-        }
-        vo.setPostCount(postMapper.selectCount(postQw));
-
-        // collect count
-        if (isMe || targetUser.getIsPrivatePostCollect() == null || targetUser.getIsPrivatePostCollect() == 0) {
-            QueryWrapper<UserPostCollect> cqw = new QueryWrapper<>();
-            cqw.eq("user_id", userId);
-            vo.setCollectCount(userPostCollectMapper.selectCount(cqw));
-        }
-
-        // like count
-        if (isMe || targetUser.getIsPrivateLikes() == null || targetUser.getIsPrivateLikes() == 0) {
-            QueryWrapper<UserPostLikes> lqw = new QueryWrapper<>();
-            lqw.eq("user_id", userId);
-            vo.setLikeCount(userPostLikesMapper.selectCount(lqw));
-        }
 
         // follows count
         if (isMe || targetUser.getIsPrivateFollows() == null || targetUser.getIsPrivateFollows() == 0) {

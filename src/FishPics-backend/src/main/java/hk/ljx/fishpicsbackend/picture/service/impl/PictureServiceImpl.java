@@ -30,8 +30,6 @@ import hk.ljx.fishpicsbackend.picture.service.PictureService;
 import hk.ljx.fishpicsbackend.picture.vo.PictureAdminVO;
 import hk.ljx.fishpicsbackend.picture.vo.PictureEditVO;
 import hk.ljx.fishpicsbackend.picture.vo.PictureListVO;
-import hk.ljx.fishpicsbackend.post.entity.Post;
-import hk.ljx.fishpicsbackend.post.service.PostService;
 import hk.ljx.fishpicsbackend.space.entity.Space;
 import hk.ljx.fishpicsbackend.space.service.SpaceService;
 import hk.ljx.fishpicsbackend.system.service.PicSystemService;
@@ -52,12 +50,6 @@ import java.util.stream.Collectors;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import hk.ljx.fishpicsbackend.common.dto.PageRequest;
-import hk.ljx.fishpicsbackend.user.entity.UserInterestProfile;
-import hk.ljx.fishpicsbackend.user.service.UserInterestProfileService;
-import hk.ljx.fishpicsbackend.user.entity.UserPostLikes;
-import hk.ljx.fishpicsbackend.user.service.UserPostLikesService;
-import hk.ljx.fishpicsbackend.user.entity.UserPostCollect;
-import hk.ljx.fishpicsbackend.user.service.UserPostCollectService;
 import hk.ljx.fishpicsbackend.permission.service.PermissionService;
 
 /**
@@ -84,21 +76,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     @Resource
     private UserService userService;
 
-    @Lazy
-    @Resource
-    private PostService postService;
-
     @Resource
     private PicSystemService picSystemService;
-
-    @Resource
-    private UserInterestProfileService userInterestProfileService;
-
-    @Resource
-    private UserPostLikesService userPostLikesService;
-
-    @Resource
-    private UserPostCollectService userPostCollectService;
 
     @Resource
     private PermissionService permissionService;
@@ -368,17 +347,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         ExcUtils.throwIfTrue(CollUtil.isEmpty(ids), "图片id不能为空");
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(ObjUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
-        // 帖子封面图禁止删除
-        List<Post> posts = postService.list(new QueryWrapper<Post>().in("cover", ids));
-        Set<Long> count = posts.stream().map(Post::getCover).collect(Collectors.toSet());
-        if (!posts.isEmpty()) {
-            posts.forEach(post -> {
-                ids.remove(post.getCover());
-            });
-        }
-        if (CollUtil.isEmpty(ids)) {
-            return "所选的都为帖子封面图，请先删除帖子再删图片";
-        }
+
         // 批量查询图片
         List<Picture> pictureList = pictureMapper.selectList(new QueryWrapper<Picture>().in("id", ids));
         ExcUtils.throwIfTrue(CollUtil.isEmpty(pictureList), "图片不存在");
@@ -410,7 +379,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         });
         // 同步删除 COS 对象
         pictureList.forEach(picture -> cosService.deletePictureByUrl(picture.getUrl()));
-        return !count.isEmpty() ? "删除成功，但有" + count.size() + "个图片为帖子封面无法删除" : "删除成功";
+        return "删除成功";
     }
 
     @Override
@@ -469,71 +438,14 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
     @Override
     public IPage<PictureListVO> getRecommendPictures(PageRequest pageRequest, Long userId) {
-        // 1. 查用户画像 top5 标签
-        List<UserInterestProfile> topProfiles = userInterestProfileService.list(
-                new LambdaQueryWrapper<UserInterestProfile>()
-                        .eq(UserInterestProfile::getUserId, userId)
-                        .orderByDesc(UserInterestProfile::getWeight)
-                        .last("LIMIT 5"));
-
-        // 2. 冷启动：无画像 → fallback 全部公开图片
-        if (topProfiles == null || topProfiles.isEmpty()) {
-            Page<Picture> page = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
-            Page<Picture> picturePage = baseMapper.selectPage(page, new LambdaQueryWrapper<Picture>()
-                    .eq(Picture::getStatus, 1)
-                    .eq(Picture::getIsPrivate, 1)
-                    .isNotNull(Picture::getUrl)
-                    .ne(Picture::getUrl, "")
-                    .orderByDesc(Picture::getCreateTime));
-            return picturePage.convert(p -> new PictureListVO(p.getId(), p.getUrl(),
-                    p.getTags() == null ? Collections.emptyList() : StrUtil.split(p.getTags(), ",")));
-        }
-
-        // 3. 构建标签JSON
-        List<String> tags = topProfiles.stream()
-                .map(UserInterestProfile::getTag)
-                .collect(Collectors.toList());
-        String tagsJson = JSON.toJSONString(tags);
-
-        // 4. 排除已看过的图片（点赞/收藏帖子关联的图片）
-        Set<Long> seenPictureIds = new HashSet<>();
-        List<Long> likedPostIds = userPostLikesService.list(
-                new LambdaQueryWrapper<UserPostLikes>().select(UserPostLikes::getPostId)
-                        .eq(UserPostLikes::getUserId, userId))
-                .stream().map(UserPostLikes::getPostId).toList();
-        List<Long> collectedPostIds = userPostCollectService.list(
-                new LambdaQueryWrapper<UserPostCollect>().select(UserPostCollect::getPostId)
-                        .eq(UserPostCollect::getUserId, userId))
-                .stream().map(UserPostCollect::getPostId).toList();
-        List<Long> allPostIds = new ArrayList<>(likedPostIds);
-        allPostIds.addAll(collectedPostIds);
-        if (!allPostIds.isEmpty()) {
-            baseMapper.selectList(new LambdaQueryWrapper<Picture>()
-                    .select(Picture::getId)
-                    .inSql(Picture::getId,
-                            "SELECT DISTINCT picture_id FROM picture_child WHERE post_id IN ("
-                                    + allPostIds.stream().map(String::valueOf)
-                                    .collect(Collectors.joining(",")) + ")"))
-                    .forEach(p -> seenPictureIds.add(p.getId()));
-        }
-
-        // 5. 查询推荐图片
+        // 直接返回公开图片（移除社区推荐逻辑）
         Page<Picture> page = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
-        LambdaQueryWrapper<Picture> lqw = new LambdaQueryWrapper<Picture>()
+        Page<Picture> picturePage = baseMapper.selectPage(page, new LambdaQueryWrapper<Picture>()
                 .eq(Picture::getStatus, 1)
                 .eq(Picture::getIsPrivate, 1)
                 .isNotNull(Picture::getUrl)
                 .ne(Picture::getUrl, "")
-                .isNotNull(Picture::getTags)
-                .ne(Picture::getTags, "")
-                .apply("JSON_OVERLAPS(tags, {0})", tagsJson)
-                .orderByDesc(Picture::getCreateTime);
-
-        if (!seenPictureIds.isEmpty()) {
-            lqw.notIn(Picture::getId, seenPictureIds);
-        }
-
-        Page<Picture> picturePage = baseMapper.selectPage(page, lqw);
+                .orderByDesc(Picture::getCreateTime));
         return picturePage.convert(p -> new PictureListVO(p.getId(), p.getUrl(),
                 p.getTags() == null ? Collections.emptyList() : StrUtil.split(p.getTags(), ",")));
     }

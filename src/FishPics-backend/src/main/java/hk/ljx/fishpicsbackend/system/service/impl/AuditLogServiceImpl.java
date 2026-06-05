@@ -4,14 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import hk.ljx.fishpicsbackend.common.entity.SysAuditLog;
-import hk.ljx.fishpicsbackend.mapper.CommentMapper;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
-import hk.ljx.fishpicsbackend.mapper.PostMapper;
 import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
 import hk.ljx.fishpicsbackend.mapper.SysAuditLogMapper;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
 import hk.ljx.fishpicsbackend.picture.entity.Picture;
-import hk.ljx.fishpicsbackend.post.entity.Post;
 import hk.ljx.fishpicsbackend.system.dto.AuditLogQueryRequest;
 import hk.ljx.fishpicsbackend.system.service.AuditLogService;
 import hk.ljx.fishpicsbackend.system.vo.SystemStatsVO;
@@ -33,12 +30,6 @@ public class AuditLogServiceImpl implements AuditLogService {
 
     @Resource
     private PictureMapper pictureMapper;
-
-    @Resource
-    private PostMapper postMapper;
-
-    @Resource
-    private CommentMapper commentMapper;
 
     @Resource
     private SpaceMapper spaceMapper;
@@ -69,20 +60,16 @@ public class AuditLogServiceImpl implements AuditLogService {
     public SystemStatsVO getStats() {
         long totalUsers = userMapper.selectCount(null);
         long totalPictures = pictureMapper.selectCount(null);
-        long totalPosts = postMapper.selectCount(null);
-        long totalComments = commentMapper.selectCount(null);
         long totalSpaces = spaceMapper.selectCount(null);
 
         long todayNewUsers = userMapper.selectCount(
                 new QueryWrapper<User>().apply("DATE(create_time) = CURDATE()"));
         long todayNewPictures = pictureMapper.selectCount(
                 new QueryWrapper<Picture>().apply("DATE(create_time) = CURDATE()"));
-        long todayNewPosts = postMapper.selectCount(
-                new QueryWrapper<Post>().apply("DATE(create_time) = CURDATE()"));
 
         return new SystemStatsVO(
-                totalUsers, totalPictures, totalPosts, totalComments, totalSpaces,
-                todayNewUsers, todayNewPictures, todayNewPosts
+                totalUsers, totalPictures, totalSpaces,
+                todayNewUsers, todayNewPictures
         );
     }
 }
