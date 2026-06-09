@@ -177,15 +177,9 @@ public class DownloadUtils {
     }
 
     private static HttpURLConnection openConnectionWithValidatedIp(String urlStr, InetAddress validatedAddress) throws IOException {
-        URI uri = URI.create(urlStr);
-        String host = uri.getHost();
-        String ipStr = validatedAddress.getHostAddress();
-        if (ipStr.contains(":")) {
-            ipStr = "[" + ipStr + "]";
-        }
-        String ipUrl = urlStr.replaceFirst("(?i://)" + java.util.regex.Pattern.quote(host), "://" + ipStr);
-        HttpURLConnection conn = (HttpURLConnection) URI.create(ipUrl).toURL().openConnection(Proxy.NO_PROXY);
-        conn.setRequestProperty("Host", host);
+        // SSRF 防护已由 validateUrl() 完成（私网/回环/链路本地地址检查）
+        // 此处直接用原始 URL 连接，保留域名以便 HTTPS 的 SNI/TLS 握手正常工作
+        HttpURLConnection conn = (HttpURLConnection) URI.create(urlStr).toURL().openConnection(Proxy.NO_PROXY);
         return conn;
     }
 
