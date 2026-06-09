@@ -5,6 +5,7 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjectUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -15,8 +16,9 @@ import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
 import hk.ljx.fishpicsbackend.picture.entity.Picture;
+import hk.ljx.fishpicsbackend.picture.service.FileResourceService;
 import hk.ljx.fishpicsbackend.picture.service.PictureService;
-import hk.ljx.fishpicsbackend.picture.vo.PictureListVO;
+import hk.ljx.fishpicsbackend.picture.vo.PictureVO;
 import hk.ljx.fishpicsbackend.picture.vo.PicturePageVO;
 import hk.ljx.fishpicsbackend.space.dto.CreateSpace;
 import hk.ljx.fishpicsbackend.space.dto.SpaceAdminUpdateRequest;
@@ -26,14 +28,14 @@ import hk.ljx.fishpicsbackend.space.dto.UpdateSpace;
 import hk.ljx.fishpicsbackend.space.vo.SpaceMemberVO;
 import hk.ljx.fishpicsbackend.space.vo.SpaceVO;
 import hk.ljx.fishpicsbackend.user.entity.User;
-import hk.ljx.fishpicsbackend.permission.service.PermissionService;
-import hk.ljx.fishpicsbackend.mapper.SpaceTeamMemberMapper;
 import hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember;
 import hk.ljx.fishpicsbackend.space.dto.TeamInviteRequest;
 import hk.ljx.fishpicsbackend.space.dto.TeamRemoveRequest;
 import hk.ljx.fishpicsbackend.space.dto.TeamChangeRoleRequest;
+import hk.ljx.fishpicsbackend.mapper.SpaceTeamMemberMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import lombok.extern.slf4j.Slf4j;
 
 import jakarta.annotation.Resource;
 
@@ -43,28 +45,27 @@ import java.util.stream.Collectors;
 import static hk.ljx.fishpicsbackend.common.constants.SpaceConstants.*;
 
 /** 空间服务实现类 */
+@Slf4j
 @Service
 public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         implements SpaceService {
 
     /**
-     * 角色名称映射
+     * 角色名称映射（简化：仅保留 OWNER 和 MEMBER）
      */
     private static final Map<Integer, String> ROLE_NAME_MAP = Map.of(
-            1, "系统超级管理员",
-            2, "团队管理员",
-            3, "普通成员",
-            4, "只读成员"
+            1, "所有者",
+            2, "成员"
     );
 
     @Resource
     private PictureService pictureService;
 
     @Resource
-    private UserMapper userMapper;
+    private FileResourceService fileResourceService;
 
     @Resource
-    private PermissionService permissionService;
+    private UserMapper userMapper;
 
     @Resource
     private SpaceTeamMemberMapper spaceTeamMemberMapper;
@@ -83,6 +84,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         String introduction = createSpace.getIntroduction();
         Integer type = createSpace.getType();
         ExcUtils.throwIfTrue(name == null || type == null, "空间名称不能为空");
+        ExcUtils.throwIfTrue(type != 0 && type != 1, "空间类型不合法，仅支持 0（私人空间）或 1（团队空间）");
         ExcUtils.throwIfTrue(user == null || user.getId() == null, "用户不存在");
 
         // 读取用户等级
@@ -90,7 +92,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
 
         // 判断空间类型并校验数量限制
         List<Space> spaceList = baseMapper
-                .selectList(new QueryWrapper<Space>().eq("user_id", user.getId()).eq("type", type));
+                .selectList(new LambdaQueryWrapper<Space>().eq(Space::getUserId, user.getId()).eq(Space::getType, type));
         if (type == 0) {
             // 私人空间：每人限一个
             ExcUtils.throwIfTrue(!spaceList.isEmpty(), "私人空间已存在");
@@ -123,15 +125,15 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         space.setType(type);
         space.setUserId(user.getId());
         int insert = baseMapper.insert(space);
+        ExcUtils.throwIfTrue(insert <= 0, "创建空间失败");
         if (type == 1) {
-            // 团队空间创建者默认为团队管理员（role_id=2）
+            // 团队空间创建者默认为所有者（role_id=1）
             SpaceTeamMember teamMember = new SpaceTeamMember();
             teamMember.setSpaceId(space.getId());
             teamMember.setUserId(user.getId());
-            teamMember.setRoleId(2);
+            teamMember.setRoleId(1);
             spaceTeamMemberMapper.insert(teamMember);
         }
-        ExcUtils.throwIfTrue(insert <= 0, "创建空间失败");
         return true;
     }
 
@@ -145,10 +147,29 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
     public List<SpaceVO> listSpace(Integer type) {
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
+        ExcUtils.throwIfTrue(type == null, ExceptionCode.PARAMETER_ERROR, "空间类型不能为空");
         Long userId = user.getId();
 
-        QueryWrapper<Space> queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq("user_id", userId).eq("type", type);
+        LambdaQueryWrapper<Space> queryWrapper = new LambdaQueryWrapper<>();
+        if (type == 1) {
+            // 团队空间：包含用户创建的 + 用户作为成员加入的
+            List<Long> memberSpaceIds = spaceTeamMemberMapper.selectList(
+                    new LambdaQueryWrapper<SpaceTeamMember>().eq(SpaceTeamMember::getUserId, userId))
+                    .stream().map(SpaceTeamMember::getSpaceId).collect(Collectors.toList());
+            if (memberSpaceIds.isEmpty()) {
+                queryWrapper.eq(Space::getUserId, userId)
+                        .eq(Space::getType, type)
+                        .eq(Space::getStatus, 1);
+            } else {
+                queryWrapper.and(w -> w.eq(Space::getUserId, userId).or().in(Space::getId, memberSpaceIds))
+                        .eq(Space::getType, type)
+                        .eq(Space::getStatus, 1);
+            }
+        } else {
+            queryWrapper.eq(Space::getUserId, userId)
+                    .eq(Space::getType, type)
+                    .eq(Space::getStatus, 1);
+        }
         List<Space> spaceList = baseMapper.selectList(queryWrapper);
         if (CollUtil.isEmpty(spaceList)) {
             return new ArrayList<>();
@@ -159,7 +180,16 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
             if (space.getUserId() != null) {
                 allUserIds.add(space.getUserId());
             }
-            spaceTeamMemberMapper.selectList(new QueryWrapper<SpaceTeamMember>().eq("space_id", space.getId())).stream().map(SpaceTeamMember::getUserId).forEach(allUserIds::add);
+        }
+        // 批量查询所有空间的成员（消除 N+1 查询）
+        List<Long> spaceIds = spaceList.stream().map(Space::getId).collect(Collectors.toList());
+        Map<Long, List<SpaceTeamMember>> membersBySpaceId = new HashMap<>();
+        if (type == 1 && !spaceIds.isEmpty()) {
+            List<SpaceTeamMember> allMembers = spaceTeamMemberMapper.selectList(
+                    new LambdaQueryWrapper<SpaceTeamMember>().in(SpaceTeamMember::getSpaceId, spaceIds));
+            membersBySpaceId = allMembers.stream()
+                    .collect(Collectors.groupingBy(SpaceTeamMember::getSpaceId));
+            allMembers.stream().map(SpaceTeamMember::getUserId).forEach(allUserIds::add);
         }
         Map<Long, User> userMap = new HashMap<>();
         if (!allUserIds.isEmpty()) {
@@ -167,7 +197,6 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
                     .stream().collect(Collectors.toMap(User::getId, u -> u));
         }
 
-        List<Long> spaceIds = spaceList.stream().map(Space::getId).collect(Collectors.toList());
         Map<Long, Long> pictureCountMap = new HashMap<>();
         List<Map<String, Object>> countResult = pictureService.listMaps(
                 new QueryWrapper<Picture>()
@@ -191,7 +220,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
                 vo.setUserAvatar(creator.getAvatar());
             }
             if (type == 1) {
-                List<SpaceTeamMember> teamMembers = spaceTeamMemberMapper.selectList(new QueryWrapper<SpaceTeamMember>().eq("space_id", space.getId()));
+                List<SpaceTeamMember> teamMembers = membersBySpaceId.getOrDefault(space.getId(), Collections.emptyList());
                 Map<Long, Long> userIdRoleIdMap = teamMembers.stream()
                         .collect(Collectors.toMap(SpaceTeamMember::getUserId,
                                 tm -> tm.getRoleId() != null ? tm.getRoleId().longValue() : 0L, (a, b) -> a));
@@ -234,12 +263,15 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
 
         Space space = baseMapper.selectById(id);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
+        validateSpaceActive(space);
 
         boolean isCreator = Objects.equals(space.getUserId(), userId);
         boolean isTeamMember = false;
-        if (space.getType() == 1) {
-            List<Long> memberIds = spaceTeamMemberMapper.selectList(new QueryWrapper<SpaceTeamMember>().eq("space_id", space.getId())).stream().map(SpaceTeamMember::getUserId).collect(Collectors.toList());
-            isTeamMember = memberIds.contains(userId);
+        // 批量查询一次成员列表（权限校验 + VO 构建复用，消除 N+1）
+        List<SpaceTeamMember> teamMembers = Collections.emptyList();
+        if (Integer.valueOf(1).equals(space.getType())) {
+            teamMembers = spaceTeamMemberMapper.selectList(new LambdaQueryWrapper<SpaceTeamMember>().eq(SpaceTeamMember::getSpaceId, space.getId()));
+            isTeamMember = teamMembers.stream().anyMatch(m -> m.getUserId().equals(userId));
         }
         ExcUtils.throwIfTrue(!isCreator && !isTeamMember, ExceptionCode.PARAMETER_ERROR, "无权限访问该空间");
 
@@ -249,7 +281,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         Set<Long> userIds = new HashSet<>();
         if (space.getUserId() != null)
             userIds.add(space.getUserId());
-        spaceTeamMemberMapper.selectList(new QueryWrapper<SpaceTeamMember>().eq("space_id", space.getId())).stream().map(SpaceTeamMember::getUserId).forEach(userIds::add);
+        teamMembers.stream().map(SpaceTeamMember::getUserId).forEach(userIds::add);
         Map<Long, User> userMap = new HashMap<>();
         if (!userIds.isEmpty()) {
             userMap = userMapper.selectByIds(userIds)
@@ -272,8 +304,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         }
         vo.setPictureCount(picCount);
 
-        if (space.getType() == 1) {
-            List<SpaceTeamMember> teamMembers = spaceTeamMemberMapper.selectList(new QueryWrapper<SpaceTeamMember>().eq("space_id", space.getId()));
+        if (Integer.valueOf(1).equals(space.getType()) && !teamMembers.isEmpty()) {
             Map<Long, Long> userIdRoleIdMap = teamMembers.stream()
                     .collect(Collectors.toMap(SpaceTeamMember::getUserId,
                             tm -> tm.getRoleId() != null ? tm.getRoleId().longValue() : 0L, (a, b) -> a));
@@ -320,14 +351,18 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         // 1. 查询空间是否存在
         Space space = baseMapper.selectById(id);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
-        // 2. 权限校验：仅空间创建者或管理员可修改
-        hk.ljx.fishpicsbackend.common.context.LoginContext ctx = UserHolder.getLoginContext();
-        ExcUtils.throwIfFalse(space.getUserId().equals(userId) || (ctx != null && ctx.hasSystemPerm("system:team:manage")),
+        validateSpaceActive(space);
+        // 2. 权限校验：空间创建者或系统管理员（level >= 3）可修改
+        boolean isCreator = java.util.Objects.equals(space.getUserId(), userId);
+        boolean isSystemAdmin = user.getLevel() != null && user.getLevel() >= 3;
+        ExcUtils.throwIfFalse(isCreator || isSystemAdmin,
                 ExceptionCode.PARAMETER_ERROR, "无权限修改空间信息");
-        // 3. 更新空间信息
-        space.setName(name);
-        space.setIntroduction(introduction);
-        int update = baseMapper.update(space, new QueryWrapper<Space>().eq("id", id));
+        // 3. 仅更新允许修改的字段（避免全字段覆盖）
+        Space updateObj = new Space();
+        updateObj.setId(id);
+        updateObj.setName(name);
+        updateObj.setIntroduction(introduction);
+        int update = baseMapper.updateById(updateObj);
         ExcUtils.throwIfTrue(update <= 0, ExceptionCode.PARAMETER_ERROR, "更新空间信息失败");
         return true;
     }
@@ -352,8 +387,9 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         Long userId = user.getId();
         Space space = baseMapper.selectById(spaceId);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在或无权限");
+        validateSpaceActive(space);
         boolean isCreator = Objects.equals(space.getUserId(), userId);
-        boolean isTeamMember = space.getType() == 1 && spaceTeamMemberMapper.selectList(new QueryWrapper<SpaceTeamMember>().eq("space_id", spaceId)).stream().anyMatch(m -> m.getUserId().equals(userId));
+        boolean isTeamMember = Integer.valueOf(1).equals(space.getType()) && spaceTeamMemberMapper.selectCount(new LambdaQueryWrapper<SpaceTeamMember>().eq(SpaceTeamMember::getSpaceId, spaceId).eq(SpaceTeamMember::getUserId, userId)) > 0;
         ExcUtils.throwIfTrue(!isCreator && !isTeamMember, ExceptionCode.PARAMETER_ERROR, "空间不存在或无权限");
         // 2. 分页查询图片列表
         Page<Picture> picturePage = new Page<>(current, pageSize);
@@ -370,27 +406,25 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         Set<String> allowedPictureSortFields = Set.of("id", "picture_name", "introduction", "tags", "url", "space_id",
                 "user_id", "create_time", "update_time");
         boolean isPictureSortFieldValid = sortField != null && allowedPictureSortFields.contains(sortField);
-        pictureQueryWrapper.orderBy(isPictureSortFieldValid, "ascend".equals(sortOrder), sortField);
+        if (isPictureSortFieldValid) {
+            pictureQueryWrapper.orderBy(true, "ascend".equals(sortOrder), sortField);
+        } else {
+            pictureQueryWrapper.orderByDesc("create_time");
+        }
         Page<Picture> pictureList = pictureService.page(picturePage, pictureQueryWrapper);
         // 3. 转换为VO（仅返回id和url，不暴露完整图片元数据）
-        ArrayList<PictureListVO> pictureListVOS = new ArrayList<>();
+        ArrayList<PictureVO> pictureVOS = new ArrayList<>();
         pictureList.getRecords().forEach(picture -> {
-            PictureListVO pictureListVO = new PictureListVO();
-            pictureListVO.setId(picture.getId());
-            pictureListVO.setUrl(picture.getUrl());
-            pictureListVOS.add(pictureListVO);
+            PictureVO pictureVO = PictureVO.ofUpload(picture.getId(), picture.getUrl());
+            pictureVOS.add(pictureVO);
         });
-        return new PicturePageVO(pictureListVOS, pictureList.getTotal());
+        return new PicturePageVO(pictureVOS, pictureList.getTotal());
     }
 
     /**
-     * 构建空间查询条件包装器
-     *
-     * @param spaceQueryWrapper 查询条件包装器
-     * @return QueryWrapper对象
+     * 构建空间查询条件包装器（内部使用）
      */
-    @Override
-    public QueryWrapper<Space> getSpaceQueryWrapper(SpaceQueryWrapper spaceQueryWrapper) {
+    private QueryWrapper<Space> getSpaceQueryWrapper(SpaceQueryWrapper spaceQueryWrapper) {
         Long id = spaceQueryWrapper.getId();
         String introduction = spaceQueryWrapper.getIntroduction();
         Integer type = spaceQueryWrapper.getType();
@@ -405,14 +439,15 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         Set<String> allowedSortFields = Set.of("id", "introduction", "type", "user_id", "storage_size", "level", "name", "size", "create_time", "update_time");
         boolean isSortFieldValid = sortField != null && allowedSortFields.contains(sortField);
 
+        // 使用 QueryWrapper 支持动态排序字段（orderBy boolean, boolean, String）
         QueryWrapper<Space> queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq(!ObjectUtil.isEmpty(id), "id", id);
-        queryWrapper.eq(!ObjectUtil.isEmpty(introduction), "introduction", introduction);
-        queryWrapper.eq(!ObjectUtil.isEmpty(type), "type", type);
-        queryWrapper.eq(!ObjectUtil.isEmpty(userId), "user_id", userId);
-        queryWrapper.eq(!ObjectUtil.isEmpty(storageSize), "storage_size", storageSize);
-        queryWrapper.eq(!ObjectUtil.isEmpty(level), "level", level);
-        queryWrapper.eq(!ObjectUtil.isEmpty(name), "name", name);
+        if (!ObjectUtil.isEmpty(id)) queryWrapper.eq("id", id);
+        if (!ObjectUtil.isEmpty(introduction)) queryWrapper.eq("introduction", introduction);
+        if (!ObjectUtil.isEmpty(type)) queryWrapper.eq("type", type);
+        if (!ObjectUtil.isEmpty(userId)) queryWrapper.eq("user_id", userId);
+        if (!ObjectUtil.isEmpty(storageSize)) queryWrapper.eq("storage_size", storageSize);
+        if (!ObjectUtil.isEmpty(level)) queryWrapper.eq("level", level);
+        if (!ObjectUtil.isEmpty(name)) queryWrapper.eq("name", name);
         queryWrapper.orderBy(isSortFieldValid, "ascend".equals(sortOrder), sortField);
         return queryWrapper;
     }
@@ -431,14 +466,19 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         Set<Long> allUserIds = new HashSet<>();
         for (Space space : spaceList) {
             if (space.getUserId() != null) allUserIds.add(space.getUserId());
-            spaceTeamMemberMapper.selectList(new QueryWrapper<SpaceTeamMember>().eq("space_id", space.getId())).stream().map(SpaceTeamMember::getUserId).forEach(allUserIds::add);
         }
+        // 批量查询所有空间的成员（消除 N+1 查询）
+        List<Long> spaceIds = spaceList.stream().map(Space::getId).collect(Collectors.toList());
+        List<SpaceTeamMember> allMembers = spaceTeamMemberMapper.selectList(
+                new LambdaQueryWrapper<SpaceTeamMember>().in(SpaceTeamMember::getSpaceId, spaceIds));
+        Map<Long, List<SpaceTeamMember>> membersBySpaceId = allMembers.stream()
+                .collect(Collectors.groupingBy(SpaceTeamMember::getSpaceId));
+        allMembers.stream().map(SpaceTeamMember::getUserId).forEach(allUserIds::add);
         Map<Long, User> userMap = new HashMap<>();
         if (!allUserIds.isEmpty()) {
             userMap = userMapper.selectByIds(allUserIds)
                     .stream().collect(Collectors.toMap(User::getId, u -> u));
         }
-        List<Long> spaceIds = spaceList.stream().map(Space::getId).collect(Collectors.toList());
         Map<Long, Long> pictureCountMap = new HashMap<>();
         List<Map<String, Object>> countResult = pictureService.listMaps(
                 new QueryWrapper<Picture>()
@@ -460,8 +500,8 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
                 vo.setUserName(creator.getNickname());
                 vo.setUserAvatar(creator.getAvatar());
             }
-            if (space.getType() != null && space.getType() == 1) {
-                List<SpaceTeamMember> teamMembers = spaceTeamMemberMapper.selectList(new QueryWrapper<SpaceTeamMember>().eq("space_id", space.getId()));
+            if (Integer.valueOf(1).equals(space.getType())) {
+                List<SpaceTeamMember> teamMembers = membersBySpaceId.getOrDefault(space.getId(), Collections.emptyList());
                 Map<Long, Long> userIdRoleIdMap = teamMembers.stream()
                         .collect(Collectors.toMap(SpaceTeamMember::getUserId,
                                 tm -> tm.getRoleId() != null ? tm.getRoleId().longValue() : 0L, (a, b) -> a));
@@ -497,17 +537,49 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
         Space space = baseMapper.selectById(id);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
-        BeanUtil.copyProperties(request, space, CopyOptions.create().ignoreNullValue());
-        boolean result = this.updateById(space);
+        // 仅更新允许的字段，防止越权修改 userId/type 等敏感字段
+        Space updateObj = new Space();
+        updateObj.setId(id);
+        if (request.getName() != null) updateObj.setName(request.getName());
+        if (request.getIntroduction() != null) updateObj.setIntroduction(request.getIntroduction());
+        if (request.getLevel() != null) updateObj.setLevel(request.getLevel());
+        if (request.getStorageSize() != null) updateObj.setStorageSize(request.getStorageSize());
+        boolean result = this.updateById(updateObj);
         ExcUtils.throwIfTrue(!result, ExceptionCode.DATABASE_ERROR, "更新失败");
         return true;
     }
 
+    /**
+     * 删除空间（管理员接口）
+     * 级联清理：file_resource 引用计数递减 → 删除团队成员 → 删除图片记录 → 删除空间本身
+     * COS 物理文件由 file_resource 的引用计数机制管理，不是在这里直接删
+     */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Boolean adminDelete(Long id) {
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
         Space space = baseMapper.selectById(id);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
+
+        // 1. 查询空间内所有图片，清理 COS 文件（仅在无其他图片依赖时删除）
+        List<Picture> pictures = pictureService.list(
+                new LambdaQueryWrapper<Picture>().eq(Picture::getSpaceId, id));
+        for (Picture pic : pictures) {
+            if (pic.getResourceId() != null) {
+                // 通过 file_resource 引用计数机制管理 COS 文件生命周期
+                // decrementRefCount 会在 ref_count 归零时自动删除 COS 文件
+                try {
+                    fileResourceService.decrementRefCount(pic.getResourceId());
+                } catch (Exception e) {
+                    log.warn("清理图片资源引用失败: pictureId={}, resourceId={}", pic.getId(), pic.getResourceId(), e);
+                }
+            }
+        }
+
+        // 2. 级联删除团队成员
+        spaceTeamMemberMapper.delete(new LambdaQueryWrapper<SpaceTeamMember>().eq(SpaceTeamMember::getSpaceId, id));
+        // 3. 删除图片记录（物理文件已由 file_resource 引用计数管理）
+        pictureService.remove(new LambdaQueryWrapper<Picture>().eq(Picture::getSpaceId, id));
         int result = baseMapper.deleteById(id);
         ExcUtils.throwIfTrue(result <= 0, ExceptionCode.DATABASE_ERROR, "删除失败");
         return true;
@@ -516,7 +588,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
     @Override
     public Boolean adminSetStatus(Long id, Integer status) {
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
-        ExcUtils.throwIfTrue(status == null, ExceptionCode.PARAMETER_ERROR, "状态不能为空");
+        ExcUtils.throwIfTrue(status == null || (status != 0 && status != 1), ExceptionCode.PARAMETER_ERROR, "无效的状态值，仅允许0或1");
         Space space = baseMapper.selectById(id);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
         space.setStatus(status);
@@ -533,15 +605,16 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
 
         Space space = baseMapper.selectById(spaceId);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
-        ExcUtils.throwIfTrue(space.getType() != 1, ExceptionCode.PARAMETER_ERROR, "非团队空间");
+        ExcUtils.throwIfTrue(!Integer.valueOf(1).equals(space.getType()), ExceptionCode.PARAMETER_ERROR, "非团队空间");
+        validateSpaceActive(space);
 
         boolean isCreator = Objects.equals(space.getUserId(), user.getId());
         boolean isTeamMember = spaceTeamMemberMapper.selectCount(
-                new QueryWrapper<SpaceTeamMember>().eq("space_id", spaceId).eq("user_id", user.getId())) > 0;
+                new LambdaQueryWrapper<SpaceTeamMember>().eq(SpaceTeamMember::getSpaceId, spaceId).eq(SpaceTeamMember::getUserId, user.getId())) > 0;
         ExcUtils.throwIfTrue(!isCreator && !isTeamMember, ExceptionCode.PARAMETER_ERROR, "无权限访问该空间");
 
         List<SpaceTeamMember> teamMembers = spaceTeamMemberMapper.selectList(
-                new QueryWrapper<SpaceTeamMember>().eq("space_id", spaceId));
+                new LambdaQueryWrapper<SpaceTeamMember>().eq(SpaceTeamMember::getSpaceId, spaceId));
         if (CollUtil.isEmpty(teamMembers)) {
             return new ArrayList<>();
         }
@@ -565,6 +638,10 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         }).filter(Objects::nonNull).collect(Collectors.toList());
     }
 
+    /**
+     * 邀请成员加入团队空间
+     * 校验链：空间存在 → 操作者有邀请权限 → 目标用户存在 → 角色合法 → 防越权提升 → 防重复邀请
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean teamInvite(TeamInviteRequest request) {
@@ -578,19 +655,39 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
 
         Space space = baseMapper.selectById(spaceId);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
-        ExcUtils.throwIfTrue(space.getType() != 1, ExceptionCode.PARAMETER_ERROR, "非团队空间");
+        ExcUtils.throwIfTrue(!Integer.valueOf(1).equals(space.getType()), ExceptionCode.PARAMETER_ERROR, "非团队空间");
+        validateSpaceActive(space);
 
-        ExcUtils.throwIfTrue(!permissionService.hasTeamPermission(operator.getId(), spaceId, "team:member_manage"),
+        // 空间创建者拥有全部团队权限
+        ExcUtils.throwIfTrue(
+                !operator.getId().equals(space.getUserId())
+                        && !(operator.getLevel() != null && operator.getLevel() >= 3),
                 ExceptionCode.PARAMETER_ERROR, "无权限邀请成员");
 
         User targetUser = userMapper.selectById(userId);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(targetUser), ExceptionCode.PARAMETER_ERROR, "目标用户不存在");
 
-        // 验证角色ID（仅允许 2=团队管理员, 3=普通成员, 4=只读）
-        ExcUtils.throwIfTrue(roleId == null || roleId < 2 || roleId > 4,
-                ExceptionCode.PARAMETER_ERROR, "无效的团队角色，仅允许 2/3/4");
+        // 验证角色ID（仅允许 1=所有者, 2=成员）
+        ExcUtils.throwIfTrue(roleId != 1 && roleId != 2,
+                ExceptionCode.PARAMETER_ERROR, "无效的团队角色，仅允许 1（所有者）或 2（成员）");
 
-        permissionService.addTeamMember(spaceId, userId, roleId);
+        // 仅空间创建者可授予所有者角色，防止权限提升
+        if (roleId == 1) {
+            ExcUtils.throwIfTrue(!Objects.equals(space.getUserId(), operator.getId()),
+                    ExceptionCode.FORBIDDEN, "仅空间创建者可授予所有者角色");
+        }
+
+        // 检查是否已是成员，防止重复邀请（避免静默覆盖角色）
+        Long existingCount = spaceTeamMemberMapper.selectCount(
+                new LambdaQueryWrapper<SpaceTeamMember>().eq(SpaceTeamMember::getSpaceId, spaceId).eq(SpaceTeamMember::getUserId, userId));
+        ExcUtils.throwIfTrue(existingCount > 0, ExceptionCode.PARAMETER_ERROR, "该用户已是团队成员");
+
+        // 直接插入团队成员记录
+        SpaceTeamMember teamMember = new SpaceTeamMember();
+        teamMember.setSpaceId(spaceId);
+        teamMember.setUserId(userId);
+        teamMember.setRoleId(roleId.intValue());
+        spaceTeamMemberMapper.insert(teamMember);
         return true;
     }
 
@@ -606,19 +703,25 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
 
         Space space = baseMapper.selectById(spaceId);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
-        ExcUtils.throwIfTrue(space.getType() != 1, ExceptionCode.PARAMETER_ERROR, "非团队空间");
+        ExcUtils.throwIfTrue(!Integer.valueOf(1).equals(space.getType()), ExceptionCode.PARAMETER_ERROR, "非团队空间");
+        validateSpaceActive(space);
 
-        ExcUtils.throwIfTrue(!permissionService.hasTeamPermission(operator.getId(), spaceId, "team:member_manage"),
+        ExcUtils.throwIfTrue(
+                !operator.getId().equals(space.getUserId())
+                        && !(operator.getLevel() != null && operator.getLevel() >= 3),
                 ExceptionCode.PARAMETER_ERROR, "无权限移除成员");
 
         ExcUtils.throwIfTrue(Objects.equals(space.getUserId(), userId), ExceptionCode.PARAMETER_ERROR, "不能移除空间创建者");
         ExcUtils.throwIfTrue(Objects.equals(operator.getId(), userId), ExceptionCode.PARAMETER_ERROR, "不能移除自己");
 
         Long count = spaceTeamMemberMapper.selectCount(
-                new QueryWrapper<SpaceTeamMember>().eq("space_id", spaceId).eq("user_id", userId));
+                new LambdaQueryWrapper<SpaceTeamMember>().eq(SpaceTeamMember::getSpaceId, spaceId).eq(SpaceTeamMember::getUserId, userId));
         ExcUtils.throwIfTrue(count == 0, ExceptionCode.PARAMETER_ERROR, "该用户不是团队成员");
 
-        permissionService.removeTeamMember(spaceId, userId);
+        spaceTeamMemberMapper.delete(
+                new LambdaQueryWrapper<SpaceTeamMember>()
+                        .eq(SpaceTeamMember::getSpaceId, spaceId)
+                        .eq(SpaceTeamMember::getUserId, userId));
         return true;
     }
 
@@ -635,23 +738,47 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
 
         Space space = baseMapper.selectById(spaceId);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
-        ExcUtils.throwIfTrue(space.getType() != 1, ExceptionCode.PARAMETER_ERROR, "非团队空间");
+        ExcUtils.throwIfTrue(!Integer.valueOf(1).equals(space.getType()), ExceptionCode.PARAMETER_ERROR, "非团队空间");
+        validateSpaceActive(space);
 
-        ExcUtils.throwIfTrue(!permissionService.hasTeamPermission(operator.getId(), spaceId, "team:member_manage"),
+        ExcUtils.throwIfTrue(
+                !operator.getId().equals(space.getUserId())
+                        && !(operator.getLevel() != null && operator.getLevel() >= 3),
                 ExceptionCode.PARAMETER_ERROR, "无权限变更成员角色");
 
         Long count = spaceTeamMemberMapper.selectCount(
-                new QueryWrapper<SpaceTeamMember>().eq("space_id", spaceId).eq("user_id", userId));
+                new LambdaQueryWrapper<SpaceTeamMember>().eq(SpaceTeamMember::getSpaceId, spaceId).eq(SpaceTeamMember::getUserId, userId));
         ExcUtils.throwIfTrue(count == 0, ExceptionCode.PARAMETER_ERROR, "该用户不是团队成员");
 
-        // 验证角色ID（仅允许 2=团队管理员, 3=普通成员, 4=只读）
-        ExcUtils.throwIfTrue(roleId == null || roleId < 2 || roleId > 4,
-                ExceptionCode.PARAMETER_ERROR, "无效的团队角色，仅允许 2/3/4");
+        // 不能变更空间创建者的角色
+        ExcUtils.throwIfTrue(Objects.equals(space.getUserId(), userId),
+                ExceptionCode.PARAMETER_ERROR, "不能变更空间创建者的角色");
 
-        permissionService.addTeamMember(spaceId, userId, roleId);
+        // 验证角色ID（仅允许 1=所有者, 2=成员）
+        ExcUtils.throwIfTrue(roleId != 1 && roleId != 2,
+                ExceptionCode.PARAMETER_ERROR, "无效的团队角色，仅允许 1（所有者）或 2（成员）");
+
+        // 仅空间创建者可授予所有者角色，防止越权提升
+        if (roleId == 1) {
+            ExcUtils.throwIfTrue(!Objects.equals(space.getUserId(), operator.getId()),
+                    ExceptionCode.FORBIDDEN, "仅空间创建者可授予所有者角色");
+        }
+
+        // 查找并更新已有成员记录
+        SpaceTeamMember existing = spaceTeamMemberMapper.selectOne(
+                new LambdaQueryWrapper<SpaceTeamMember>()
+                        .eq(SpaceTeamMember::getSpaceId, spaceId)
+                        .eq(SpaceTeamMember::getUserId, userId));
+        ExcUtils.throwIfTrue(existing == null, ExceptionCode.PARAMETER_ERROR, "该用户不是团队成员");
+        existing.setRoleId(roleId.intValue());
+        spaceTeamMemberMapper.updateById(existing);
         return true;
     }
 
+    /**
+     * 获取用户可上传图片的空间列表
+     * 包括：私人空间 + 有上传权限的团队空间（角色为所有者或成员）
+     */
     @Override
     public List<SpaceVO> saveableSpaces() {
         User user = UserHolder.getUser();
@@ -660,25 +787,26 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
 
         List<SpaceVO> result = new ArrayList<>();
 
-        // 1. 私人空间（每人最多一个）
+        // 1. 私人空间（每人最多一个，仅返回正常状态）
         Space privateSpace = baseMapper.selectOne(
-                new QueryWrapper<Space>().eq("user_id", userId).eq("type", 0).last("LIMIT 1"));
+                new LambdaQueryWrapper<Space>().eq(Space::getUserId, userId).eq(Space::getType, 0).eq(Space::getStatus, 1).last("LIMIT 1"));
         if (privateSpace != null) {
             SpaceVO vo = new SpaceVO();
             BeanUtil.copyProperties(privateSpace, vo);
             result.add(vo);
         }
 
-        // 2. 有上传权限的团队空间（roleId=3 team_admin 或 roleId=4 team_member）
+        // 2. 有上传权限的团队空间（roleId=1 所有者, 2 成员）
         List<SpaceTeamMember> memberships = spaceTeamMemberMapper.selectList(
-                new QueryWrapper<SpaceTeamMember>().eq("user_id", userId)
-                        .in("role_id", List.of(3, 4)));
+                new LambdaQueryWrapper<SpaceTeamMember>().eq(SpaceTeamMember::getUserId, userId)
+                        .in(SpaceTeamMember::getRoleId, List.of(1, 2)));
         if (!memberships.isEmpty()) {
             Set<Long> teamSpaceIds = memberships.stream()
                     .map(SpaceTeamMember::getSpaceId)
                     .collect(Collectors.toSet());
-            // 排除用户作为创建者的私人空间（已包含）
-            List<Space> teamSpaces = baseMapper.selectBatchIds(teamSpaceIds);
+            // 排除用户作为创建者的私人空间（已包含），仅返回正常状态
+            List<Space> teamSpaces = baseMapper.selectList(
+                    new LambdaQueryWrapper<Space>().in(Space::getId, teamSpaceIds).eq(Space::getStatus, 1));
             for (Space space : teamSpaces) {
                 SpaceVO vo = new SpaceVO();
                 BeanUtil.copyProperties(space, vo);
@@ -695,7 +823,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
     private Long getPrivateStorageSize(int level) {
         return switch (level) {
             case 1 -> VIP_STORAGE_SIZE;
-            case 2 -> SVIP_STORAGE_SIZE;
+            case 2, 3 -> SVIP_STORAGE_SIZE;
             default -> DEFAULT_STORAGE_SIZE;
         };
     }
@@ -706,8 +834,13 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
     private Long getTeamStorageSize(int level) {
         return switch (level) {
             case 1 -> TEAM_VIP_STORAGE_SIZE;
-            case 2 -> TEAM_SVIP_STORAGE_SIZE;
+            case 2, 3 -> TEAM_SVIP_STORAGE_SIZE;
             default -> TEAM_DEFAULT_STORAGE_SIZE;
         };
+    }
+
+    private void validateSpaceActive(Space space) {
+        ExcUtils.throwIfTrue(space == null, ExceptionCode.PARAMETER_ERROR, "空间不存在");
+        ExcUtils.throwIfTrue(!Integer.valueOf(1).equals(space.getStatus()), ExceptionCode.FORBIDDEN, "空间已被禁用");
     }
 }

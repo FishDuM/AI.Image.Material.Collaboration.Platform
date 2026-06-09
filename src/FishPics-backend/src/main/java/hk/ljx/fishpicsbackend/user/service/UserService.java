@@ -1,16 +1,11 @@
 package hk.ljx.fishpicsbackend.user.service;
 import hk.ljx.fishpicsbackend.user.entity.User;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.user.dto.*;
 import com.baomidou.mybatisplus.extension.service.IService;
-import hk.ljx.fishpicsbackend.user.vo.AdminGetUserVO;
-import hk.ljx.fishpicsbackend.user.vo.UserLoginVO;
-import hk.ljx.fishpicsbackend.user.vo.UserMessageVO;
-import hk.ljx.fishpicsbackend.user.vo.UserPublicProfileVO;
-import hk.ljx.fishpicsbackend.user.vo.UserSearchVO;
+import hk.ljx.fishpicsbackend.user.vo.UserVO;
 
 import java.util.List;
 
@@ -44,22 +39,14 @@ public interface UserService extends IService<User> {
      * @param userLoginRequest 用户登录请求
      * @return 用户 VO
      */
-    Response<UserLoginVO> userLogin(UserLoginRequest userLoginRequest);
-
-    /**
-     * 构造查询用户条件
-     *
-     * @param userQueryWrapper 用户查询条件
-     * @return 查询条件
-     */
-    QueryWrapper<User> newQueryWrapper(UserQueryWrapper userQueryWrapper);
+    Response<UserVO> userLogin(UserLoginRequest userLoginRequest);
 
     /**
      * 管理员获取用户列表
      *
      * @return 用户列表
      */
-    IPage<AdminGetUserVO> getUserList(UserQueryWrapper userQueryWrapper, long current, long pageSize);
+    IPage<UserVO> getUserList(UserQueryWrapper userQueryWrapper, long current, long pageSize);
 
     /**
      * 管理员设置用户状态（1正常，0封禁）
@@ -81,7 +68,7 @@ public interface UserService extends IService<User> {
      * 获取自己的主页信息
      * @return 用户信息
      */
-    UserMessageVO getMyselfMessage();
+    UserVO getMyselfMessage();
 
     /**
      * 用户编辑自己信息
@@ -103,19 +90,12 @@ public interface UserService extends IService<User> {
      * @param userId 目标用户ID
      * @return 用户公开主页VO
      */
-    UserPublicProfileVO getUserProfile(Long userId);
-
-    /**
-     * 修改隐私设置
-     * @param request 隐私设置请求
-     * @return 修改结果
-     */
-    Boolean updatePrivacy(UserPrivacyRequest request);
+    UserVO getUserProfile(Long userId);
 
     /**
      * 按用户名或昵称搜索用户
      * @param keyword 搜索关键词
      * @return 匹配的用户列表
      */
-    List<UserSearchVO> searchUsers(String keyword);
+    List<UserVO> searchUsers(String keyword);
 }

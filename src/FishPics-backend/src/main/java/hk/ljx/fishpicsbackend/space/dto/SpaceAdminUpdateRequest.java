@@ -21,9 +21,9 @@ public class SpaceAdminUpdateRequest {
     // 空间介绍
     private String introduction;
 
-    // 存储空间大小(Byte)
-    private Long storageSize;
-
     // 空间级别：0-普通, 1-VIP, 2-SVIP
     private Integer level;
+
+    // 存储空间大小（字节）
+    private Long storageSize;
 }

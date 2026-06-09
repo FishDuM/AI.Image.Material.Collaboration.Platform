@@ -4,11 +4,10 @@ import { App as AntApp, Card, Typography, Button, Input, Select, Space, Row, Col
 import {
   RobotOutlined,
   SendOutlined, SyncOutlined, ExperimentOutlined, ClearOutlined, CloseCircleOutlined,
-  RedoOutlined, SaveOutlined, TeamOutlined,
+  RedoOutlined, SaveOutlined, TeamOutlined, DownloadOutlined,
 } from '@ant-design/icons'
-import { submitAiDraw, getAiDrawResult, savePictureByUrl } from '../api'
+import { submitAiDraw, getAiDrawResult, savePictureByUrl, downloadAiImage } from '../api'
 import { TIMEOUT_AI } from '../utils/constants'
-import { onMessage, offMessage, getConnectionStatus } from '../hooks/useWebSocket'
 import { logError } from '../utils/logger'
 import { useIsMobile } from '../hooks/useIsMobile'
 import SaveToSpaceModal from '../components/shared/SaveToSpaceModal'
@@ -54,59 +53,27 @@ function AIImageTools() {
   const [genState, setGenState] = useState('idle') // idle | generating | done | failed
   const [genError, setGenError] = useState('')
   const [currentTaskId, setCurrentTaskId] = useState(null)
-  const [wsConnected, setWsConnected] = useState(false)
   const genStateRef = useRef('idle')
   const pollTimerRef = useRef(null)
   const genParamsRef = useRef(null)
+  const startPollingRef = useRef(null)
 
-  // 监听 WebSocket 连接状态
-  useEffect(() => {
-    const onWsEvent = (data) => {
-      if (data.type === '__WS_OPEN__') setWsConnected(true)
-      if (data.type === '__WS_CLOSE__') setWsConnected(false)
-    }
-    const unsub = onMessage(onWsEvent)
-    setWsConnected(getConnectionStatus() === 'OPEN')
-    return unsub
-  }, [])
-
-  // 监听 WebSocket 消息
-  useEffect(() => {
-    const handleMessage = (data) => {
-      if (!data.type || !currentTaskId) return
-      if (data.taskId !== currentTaskId) return
-
-      if (data.type === 'TASK_DONE') {
-        setGenStateAndRef('done')
-        setGenResults({ url: data.result })
-        message.success('图片生成成功')
-        stopPolling()
-      } else if (data.type === 'TASK_FAILED') {
-        setGenStateAndRef('failed')
-        setGenError(data.errorMsg || '生成失败')
-        message.error(data.errorMsg || '图片生成失败')
-        stopPolling()
-      }
-    }
-
-    const unsub = onMessage(handleMessage)
-    return () => {
-      unsub()
-      offMessage(handleMessage)
-    }
-  }, [currentTaskId, message])
-
-  const setGenStateAndRef = (s) => {
+  const setGenStateAndRef = useCallback((s) => {
     setGenState(s)
     genStateRef.current = s
-  }
-  useEffect(() => {
-    return () => stopPolling()
+  }, [])
+
+  const stopPolling = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current)
+      pollTimerRef.current = null
+    }
   }, [])
 
   // 轮询兜底，带超时
   const startPolling = useCallback((taskId) => {
     stopPolling()
+    console.log('[AI轮询] 开始轮询 taskId:', taskId)
     const startTime = Date.now()
     pollTimerRef.current = setInterval(async () => {
       // 超时停止轮询
@@ -119,6 +86,7 @@ function AIImageTools() {
       }
       try {
         const task = await getAiDrawResult(taskId)
+        console.log('[AI轮询] taskId:', taskId, 'status:', task?.status, 'result:', task?.result ? 'has-url' : 'no-url')
         if (task.status === 'DONE') {
           setGenStateAndRef('done')
           setGenResults({ url: task.result })
@@ -131,39 +99,54 @@ function AIImageTools() {
           stopPolling()
         }
       } catch (error) {
+        console.error('[AI轮询] 请求失败:', error.message, 'taskId:', taskId)
         logError('getAiDrawResult polling', error)
       }
     }, 3000)
-  }, [message])
+  }, [message, stopPolling, setGenStateAndRef])
 
-  const stopPolling = () => {
-    if (pollTimerRef.current) {
-      clearInterval(pollTimerRef.current)
-      pollTimerRef.current = null
+  // 保持 ref 指向最新的 startPolling
+  useEffect(() => {
+    startPollingRef.current = startPolling
+  }, [startPolling])
+
+  // 恢复中断的轮询（导航离开再返回时），只在挂载时执行一次
+  useEffect(() => {
+    const savedTaskId = sessionStorage.getItem('ai_pending_task')
+    if (savedTaskId && genState === 'idle') {
+      setCurrentTaskId(savedTaskId)
+      setGenStateAndRef('generating')
+      startPollingRef.current(savedTaskId)
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 在提交任务时保存到 sessionStorage，完成后清除
+  useEffect(() => {
+    if (genState === 'generating' && currentTaskId) {
+      sessionStorage.setItem('ai_pending_task', currentTaskId)
+    } else {
+      sessionStorage.removeItem('ai_pending_task')
+    }
+  }, [genState, currentTaskId])
+
+  // 组件卸载时清理轮询
+  useEffect(() => {
+    return () => stopPolling()
+  }, [stopPolling])
 
   const doSubmit = useCallback(async (params) => {
     try {
       const result = await submitAiDraw(params)
       const tId = result.taskId
       setCurrentTaskId(tId)
-
-      if (wsConnected) {
-        setTimeout(() => {
-          if (genStateRef.current === 'generating') {
-            startPolling(tId)
-          }
-        }, 120000)
-      } else {
-        startPolling(tId)
-      }
+      startPolling(tId)
     } catch (e) {
       setGenStateAndRef('failed')
       setGenError(e.message || '提交生成任务失败')
       message.error(e.message || '提交生成任务失败')
     }
-  }, [wsConnected, message])
+  }, [message, startPolling, setGenStateAndRef])
 
   const handleGenerate = async () => {
     if (!genPrompt.trim()) { message.warning('请输入画面描述'); return }
@@ -200,6 +183,7 @@ function AIImageTools() {
     setGenNegative('')
     setGenStyle('auto')
     setGenSize('1:1')
+    genParamsRef.current = null
   }
 
   const handleSaveToPrivate = async () => {
@@ -218,6 +202,32 @@ function AIImageTools() {
       navigate('/mobile/save-to-space', { state: { imageUrl: genResults.url } })
     } else {
       setSaveModalOpen(true)
+    }
+  }
+
+  const handleDownload = async () => {
+    if (!currentTaskId) {
+      message.warning('当前图片暂不可下载，请重新生成后再试')
+      return
+    }
+
+    try {
+      const response = await downloadAiImage(currentTaskId)
+      const blob = response?.data
+      if (!(blob instanceof Blob)) {
+        throw new Error('下载响应无效')
+      }
+
+      const objectUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = `ai-image-${currentTaskId}.png`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(objectUrl)
+    } catch (error) {
+      message.error(error.message || '下载失败')
     }
   }
 
@@ -262,6 +272,9 @@ function AIImageTools() {
                 重新生成
               </Button>
             </Tooltip>
+            <Button icon={<DownloadOutlined />} onClick={handleDownload}>
+              下载图片
+            </Button>
             <Button icon={<SaveOutlined />} onClick={handleSaveToPrivate}>
               保存到私人空间
             </Button>

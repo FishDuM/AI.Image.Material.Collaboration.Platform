@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { App as AntApp, Table, Tag, Space, Button, Card, Typography, Avatar, Popconfirm, Input, Row, Col, Form, Select, Modal, Upload } from 'antd'
-import { UserOutlined, EditOutlined, SearchOutlined, ReloadOutlined, LockOutlined, UnlockOutlined, PlusOutlined, LoadingOutlined } from '@ant-design/icons'
+import { App as AntApp, Table, Tag, Space, Button, Card, Typography, Avatar, Input, Row, Col, Form, Select, Modal, Upload } from 'antd'
+import { EditOutlined, SearchOutlined, ReloadOutlined, LockOutlined, UnlockOutlined, PlusOutlined, LoadingOutlined } from '@ant-design/icons'
 import { AuthContext } from '../context/AuthContext.jsx'
 import api, { getAdminUser } from '../api'
 import { getBase64, beforeUpload } from '../utils/upload'
@@ -9,6 +9,40 @@ import { PAGINATION_LOCALE } from '../utils/constants'
 import './UserManagement.css'
 
 const { Title } = Typography
+
+const LEVEL_OPTIONS = [
+  { value: 0, label: '普通用户' },
+  { value: 1, label: 'VIP' },
+  { value: 2, label: 'SVIP' },
+  { value: 3, label: '管理员' },
+]
+
+function formatDateTime(value) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '-'
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
+function renderLevelTag(level) {
+  if (level >= 3) {
+    return <Tag color="red">管理员</Tag>
+  }
+  if (level === 2) {
+    return <Tag color="purple">SVIP</Tag>
+  }
+  if (level === 1) {
+    return <Tag color="gold">VIP</Tag>
+  }
+  return <Tag color="default">普通用户</Tag>
+}
 
 function UserManagement() {
   const { message, modal } = AntApp.useApp()
@@ -30,9 +64,6 @@ function UserManagement() {
   const [previewAvatar, setPreviewAvatar] = useState(null)
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(null)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
-  const [roleList, setRoleList] = useState([])
-
-
 
   const fetchUserList = useCallback(async (current, pageSize, params = {}) => {
     setLoading(true)
@@ -56,10 +87,10 @@ function UserManagement() {
     } finally {
       setLoading(false)
     }
-  }, [navigate, message])
+  }, [message])
 
   useEffect(() => {
-    if (!userInfo || !userInfo?.permissions?.includes('system:user:manage')) {
+    if (!userInfo?.permissions?.includes('system:user:manage')) {
       message.error('无权访问')
       navigate('/', { replace: true })
       return
@@ -68,46 +99,39 @@ function UserManagement() {
     if (hasFetchedRef.current) return
     hasFetchedRef.current = true
     fetchUserList(1, 20)
-  }, [fetchUserList, userInfo])
+  }, [fetchUserList, message, navigate, userInfo])
 
-  // 获取角色列表
   useEffect(() => {
-    const fetchRoleList = async () => {
-      try {
-        const result = await api.get('/permission/roles')
-        if (result && Array.isArray(result)) {
-          setRoleList(result)
-        }
-      } catch {
-        // 如果获取失败，使用默认角色列表
-        setRoleList([
-          { id: 1, name: '超级管理员' },
-          { id: 2, name: '管理员' },
-          { id: 3, name: '内容审核员' },
-          { id: 4, name: '内容编辑' },
-          { id: 5, name: '数据分析员' },
-        ])
-      }
-    }
-    fetchRoleList()
-  }, [])
+    if (!isModalOpen || !editingUser) return
+    requestAnimationFrame(() => {
+      editForm.setFieldsValue({
+        id: editingUser.id,
+        username: editingUser.username,
+        password: '',
+        nickname: editingUser.nickname,
+        email: editingUser.email,
+        phone: editingUser.phone,
+        level: editingUser.level ?? 0,
+      })
+    })
+  }, [editForm, editingUser, isModalOpen])
 
   const handleSetStatus = async (userId) => {
-    if (userInfo && userInfo.id === userId) {
+    if (userInfo?.id === userId) {
       message.warning('不能封禁自己')
       return
     }
 
     modal.confirm({
       title: '确认操作',
-      content: '确定要对该用户执行封禁/解封操作吗？',
+      content: '确定要切换该用户的启用状态吗？',
       onOk: async () => {
         try {
           await api.post('/user/admin/setStatus', { userId })
           message.success('操作成功')
           fetchUserList(pagination.current, pagination.pageSize)
         } catch (error) {
-          message.error('操作失败：' + error.message)
+          message.error(error.message || '操作失败')
         }
       },
     })
@@ -118,14 +142,13 @@ function UserManagement() {
   }
 
   const handleSearch = (values) => {
-    const newParams = {
+    fetchUserList(1, pagination.pageSize, {
       id: values.id || null,
       username: values.username || null,
       phone: values.phone || null,
       nickname: values.nickname || null,
-      status: values.status || null,
-    }
-    fetchUserList(1, pagination.pageSize, newParams)
+      status: values.status ?? null,
+    })
   }
 
   const handleReset = () => {
@@ -133,54 +156,33 @@ function UserManagement() {
     fetchUserList(1, pagination.pageSize)
   }
 
-  useEffect(() => {
-    if (isModalOpen && editingUser) {
-      requestAnimationFrame(() => {
-        editForm.setFieldsValue({
-          id: editingUser.id,
-          username: editingUser.username,
-          password: '',
-          nickname: editingUser.nickname,
-          email: editingUser.email,
-          phone: editingUser.phone,
-          roleIds: editingUser.roleIds || [],
-          level: editingUser.level,
-        })
-      })
-    }
-  }, [isModalOpen, editingUser])
-
   const handleEdit = async (record) => {
     try {
       const data = await getAdminUser(record.id)
       setEditingUser(data)
       setIsModalOpen(true)
     } catch (error) {
-      message.error('获取用户信息失败：' + error.message)
+      message.error(error.message || '获取用户信息失败')
     }
   }
 
   const handleEditSubmit = async (values) => {
     try {
-      const submitData = {
+      await api.post('/user/admin/editUser', {
         id: editingUser.id,
         username: values.username,
         password: values.password || null,
         email: values.email || null,
         phone: values.phone || null,
         nickname: values.nickname || null,
-        roleIds: values.roleIds || [],
         level: values.level,
-      }
+      })
 
-      await api.post('/user/admin/editUser', submitData)
-
-      editForm.resetFields()
       message.success('编辑用户成功')
-      setIsModalOpen(false)
+      handleModalClose()
       fetchUserList(pagination.current, pagination.pageSize)
     } catch (error) {
-      message.error('编辑用户失败：' + error.message)
+      message.error(error.message || '编辑用户失败')
     }
   }
 
@@ -202,8 +204,9 @@ function UserManagement() {
         setUploadingAvatar(false)
         setAvatarPreviewUrl(url)
       })
-      const avatarUrl = info.file.response
-      setAvatarPreviewUrl(avatarUrl)
+      if (info.file.response) {
+        setAvatarPreviewUrl(info.file.response)
+      }
       message.success('头像上传成功')
     }
     if (info.file.status === 'error') {
@@ -212,40 +215,21 @@ function UserManagement() {
     }
   }
 
-  const uploadButton = (
-    <button style={{ border: 0, background: 'none' }} type="button">
-      {uploadingAvatar ? <LoadingOutlined /> : <PlusOutlined />}
-      <div style={{ marginTop: 8 }}>上传</div>
-    </button>
-  )
-
   const handleAvatarUpload = async (options) => {
     const { file, onSuccess, onError } = options
-    
     setUploadingAvatar(true)
     try {
       const formData = new FormData()
       formData.append('file', file)
       formData.append('id', editingUser.id)
-      
+
       const result = await api.post('/picture/avatar', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
-      
-      if (onSuccess) {
-        onSuccess(result)
-      }
-    } catch (error) {
-      if (onError) {
-        onError(error)
-      }
-    }
-  }
 
-  const handleAvatarClick = (avatar) => {
-    if (avatar) {
-      setPreviewAvatar(avatar)
-      setAvatarVisible(true)
+      onSuccess?.(result)
+    } catch (error) {
+      onError?.(error)
     }
   }
 
@@ -262,13 +246,17 @@ function UserManagement() {
       key: 'avatar',
       width: 80,
       render: (_, record) => (
-        <Avatar 
+        <Avatar
           src={record.avatar}
-          style={{ 
+          style={{
             backgroundColor: record.avatar ? 'transparent' : 'var(--accent)',
-            cursor: record.avatar ? 'pointer' : 'default'
+            cursor: record.avatar ? 'pointer' : 'default',
           }}
-          onClick={() => handleAvatarClick(record.avatar)}
+          onClick={() => {
+            if (!record.avatar) return
+            setPreviewAvatar(record.avatar)
+            setAvatarVisible(true)
+          }}
         >
           {!record.avatar && (record.nickname || record.username)?.charAt(0)?.toUpperCase()}
         </Avatar>
@@ -278,7 +266,7 @@ function UserManagement() {
       title: '昵称',
       dataIndex: 'nickname',
       key: 'nickname',
-      render: (nickname) => nickname || '无昵称',
+      render: (nickname) => nickname || '未设置',
     },
     {
       title: '账号',
@@ -298,28 +286,10 @@ function UserManagement() {
       render: (phone) => phone || '-',
     },
     {
-      title: '角色',
-      dataIndex: 'roleIds',
-      key: 'role',
-      render: (_, record) => {
-        const roleIds = record.roleIds || []
-        if (roleIds.includes(1)) {
-          return <Tag color="red">超级管理员</Tag>
-        }
-        if (roleIds.includes(2)) {
-          return <Tag color="orange">管理员</Tag>
-        }
-        if (roleIds.includes(3)) {
-          return <Tag color="blue">内容审核员</Tag>
-        }
-        if (roleIds.includes(4)) {
-          return <Tag color="green">内容编辑</Tag>
-        }
-        if (roleIds.includes(5)) {
-          return <Tag color="purple">数据分析员</Tag>
-        }
-        return <Tag color="default">普通用户</Tag>
-      },
+      title: '等级',
+      dataIndex: 'level',
+      key: 'level',
+      render: (level) => renderLevelTag(level),
     },
     {
       title: '状态',
@@ -336,18 +306,7 @@ function UserManagement() {
       dataIndex: 'createTime',
       key: 'createTime',
       width: 180,
-      render: (createTime) => {
-        if (!createTime) return '-'
-        const date = new Date(createTime)
-        return date.toLocaleString('zh-CN', {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-        })
-      },
+      render: formatDateTime,
     },
     {
       title: '操作',
@@ -378,7 +337,14 @@ function UserManagement() {
     },
   ]
 
-  if (!userInfo || !userInfo?.permissions?.includes('system:user:manage')) {
+  const uploadButton = (
+    <button style={{ border: 0, background: 'none' }} type="button">
+      {uploadingAvatar ? <LoadingOutlined /> : <PlusOutlined />}
+      <div style={{ marginTop: 8 }}>上传</div>
+    </button>
+  )
+
+  if (!userInfo?.permissions?.includes('system:user:manage')) {
     return (
       <main className="user-management-container">
         <div style={{ textAlign: 'center', padding: '100px 0' }}>
@@ -390,236 +356,214 @@ function UserManagement() {
 
   return (
     <main className="user-management-container">
-        <div className="user-management-header">
-          <Title level={2}>用户管理</Title>
-          <p className="header-subtitle">管理系统所有用户信息和权限</p>
-        </div>
+      <div className="user-management-header">
+        <Title level={2}>用户管理</Title>
+        <p className="header-subtitle">管理系统内所有用户的基本信息与等级状态</p>
+      </div>
 
-        <Card className="search-card" variant="borderless">
-          <Form
-            form={form}
-            name="search"
-            onFinish={handleSearch}
-            className="search-form"
-          >
-            <Row gutter={[24, 16]}>
-              <Col xs={24} sm={12} md={8}>
-                <Form.Item name="id" label="ID">
-                  <Input placeholder="请输入用户 ID" allowClear />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12} md={8}>
-                <Form.Item name="username" label="账号">
-                  <Input placeholder="请输入账号" allowClear />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12} md={8}>
-                <Form.Item name="phone" label="手机号">
-                  <Input placeholder="请输入手机号" allowClear />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12} md={8}>
-                <Form.Item name="nickname" label="昵称">
-                  <Input placeholder="请输入昵称" allowClear />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12} md={8}>
-                <Form.Item name="status" label="状态">
-                  <Select placeholder="请选择状态" allowClear>
-                    <Select.Option value="1">正常</Select.Option>
-                    <Select.Option value="0">禁用</Select.Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-              <Col xs={24}>
-                <div className="search-form-actions">
-                  <Space>
-                    <Button
-                      type="primary"
-                      htmlType="submit"
-                      icon={<SearchOutlined />}
-                    >
-                      查询
-                    </Button>
-                    <Button
-                      htmlType="button"
-                      icon={<ReloadOutlined />}
-                      onClick={handleReset}
-                    >
-                      重置
-                    </Button>
-                  </Space>
-                </div>
-              </Col>
-            </Row>
-          </Form>
-        </Card>
-
-        <Card className="user-table-card" variant="borderless">
-          <Table
-            columns={columns}
-            dataSource={users}
-            loading={loading}
-            rowKey="id"
-            locale={{
-              emptyText: '暂无数据',
-            }}
-            pagination={{
-              current: pagination.current,
-              pageSize: pagination.pageSize,
-              total: pagination.total,
-              showSizeChanger: true,
-              showQuickJumper: true,
-              showTotal: (total) => `共 ${total} 条`,
-              pageSizeOptions: ['10', '20', '50', '100'],
-              locale: PAGINATION_LOCALE,
-            }}
-            onChange={handleTableChange}
-            scroll={{ x: 1400 }}
-          />
-        </Card>
-
-        <Modal
-          className="avatar-modal"
-          open={avatarVisible}
-          onCancel={() => setAvatarVisible(false)}
-          footer={null}
-          width={600}
+      <Card className="search-card" variant="borderless">
+        <Form
+          form={form}
+          name="search"
+          onFinish={handleSearch}
+          className="search-form"
         >
-          {previewAvatar && <img src={previewAvatar} alt="avatar" />}
-        </Modal>
-
-        <Modal
-          title="编辑用户"
-          open={isModalOpen}
-          onCancel={handleModalClose}
-          footer={null}
-          centered
-          className="edit-user-modal"
-          destroyOnHidden
-        >
-          <Form
-            form={editForm}
-            name="edit"
-            onFinish={handleEditSubmit}
-            layout="vertical"
-            size="large"
-            requiredMark={false}
-          >
-            <Row gutter={[16, 16]}>
-              <Col xs={24}>
-                <Form.Item label="修改头像">
-                  <Upload
-                    name="avatar"
-                    listType="picture-circle"
-                    className="avatar-uploader"
-                    showUploadList={false}
-                    accept=".jpeg,.png,.jpg,.gif,.webp,.heic"
-                    customRequest={handleAvatarUpload}
-                    beforeUpload={beforeUpload}
-                    onChange={handleAvatarChange}
+          <Row gutter={[24, 16]}>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item name="id" label="ID">
+                <Input placeholder="请输入用户 ID" allowClear />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item name="username" label="账号">
+                <Input placeholder="请输入账号" allowClear />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item name="phone" label="手机号">
+                <Input placeholder="请输入手机号" allowClear />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item name="nickname" label="昵称">
+                <Input placeholder="请输入昵称" allowClear />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item name="status" label="状态">
+                <Select placeholder="请选择状态" allowClear>
+                  <Select.Option value={1}>正常</Select.Option>
+                  <Select.Option value={0}>禁用</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col xs={24}>
+              <div className="search-form-actions">
+                <Space>
+                  <Button
+                    type="primary"
+                    htmlType="submit"
+                    icon={<SearchOutlined />}
                   >
-                    {avatarPreviewUrl || editingUser?.avatar ? (
-                      <img src={avatarPreviewUrl || editingUser.avatar} alt="avatar" style={{ width: '100%' }} />
-                    ) : (
-                      uploadButton
-                    )}
-                  </Upload>
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="username"
-                  label="账号"
-                  rules={[
-                    { required: true, message: '请输入账号' },
-                    { min: 6, message: '账号至少 6 个字符' },
-                  ]}
+                    查询
+                  </Button>
+                  <Button
+                    htmlType="button"
+                    icon={<ReloadOutlined />}
+                    onClick={handleReset}
+                  >
+                    重置
+                  </Button>
+                </Space>
+              </div>
+            </Col>
+          </Row>
+        </Form>
+      </Card>
+
+      <Card className="user-table-card" variant="borderless">
+        <Table
+          columns={columns}
+          dataSource={users}
+          loading={loading}
+          rowKey="id"
+          locale={{
+            emptyText: '暂无数据',
+          }}
+          pagination={{
+            current: pagination.current,
+            pageSize: pagination.pageSize,
+            total: pagination.total,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            showTotal: (total) => `共 ${total} 条`,
+            pageSizeOptions: ['10', '20', '50', '100'],
+            locale: PAGINATION_LOCALE,
+          }}
+          onChange={handleTableChange}
+          scroll={{ x: 1400 }}
+        />
+      </Card>
+
+      <Modal
+        className="avatar-modal"
+        open={avatarVisible}
+        onCancel={() => setAvatarVisible(false)}
+        footer={null}
+        width={600}
+      >
+        {previewAvatar && <img src={previewAvatar} alt="avatar" />}
+      </Modal>
+
+      <Modal
+        title="编辑用户"
+        open={isModalOpen}
+        onCancel={handleModalClose}
+        footer={null}
+        centered
+        className="edit-user-modal"
+        destroyOnHidden
+      >
+        <Form
+          form={editForm}
+          name="edit"
+          onFinish={handleEditSubmit}
+          layout="vertical"
+          size="large"
+          requiredMark={false}
+        >
+          <Row gutter={[16, 16]}>
+            <Col xs={24}>
+              <Form.Item label="修改头像">
+                <Upload
+                  name="avatar"
+                  listType="picture-circle"
+                  className="avatar-uploader"
+                  showUploadList={false}
+                  accept=".jpeg,.png,.jpg,.gif,.webp,.heic"
+                  customRequest={handleAvatarUpload}
+                  beforeUpload={beforeUpload}
+                  onChange={handleAvatarChange}
                 >
-                  <Input 
-                    placeholder="请输入账号" 
-                    disabled
-                  />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="password"
-                  label="密码"
-                  rules={[
-                    { min: 6, message: '密码至少 6 个字符' },
-                  ]}
-                >
-                  <Input.Password placeholder="请输入密码（不修改请留空）" />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="nickname"
-                  label="昵称"
-                >
-                  <Input placeholder="请输入昵称" />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="email"
-                  label="邮箱"
-                  rules={[
-                    { type: 'email', message: '请输入有效的邮箱地址' },
-                  ]}
-                >
-                  <Input placeholder="请输入邮箱" />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="phone"
-                  label="手机号"
-                  rules={[
-                    { pattern: /^1[3-9]\d{9}$/, message: '请输入有效的手机号' },
-                  ]}
-                >
-                  <Input placeholder="请输入手机号" />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="roleIds"
-                  label="角色"
-                >
-                  <Select mode="multiple" placeholder="请选择角色（不选则无系统角色）">
-                    {roleList.map(role => (
-                      <Select.Option key={role.id} value={role.id}>{role.name}</Select.Option>
-                    ))}
-                  </Select>
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={12}>
-                <Form.Item
-                  name="level"
-                  label="等级"
-                  rules={[{ required: true, message: '请选择等级' }]}
-                >
-                  <Select placeholder="请选择等级">
-                    <Select.Option value={0}>普通</Select.Option>
-                    <Select.Option value={1}>VIP</Select.Option>
-                    <Select.Option value={2}>SVIP</Select.Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-            </Row>
-            <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>
-              <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
-                <Button onClick={handleModalClose}>取消</Button>
-                <Button type="primary" htmlType="submit">
-                  确定
-                </Button>
-              </Space>
-            </Form.Item>
-          </Form>
-        </Modal>
-      </main>
+                  {avatarPreviewUrl || editingUser?.avatar ? (
+                    <img src={avatarPreviewUrl || editingUser.avatar} alt="avatar" style={{ width: '100%' }} />
+                  ) : (
+                    uploadButton
+                  )}
+                </Upload>
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                name="username"
+                label="账号"
+                rules={[
+                  { required: true, message: '请输入账号' },
+                  { min: 6, message: '账号至少 6 个字符' },
+                ]}
+              >
+                <Input placeholder="请输入账号" disabled />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                name="password"
+                label="密码"
+                rules={[
+                  { min: 6, message: '密码至少 6 个字符' },
+                ]}
+              >
+                <Input.Password placeholder="不修改密码可留空" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item name="nickname" label="昵称">
+                <Input placeholder="请输入昵称" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                name="email"
+                label="邮箱"
+                rules={[
+                  { type: 'email', message: '请输入有效邮箱地址' },
+                ]}
+              >
+                <Input placeholder="请输入邮箱" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                name="phone"
+                label="手机号"
+                rules={[
+                  { pattern: /^1[3-9]\d{9}$/, message: '请输入有效手机号' },
+                ]}
+              >
+                <Input placeholder="请输入手机号" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                name="level"
+                label="等级"
+                rules={[{ required: true, message: '请选择等级' }]}
+              >
+                <Select placeholder="请选择等级" options={LEVEL_OPTIONS} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>
+            <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
+              <Button onClick={handleModalClose}>取消</Button>
+              <Button type="primary" htmlType="submit">
+                确定
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
+    </main>
   )
 }
 

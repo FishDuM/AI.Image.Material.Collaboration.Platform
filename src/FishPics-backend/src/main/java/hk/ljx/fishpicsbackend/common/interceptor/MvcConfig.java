@@ -1,7 +1,7 @@
 package hk.ljx.fishpicsbackend.common.interceptor;
 
 import hk.ljx.fishpicsbackend.common.utils.JwtUtils;
-import hk.ljx.fishpicsbackend.permission.service.PermissionService;
+import hk.ljx.fishpicsbackend.mapper.UserMapper;
 import jakarta.annotation.Resource;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -18,13 +18,15 @@ public class MvcConfig implements WebMvcConfigurer {
     private JwtUtils jwtUtils;
 
     @Resource
-    private PermissionService permissionService;
+    private UserMapper userMapper;
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         // Token 刷新拦截器（order=0，最先执行）
-        // JWT 解析 + 黑名单检查 + 自动续签 + 权限上下文加载
-        registry.addInterceptor(new TokenRefreshInterceptor(stringRedisTemplate, jwtUtils, permissionService))
+        // JWT 解析 + 黑名单检查 + 自动续签 + 简化版权限上下文加载
+        // 分享页路径需要排除，否则已登录但 JWT 失效的用户无法访问分享页
+        registry.addInterceptor(new TokenRefreshInterceptor(stringRedisTemplate, jwtUtils, userMapper))
+                .excludePathPatterns("/share/info/*", "/share/preview/*", "/share/download/*", "/ws/**")
                 .order(0);
 
         // 登录拦截器（order=1，在 Token 刷新之后）
@@ -38,13 +40,14 @@ public class MvcConfig implements WebMvcConfigurer {
                         "/picture/recommend",
                         "/system/list",
                         "/system/marquee",
-                        "/user/profile",
-                        "/user/search",
                         "/doc.html",
                         "/webjars/**",
                         "/v3/api-docs/**",
                         "/favicon.ico",
-                        "/ai/**")
+                        "/share/info/*",
+                        "/share/preview/*",
+                        "/share/download/*",
+                        "/ws/**")
                 .order(1);
     }
 }

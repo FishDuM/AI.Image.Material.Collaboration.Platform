@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="hk.ljx.fishpicsbackend.mapper.PictureShareMapper">
+
+    <resultMap id="BaseResultMap" type="hk.ljx.fishpicsbackend.picture.entity.PictureShare">
+        <id property="id" column="id"/>
+        <result property="pictureId" column="picture_id"/>
+        <result property="shareUserId" column="share_user_id"/>
+        <result property="shareToken" column="share_token"/>
+        <result property="expireTime" column="expire_time"/>
+        <result property="allowDownload" column="allow_download"/>
+        <result property="status" column="status"/>
+        <result property="createTime" column="create_time"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, picture_id, share_user_id, share_token,
+        expire_time, allow_download, status, create_time
+    </sql>
+</mapper>

@@ -3,6 +3,8 @@ package hk.ljx.fishpicsbackend.common.config;
 import org.apache.rocketmq.client.consumer.DefaultMQPushConsumer;
 import org.apache.rocketmq.client.consumer.listener.ConsumeConcurrentlyStatus;
 import org.apache.rocketmq.client.consumer.listener.MessageListenerConcurrently;
+import org.apache.rocketmq.client.producer.DefaultMQProducer;
+import org.apache.rocketmq.client.producer.SendStatus;
 import org.apache.rocketmq.common.consumer.ConsumeFromWhere;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -11,6 +13,9 @@ import org.springframework.messaging.converter.SimpleMessageConverter;
 import lombok.extern.slf4j.Slf4j;
 
 import hk.ljx.fishpicsbackend.task.consumer.TaskConsumer;
+import hk.ljx.fishpicsbackend.common.entity.SysAuditLog;
+import hk.ljx.fishpicsbackend.mapper.SysAuditLogMapper;
+import cn.hutool.json.JSONUtil;
 
 @Configuration
 @Slf4j
@@ -42,10 +47,50 @@ public class RocketMQConfig {
         consumer.registerMessageListener((MessageListenerConcurrently) (msgs, context) -> {
             for (var msg : msgs) {
                 try {
-                    String body = new String(msg.getBody());
+                    String body = new String(msg.getBody(), java.nio.charset.StandardCharsets.UTF_8);
                     listener.onMessage(new hk.ljx.fishpicsbackend.task.message.TaskMessage(body));
                 } catch (Exception e) {
                     log.error("consume message error, msgId={}", msg.getMsgId(), e);
+                    return ConsumeConcurrentlyStatus.RECONSUME_LATER;
+                }
+            }
+            return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
+        });
+        return consumer;
+    }
+
+    // ==================== 审计日志 Producer ====================
+
+    @Bean(name = "auditLogProducer", initMethod = "start", destroyMethod = "shutdown")
+    public DefaultMQProducer auditLogProducer() {
+        DefaultMQProducer producer = new DefaultMQProducer("audit-log-producer-group");
+        producer.setNamesrvAddr(nameServer);
+        producer.setRetryTimesWhenSendFailed(2);
+        return producer;
+    }
+
+    // ==================== 审计日志 Consumer ====================
+
+    @Bean(initMethod = "start", destroyMethod = "shutdown")
+    public DefaultMQPushConsumer auditLogConsumerContainer(SysAuditLogMapper sysAuditLogMapper) throws Exception {
+        log.info("AuditLogConsumer init, nameServer={}", nameServer);
+
+        DefaultMQPushConsumer consumer = new DefaultMQPushConsumer("audit-log-consumer-group");
+        consumer.setNamesrvAddr(nameServer);
+        consumer.setConsumeFromWhere(ConsumeFromWhere.CONSUME_FROM_LAST_OFFSET);
+        consumer.setConsumeThreadMin(1);
+        consumer.setConsumeThreadMax(2);
+        consumer.setConsumeMessageBatchMaxSize(1);
+        consumer.subscribe("audit-log-topic", "*");
+        consumer.registerMessageListener((MessageListenerConcurrently) (msgs, context) -> {
+            for (var msg : msgs) {
+                try {
+                    String body = new String(msg.getBody(), java.nio.charset.StandardCharsets.UTF_8);
+                    SysAuditLog auditLog = JSONUtil.toBean(body, SysAuditLog.class);
+                    sysAuditLogMapper.insert(auditLog);
+                    log.debug("审计日志异步写入成功: operation={}", auditLog.getOperation());
+                } catch (Exception e) {
+                    log.error("审计日志消费失败, msgId={}", msg.getMsgId(), e);
                     return ConsumeConcurrentlyStatus.RECONSUME_LATER;
                 }
             }

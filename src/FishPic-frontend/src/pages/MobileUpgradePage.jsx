@@ -1,7 +1,6 @@
 import { useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App as AntApp } from 'antd'
-import { ArrowLeftOutlined } from '@ant-design/icons'
 import MobilePageWrapper from '../components/MobilePageWrapper'
 import { UpgradeContent } from '../components/shared/UpgradeContent'
 import './PrivateSpace.css'

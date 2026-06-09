@@ -58,34 +58,4 @@ public class UserHolder {
         user.setLevel(ctx.getLevel());
         return user;
     }
-
-    /**
-     * 兼容旧代码：设置 User 对象
-     * 不推荐使用，请使用 setLoginContext
-     *
-     * @param user 用户对象
-     */
-    @Deprecated
-    public static void setUser(User user) {
-        if (user == null) {
-            removeLoginContext();
-            return;
-        }
-        LoginContext ctx = LoginContext.builder()
-                .userId(user.getId())
-                .username(user.getUsername())
-                .nickname(user.getNickname())
-                .avatar(user.getAvatar())
-                .status(user.getStatus())
-                .level(user.getLevel())
-                .build();
-        setLoginContext(ctx);
-    }
-
-    /**
-     * 兼容旧代码：清除
-     */
-    public static void removeUser() {
-        removeLoginContext();
-    }
 }

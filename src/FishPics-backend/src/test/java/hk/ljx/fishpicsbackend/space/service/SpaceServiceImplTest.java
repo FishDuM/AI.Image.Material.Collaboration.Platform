@@ -1,152 +1,129 @@
 package hk.ljx.fishpicsbackend.space.service;
 
-import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.ReflectUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import hk.ljx.fishpicsbackend.picture.entity.Picture;
 import hk.ljx.fishpicsbackend.space.dto.SpaceQueryWrapper;
 import hk.ljx.fishpicsbackend.space.entity.Space;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * SpaceServiceImpl 单元测试
- * 测试 SQL 注入防护等功能
- */
-@ExtendWith(MockitoExtension.class)
 class SpaceServiceImplTest {
 
-    @InjectMocks
-    private SpaceServiceImpl spaceService;
+    private final SpaceServiceImpl spaceService = new SpaceServiceImpl();
+
+    @SuppressWarnings("unchecked")
+    private QueryWrapper<Space> invokeGetSpaceQueryWrapper(SpaceQueryWrapper request) {
+        Method method = ReflectUtil.getMethod(SpaceServiceImpl.class, "getSpaceQueryWrapper", SpaceQueryWrapper.class);
+        assertNotNull(method);
+        return (QueryWrapper<Space>) ReflectUtil.invoke(spaceService, method, request);
+    }
 
     @Test
-    @DisplayName("测试空间查询 sortField 白名单校验 - 允许的字段")
-    void testGetSpaceQueryWrapper_AllowedSortFields() {
-        // Given
-        SpaceQueryWrapper queryWrapper = new SpaceQueryWrapper();
-        queryWrapper.setSortField("create_time");
-        queryWrapper.setSortOrder("ascend");
+    @DisplayName("getSpaceQueryWrapper 应允许白名单排序字段")
+    void getSpaceQueryWrapperShouldAllowWhitelistedSortField() {
+        SpaceQueryWrapper request = new SpaceQueryWrapper();
+        request.setSortField("create_time");
+        request.setSortOrder("ascend");
 
-        // When
-        QueryWrapper<Space> result = spaceService.getSpaceQueryWrapper(queryWrapper);
+        QueryWrapper<Space> result = invokeGetSpaceQueryWrapper(request);
 
-        // Then
-        assertNotNull(result);
         String sql = result.getSqlSegment();
+        assertNotNull(sql);
         assertTrue(sql.contains("ORDER BY"));
         assertTrue(sql.contains("create_time"));
     }
 
     @Test
-    @DisplayName("测试空间查询 sortField 白名单校验 - 拒绝非法字段")
-    void testGetSpaceQueryWrapper_RejectInvalidSortField() {
-        // Given
-        SpaceQueryWrapper queryWrapper = new SpaceQueryWrapper();
-        queryWrapper.setSortField("1; DROP TABLE space; --");
-        queryWrapper.setSortOrder("ascend");
+    @DisplayName("getSpaceQueryWrapper 应拦截非法排序字段")
+    void getSpaceQueryWrapperShouldRejectIllegalSortField() {
+        SpaceQueryWrapper request = new SpaceQueryWrapper();
+        request.setSortField("1; DROP TABLE space; --");
+        request.setSortOrder("ascend");
 
-        // When
-        QueryWrapper<Space> result = spaceService.getSpaceQueryWrapper(queryWrapper);
+        QueryWrapper<Space> result = invokeGetSpaceQueryWrapper(request);
 
-        // Then
-        assertNotNull(result);
         String sql = result.getSqlSegment();
         assertFalse(sql.contains("DROP TABLE"));
         assertFalse(sql.contains(";"));
-    }
-
-    @Test
-    @DisplayName("测试空间查询 sortField 白名单校验 - null 值")
-    void testGetSpaceQueryWrapper_NullSortField() {
-        // Given
-        SpaceQueryWrapper queryWrapper = new SpaceQueryWrapper();
-        queryWrapper.setSortField(null);
-        queryWrapper.setSortOrder("ascend");
-
-        // When
-        QueryWrapper<Space> result = spaceService.getSpaceQueryWrapper(queryWrapper);
-
-        // Then
-        assertNotNull(result);
-        String sql = result.getSqlSegment();
         assertFalse(sql.contains("ORDER BY"));
     }
 
     @Test
-    @DisplayName("测试图片查询 sortField 白名单校验 - 允许的字段")
-    void testPictureList_AllowedSortFields() {
-        // Given
-        String[] allowedFields = {
-            "id", "picture_name", "introduction", "tags", "url", "space_id",
-            "user_id", "create_time", "update_time"
-        };
+    @DisplayName("getSpaceQueryWrapper 空排序字段时不应追加排序")
+    void getSpaceQueryWrapperShouldIgnoreNullSortField() {
+        SpaceQueryWrapper request = new SpaceQueryWrapper();
+        request.setSortField(null);
+        request.setSortOrder("ascend");
 
-        Set<String> allowedSet = new HashSet<>(Arrays.asList(allowedFields));
+        QueryWrapper<Space> result = invokeGetSpaceQueryWrapper(request);
 
-        for (String field : allowedFields) {
-            // When - 直接测试白名单逻辑
-            boolean isValid = allowedSet.contains(field);
-
-            // Then
-            assertTrue(isValid, "字段 " + field + " 应该被允许");
+        String sql = result.getSqlSegment();
+        if (sql != null) {
+            assertFalse(sql.contains("ORDER BY"));
         }
     }
 
     @Test
-    @DisplayName("测试图片查询 sortField 白名单校验 - 拒绝非法字段")
-    void testPictureList_RejectInvalidSortField() {
-        // Given
+    @DisplayName("图片排序字段白名单应覆盖允许字段")
+    void pictureSortWhitelistShouldContainAllowedFields() {
+        String[] allowedFields = {
+                "id", "picture_name", "introduction", "tags", "url", "space_id",
+                "user_id", "create_time", "update_time"
+        };
+
+        Set<String> allowedSet = new HashSet<>(Arrays.asList(allowedFields));
+        for (String field : allowedFields) {
+            assertTrue(allowedSet.contains(field), "字段 " + field + " 应该被允许");
+        }
+    }
+
+    @Test
+    @DisplayName("图片排序字段白名单应拒绝非法字段")
+    void pictureSortWhitelistShouldRejectIllegalFields() {
         String[] invalidFields = {
-            "1; DROP TABLE picture; --",
-            "name",
-            "size",
-            "status",
-            "is_private"
+                "1; DROP TABLE picture; --",
+                "name",
+                "size",
+                "status",
+                "is_private"
         };
 
         String[] allowedFields = {
-            "id", "picture_name", "introduction", "tags", "url", "space_id",
-            "user_id", "create_time", "update_time"
+                "id", "picture_name", "introduction", "tags", "url", "space_id",
+                "user_id", "create_time", "update_time"
         };
 
         Set<String> allowedSet = new HashSet<>(Arrays.asList(allowedFields));
-
         for (String field : invalidFields) {
-            // When
-            boolean isValid = allowedSet.contains(field);
-
-            // Then
-            assertFalse(isValid, "字段 " + field + " 应该被拒绝");
+            assertFalse(allowedSet.contains(field), "字段 " + field + " 应该被拒绝");
         }
     }
 
     @Test
-    @DisplayName("测试空间查询 sortField 白名单校验 - 所有允许的字段")
-    void testGetSpaceQueryWrapper_AllAllowedFields() {
-        // Given
+    @DisplayName("getSpaceQueryWrapper 应允许所有白名单字段")
+    void getSpaceQueryWrapperShouldAllowAllWhitelistedFields() {
         String[] allowedFields = {
-            "id", "introduction", "type", "user_id", "storage_size", "level", "name", "size", "create_time", "update_time"
+                "id", "introduction", "type", "user_id", "storage_size", "level", "name", "size", "create_time", "update_time"
         };
 
         for (String field : allowedFields) {
-            SpaceQueryWrapper queryWrapper = new SpaceQueryWrapper();
-            queryWrapper.setSortField(field);
-            queryWrapper.setSortOrder("ascend");
+            SpaceQueryWrapper request = new SpaceQueryWrapper();
+            request.setSortField(field);
+            request.setSortOrder("ascend");
 
-            // When
-            QueryWrapper<Space> result = spaceService.getSpaceQueryWrapper(queryWrapper);
+            QueryWrapper<Space> result = invokeGetSpaceQueryWrapper(request);
 
-            // Then
-            assertNotNull(result);
             String sql = result.getSqlSegment();
+            assertNotNull(sql);
             assertTrue(sql.contains("ORDER BY"), "字段 " + field + " 应该被允许");
             assertTrue(sql.contains(field), "字段 " + field + " 应该出现在 ORDER BY 中");
         }

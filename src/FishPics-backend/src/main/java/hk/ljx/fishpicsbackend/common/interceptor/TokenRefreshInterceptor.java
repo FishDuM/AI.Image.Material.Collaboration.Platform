@@ -1,13 +1,18 @@
 package hk.ljx.fishpicsbackend.common.interceptor;
 
+import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
 import hk.ljx.fishpicsbackend.common.context.LoginContext;
+import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
+import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.common.utils.JwtUtils;
+import hk.ljx.fishpicsbackend.common.utils.PermissionUtils;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
-import hk.ljx.fishpicsbackend.permission.service.PermissionService;
+import hk.ljx.fishpicsbackend.mapper.UserMapper;
 import hk.ljx.fishpicsbackend.user.entity.User;
+import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -16,10 +21,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Token 刷新拦截器（新版）
- * JWT 解析 + 黑名单检查 + 自动续签 + 权限上下文加载
- *
- * 执行顺序：order=0（最先执行）
+ * Token refresh interceptor.
  */
 public class TokenRefreshInterceptor implements HandlerInterceptor {
 
@@ -27,22 +29,19 @@ public class TokenRefreshInterceptor implements HandlerInterceptor {
 
     private final StringRedisTemplate stringRedisTemplate;
     private final JwtUtils jwtUtils;
-    private final PermissionService permissionService;
+    private final UserMapper userMapper;
 
-    public TokenRefreshInterceptor(StringRedisTemplate stringRedisTemplate,
-                                    JwtUtils jwtUtils,
-                                    PermissionService permissionService) {
+    public TokenRefreshInterceptor(StringRedisTemplate stringRedisTemplate, JwtUtils jwtUtils, UserMapper userMapper) {
         this.stringRedisTemplate = stringRedisTemplate;
         this.jwtUtils = jwtUtils;
-        this.permissionService = permissionService;
+        this.userMapper = userMapper;
     }
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-        // 1. 从请求头获取 JWT（严格要求 Bearer 前缀）
         String authHeader = request.getHeader("Authorization");
         if (StrUtil.isBlank(authHeader) || !authHeader.startsWith("Bearer ")) {
-            return true; // 无 Token，放行（由 LoginInterceptor 判断是否需要登录）
+            return true;
         }
 
         String jwt = authHeader.substring(7);
@@ -50,106 +49,131 @@ public class TokenRefreshInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        // 2. 检查黑名单（已登出的 Token）
         if (jwtUtils.isBlacklisted(jwt)) {
             writeUnauthorized(response, "Token 已失效，请重新登录");
             return false;
         }
 
-        // 3. 解析 JWT 获取 userId
         Long userId = jwtUtils.getUserId(jwt);
         if (userId == null) {
-            // JWT 无效或过期，尝试检查是否在黑名单
-            if (jwtUtils.isExpired(jwt)) {
-                writeUnauthorized(response, "登录已过期，请重新登录");
-            }
-            return true; // 放行，由 LoginInterceptor 拦截
+            writeUnauthorized(response, jwtUtils.isExpired(jwt) ? "登录已过期，请重新登录" : "Token 无效，请重新登录");
+            return false;
         }
 
-        // 4. 从 Redis 读取权限上下文
-        String ctxKey = RedisConstants.getUserPermCtxKey(userId);
-        String ctxJson = stringRedisTemplate.opsForValue().get(ctxKey);
-
-        LoginContext loginContext;
-        boolean needRefreshTtl = false;
-
-        if (StrUtil.isNotBlank(ctxJson)) {
-            // Redis 命中，反序列化
-            loginContext = JSONUtil.toBean(ctxJson, LoginContext.class);
-
-            // 检查用户状态
-            if (loginContext.getStatus() != null && loginContext.getStatus() == 0) {
-                writeUnauthorized(response, "账号已被禁用");
-                return false;
-            }
-        } else {
-            // Redis 未命中，从数据库重建
-            User user = getUserFromRedis(userId);
-            if (user == null) {
-                return true; // 用户不存在，放行
-            }
-
-            // 检查用户状态
-            if (user.getStatus() != null && user.getStatus() == 0) {
-                writeUnauthorized(response, "账号已被禁用");
-                return false;
-            }
-
-            // 从数据库构建权限上下文
-            loginContext = permissionService.buildLoginContext(
-                    userId, user.getUsername(), user.getNickname(),
-                    user.getAvatar(), user.getStatus(), user.getLevel());
-
-            // 写入 Redis
-            stringRedisTemplate.opsForValue().set(
-                    ctxKey, JSONUtil.toJsonStr(loginContext),
-                    RedisConstants.USER_PERM_CTX_TTL, TimeUnit.DAYS);
-            needRefreshTtl = false; // 刚写入，不需要刷新
+        if (isTokenInvalidated(userId, jwt)) {
+            writeUnauthorized(response, "登录状态已失效，请重新登录");
+            return false;
         }
 
-        // 5. 刷新 Redis 会话 TTL（7天滑动续期）- 使用惰性刷新策略
-        // 只在 TTL 小于一半时刷新，减少 Redis 操作
-        Long ttl = stringRedisTemplate.getExpire(ctxKey, TimeUnit.DAYS);
-        if (ttl != null && ttl < RedisConstants.USER_PERM_CTX_TTL / 2) {
-            stringRedisTemplate.expire(ctxKey, RedisConstants.USER_PERM_CTX_TTL, TimeUnit.DAYS);
+        Boolean isBanned = stringRedisTemplate.opsForSet().isMember(RedisConstants.BANNED_USERS_KEY, userId.toString());
+        if (Boolean.TRUE.equals(isBanned)) {
+            writeUnauthorized(response, "账号已被封禁");
+            return false;
         }
 
-        // 6. JWT 自动续签（超过 15 分钟签发新 JWT）
+        LoginContext loginContext = loadLoginContext(userId);
+        if (loginContext == null) {
+            writeUnauthorized(response, "用户不存在，请重新登录");
+            return false;
+        }
+
+        if (!Integer.valueOf(1).equals(loginContext.getStatus())) {
+            writeUnauthorized(response, "账号已被禁用");
+            return false;
+        }
+
+        refreshContextTtlIfNeeded(userId);
+
         if (jwtUtils.shouldRenew(jwt)) {
-            String newJwt = jwtUtils.sign(userId);
-            response.setHeader(NEW_TOKEN_HEADER, newJwt);
+            response.setHeader(NEW_TOKEN_HEADER, jwtUtils.sign(userId));
         }
 
-        // 7. 存入 ThreadLocal
         UserHolder.setLoginContext(loginContext);
-
         return true;
     }
 
     @Override
-    public void afterCompletion(HttpServletRequest request, HttpServletResponse response,
-                                 Object handler, Exception ex) throws Exception {
+    public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) {
         UserHolder.removeLoginContext();
     }
 
-    /**
-     * 从 Redis 获取用户基本信息（登录时写入的 USER_MESSAGE:{userId}）
-     */
-    private User getUserFromRedis(Long userId) {
+    private LoginContext loadLoginContext(Long userId) {
+        String ctxKey = RedisConstants.getUserPermCtxKey(userId);
+        String ctxJson = stringRedisTemplate.opsForValue().get(ctxKey);
+        if (StrUtil.isNotBlank(ctxJson)) {
+            return JSONUtil.toBean(ctxJson, LoginContext.class);
+        }
+
+        User user = getUserFromCacheOrDb(userId);
+        if (user == null) {
+            return null;
+        }
+
+        LoginContext loginContext = PermissionUtils.buildLoginContext(user);
+        stringRedisTemplate.opsForValue().set(
+                ctxKey,
+                JSONUtil.toJsonStr(loginContext),
+                RedisConstants.USER_PERM_CTX_TTL,
+                TimeUnit.DAYS
+        );
+        return loginContext;
+    }
+
+    private User getUserFromCacheOrDb(Long userId) {
         String userKey = RedisConstants.getUserInfoKey(userId);
         String userJson = stringRedisTemplate.opsForValue().get(userKey);
         if (StrUtil.isNotBlank(userJson)) {
             return JSONUtil.toBean(userJson, User.class);
         }
-        return null;
+
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            return null;
+        }
+
+        User cacheUser = new User();
+        BeanUtil.copyProperties(user, cacheUser, "password", "email", "phone");
+        stringRedisTemplate.opsForValue().set(
+                userKey,
+                JSONUtil.toJsonStr(cacheUser),
+                RedisConstants.USER_PERM_CTX_TTL,
+                TimeUnit.DAYS
+        );
+        return user;
     }
 
-    /**
-     * 返回 401 响应
-     */
+    private boolean isTokenInvalidated(Long userId, String jwt) {
+        String invalidBeforeValue = stringRedisTemplate.opsForValue().get(RedisConstants.getUserTokenInvalidBeforeKey(userId));
+        if (StrUtil.isBlank(invalidBeforeValue)) {
+            return false;
+        }
+
+        Claims claims = jwtUtils.parse(jwt);
+        if (claims == null || claims.getIssuedAt() == null) {
+            return true;
+        }
+
+        try {
+            long invalidBefore = Long.parseLong(invalidBeforeValue);
+            return claims.getIssuedAt().getTime() <= invalidBefore;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    private void refreshContextTtlIfNeeded(Long userId) {
+        String ctxKey = RedisConstants.getUserPermCtxKey(userId);
+        Long ttl = stringRedisTemplate.getExpire(ctxKey, TimeUnit.DAYS);
+        if (ttl != null && ttl < RedisConstants.USER_PERM_CTX_TTL / 2) {
+            stringRedisTemplate.expire(ctxKey, RedisConstants.USER_PERM_CTX_TTL, TimeUnit.DAYS);
+        }
+    }
+
     private void writeUnauthorized(HttpServletResponse response, String message) throws Exception {
         response.setStatus(401);
         response.setContentType("application/json;charset=UTF-8");
-        response.getWriter().write("{\"code\":40001,\"message\":\"" + message + "\"}");
+        response.getWriter().write(JSONUtil.toJsonStr(
+                new Response<>(ExceptionCode.NOT_LOGIN.getCode(), message, null)
+        ));
     }
 }

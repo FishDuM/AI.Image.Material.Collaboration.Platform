@@ -1,6 +1,9 @@
 package hk.ljx.fishpicsbackend.common.interceptor;
 
+import cn.hutool.json.JSONUtil;
 import hk.ljx.fishpicsbackend.common.context.LoginContext;
+import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
+import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -20,7 +23,8 @@ public class LoginInterceptor implements HandlerInterceptor {
         if (ctx == null || ctx.getUserId() == null) {
             response.setStatus(401);
             response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write("{\"code\":40001,\"message\":\"未登录或登录已过期\"}");
+            response.getWriter().write(JSONUtil.toJsonStr(
+                    new Response<>(ExceptionCode.NOT_LOGIN.getCode(), "未登录或登录已过期", null)));
             return false;
         }
         return true;

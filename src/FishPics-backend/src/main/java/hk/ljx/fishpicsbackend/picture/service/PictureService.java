@@ -10,9 +10,7 @@ import hk.ljx.fishpicsbackend.picture.dto.DeleteByIdList;
 import hk.ljx.fishpicsbackend.picture.dto.MergeChunksRequest;
 import hk.ljx.fishpicsbackend.picture.dto.PictureQueryRequest;
 import hk.ljx.fishpicsbackend.picture.dto.PictureUpdateRequest;
-import hk.ljx.fishpicsbackend.picture.vo.PictureAdminVO;
-import hk.ljx.fishpicsbackend.picture.vo.PictureEditVO;
-import hk.ljx.fishpicsbackend.picture.vo.PictureListVO;
+import hk.ljx.fishpicsbackend.picture.vo.PictureVO;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
@@ -54,7 +52,7 @@ public interface PictureService extends IService<Picture> {
      *
      * @return 图片分页列表
      */
-    IPage<PictureListVO> getPictureList(PictureQueryRequest pictureQueryRequest);
+    IPage<PictureVO> getPictureList(PictureQueryRequest pictureQueryRequest);
 
     /**
      * 管理员获取所有图片列表（分页，按状态过滤）
@@ -62,7 +60,7 @@ public interface PictureService extends IService<Picture> {
      * @param dto 查询参数（包含分页和状态筛选）
      * @return 图片管理分页列表
      */
-    IPage<PictureAdminVO> getAdminPictureList(AdminPictureListDTO dto);
+    IPage<PictureVO> getAdminPictureList(AdminPictureListDTO dto);
 
     /**
      * 管理员审核图片
@@ -92,12 +90,20 @@ public interface PictureService extends IService<Picture> {
      * @param id 图片id
      * @return 图片信息
      */
-    PictureEditVO getPictureEditMessage(Long id);
+    PictureVO getPictureEditMessage(Long id);
+
+    /**
+     * 协同编辑替换图片文件：上传新文件到 COS，更新数据库记录，删除旧文件
+     *
+     * @param pictureId 图片ID
+     * @param file      新的图片文件
+     */
+    void replacePictureFile(Long pictureId, MultipartFile file);
 
     /**
      * 获取推荐图片列表（基于用户兴趣画像标签匹配）
      */
-    IPage<PictureListVO> getRecommendPictures(PageRequest pageRequest, Long userId);
+    IPage<PictureVO> getRecommendPictures(PageRequest pageRequest, Long userId);
 
     /**
      * 秒传校验（MD5+size）
@@ -107,10 +113,10 @@ public interface PictureService extends IService<Picture> {
     /**
      * 分片上传
      */
-    Object uploadChunk(MultipartFile file, String md5, Integer chunkIndex, String cosKey);
+    Object uploadChunk(MultipartFile file, String md5, Integer chunkIndex);
 
     /**
      * 合并分片
      */
-    PictureListVO mergeChunks(MergeChunksRequest request);
+    PictureVO mergeChunks(MergeChunksRequest request);
 }

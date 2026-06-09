@@ -1,0 +1,125 @@
+.collab-canvas-container {
+  position: relative;
+  width: 100%;
+  height: 400px;
+  background: var(--bg-secondary, #fafafa);
+  border: 1px solid var(--border-color, #e8e8e8);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.collab-canvas-container .image-cropper-toolbar {
+  display: none;
+}
+
+.collab-canvas-container .image-cropper-container {
+  width: 100%;
+  height: 100%;
+}
+
+.collab-canvas-container .image-cropper-container img {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.collab-status-bar {
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.collab-status-editing {
+  background: #f6ffed;
+  border: 1px solid #b7eb8f;
+  color: #389e0d;
+}
+
+.collab-status-viewing {
+  background: #fff7e6;
+  border: 1px solid #ffd591;
+  color: #d46b08;
+}
+
+.collab-status-free {
+  background: #e6f7ff;
+  border: 1px solid #91d5ff;
+  color: #096dd9;
+}
+
+.collab-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.collab-image-viewport {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.collab-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transition: transform 0.2s ease;
+  pointer-events: none;
+  user-select: none;
+}
+
+.collab-toolbar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 24px;
+  margin-top: 12px;
+}
+
+.collab-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.collab-scale-text,
+.collab-rotation-text {
+  min-width: 48px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary, #666);
+  font-variant-numeric: tabular-nums;
+}
+
+.collab-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.collab-users {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.collab-users-count {
+  font-size: 12px;
+  color: var(--text-secondary, #999);
+  margin-left: 4px;
+}
+
+.collab-actions {
+  display: flex;
+  gap: 8px;
+}

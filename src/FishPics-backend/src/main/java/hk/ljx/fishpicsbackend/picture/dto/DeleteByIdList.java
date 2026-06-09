@@ -1,5 +1,6 @@
 package hk.ljx.fishpicsbackend.picture.dto;
 
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -11,5 +12,6 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class DeleteByIdList implements Serializable {
+    @Size(max = 100, message = "单次最多删除100条")
     private List<Long> ids;
 }

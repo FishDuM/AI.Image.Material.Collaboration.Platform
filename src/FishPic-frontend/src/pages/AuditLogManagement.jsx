@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useContext, useRef } from 'react'
+import { useEffect, useState, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App as AntApp, Table, Button, Input, Select, Space, Tag, Typography, Card } from 'antd'
 import { ReloadOutlined } from '@ant-design/icons'
@@ -13,25 +13,22 @@ const RESULT_COLOR = { 0: 'red', 1: 'green' }
 
 const OPERATION_OPTIONS = [
   { label: '全部', value: '' },
-  { label: '登录', value: 'LOGIN' },
-  { label: '登出', value: 'LOGOUT' },
-  { label: '用户禁用', value: 'USER_DISABLE' },
-  { label: '角色变更', value: 'ROLE_CHANGE' },
-  { label: '图片审核', value: 'PICTURE_REVIEW' },
-  { label: '帖子审核', value: 'POST_REVIEW' },
-  { label: '帖子删除', value: 'POST_DELETE' },
-  { label: '评论审核', value: 'COMMENT_REVIEW' },
-  { label: '评论删除', value: 'COMMENT_DELETE' },
-  { label: '空间更新', value: 'SPACE_UPDATE' },
-  { label: '空间删除', value: 'SPACE_DELETE' },
-  { label: '空间状态变更', value: 'SPACE_STATUS' },
+  { label: '用户登录', value: '用户登录' },
+  { label: '用户登出', value: '用户登出' },
+  { label: '用户状态变更', value: '用户状态变更' },
+  { label: '编辑用户', value: '编辑用户' },
+  { label: '图片审核', value: '图片审核' },
+  { label: '上传图片', value: '上传图片' },
+  { label: '删除图片', value: '删除图片' },
+  { label: '更新空间', value: '更新空间' },
+  { label: '删除空间', value: '删除空间' },
+  { label: '空间状态变更', value: '空间状态变更' },
 ]
 
 function AuditLogManagement() {
   const { message } = AntApp.useApp()
   const navigate = useNavigate()
-  const { userInfo } = useContext(AuthContext)
-  const hasFetchedRef = useRef(false)
+  const { userInfo, authLoading } = useContext(AuthContext)
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState([])
   const [total, setTotal] = useState(0)
@@ -42,39 +39,40 @@ function AuditLogManagement() {
   const [filterResult, setFilterResult] = useState(undefined)
 
   useEffect(() => {
+    if (authLoading) return
     if (!userInfo || !userInfo?.permissions?.includes('system:log:manage')) {
       message.error('无权访问，正在跳转...')
       setTimeout(() => navigate('/404', { replace: true }), 500)
     }
-  }, [userInfo, navigate, message])
-
-  const fetchData = useCallback(async (page = current, size = pageSize) => {
-    setLoading(true)
-    try {
-      const params = { current: page, pageSize: size }
-      if (searchUsername) params.username = searchUsername
-      if (filterOperation) params.operation = filterOperation
-      if (filterResult !== undefined) params.result = filterResult
-      const result = await api.post('/system/audit-log/list', params)
-      setData(result?.records || [])
-      setTotal(result?.total || 0)
-    } catch (err) {
-      message.error(err.message || '获取审计日志失败')
-    } finally {
-      setLoading(false)
-    }
-  }, [current, pageSize, searchUsername, filterOperation, filterResult, message])
+  }, [userInfo, authLoading, navigate, message])
 
   useEffect(() => {
-    if (userInfo?.permissions?.includes('system:log:manage') && !hasFetchedRef.current) {
-      hasFetchedRef.current = true
-      fetchData()
+    if (!userInfo?.permissions?.includes('system:log:manage')) return
+    let ignore = false
+    const fetchData = async () => {
+      setLoading(true)
+      try {
+        const params = { current, pageSize }
+        if (searchUsername) params.username = searchUsername
+        if (filterOperation) params.operation = filterOperation
+        if (filterResult !== undefined) params.result = filterResult
+        const result = await api.post('/system/audit-log/list', params)
+        if (!ignore) {
+          setData(result?.records || [])
+          setTotal(result?.total || 0)
+        }
+      } catch (err) {
+        if (!ignore) message.error(err.message || '获取审计日志失败')
+      } finally {
+        if (!ignore) setLoading(false)
+      }
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    fetchData()
+    return () => { ignore = true }
+  }, [current, pageSize, searchUsername, filterOperation, filterResult, userInfo, message])
 
   const handleSearch = () => {
     setCurrent(1)
-    fetchData(1, pageSize)
   }
 
   const handleReset = () => {
@@ -82,14 +80,11 @@ function AuditLogManagement() {
     setFilterOperation('')
     setFilterResult(undefined)
     setCurrent(1)
-    fetchData(1, pageSize)
   }
 
   const handleTableChange = (pagination) => {
-    const { current: c, pageSize: s } = pagination
-    setCurrent(c)
-    setPageSize(s)
-    fetchData(c, s)
+    setCurrent(pagination.current)
+    setPageSize(pagination.pageSize)
   }
 
   const formatTime = (t) => {

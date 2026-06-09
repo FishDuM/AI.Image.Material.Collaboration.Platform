@@ -29,6 +29,7 @@ const MobileEditProfilePage = lazy(() => import('./pages/MobileEditProfilePage')
 const MobileUpgradePage = lazy(() => import('./pages/MobileUpgradePage'))
 const MobileUserProfilePage = lazy(() => import('./pages/MobileUserProfilePage'))
 const MobileSaveToSpacePage = lazy(() => import('./pages/MobileSaveToSpacePage'))
+const SharePage = lazy(() => import('./pages/SharePage'))
 
 function PageLoading() {
   return (
@@ -88,6 +89,7 @@ function App() {
           <GlobalLayout>
             <Routes>
               <Route path="/" element={<RouteWithBoundary><HomePage /></RouteWithBoundary>} />
+              <Route path="/s/:token" element={<RouteWithBoundary><SharePage /></RouteWithBoundary>} />
               <Route path="/profile" element={<RouteWithBoundary><ProtectedRoute><UserProfile /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/private-space" element={<RouteWithBoundary><ProtectedRoute><PrivateSpace /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/team-space" element={<RouteWithBoundary><ProtectedRoute><TeamSpace /></ProtectedRoute></RouteWithBoundary>} />

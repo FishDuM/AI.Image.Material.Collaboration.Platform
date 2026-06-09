@@ -13,10 +13,13 @@ public class CorsConfig implements WebMvcConfigurer {
         registry.addMapping("/**")
                 // 允许发送 Cookie
                 .allowCredentials(true)
-                // 放行哪些域名（必须用 patterns，否则 * 会和 allowCredentials 冲突）
-                .allowedOriginPatterns("*")
+                .allowedOriginPatterns(
+                        "http://localhost:*",
+                        "http://127.0.0.1:*"
+                        // 生产环境添加真实域名，如 "https://yourdomain.com"
+                )
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("*")
-                .exposedHeaders("*");
+                .exposedHeaders("X-New-Token", "Content-Disposition");
     }
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { App, Modal, Button, Tabs, Checkbox, Tag, Spin, Empty, Alert } from 'antd'
 import { SaveOutlined, TeamOutlined, LockOutlined } from '@ant-design/icons'
-import { listSpace, savePictureByUrl } from '../../api'
+import { getSaveableSpaces, savePictureByUrl } from '../../api'
 
 const SPACE_TYPE_MAP = { 0: '私人空间', 1: '团队空间' }
 const SPACE_TYPE_COLOR = { 0: 'blue', 1: 'green' }
@@ -18,13 +18,10 @@ function SaveToSpaceModal({ open, onClose, imageUrl }) {
   const loadSpaces = useCallback(async () => {
     setLoading(true)
     try {
-      const result = await listSpace(0)
+      const result = await getSaveableSpaces()
       const list = Array.isArray(result) ? result : []
-      setPrivateSpace(list.length > 0 ? list[0] : null)
-
-      const teamResult = await listSpace(1)
-      const teamList = Array.isArray(teamResult) ? teamResult : []
-      setTeamSpaces(teamList)
+      setPrivateSpace(list.find((space) => space.type === 0) || null)
+      setTeamSpaces(list.filter((space) => space.type === 1))
     } catch {
       setPrivateSpace(null)
       setTeamSpaces([])
@@ -179,7 +176,7 @@ function SaveToSpaceModal({ open, onClose, imageUrl }) {
       ]}
     >
       <Alert
-        message="选择要保存到的空间，支持同时保存到多个空间"
+        title="选择要保存到的空间，支持同时保存到多个空间"
         type="info"
         showIcon
         style={{ marginBottom: 16 }}

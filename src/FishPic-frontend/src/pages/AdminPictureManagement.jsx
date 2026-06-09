@@ -112,7 +112,7 @@ function AdminPictureManagement() {
         try {
           for (const id of selectedRowKeys) {
             const record = pictures.find(p => p.id === id)
-            await reviewPicture(id, status, record?.isPrivate)
+            await reviewPicture(id, status, record?.isSelected)
           }
           message.success(`已批量${statusText} ${selectedRowKeys.length} 张图片`)
           fetchPictureList(pagination.current, pagination.pageSize, statusFilter)
@@ -266,7 +266,7 @@ function AdminPictureManagement() {
               <Popconfirm
                 title="确认通过"
                 description="确定通过该图片审核？"
-                onConfirm={() => handleReview(record.id, 1, record.isPrivate)}
+                onConfirm={() => handleReview(record.id, 1, record.isSelected)}
                 okText="通过"
                 cancelText="取消"
                 okButtonProps={{ danger: false }}
@@ -282,7 +282,7 @@ function AdminPictureManagement() {
               <Popconfirm
                 title="确认拒绝"
                 description="确定拒绝该图片审核？"
-                onConfirm={() => handleReview(record.id, 0, record.isPrivate)}
+                onConfirm={() => handleReview(record.id, 0, record.isSelected)}
                 okText="拒绝"
                 cancelText="取消"
                 okButtonProps={{ danger: true }}
@@ -304,7 +304,7 @@ function AdminPictureManagement() {
               <Popconfirm
                 title="确认禁用"
                 description="确定禁用该图片？"
-                onConfirm={() => handleReview(record.id, 0, record.isPrivate)}
+                onConfirm={() => handleReview(record.id, 0, record.isSelected)}
                 okText="确定"
                 cancelText="取消"
                 okButtonProps={{ danger: true }}
@@ -317,7 +317,7 @@ function AdminPictureManagement() {
                   禁用
                 </Button>
               </Popconfirm>
-              {record.isPrivate === 0 ? (
+              {record.isSelected === 0 ? (
                 <Popconfirm
                   title="确认精选"
                   description="确定精选该图片？"
@@ -359,7 +359,7 @@ function AdminPictureManagement() {
               <Popconfirm
                 title="确认启用"
                 description="确定启用该图片？"
-                onConfirm={() => handleReview(record.id, 1, record.isPrivate)}
+                onConfirm={() => handleReview(record.id, 1, record.isSelected)}
                 okText="确定"
                 cancelText="取消"
               >
@@ -371,7 +371,7 @@ function AdminPictureManagement() {
                   启用
                 </Button>
               </Popconfirm>
-              {record.isPrivate === 0 ? (
+              {record.isSelected === 0 ? (
                 <Popconfirm
                   title="确认精选"
                   description="确定精选该图片？"

@@ -1,11 +1,9 @@
-import { useEffect, useState, useContext } from 'react'
+import { useEffect, useState, useContext, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App as AntApp, Typography, Card, Row, Col, Statistic, Spin } from 'antd'
 import {
   UserOutlined,
   PictureOutlined,
-  MessageOutlined,
-  CommentOutlined,
   AppstoreOutlined,
   RiseOutlined,
 } from '@ant-design/icons'
@@ -22,13 +20,16 @@ function AdminDashboard() {
   const { userInfo } = useContext(AuthContext)
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState(null)
+  const hasFetchedRef = useRef(false)
 
   useEffect(() => {
+    if (hasFetchedRef.current) return
     if (!userInfo || !userInfo?.permissions?.includes('system:user:manage')) {
       message.error('无权访问，正在跳转...')
       setTimeout(() => navigate('/404', { replace: true }), 500)
       return
     }
+    hasFetchedRef.current = true
 
     const fetchStats = async () => {
       setLoading(true)
@@ -59,7 +60,7 @@ function AdminDashboard() {
     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
     xAxis: {
       type: 'category',
-      data: ['用户', '图片', '帖子', '评论', '空间'],
+      data: ['用户', '图片', '空间'],
       axisLabel: { color: 'var(--text-secondary)' },
     },
     yAxis: {
@@ -72,8 +73,6 @@ function AdminDashboard() {
       data: [
         stats.totalUsers || 0,
         stats.totalPictures || 0,
-        stats.totalPosts || 0,
-        stats.totalComments || 0,
         stats.totalSpaces || 0,
       ],
       itemStyle: {
@@ -94,7 +93,7 @@ function AdminDashboard() {
     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
     xAxis: {
       type: 'category',
-      data: ['新增用户', '新增图片', '新增帖子'],
+      data: ['新增用户', '新增图片'],
       axisLabel: { color: 'var(--text-secondary)' },
     },
     yAxis: {
@@ -108,7 +107,6 @@ function AdminDashboard() {
       data: [
         stats.todayNewUsers || 0,
         stats.todayNewPictures || 0,
-        stats.todayNewPosts || 0,
       ],
       itemStyle: {
         borderRadius: [4, 4, 0, 0],
@@ -144,16 +142,6 @@ function AdminDashboard() {
           </Col>
           <Col xs={24} sm={12} md={8} lg={6}>
             <Card variant="borderless" className="stat-card">
-              <Statistic title="帖子总数" value={stats?.totalPosts || 0} prefix={<MessageOutlined />} />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} md={8} lg={6}>
-            <Card variant="borderless" className="stat-card">
-              <Statistic title="评论总数" value={stats?.totalComments || 0} prefix={<CommentOutlined />} />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} md={8} lg={6}>
-            <Card variant="borderless" className="stat-card">
               <Statistic title="空间总数" value={stats?.totalSpaces || 0} prefix={<AppstoreOutlined />} />
             </Card>
           </Col>
@@ -165,11 +153,6 @@ function AdminDashboard() {
           <Col xs={24} sm={12} md={8} lg={6}>
             <Card variant="borderless" className="stat-card stat-card-today">
               <Statistic title="今日新增图片" value={stats?.todayNewPictures || 0} prefix={<RiseOutlined />} valueStyle={{ color: '#52c41a' }} />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} md={8} lg={6}>
-            <Card variant="borderless" className="stat-card stat-card-today">
-              <Statistic title="今日新增帖子" value={stats?.todayNewPosts || 0} prefix={<RiseOutlined />} valueStyle={{ color: '#52c41a' }} />
             </Card>
           </Col>
         </Row>

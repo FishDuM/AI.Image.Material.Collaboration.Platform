@@ -5,7 +5,7 @@ import { AuthContext } from '../../context/AuthContext.jsx'
 
 const NAV_ITEMS = [
   { key: '/', icon: <HomeOutlined />, label: '首页' },
-  { key: '/community', icon: <AppstoreOutlined />, label: '社区' },
+  { key: '/ai-tools', icon: <AppstoreOutlined />, label: 'AI工具' },
   { key: '/private-space', icon: <LockOutlined />, label: '私人' },
   { key: '/team-space', icon: <TeamOutlined />, label: '团队' },
   { key: '/profile', icon: <UserOutlined />, label: '我的' },
@@ -39,7 +39,7 @@ function MobileBottomNav() {
       {NAV_ITEMS.map((item) => (
         <button
           key={item.key}
-          className={`mobile-bottom-nav-item${isActive(item.key) ? ' active' : ''}${item.isAction ? ' action' : ''}`}
+          className={`mobile-bottom-nav-item${isActive(item.key) ? ' active' : ''}`}
           onClick={() => handleClick(item)}
         >
           <span className="mobile-bottom-nav-icon">{item.icon}</span>

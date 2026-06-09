@@ -12,6 +12,18 @@ function ProtectedRoute({ children, requireAdmin = false, permission }) {
   const location = useLocation()
   const hasPrompted = useRef(false)
 
+  useEffect(() => {
+    // 监听认证过期事件（非主动退出），显示提示
+    const handleExpired = () => {
+      if (!hasPrompted.current) {
+        hasPrompted.current = true
+        message.info('登录已过期，请重新登录')
+      }
+    }
+    window.addEventListener('auth:expired', handleExpired)
+    return () => window.removeEventListener('auth:expired', handleExpired)
+  }, [])
+
   if (auth?.authLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
@@ -21,10 +33,6 @@ function ProtectedRoute({ children, requireAdmin = false, permission }) {
   }
 
   if (!auth || !auth.isAuthenticated) {
-    if (!hasPrompted.current) {
-      hasPrompted.current = true
-      message.info('请先登录')
-    }
     return <Navigate to="/" replace state={{ from: location }} />
   }
 

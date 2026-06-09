@@ -1,17 +1,8 @@
 package hk.ljx.fishpicsbackend.ai.service;
 
 import cn.hutool.json.JSONUtil;
-import com.alibaba.dashscope.aigc.multimodalconversation.MultiModalConversation;
-import com.alibaba.dashscope.aigc.multimodalconversation.MultiModalConversationParam;
-import com.alibaba.dashscope.aigc.multimodalconversation.MultiModalConversationResult;
-import com.alibaba.dashscope.common.MultiModalMessage;
-import com.alibaba.dashscope.common.Role;
-import com.alibaba.dashscope.exception.NoApiKeyException;
-import com.alibaba.dashscope.exception.UploadFileException;
 import com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeConnectionProperties;
 import hk.ljx.fishpicsbackend.ai.dto.AiDrawPictureDTO;
-import hk.ljx.fishpicsbackend.common.enums.PicturePromptEnum;
-import hk.ljx.fishpicsbackend.common.enums.PictureSizeEnum;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.task.entity.Task;
@@ -20,7 +11,6 @@ import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.picture.entity.Picture;
 import hk.ljx.fishpicsbackend.picture.service.PictureService;
 import hk.ljx.fishpicsbackend.user.entity.User;
-import hk.ljx.fishpicsbackend.permission.service.PermissionService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -40,17 +30,20 @@ public class AiServiceImpl implements AiService {
     @Resource
     private PictureService pictureService;
 
-    @Resource
-    private PermissionService permissionService;
-
+    /**
+     * 提交图片标签任务
+     * 只有图片所有者或拥有 ai:manage 权限的管理员才能触发
+     */
     @Override
     public String submitTagTask(Long pictureId) {
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_LOGIN);
         Picture picture = pictureService.getById(pictureId);
         ExcUtils.throwIfTrue(picture == null, "图片不存在");
+        ExcUtils.throwIfTrue(picture.getUserId() == null, "图片数据异常");
+        // 非本人且非管理员，拒绝
         hk.ljx.fishpicsbackend.common.context.LoginContext ctx = UserHolder.getLoginContext();
-        ExcUtils.throwIfTrue(!picture.getUserId().equals(user.getId()) && (ctx == null || !ctx.hasSystemPerm("system:ai:manage")), ExceptionCode.UNAUTHORIZED);
+        ExcUtils.throwIfTrue(!user.getId().equals(picture.getUserId()) && (ctx == null || !ctx.hasSystemPerm("system:ai:manage")), ExceptionCode.UNAUTHORIZED);
 
         return taskService.submitTask("ai_tag", String.valueOf(pictureId), null, user.getId());
     }
@@ -60,54 +53,10 @@ public class AiServiceImpl implements AiService {
         return taskService.getTaskByTaskId(taskId);
     }
 
-    @Override
-    public String drawPicture(AiDrawPictureDTO drawPictureDTO) {
-        String description = drawPictureDTO.getDescription();
-        String exclusion = drawPictureDTO.getExclusion();
-        String style = drawPictureDTO.getStyle();
-        String size = PictureSizeEnum.getSizeByCode(drawPictureDTO.getSize());
-
-        MultiModalConversation conv = new MultiModalConversation();
-
-        String promptStyle = PicturePromptEnum.getPromptByCode(style);
-
-        MultiModalMessage userMessage = MultiModalMessage.builder()
-                .role(Role.USER.getValue())
-                .content(List.of(Collections.singletonMap("text", description + promptStyle))).build();
-
-        Map<String, Object> parameters = new HashMap<>();
-        parameters.put("watermark", false);
-        parameters.put("prompt_extend", true);
-        if (exclusion != null) {
-            parameters.put("negative_prompt", exclusion);
-        }
-        parameters.put("size", size);
-
-        String apikey = dashScopeConnectionProperties.getApiKey();
-        ExcUtils.throwIfTrue(apikey == null || apikey.isBlank(), ExceptionCode.SERVICE_UNAVAILABLE, "AI服务未配置API Key");
-        MultiModalConversationParam param = MultiModalConversationParam.builder()
-                .apiKey(apikey)
-                .model("qwen-image-2.0-pro")
-                .messages(Collections.singletonList(userMessage))
-                .parameters(parameters)
-                .build();
-        MultiModalConversationResult result;
-        try {
-            result = conv.call(param);
-        } catch (NoApiKeyException e) {
-            log.error("生图失败，apiKey无效", e);
-            throw new hk.ljx.fishpicsbackend.common.exception.BaseException(
-                    ExceptionCode.SERVICE_UNAVAILABLE.getCode(), "AI服务apiKey无效");
-        } catch (UploadFileException e) {
-            log.error("生图失败，上传文件失败", e);
-            throw new hk.ljx.fishpicsbackend.common.exception.BaseException(
-                    ExceptionCode.SERVICE_UNAVAILABLE.getCode(), "AI服务文件上传失败");
-        }
-        String url = result.getOutput().getChoices().getFirst().getMessage().getContent().getFirst().get("image").toString();
-        log.info("生图成功: {}", url);
-        return url;
-    }
-
+    /**
+     * 提交 AI 生图任务
+     * 先检查 DashScope API Key 是否配置，然后把参数序列化成 JSON 交给 TaskService 异步处理
+     */
     @Override
     public String submitDrawTask(AiDrawPictureDTO drawPictureDTO, Long userId) {
         ExcUtils.throwIfTrue(drawPictureDTO == null || drawPictureDTO.getDescription() == null,
@@ -121,5 +70,19 @@ public class AiServiceImpl implements AiService {
     @Override
     public Task getDrawResult(String taskId) {
         return taskService.getTaskByTaskId(taskId);
+    }
+
+    @Override
+    public String getDownloadImageUrl(String taskId) {
+        Task task = taskService.getTaskByTaskId(taskId);
+        ExcUtils.throwIfTrue(task == null, ExceptionCode.NOT_FOUND, "任务不存在");
+
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_LOGIN);
+        ExcUtils.throwIfTrue(!user.getId().equals(task.getUserId()), ExceptionCode.UNAUTHORIZED);
+        ExcUtils.throwIfTrue(!"ai_draw".equals(task.getBizType()), ExceptionCode.PARAMETER_ERROR, "任务类型不支持下载");
+        ExcUtils.throwIfTrue(!"DONE".equals(task.getStatus()), ExceptionCode.PARAMETER_ERROR, "任务尚未完成");
+        ExcUtils.throwIfTrue(task.getResult() == null || task.getResult().isBlank(), ExceptionCode.NOT_FOUND, "图片结果不存在");
+        return task.getResult();
     }
 }

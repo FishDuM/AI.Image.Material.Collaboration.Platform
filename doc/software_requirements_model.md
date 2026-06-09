@@ -1,20 +1,19 @@
 # FishPics 后端软件需求模型
 
-> 本文档基于 `src/FishPics-backend` 当前后端项目重构，覆盖用户、图片、帖子、评论、空间、系统配置、AI 能力与后台管理等需求。接口统一挂载在 `/api` 上，具体控制器路径来自 `controller` 包。
+> 本文档基于 `src/FishPics-backend` 当前后端项目，覆盖用户认证、图片管理与分片上传、文件去重、图片分享、空间协作、系统配置、AI 能力与后台治理等需求。接口统一挂载在 `/api` 上，具体控制器路径来自 `controller` 包。
 
 ## 1. 项目定位
 
-FishPics 是一个图片素材协作与社区平台。后端负责用户认证、图片上传与空间容量管理、帖子发布与互动、评论审核、社交关系、系统配置、AI 图片处理任务和后台治理。
+FishPics 是一个图片素材协作平台。后端负责用户认证与权限管理、图片上传（含分片上传与文件去重）、空间容量管理、图片分享、系统配置、AI 图片处理任务和后台治理。
 
 ### 1.1 目标
 
-- 支持用户注册登录、个人资料维护和隐私设置。
-- 支持图片上传、空间归档、公开展示、审核和信息编辑。
-- 支持帖子发布、编辑、浏览、点赞、收藏、评论和热度排序。
-- 支持私人空间与团队空间的图片资产管理。
-- 支持管理员对用户、图片、帖子、评论、空间、系统配置和 AI 任务进行管理。
-- 支持 VIP/SVIP 用户使用 AI 标注、文生图能力（异步任务模式）。
-- 支持用户兴趣画像自动生成，为个性化推荐提供数据基础。
+- 支持用户注册登录、个人资料维护。
+- 支持图片普通上传与分片上传（含秒传校验和断点续传）、文件去重、空间归档、公开展示、审核和信息编辑。
+- 支持图片分享，可生成带过期时间和下载权限控制的分享链接，支持在线预览和下载。
+- 支持私人空间与团队空间的图片资产协作管理，团队成员角色通过整数 `roleId` 区分（1=所有者，2=成员）。
+- 支持管理员对用户、图片、空间、系统配置和 AI 任务进行管理。
+- 支持已登录用户使用 AI 标注、文生图能力（异步任务模式），VIP 等级校验在 Service 层执行。
 
 ### 1.2 技术栈
 
@@ -24,20 +23,21 @@ FishPics 是一个图片素材协作与社区平台。后端负责用户认证�
 | Web 框架 | Spring Boot 3.3.0, Spring MVC |
 | ORM | MyBatis-Plus 3.5.14 |
 | 数据库 | MySQL 8, 数据库名 `FishPics` |
-| 缓存 | Redis, Redisson, Caffeine 本地缓存, 多级缓存架构 |
+| 缓存 | Redis, Caffeine 本地缓存, 多级缓存架构 |
+| 认证 | JWT（jjwt），Redis 黑名单管理 |
 | API 文档 | Knife4j OpenAPI3 |
 | 工具库 | Hutool, Lombok |
 | 对象存储 | 腾讯云 COS |
+| 消息队列 | RocketMQ |
 | AI | Spring AI Alibaba 1.1.2.3, DashScope SDK 2.22.18, 通义千问视觉理解与万相图像能力 |
 
 ### 1.3 运行与配置
 
 - 服务端口：`8080`
 - Servlet 上下文：`/api`
-- Knife4j 扫描包：`hk.ljx.fishpicsbackend`（各模块 Controller 分布在 `user`、`picture`、`post`、`comment`、`space`、`system`、`ai`、`permission` 包下）
-- 上传限制：单文件最大 `50MB`，单次请求最大 `750MB`
-- WebSocket 端点：`/ws`（通过 `Sec-WebSocket-Protocol` 头传递 Token 认证）
-- RocketMQ：`task-topic` 主题，`task-consumer-group` 消费组
+- Knife4j 扫描包：`hk.ljx.fishpicsbackend`（各模块 Controller 分布在 `user`、`picture`、`space`、`system`、`ai` 包下）
+- 上传限制：单文件最大 `25MB`，单次请求最大 `100MB`
+- RocketMQ：`task-topic` 主题（AI 异步任务），`audit-log-topic` 主题（审计日志异步写入）
 - MySQL、Redis、COS、DashScope 密钥通过 `application-local.yml` 或本地配置注入。
 
 ## 2. 架构与公共机制
@@ -52,7 +52,8 @@ FishPics 是一个图片素材协作与社区平台。后端负责用户认证�
 | DTO | `dto` | 请求参数模型 |
 | VO | `vo` | 响应视图模型 |
 | Entity | `entity` | 数据库表映射 |
-| Common | `common` | 响应、异常、拦截器、AOP、常量、COS、配置、定时任务 |
+| Common | `common` | 响应、异常、拦截器、AOP、常量、COS、配置 |
+| Task | `task` | 异步任务消费、处理器和消息模型 |
 | AI | `ai` | AI 能力接口、Spring AI Alibaba Agent 和 DashScope SDK 实现 |
 
 ### 2.2 统一响应
@@ -69,26 +70,28 @@ FishPics 是一个图片素材协作与社区平台。后端负责用户认证�
 
 ### 2.3 认证与权限
 
-- 登录成功后生成 UUID Token，并通过 `Authorization` 请求头传递。
-- Redis 保存 Token 与用户 ID、用户信息缓存，支持多级缓存（Caffeine L1 + Redis L2）。
-- `RefreshTokenInterceptor` 读取 Token，恢复当前用户到 `UserHolder`，同时阻断已禁用用户。
-- `LoginInterceptor` 校验需要登录的请求。
-- RBAC 权限系统：三级权限模型（系统级、团队级、资源级），支持角色继承；通过 `@AuthCheck(permission, mode)` + AOP 切面实现细粒度权限校验，支持 AND/OR 匹配模式。
-- 审计日志：通过 `@AuditLog(module, operation)` 注解自动记录操作日志，持久化在 `sys_audit_log` 表。
-- 当前用户通过 `UserHolder` 在线程内传递。
+- 登录成功后签发 JWT（HMAC-SHA 密钥，30 分钟有效期），通过 `Authorization: Bearer <token>` 请求头传递。
+- JWT 黑名单通过 Redis 管理，登出时将 `jti` 加入黑名单，TTL 与 JWT 剩余有效期一致。
+- `TokenRefreshInterceptor`（order=0）解析 JWT，检查黑名单、用户封禁和禁用状态，从 Redis 读取 `LoginContext`（通过 `StringRedisTemplate` 直接操作，不经过 `MultiLevelCacheManager` 的 Caffeine L1），超过 15 分钟自动续签并通过 `X-New-Token` 响应头返回新 JWT。`LoginContext` 在 Redis 中的 TTL 为 7 天，采用惰性续期策略（TTL 低于一半即 3.5 天时才刷新），减少 Redis 操作。
+- `LoginInterceptor`（order=1）检查 ThreadLocal 中是否存在有效 `LoginContext`，拦截未登录请求。
+- 权限体系采用简化 RBAC：通过 `user.level` 字段判断用户等级（`0` 普通、`1` VIP、`2` SVIP、`3` 管理员），管理端接口通过 `@RequireAdmin` 注解 + AOP 切面（`AdminInterceptor`）校验管理员权限（`level >= 3`）。
+- 审计日志：通过 `@AuditLog(module, operation)` 注解自动记录操作日志，由 `AuditLogAspect` 切面拦截，通过 RocketMQ 异步写入 `sys_audit_log` 表（MQ 失败时降级为同步写 DB）。
+- 当前用户通过 `UserHolder`（ThreadLocal 存储 `LoginContext`）在线程内传递。
 
 ### 2.4 状态约定
 
 | 对象 | 字段 | 约定 |
 | --- | --- | --- |
-| 用户 | `status` | `1` 正常，`0` 禁用，`2` 待审核 |
+| 用户 | `status` | `1` 正常，`0` 禁用 |
 | 图片 | `status` | `1` 正常，`0` 禁用，`2` 待审核 |
-| 帖子 | `status` | `1` 正常，`0` 禁用，`2` 待审核 |
-| 评论 | `status` | `1` 正常，`0` 禁用，`2` 待审核 |
+| 图片 | `is_private` | `0` 公开，`1` 私有 |
+| 图片 | `is_selected` | `0` 普通，`1` 精选 |
 | 空间 | `status` | `1` 正常，`0` 禁用 |
-| AI 任务 | `status` | `0` 处理中，`1` 成功，`2` 失败 |
-| 用户等级 | `level` | `0` 普通，`1` VIP，`2` SVIP |
+| AI 任务 | `status` | `PENDING` 待处理，`PROCESSING` 处理中，`DONE` 成功，`FAILED` 失败 |
+| 用户等级 | `level` | `0` 普通，`1` VIP，`2` SVIP，`3` 管理员 |
 | 空间类型 | `type` | `0` 私人空间，`1` 团队空间 |
+| 分享 | `status` | `1` 有效，`0` 已取消 |
+| 去重文件 | `ref_count` | 引用计数，`>= 0`，归零时可清理物理文件 |
 
 ## 3. 功能需求
 
@@ -96,82 +99,54 @@ FishPics 是一个图片素材协作与社区平台。后端负责用户认证�
 
 | 功能 | 接口 | 说明 |
 | --- | --- | --- |
-| 登录 | `POST /api/user/login` | 用户名、密码、登录验证码校验，成功返回 `UserLoginVO` 和 Token |
+| 登录 | `POST /api/user/login` | 用户名、密码、登录验证码校验，成功返回 `UserVO` 和 JWT |
 | 注册 | `POST /api/user/register` | 校验用户名、密码、确认密码、注册验证码，注册后自动创建私人空间 |
 | 注册验证码 | `GET /api/user/checkCode/register` | 返回 `captchaKey` 和 Base64 图片 |
 | 登录验证码 | `GET /api/user/checkCode/login` | 返回 `captchaKey` 和 Base64 图片 |
-| 当前用户主页 | `GET /api/user/myself` | 返回用户资料、本人帖子、收藏和点赞列表 |
-| 当前登录用户 | `GET /api/user/getUser` | 从 `UserHolder` 返回当前用户基础信息和权限列表 |
+| 当前用户详情 | `GET /api/user/myself` | 返回用户详细资料 |
+| 当前登录用户 | `GET /api/user/getUser` | 从 `LoginContext` 返回当前用户基础信息和权限列表 |
 | 编辑本人资料 | `POST /api/user/editUser` | 修改昵称、用户名、密码（需原密码验证） |
-| 退出登录 | `POST /api/user/logout` | 清除当前线程用户并删除 Redis Token 映射 |
-| 隐私设置 | `POST /api/user/privacy` | 更新关注、粉丝、收藏、点赞可见性 |
+| 退出登录 | `POST /api/user/logout` | 将 JWT 加入 Redis 黑名单，清除 ThreadLocal 和 Redis 中的权限上下文 |
 | 用户主页 | `GET /api/user/profile` | 查询指定用户资料，公开接口，无需登录 |
 | 用户搜索 | `GET /api/user/search` | 按用户名或昵称模糊搜索，需登录 |
+| 管理员查询用户 | `POST /api/user/admin/getUser` | 根据 `userId` 查询用户详情，需管理员权限 |
+| 管理员用户列表 | `POST /api/user/admin/userList` | 分页查询用户列表，支持筛选，需管理员权限 |
+| 管理员用户状态变更 | `POST /api/user/admin/setStatus` | 切换用户启用/禁用状态，需管理员权限 |
+| 管理员编辑用户 | `POST /api/user/admin/editUser` | 管理员修改用户资料，需管理员权限 |
 
-### 3.2 社交关系
-
-| 功能 | 接口 | 说明 |
-| --- | --- | --- |
-| 关注/取消关注 | `POST /api/user/follow` | 请求体为 `UserIdRequest`，由 `user_fans` 记录关系 |
-| 粉丝列表 | `POST /api/user/fans` | 请求体为 `FollowQueryDTO`，支持分页查询 |
-| 关注列表 | `POST /api/user/follows` | 请求体为 `FollowQueryDTO`，支持分页查询 |
-
-隐私字段位于 `user` 表：`is_private_follows`、`is_private_post_collect`、`is_private_likes`、`is_private_fans`。
-
-### 3.3 图片管理
+### 3.2 图片管理
 
 | 功能 | 接口 | 说明 |
 | --- | --- | --- |
-| 上传头像 | `POST /api/picture/avatar` | `multipart/form-data`，头像文件最大 5MB |
+| 上传头像 | `POST /api/picture/avatar` | `multipart/form-data`，头像文件最大 5MB，支持指定 `targetUserId`（管理员可为其他用户上传） |
 | 上传图片 | `POST /api/picture/upload` | 上传到指定 `targetSpaceId`，未传默认私人空间 |
 | URL 保存图片 | `POST /api/picture/save-by-url` | 通过 URL 下载图片，校验魔数后上传 COS |
-| 公开图片列表 | `POST /api/picture/list` | 分页返回 `status=1` 且 `is_private=1` 的首页公开图片，入参为 `PictureQueryRequest` 支持按标签筛选 |
-| 图片推荐 | `POST /api/picture/recommend` | 基于用户兴趣画像的个性化图片推荐 |
-| 图片编辑信息 | `GET /api/picture/pictureEditMessage` | 返回 `PictureEditVO`，包含图片编辑所需数据 |
-| 删除图片 | `DELETE /api/picture/delete` | 请求体为 `DeleteByIdList`，支持批量删除，同时删除 COS 文件 |
+| 秒传校验 | `POST /api/picture/check` | 根据文件 MD5 和大小检查是否已存在，支持秒传和断点续传检测 |
+| 分片上传 | `POST /api/picture/upload-chunk` | 上传单个分片，参数为文件、MD5 和分片序号 |
+| 合并分片 | `POST /api/picture/merge` | 合并已上传的分片为完整文件，写入去重表和图片记录 |
+| 公开图片列表 | `POST /api/picture/list` | 分页返回 `status=1` 且 `is_private=0` 的首页公开图片，入参为 `PictureQueryRequest` 支持按标签筛选 |
+| 图片推荐 | `POST /api/picture/recommend` | 基于标签匹配的图片推荐 |
+| 图片编辑信息 | `GET /api/picture/pictureEditMessage` | 返回 `PictureVO`，包含图片编辑所需数据 |
+| 删除图片 | `POST /api/picture/delete` | 请求体为 `DeleteByIdList`，支持批量删除，同时删除 COS 文件并更新去重引用计数 |
 | 更新图片信息 | `PUT /api/picture/update` | 修改图片名称、简介和标签 |
 | 管理员图片列表 | `POST /api/picture/admin/list` | 按状态分页查询 |
-| 管理员审核图片 | `POST /api/picture/admin/review` | 修改图片状态和首页公开标记，`selected` 实际写入 `is_private` |
+| 管理员审核图片 | `POST /api/picture/admin/review` | 修改图片状态和首页公开标记，支持设置精选状态 |
 
-图片元数据保存在 `picture` 表，帖子与图片的有序关系由 `picture_child` 表维护。当前 SQL 中 `picture` 表不含 `post_id` 字段。
+图片元数据保存在 `picture` 表，物理文件通过 `file_resource` 表实现去重（MD5 + 文件大小唯一），`picture.resource_id` 关联去重记录。分片上传流程：秒传校验 -> 逐片上传 -> 合并分片，分片临时存储在 COS 的 `chunks/` 目录下。
 
-### 3.4 帖子与互动
-
-| 功能 | 接口 | 说明 |
-| --- | --- | --- |
-| 发布帖子 | `POST /api/post/post` | 请求体为 `UploadPostRequest`，绑定图片 ID 列表和封面 |
-| 帖子详情 | `GET /api/post/getPost` | 返回帖子详情、图片、作者、互动数据；当前接口被拦截器放行，Service 仅按 ID 查询，未强制校验 `status` 或 `is_private` |
-| 编辑帖子 | `POST /api/post/editPost` | 作者更新标题、内容、图片、封面和隐私 |
-| 帖子列表 | `POST /api/post/postList` | 支持分页、文本搜索、用户筛选、热门排序；当前默认筛选 `status=1`，不默认筛选 `is_private=0` |
-| 点赞/取消点赞 | `POST /api/post/like` | 返回点赞后的状态，使用 Redisson 分布式锁 |
-| 收藏/取消收藏 | `POST /api/post/collect` | 返回收藏后的状态，使用 Redisson 分布式锁 |
-| 空间图片选择 | `POST /api/post/pictureList` | 发帖或编辑时按空间获取可选图片 |
-| 帖子推荐 | `POST /api/post/recommend` | 基于用户兴趣画像的个性化帖子推荐 |
-| 本人帖子 | `POST /api/post/myPosts` | 分页返回当前用户发布内容 |
-| 本人收藏 | `POST /api/post/myCollects` | 分页返回当前用户收藏内容 |
-| 本人点赞 | `POST /api/post/myLikes` | 分页返回当前用户点赞内容 |
-| 管理员帖子列表 | `POST /api/post/admin/list` | 后台分页查询 |
-| 管理员审核帖子 | `POST /api/post/admin/review` | 修改帖子状态 |
-| 管理员删除帖子 | `POST /api/post/admin/delete` | 后台删除帖子 |
-
-帖子统计字段包括 `likes_num`、`collects_num`、`comment_num`、`views_num`、`hot`。点赞使用 Redisson 锁降低并发重复操作风险。
-
-用户兴趣画像由定时任务（每 30 分钟）自动刷新：根据用户点赞（权重+3）和收藏（权重+5）的帖子关联图片标签，生成用户标签权重分布，持久化在 `user_interest_profile` 表中。
-
-### 3.5 评论
+### 3.3 图片分享
 
 | 功能 | 接口 | 说明 |
 | --- | --- | --- |
-| 创建评论 | `POST /api/comment/create` | 支持一级评论与回复 |
-| 评论列表 | `POST /api/comment/list` | 按帖子分页查询正常评论 |
-| 删除评论 | `POST /api/comment/delete` | 当前用户删除评论 |
-| 管理员评论列表 | `POST /api/comment/admin/list` | 后台分页查询 |
-| 评论审核 | `POST /api/comment/review` | 管理员修改评论状态 |
-| 管理员删除评论 | `POST /api/comment/adminDelete` | 后台删除评论 |
+| 创建分享链接 | `POST /api/share/create` | 生成分享 Token，可设置过期天数和是否允许下载 |
+| 获取分享信息 | `GET /api/share/info/{token}` | 无需登录，根据 Token 获取分享的图片信息，校验过期和状态 |
+| 分享预览 | `GET /api/share/preview/{token}` | 无需登录，直接返回图片流，仅允许图片 MIME 类型，防止 XSS |
+| 分享下载 | `GET /api/share/download/{token}` | 无需登录，以附件形式返回图片文件，需允许下载权限 |
+| 取消分享 | `POST /api/share/cancel` | 分享者取消分享，将状态置为 `0` |
 
-评论通过 `parent_id` 和 `to_user_id` 表示二级回复关系。
+分享记录存储在 `picture_share` 表，通过 `share_token`（UUID）标识唯一分享链接，支持过期时间控制和下载权限管理。`/share/info/*`、`/share/preview/*`、`/share/download/*` 路径从登录拦截器中排除，支持匿名访问。
 
-### 3.6 空间管理
+### 3.4 空间管理
 
 | 功能 | 接口 | 说明 |
 | --- | --- | --- |
@@ -180,46 +155,56 @@ FishPics 是一个图片素材协作与社区平台。后端负责用户认证�
 | 空间详情 | `GET /api/space/getSpace` | 查询空间详情 |
 | 更新空间 | `POST /api/space/update` | 修改名称和介绍 |
 | 空间图片列表 | `POST /api/space/pictureList` | 分页返回空间内图片，支持关键词搜索和排序 |
-| 可上传空间 | `GET /api/space/saveable` | 返回当前用户可上传图片的空间列表 |
+| 可上传空间 | `GET /api/space/saveable` | 返回当前用户可上传图片的空间列表（私人空间 + 有上传权限的团队空间） |
 | 团队成员列表 | `GET /api/space/team/members` | 查询团队空间成员 |
-| 邀请团队成员 | `POST /api/space/team/invite` | 邀请用户加入团队空间，需 `team:member_manage` 权限 |
+| 邀请团队成员 | `POST /api/space/team/invite` | 邀请用户加入团队空间，需指定 `roleId` |
 | 移除团队成员 | `POST /api/space/team/remove` | 从团队空间移除成员 |
-| 变更团队角色 | `POST /api/space/team/changeRole` | 变更团队成员角色 |
-| 管理员空间列表 | `GET /api/space/admin/list` | 按名称、类型分页筛选 |
+| 变更团队角色 | `POST /api/space/team/changeRole` | 变更团队成员角色（`roleId`：1=所有者，2=成员） |
+| 管理员空间列表 | `POST /api/space/admin/list` | 按名称、类型分页筛选 |
 | 管理员更新空间 | `POST /api/space/admin/update` | 修改空间配置 |
 | 管理员删除空间 | `POST /api/space/admin/delete` | 删除指定空间 |
 | 管理员设置状态 | `POST /api/space/admin/setStatus` | 启用或禁用空间 |
 
-空间容量字段为 `storage_size` 和 `size`。创建空间时按用户等级和空间类型分配容量：私人空间普通/VIP/SVIP 为 512MB/5GB/10GB，团队空间普通/VIP/SVIP 为 512MB/30GB/50GB。团队成员以 `team_users_id` 字符串保存。
+空间容量字段为 `storage_size` 和 `size`。创建空间时按用户等级和空间类型分配容量：
 
-### 3.7 系统配置
+| 用户等级 | 私人空间 | 团队空间 |
+| --- | --- | --- |
+| 普通 (level=0) | 512MB | 512MB |
+| VIP (level=1) | 50GB | 50GB |
+| SVIP (level=2) | 100GB | 100GB |
+
+团队空间数量上限：普通用户 1 个，VIP 2 个，SVIP 5 个。上传文件大小限制：普通用户 10MB，VIP 1GB，SVIP 10GB。团队成员角色通过 `space_team_member` 表的 `role_id` 整数字段管理（1=所有者，2=成员）。
+
+### 3.5 系统配置
 
 | 功能 | 接口 | 说明 |
 | --- | --- | --- |
-| 分类标签列表 | `GET /api/system/list` | 返回系统图片分类 |
+| 分类标签列表 | `GET /api/system/list` | 返回系统图片分类（`syskey = type_list_key`） |
 | 添加分类标签 | `POST /api/system/addList` | 管理员追加标签 |
 | 删除分类标签 | `POST /api/system/deleteType` | 管理员删除标签 |
-| 跑马灯列表 | `GET /api/system/marquee` | 返回首页轮播图片 URL |
+| 跑马灯列表 | `GET /api/system/marquee` | 返回首页轮播图片 URL（`syskey = marquees_key`） |
 | 添加跑马灯 | `POST /api/system/addMarquee` | 管理员追加 URL |
 | 删除跑马灯 | `POST /api/system/deleteMarquee` | 管理员删除 URL |
+| 审计日志列表 | `POST /api/system/audit-log/list` | 管理员分页查询审计日志 |
+| 系统统计概览 | `GET /api/system/stats` | 管理员获取系统统计数据 |
 
-配置持久化在 `pic_system` 表，同时通过 Redis 做热点读取。
+配置持久化在 `pic_system` 表（键值对结构：`syskey` + `sysvalue`），同时通过 Redis 做热点读取。当前已知的配置键：`type_list_key`（图片分类标签 JSON 数组）、`marquees_key`（跑马灯 URL 列表）、`ai_config`（AI 功能开关 JSON）。审计日志通过 RocketMQ 异步写入（`audit-log-topic`），避免阻塞主业务链路；MQ 不可用时降级为同步写 DB。
 
-### 3.8 AI 能力
+### 3.6 AI 能力
 
 | 功能 | 接口 | 权限 | 说明 |
 | --- | --- | --- | --- |
-| 提交图片标注任务 | `POST /api/ai/tags` | VIP/SVIP | 提交异步标注任务，返回 `taskId` |
-| 查询标注结果 | `GET /api/ai/tags/result/{taskId}` | VIP/SVIP | 查询标注任务结果 |
-| 同步文生图 | `POST /api/ai/draw` | VIP/SVIP | 同步调用 DashScope 生成图片 |
-| 提交文生图任务 | `POST /api/ai/draw/submit` | VIP/SVIP | 提交异步文生图任务，返回 `taskId` |
-| 查询文生图结果 | `GET /api/ai/draw/result/{taskId}` | VIP/SVIP | 查询文生图任务结果 |
+| 提交图片标注任务 | `POST /api/ai/tags` | 需登录 | 提交异步标注任务，返回 `taskId`（VIP 等级校验在 Service 层执行） |
+| 查询标注结果 | `GET /api/ai/tags/result/{taskId}` | 需登录 | 查询标注任务结果（仅可查看本人任务） |
+| 提交文生图任务 | `POST /api/ai/draw/submit` | 需登录 | 提交异步文生图任务，返回 `taskId`（VIP 等级校验在 Service 层执行） |
+| 查询文生图结果 | `GET /api/ai/draw/result/{taskId}` | 需登录 | 查询文生图任务结果（仅可查看本人任务） |
+| 下载 AI 生成图片 | `GET /api/ai/download-image/{taskId}` | 需登录 | 下载文生图结果图片（流式响应，最大 50MB） |
 | 管理员任务列表 | `POST /api/ai/admin/tasks` | 管理员 | 分页查询 AI 任务，支持按类型和状态筛选 |
 | 管理员任务统计 | `GET /api/ai/admin/stats` | 管理员 | 返回任务总数、成功/失败/处理中数量、按类型统计 |
-| 获取 AI 配置 | `GET /api/ai/admin/config` | 管理员 | 获取 AI 功能开关配置 |
-| 更新 AI 配置 | `POST /api/ai/admin/config` | 管理员 | 更新 AI 功能开关（标注/编辑/生成/推荐） |
+| 获取 AI 配置 | `GET /api/ai/admin/config` | 管理员 | 获取 AI 功能开关配置（`syskey = ai_config`） |
+| 更新 AI 配置 | `POST /api/ai/admin/config` | 管理员 | 更新 AI 功能开关（标注/编辑/生成/推荐），使用 `ReentrantLock` 保证并发安全 |
 
-AI 能力采用**异步任务模式**：标注和文生图任务提交后立即返回 `taskId`，任务通过 RocketMQ 异步处理，结果持久化在 `task` 表中，前端可通过 WebSocket 实时接收任务完成通知。管理员可通过后台查看任务列表、统计和配置 AI 功能开关。
+AI 能力采用**异步任务模式**：标注和文生图任务提交后立即返回 `taskId`，任务通过 RocketMQ 异步处理。`TaskConsumer` 消费消息时通过条件 UPDATE 原子抢占任务（PENDING -> PROCESSING），防止并发重复处理；处理超过 5 分钟未完成的任务允许被其他消费者重新抢占。任务结果持久化在 `task` 表中，前端通过轮询结果接口获取。Controller 层仅检查登录态和任务归属权，VIP 等级等业务权限校验在 Service 层执行。管理员可通过后台查看任务列表、统计和配置 AI 功能开关。
 
 ## 4. 数据需求
 
@@ -227,72 +212,66 @@ AI 能力采用**异步任务模式**：标注和文生图任务提交后立即�
 
 | 表 | 实体 | 说明 |
 | --- | --- | --- |
-| `user` | `User` | 用户账户、资料、隐私和等级 |
+| `user` | `User` | 用户账户、资料和等级（`level` 字段标识权限级别） |
 | `space` | `Space` | 私人空间、团队空间和容量 |
-| `space_team_member` | `SpaceTeamMember` | 团队空间成员关系和角色 |
-| `picture` | `Picture` | 图片元数据、状态、空间和 AI 标签 |
-| `picture_child` | `PictureChild` | 帖子与图片的有序关联 |
-| `post` | `Post` | 帖子正文、状态、统计、封面 |
-| `comment` | `Comment` | 评论和二级回复 |
-| `user_fans` | `UserFans` | 用户关注/粉丝关系 |
-| `user_post_collect` | `UserPostCollect` | 用户收藏帖子 |
-| `user_post_likes` | `UserPostLikes` | 用户点赞帖子 |
-| `user_interest_profile` | `UserInterestProfile` | 用户兴趣画像（标签权重） |
-| `pic_system` | `PicSystem` | 系统键值配置 |
-| `task` | `Task` | 异步任务（AI 标注、文生图等） |
-| `sys_role` | `SysRole` | 系统角色定义（支持继承） |
-| `sys_permission` | `SysPermission` | 系统权限点（系统级/团队级/资源级） |
-| `sys_role_permission` | `SysRolePermission` | 角色与权限的关联 |
-| `sys_user_role` | `SysUserRole` | 用户与角色的关联 |
+| `space_team_member` | `SpaceTeamMember` | 团队空间成员关系，`role_id` 整数字段（1=所有者，2=成员） |
+| `picture` | `Picture` | 图片元数据、状态、空间、精选标记和 AI 标签 |
+| `file_resource` | `FileResource` | 物理文件去重记录（MD5 + 大小唯一），引用计数管理 |
+| `picture_share` | `PictureShare` | 图片分享链接，含过期时间和下载权限控制 |
+| `pic_system` | `PicSystem` | 系统键值配置（`syskey` + `sysvalue`） |
+| `task` | `Task` | 异步任务（AI 标注、文生图等），含状态流转和结果 |
 | `sys_audit_log` | `SysAuditLog` | 审计操作日志 |
 
 ### 4.2 关键关系
 
-- 一个用户可以创建多个帖子、图片、评论和空间。
-- 一个帖子可以拥有多张图片，关系和顺序由 `picture_child` 保存。
+- 一个用户可以创建多个图片和空间。
 - 一个空间可以拥有多张图片。
-- 一个帖子可以被多个用户点赞、收藏和评论。
-- 一个用户可以关注多个用户，也可以被多个用户关注。
-- 一个用户拥有一个兴趣画像，包含多个标签权重。
-- 一个异步任务属于一个用户，可关联一个业务对象（图片或帖子）。
-- 一个团队空间可以有多个成员，成员通过 `space_team_member` 关联，每个成员有一个角色。
-- 一个角色可以拥有多个权限，通过 `sys_role_permission` 关联。
-- 一个用户可以被分配多个角色，通过 `sys_user_role` 关联。
-- 角色支持继承：一个角色可以继承另一个角色的权限。
+- 一个图片通过 `resource_id` 关联一条去重文件记录，多张相同内容的图片可共享同一物理文件（引用计数 `ref_count` 管理生命周期）。
+- 一个图片可以生成多个分享链接，每个链接有独立的过期时间和下载权限。
+- 一个团队空间可以有多个成员，成员通过 `space_team_member` 关联，每个成员 `role_id` 为 1（所有者）或 2（成员）。
+- 一个异步任务属于一个用户，可关联一个业务对象（图片）。
 
 ### 4.3 重要索引
 
 - 用户：`uk_username`、`uk_nickname`
-- 帖子：`idx_user_id`、`idx_title`、`post_content_index`、`post_status_index`
-- 图片：`idx_user_id`、`idx_picture_name`、`picture_space_id_index`、`picture_introduction_index`、`picture_update_time_index`
-- 图片关联：`picture_child_picture_id_post_id_uindex`、`picture_child_picture_id_index`、`picture_child_post_id_index`
-- 评论：`idx_post_id`、`idx_user_id`
-- 用户兴趣画像：`uk_user_tag`（用户+标签唯一）
-- 异步任务：`idx_task_id`、`idx_user_id`、`idx_status`
+- 图片：`idx_user_id`、`idx_space_id`、`idx_picture_name`、`idx_introduction`、`idx_status`、`idx_update_time`
+- 去重文件：`uk_md5_size`（MD5 + 大小联合唯一）
+- 分享：`uk_share_token`、`idx_picture_id`、`idx_share_user_id`、`idx_expire_time`
+- 团队成员：`uk_space_user`（空间 + 用户联合唯一）
+- 异步任务：`uk_task_id`、`idx_user_id`、`idx_biz_type`、`idx_status`
+- 审计日志：`idx_user_id`、`idx_create_time`、`idx_operation`
 
 ## 5. 非功能需求
 
 ### 5.1 安全
 
-- 登录、资料、空间、发帖、互动、AI 等用户态操作需要 Token。
-- 管理端接口统一通过 `@AuthCheck(permission = "...")` 控制，基于 RBAC 权限码校验。
-- 用户密码使用项目内加盐哈希方案保存。
+- 登录、资料、空间、图片管理、分享、AI 等用户态操作需要有效 JWT。
+- 管理端接口统一通过 `@RequireAdmin` 注解控制，基于 `user.level >= 3` 校验。
+- JWT 支持自动续签（超过 15 分钟签发新 Token）和黑名单机制（登出即时失效）。
+- 封禁用户通过 Redis 集合（`banned:users`）实现即时全 Token 失效。
+- 用户密码使用 MD5 加盐哈希方案保存。
 - 文件上传需要校验空文件、大小、存储空间和业务权限。
+- 分片上传通过 MD5 校验文件完整性，秒传校验避免重复上传。
+- 分享预览接口限制 Content-Type 为 `image/*`，防止 XSS 攻击。
+- 审计日志记录请求参数时自动脱敏（password、token、apiKey 等字段），并截断过长内容（最大 1000 字符）。
 
 ### 5.2 性能
 
 - 分页查询使用 MyBatis-Plus 分页能力。
-- 多级缓存架构：Caffeine L1（热数据本地缓存）+ Redis L2，覆盖用户信息、权限、帖子列表和系统配置。
-- 分类标签、跑马灯、验证码、Token 和用户信息使用 Redis。
-- 点赞、收藏等高并发互动使用 Redisson 分布式锁保护关键更新。
+- 多级缓存架构（`MultiLevelCacheManager`）：Caffeine L1（热数据本地缓存）+ Redis L2，覆盖用户信息（L1: 30s / L2: 60min）、权限上下文（L1: 300s / L2: 60min）和系统配置（L1: 600s / L2: 1440min）。该缓存用于业务层的热点数据读取。
+- `TokenRefreshInterceptor` 中的 JWT 权限上下文（`LoginContext`）通过 `StringRedisTemplate` 直接操作 Redis（TTL 7 天），不经过 `MultiLevelCacheManager` 的 Caffeine L1 层。采用惰性续期策略（TTL 低于一半时才刷新）减少 Redis 操作。
+- 文件去重通过 `file_resource` 表的 MD5 + 大小联合唯一索引实现，相同文件只存储一份物理副本。
+- 秒传校验可在上传前快速判断文件是否已存在，避免不必要的网络传输。
+- 分片上传支持大文件传输，降低单次上传失败的重试成本。
 - 图片文件存储在 COS，数据库只保存元数据和 URL。
-- 帖子列表查询使用分布式锁防止缓存击穿。
+- 审计日志通过 RocketMQ 异步写入（Producer 发送到 `audit-log-topic`，Consumer 持久化到 DB），避免阻塞主业务链路；MQ 发送失败时自动降级为同步写 DB。
 
 ### 5.3 可维护性
 
 - 控制器保持薄层，业务规则落在 Service。
 - 表模型与实体类一一对应，DTO/VO 隔离入参与出参。
-- AI 能力通过接口与 Provider 实现隔离，便于替换模型供应商。
+- AI 能力通过 `TaskHandler` 接口与具体实现隔离，`TaskConsumer` 通过 `bizType` 自动路由到对应 Handler，便于扩展新的任务类型。
+- 权限判断逻辑集中在 `user.level` 字段和 `@RequireAdmin` 注解，避免分散的权限校验代码。
 - Knife4j 提供开发期接口文档。
 
 ## 6. 主要业务流程
@@ -302,32 +281,55 @@ AI 能力采用**异步任务模式**：标注和文生图任务提交后立即�
 1. 前端请求 `/user/checkCode/login` 获取验证码图片和 `captchaKey`。
 2. 用户提交用户名、密码、验证码和 `captchaKey` 到 `/user/login`。
 3. 服务端校验验证码、用户状态和密码。
-4. 生成 Token，写入 Redis。
-5. 返回 `UserLoginVO`，前端后续请求携带 `Authorization`。
+4. 签发 JWT，将用户信息写入 Redis 缓存。
+5. 返回 `UserVO`，前端后续请求携带 `Authorization: Bearer <token>`。
+6. `TokenRefreshInterceptor` 在每次请求时解析 JWT、检查黑名单、加载 `LoginContext` 到 ThreadLocal，超过 15 分钟自动续签。`LoginContext` 从 Redis 直接读取（`StringRedisTemplate`），不经过 Caffeine L1。
 
-### 6.2 发帖流程
+### 6.2 图片上传流程
 
-1. 用户上传图片到 `/picture/upload`，图片进入目标空间。
-2. 前端提交标题、内容、图片 ID 列表、封面和隐私配置。
-3. 服务端创建 `post` 记录。
-4. 服务端写入 `picture_child`，保存图片顺序。
-5. 列表和详情接口聚合帖子、图片、作者和互动数据。
+**普通上传：**
 
-### 6.3 AI 调用流程
+1. 用户上传文件到 `/picture/upload`（可指定 `targetSpaceId`，未传默认私人空间）。
+2. 服务端校验文件大小、空间容量，计算文件 MD5。
+3. 查询 `file_resource` 表判断是否为重复文件：若已存在则增加引用计数，复用已有 COS 文件；若不存在则上传到 COS 并创建去重记录。
+4. 创建 `picture` 记录，关联 `resource_id`。
 
-1. VIP/SVIP 用户调用 `/ai/tags`（提交标注任务）或 `/ai/draw/submit`（提交文生图任务）。
+**分片上传：**
+
+1. 前端调用 `/picture/check` 提交文件 MD5 和大小，服务端检查是否可秒传（文件已存在）或需要续传（返回已上传分片列表）。
+2. 若需上传，前端逐片调用 `/picture/upload-chunk` 上传分片，分片临时存储在 COS 的 `chunks/` 目录。
+3. 全部分片上传完成后，前端调用 `/picture/merge` 提交合并请求。
+4. 服务端合并分片为完整文件，执行去重逻辑，创建 `picture` 记录并清理临时分片。
+
+### 6.3 图片分享流程
+
+1. 图片所有者调用 `/share/create`，指定图片 ID、过期天数和是否允许下载。
+2. 服务端生成 UUID 分享 Token，创建 `picture_share` 记录。
+3. 分享链接形如 `/share/info/{token}`，无需登录即可访问。
+4. 访问时服务端校验 Token 有效性、过期时间和分享状态，返回图片信息。
+5. 通过 `/share/preview/{token}` 可直接预览图片（流式返回图片内容，仅允许图片 MIME 类型）。
+6. 通过 `/share/download/{token}` 可下载图片（需分享链接允许下载）。
+7. 分享者可随时调用 `/share/cancel` 取消分享。
+
+### 6.4 AI 调用流程
+
+1. 已登录用户调用 `/ai/tags`（提交标注任务）或 `/ai/draw/submit`（提交文生图任务）。Controller 层仅检查登录态，VIP 等级校验在 Service 层执行。
 2. 服务端创建 `task` 记录（状态 PENDING），通过 RocketMQ 发送异步消息到 `task-topic`。
-3. `TaskConsumer` 消费消息，根据 `bizType` 分发到对应 Handler。
+3. `TaskConsumer` 消费消息，通过条件 UPDATE 原子抢占任务（PENDING -> PROCESSING），根据 `bizType` 分发到对应 `TaskHandler`。
 4. 标签识别：`AiTagTaskHandler` 通过 Spring AI Alibaba Agent + 通义千问视觉理解模型分析图片，更新图片标签并标记任务完成（DONE）。
 5. 文生图：`AiDrawTaskHandler` 通过 DashScope SDK 调用万相模型生成图片，保存 URL 并标记任务完成（DONE）。
-6. 任务完成后通过 WebSocket 推送通知（支持跨实例 Redis Pub/Sub 投递），前端实时接收。
-7. 前端也可通过 `/ai/tags/result/{taskId}` 和 `/ai/draw/result/{taskId}` 轮询结果。
-8. 管理员可通过 `/ai/admin/tasks`、`/ai/admin/stats` 和 `/ai/admin/config` 管理 AI 任务和配置。
+6. 任务失败时记录错误信息，DashScope 审核类错误自动转换为友好提示。
+7. 前端通过 `/ai/tags/result/{taskId}` 或 `/ai/draw/result/{taskId}` 轮询结果（仅可查看本人任务）。
+8. 文生图结果可通过 `/ai/download-image/{taskId}` 下载（流式响应，最大 50MB）。
+9. 管理员可通过 `/ai/admin/tasks`、`/ai/admin/stats` 和 `/ai/admin/config` 管理 AI 任务和配置。
 
 ## 7. 后续维护说明
 
-- 本文档应优先跟随 `controller`、`entity`、`src/sql/create.sql`、AI DTO 和 `common` 包变化更新。
+- 本文档应优先跟随 `controller`、`entity`、`src/sql/init.sql`、DTO 和 `common` 包变化更新。
 - 若数据库结构调整，必须同步更新 `model/uml_diagrams.md` 中的类图和 ER 图。
 - 若新增接口，需在功能需求和接口矩阵中补齐路径、权限和输入输出。
-- `common` 包中的 `scheduled/HotScoreScheduler`（热度定时任务）、`cache/MultiLevelCacheManager`（多级缓存）、`config/RocketMQConfig`、`config/WebSocketConfig` 如有更新需同步至本文档。
-- RBAC 权限模块（`permission` 包）和审计日志（`@AuditLog`）如有变更需同步更新权限矩阵和安全需求。
+- `common` 包中的 `cache/MultiLevelCacheManager`（多级缓存）、`config/RocketMQConfig`、`aop/AdminInterceptor`（权限切面）、`aop/AuditLogAspect`（审计日志切面）、`interceptor/TokenRefreshInterceptor`（JWT 拦截器）如有更新需同步至本文档。
+- `@RequireAdmin` 注解和 `@AuditLog` 注解如有变更需同步更新权限和安全需求。
+- 文件去重逻辑（`file_resource` 表的引用计数管理）和分片上传流程如有变更需同步更新业务流程章节。
+- `SpaceConstants` 中的空间容量和上传限制如有调整需同步更新空间管理章节。
+- `SysConstants` 中的配置键如有变更需同步更新系统配置章节。

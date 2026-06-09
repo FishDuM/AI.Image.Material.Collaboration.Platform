@@ -14,20 +14,16 @@ import {
   TeamOutlined,
   AppstoreOutlined,
   RobotOutlined,
-  MessageOutlined,
   LockFilled,
   ToolOutlined,
   PictureOutlined,
-  CommentOutlined,
   BellOutlined,
   ReloadOutlined,
   UpOutlined,
-  PlusOutlined,
   DashboardOutlined,
   FileTextOutlined,
 } from '@ant-design/icons'
 import { AuthContext } from '../context/AuthContext.jsx'
-import { logout } from '../api'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { ThemeContext } from '../context/ThemeContext.jsx'
 import { useAuthModal } from '../hooks/useAuthModal.js'
@@ -64,12 +60,11 @@ function GlobalLayout({ children }) {
   }, [])
 
   const handleLogout = useCallback(async () => {
-    try { await logout() } catch { /* ignore */ }
-    finally {
-      authLogout()
-      message.success('退出成功')
-      navigate('/')
+    if (authLogout) {
+      await authLogout()
     }
+    message.success('退出成功')
+    navigate('/')
   }, [authLogout, message, navigate])
 
   const handleScrollToTop = useCallback(() => {
@@ -88,8 +83,7 @@ function GlobalLayout({ children }) {
     if (location.pathname === '/') {
       authModal.openLogin()
     } else {
-      navigate('/')
-      setTimeout(() => authModal.openLogin(), 100)
+      navigate('/', { state: { showLogin: true } })
     }
   }, [isMobile, location.pathname, navigate, authModal])
 
@@ -133,13 +127,13 @@ function GlobalLayout({ children }) {
       if (userInfo?.permissions?.includes('system:team:manage')) {
         adminChildren.push({ key: '/admin/spaces', icon: <AppstoreOutlined />, label: '空间管理', onClick: () => handleSidebarMenuClick('/admin/spaces') });
       }
-      if (userInfo?.permissions?.includes('system:user:manage')) {
+      if (userInfo?.permissions?.includes('system:log:manage')) {
         adminChildren.push({ key: '/admin/audit-logs', icon: <FileTextOutlined />, label: '审计日志', onClick: () => handleSidebarMenuClick('/admin/audit-logs') });
       }
       if (userInfo?.permissions?.includes('system:ai:manage')) {
         adminChildren.push({ key: '/admin/ai', icon: <RobotOutlined />, label: 'AI 管理', onClick: () => handleSidebarMenuClick('/admin/ai') });
       }
-      if (userInfo?.permissions?.includes('system:user:manage')) {
+      if (userInfo?.permissions?.includes('system:config')) {
         adminChildren.push({ key: '/admin/system', icon: <ToolOutlined />, label: '系统管理', onClick: () => handleSidebarMenuClick('/admin/system') });
       }
 

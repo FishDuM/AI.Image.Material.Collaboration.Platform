@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { App, Modal, Button, Tabs, Pagination, Spin, Empty } from 'antd'
 import { CheckOutlined, LeftOutlined, TeamOutlined } from '@ant-design/icons'
-import { listSpace, postPictureList } from '../../api'
+import { listSpace, spaceListPicture } from '../../api'
 
 function SpacePickerModal({ open, onClose, onConfirm, currentImageCount, existingImageIds = [] }) {
   const { message: msg } = App.useApp()
@@ -68,8 +68,11 @@ function SpacePickerModal({ open, onClose, onConfirm, currentImageCount, existin
     if (!sid) return
     setLoading(true)
     try {
-      const result = await postPictureList({ spaceId: sid, pictureIds: ids, current: p, pageSize: 20 })
-      const list = result?.records ?? []
+      const result = await spaceListPicture({ spaceId: sid, pictureIds: ids, current: p, pageSize: 20 })
+      const list = (result?.records ?? []).map(img => ({
+        ...img,
+        flag: (ids || []).includes(img.id) ? false : true
+      }))
       setImages(list)
       setTotal(result?.total ?? list.length)
     } catch {
@@ -137,8 +140,11 @@ function SpacePickerModal({ open, onClose, onConfirm, currentImageCount, existin
     if (!teamSpaceId) return
     setTeamSpaceImageLoading(true)
     try {
-      const result = await postPictureList({ spaceId: teamSpaceId, pictureIds: ids, current: p, pageSize: 20 })
-      const list = result?.records ?? []
+      const result = await spaceListPicture({ spaceId: teamSpaceId, pictureIds: ids, current: p, pageSize: 20 })
+      const list = (result?.records ?? []).map(img => ({
+        ...img,
+        flag: (ids || []).includes(img.id) ? false : true
+      }))
       setTeamSpaceImages(list)
       setTeamSpaceImageTotal(result?.total ?? list.length)
     } catch {

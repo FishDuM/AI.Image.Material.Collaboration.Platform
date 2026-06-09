@@ -1,5 +1,6 @@
 package hk.ljx.fishpicsbackend.system.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -36,23 +37,25 @@ public class AuditLogServiceImpl implements AuditLogService {
 
     @Override
     public IPage<SysAuditLog> pageQuery(AuditLogQueryRequest request) {
-        Page<SysAuditLog> page = new Page<>(request.getCurrent(), request.getPageSize());
-        QueryWrapper<SysAuditLog> qw = new QueryWrapper<>();
+        long current = Math.max(request.getCurrent(), 1);
+        long pageSize = Math.min(Math.max(request.getPageSize(), 1), 100);
+        Page<SysAuditLog> page = new Page<>(current, pageSize);
+        LambdaQueryWrapper<SysAuditLog> qw = new LambdaQueryWrapper<>();
 
         if (request.getOperation() != null && !request.getOperation().isBlank()) {
-            qw.eq("operation", request.getOperation());
+            qw.eq(SysAuditLog::getOperation, request.getOperation());
         }
         if (request.getModule() != null && !request.getModule().isBlank()) {
-            qw.eq("module", request.getModule());
+            qw.eq(SysAuditLog::getModule, request.getModule());
         }
         if (request.getResult() != null) {
-            qw.eq("result", request.getResult());
+            qw.eq(SysAuditLog::getResult, request.getResult());
         }
         if (request.getUsername() != null && !request.getUsername().isBlank()) {
-            qw.like("username", request.getUsername());
+            qw.like(SysAuditLog::getUsername, request.getUsername());
         }
 
-        qw.orderByDesc("create_time");
+        qw.orderByDesc(SysAuditLog::getCreateTime);
         return sysAuditLogMapper.selectPage(page, qw);
     }
 

@@ -24,7 +24,7 @@ import {
   UserOutlined,
   LoadingOutlined,
 } from '@ant-design/icons'
-import { editUser, getUser, getUserMyself, uploadAvatar } from '../api'
+import { editUser, getUser, getUserMyself, getUserProfile, uploadAvatar } from '../api'
 import { AuthContext } from '../context/AuthContext'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { getBase64, beforeUpload } from '../utils/upload'
@@ -33,7 +33,7 @@ import './UserProfile.css'
 
 function UserProfile() {
   const { message } = AntApp.useApp()
-  const { userInfo, login: authLogin, isAuthenticated } = useContext(AuthContext)
+  const { userInfo, updateUserInfo, isAuthenticated } = useContext(AuthContext)
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const [searchParams] = useSearchParams()
@@ -46,20 +46,21 @@ function UserProfile() {
   const [avatarVisible, setAvatarVisible] = useState(false)
   const [editModalVisible, setEditModalVisible] = useState(false)
   const [editForm] = Form.useForm()
-  const [, setUploadedAvatarUrl] = useState(null)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(null)
   const [showPasswordSection, setShowPasswordSection] = useState(false)
 
-  const fetchUserInfo = async () => {
+  const fetchUserInfo = async (signal) => {
     try {
-      const data = await getUserMyself()
+      const data = isOwnProfile ? await getUserMyself() : await getUserProfile(profileUserId)
+      if (signal?.aborted) return
       setUserData(data)
-      if (userInfo) {
+      if (isOwnProfile && userInfo) {
         const updatedUserInfo = { ...userInfo, ...data }
-        authLogin(updatedUserInfo)
+        updateUserInfo(updatedUserInfo)
       }
     } catch (error) {
+      if (signal?.aborted) return
       if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
       message.error(error.message || '获取个人信息失败')
     }
@@ -67,11 +68,11 @@ function UserProfile() {
 
   const refreshUserInfo = async () => {
     try {
-      const data = await getUser()
+      const data = isOwnProfile ? await getUser() : await getUserProfile(profileUserId)
       setUserData((prev) => ({ ...prev, ...data }))
-      if (userInfo) {
+      if (isOwnProfile && userInfo) {
         const updatedUserInfo = { ...userInfo, ...data }
-        authLogin(updatedUserInfo)
+        updateUserInfo(updatedUserInfo)
       }
     } catch (error) {
       if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
@@ -81,13 +82,16 @@ function UserProfile() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      message.warning('请先登录')
       navigate('/')
       return
     }
+    const controller = new AbortController()
     setLoading(true)
-    fetchUserInfo().finally(() => setLoading(false))
-  }, [profileUserId, isAuthenticated])
+    fetchUserInfo(controller.signal).finally(() => {
+      if (!controller.signal.aborted) setLoading(false)
+    })
+    return () => controller.abort()
+  }, [profileUserId, isAuthenticated, isOwnProfile])
 
   useEffect(() => {
     if (!editModalVisible) return
@@ -199,7 +203,6 @@ function UserProfile() {
   const handleEditModalCancel = () => {
     editForm.resetFields()
     setEditModalVisible(false)
-    setUploadedAvatarUrl(null)
     setAvatarPreviewUrl(null)
     setShowPasswordSection(false)
   }
@@ -214,8 +217,6 @@ function UserProfile() {
         setUploadingAvatar(false)
         setAvatarPreviewUrl(url)
       })
-      const avatarUrl = info.file.response
-      setUploadedAvatarUrl(avatarUrl)
       await refreshUserInfo()
       message.success('头像上传成功')
     }
@@ -408,7 +409,9 @@ function UserProfile() {
                   >
                     <Input.Password prefix={<LockOutlined />} placeholder="请输入新密码" />
                   </Form.Item>
-                  <Form.Item name="originalPassword">
+                  <Form.Item name="originalPassword"
+                    rules={[{ required: true, message: '请输入原始密码' }]}
+                  >
                     <Input.Password prefix={<EyeOutlined />} placeholder="请输入原始密码" />
                   </Form.Item>
                 </div>

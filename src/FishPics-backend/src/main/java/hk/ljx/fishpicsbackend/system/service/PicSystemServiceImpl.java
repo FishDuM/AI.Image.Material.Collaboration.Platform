@@ -2,9 +2,11 @@ package hk.ljx.fishpicsbackend.system.service;
 import hk.ljx.fishpicsbackend.system.entity.PicSystem;
 
 import cn.hutool.json.JSONUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.cache.MultiLevelCacheManager;
+import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.mapper.PicSystemMapper;
@@ -13,6 +15,7 @@ import hk.ljx.fishpicsbackend.picture.entity.Picture;
 import hk.ljx.fishpicsbackend.system.dto.AddSysMarquee;
 import hk.ljx.fishpicsbackend.system.dto.AddSysPicType;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.annotation.Resource;
 import java.util.ArrayList;
@@ -23,10 +26,10 @@ import static hk.ljx.fishpicsbackend.common.constants.SysConstants.MARQUESS_KEY;
 import static hk.ljx.fishpicsbackend.common.constants.SysConstants.TYPE_LIST_KEY;
 
 /**
-* @author abc
-* @description 针对表【pic_system(系统表)】的数据库操作Service实现
-* @createDate 2026-05-01 14:33:03
-*/
+ * 系统配置表（pic_system）的 Service 实现
+ * 用 key-value 方式存储系统级配置（图片标签列表、跑马灯、AI开关等）
+ * 所有配置变更后都会清除多级缓存，保证下次读取拿到最新值
+ */
 @Service
 public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem>
     implements PicSystemService{
@@ -47,7 +50,7 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         }
 
         // 缓存miss，查数据库
-        QueryWrapper<PicSystem> queryWrapper = new QueryWrapper<PicSystem>().eq("syskey", TYPE_LIST_KEY);
+        LambdaQueryWrapper<PicSystem> queryWrapper = new LambdaQueryWrapper<PicSystem>().eq(PicSystem::getSyskey, TYPE_LIST_KEY);
         List<PicSystem> list = baseMapper.selectList(queryWrapper);
         ExcUtils.throwIfTrue(list == null || list.isEmpty(), "标签不存在");
         PicSystem picSystem = list.get(0);
@@ -60,9 +63,10 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
     }
 
     @Override
-    public void addTypeList(AddSysPicType addSysPicType) {
+    @Transactional(rollbackFor = Exception.class)
+    public synchronized void addTypeList(AddSysPicType addSysPicType) {
         ExcUtils.throwIfTrue(addSysPicType.getValue() == null || addSysPicType.getValue().isEmpty(), ExceptionCode.PARAMETER_ERROR, "标签不能为空");
-        QueryWrapper<PicSystem> queryWrapper = new QueryWrapper<PicSystem>().eq("syskey", TYPE_LIST_KEY);
+        LambdaQueryWrapper<PicSystem> queryWrapper = new LambdaQueryWrapper<PicSystem>().eq(PicSystem::getSyskey, TYPE_LIST_KEY);
         List<PicSystem> list = baseMapper.selectList(queryWrapper);
         PicSystem picSystem;
         if (list == null || list.isEmpty()) {
@@ -72,7 +76,12 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         } else {
             picSystem = list.get(0);
             List<String> typeList = JSONUtil.toList(picSystem.getSysvalue(), String.class);
-            typeList.addAll(addSysPicType.getValue());
+            // 去重添加，防止标签列表无限膨胀
+            for (String item : addSysPicType.getValue()) {
+                if (!typeList.contains(item)) {
+                    typeList.add(item);
+                }
+            }
             picSystem.setSysvalue(JSONUtil.toJsonStr(typeList));
             for (int i = 1; i < list.size(); i++) {
                 baseMapper.deleteById(list.get(i).getId());
@@ -84,9 +93,9 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
     }
 
     @Override
-    public void deleteType(String type) {
+    public synchronized void deleteType(String type) {
         ExcUtils.throwIfTrue(type == null || type.trim().isEmpty(), ExceptionCode.PARAMETER_ERROR, "标签名不能为空");
-        QueryWrapper<PicSystem> queryWrapper = new QueryWrapper<PicSystem>().eq("syskey", TYPE_LIST_KEY);
+        LambdaQueryWrapper<PicSystem> queryWrapper = new LambdaQueryWrapper<PicSystem>().eq(PicSystem::getSyskey, TYPE_LIST_KEY);
         List<PicSystem> list = baseMapper.selectList(queryWrapper);
         ExcUtils.throwIfTrue(list == null || list.isEmpty(), ExceptionCode.NOT_FOUND, "标签配置不存在");
         PicSystem picSystem = list.get(0);
@@ -110,7 +119,7 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         }
 
         // 缓存miss，查数据库
-        QueryWrapper<PicSystem> queryWrapper = new QueryWrapper<PicSystem>().eq("syskey", MARQUESS_KEY);
+        LambdaQueryWrapper<PicSystem> queryWrapper = new LambdaQueryWrapper<PicSystem>().eq(PicSystem::getSyskey, MARQUESS_KEY);
         List<PicSystem> list = baseMapper.selectList(queryWrapper);
         if (list == null || list.isEmpty()) {
             return List.of();
@@ -127,18 +136,23 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
     }
 
     @Override
-    public void addMarquee(AddSysMarquee addSysMarquee) {
+    public synchronized void addMarquee(AddSysMarquee addSysMarquee) {
         ExcUtils.throwIfTrue(addSysMarquee.getPictureId() == null || addSysMarquee.getPictureId().isEmpty(), ExceptionCode.PARAMETER_ERROR, "图片id不能为空");
 
-        List<Long> idList = addSysMarquee.getPictureId().stream()
-                .map(Long::parseLong)
-                .collect(Collectors.toList());
-        List<Picture> pictures = pictureMapper.selectList(new QueryWrapper<Picture>().in("id", idList));
-        ExcUtils.throwIfTrue(pictures.isEmpty(), ExceptionCode.NOT_FOUND, "未找到对应的图片，请检查图片id是否正确");
+        List<Long> idList;
+        try {
+            idList = addSysMarquee.getPictureId().stream()
+                    .map(Long::parseLong)
+                    .collect(Collectors.toList());
+        } catch (NumberFormatException e) {
+            throw new BaseException(ExceptionCode.PARAMETER_ERROR, "图片ID必须为数字");
+        }
+        List<Picture> pictures = pictureMapper.selectList(new LambdaQueryWrapper<Picture>().in(Picture::getId, idList));
+        ExcUtils.throwIfTrue(pictures.size() != idList.size(), ExceptionCode.NOT_FOUND, "部分图片不存在，请检查所有图片ID");
 
         List<String> marquess = pictures.stream().map(Picture::getUrl).collect(Collectors.toList());
 
-        QueryWrapper<PicSystem> queryWrapper = new QueryWrapper<PicSystem>().eq("syskey", MARQUESS_KEY);
+        LambdaQueryWrapper<PicSystem> queryWrapper = new LambdaQueryWrapper<PicSystem>().eq(PicSystem::getSyskey, MARQUESS_KEY);
         List<PicSystem> list = baseMapper.selectList(queryWrapper);
 
         PicSystem picSystem;
@@ -149,7 +163,12 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         } else {
             picSystem = list.get(0);
             List<String> oldMarquess = JSONUtil.toList(picSystem.getSysvalue(), String.class);
-            oldMarquess.addAll(marquess);
+            // 去重添加，防止跑马灯列表无限膨胀
+            for (String url : marquess) {
+                if (!oldMarquess.contains(url)) {
+                    oldMarquess.add(url);
+                }
+            }
             picSystem.setSysvalue(JSONUtil.toJsonStr(oldMarquess));
             for (int i = 1; i < list.size(); i++) {
                 baseMapper.deleteById(list.get(i).getId());
@@ -161,9 +180,9 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
     }
 
     @Override
-    public void deleteMarquee(String url) {
+    public synchronized void deleteMarquee(String url) {
         ExcUtils.throwIfTrue(url == null || url.trim().isEmpty(), ExceptionCode.PARAMETER_ERROR, "图片url不能为空");
-        QueryWrapper<PicSystem> queryWrapper = new QueryWrapper<PicSystem>().eq("syskey", MARQUESS_KEY);
+        LambdaQueryWrapper<PicSystem> queryWrapper = new LambdaQueryWrapper<PicSystem>().eq(PicSystem::getSyskey, MARQUESS_KEY);
         List<PicSystem> list = baseMapper.selectList(queryWrapper);
         ExcUtils.throwIfTrue(list == null || list.isEmpty(), ExceptionCode.NOT_FOUND, "跑马灯配置不存在");
         PicSystem picSystem = list.get(0);

@@ -4,7 +4,9 @@ import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.lang.UUID;
 import cn.hutool.json.JSONUtil;
 import com.qcloud.cos.COSClient;
+import com.qcloud.cos.http.HttpMethodName;
 import com.qcloud.cos.model.*;
+import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.picture.dto.PictureMessage;
@@ -16,6 +18,7 @@ import org.springframework.web.multipart.MultipartFile;
 import jakarta.annotation.Resource;
 
 import java.io.InputStream;
+import java.net.URL;
 import java.util.*;
 
 @Slf4j
@@ -65,7 +68,7 @@ public class CosService {
             PutObjectResult result = cosClient.putObject(bucket, key, inputStream, metadata);
             ExcUtils.throwIfTrue(result == null, "上传文件失败");
         } catch (Exception e) {
-            log.error("上传文件失败: {}", e.getMessage());
+            log.error("上传文件失败", e);
             ExcUtils.error(ExceptionCode.INTERNAL_SERVER_ERROR, "上传文件失败");
         }
         return key;
@@ -92,7 +95,7 @@ public class CosService {
             );
             ExcUtils.throwIfTrue(result == null, "上传文件失败");
         } catch (Exception e) {
-            log.error("上传文件失败{}", e.getMessage());
+            log.error("上传文件失败", e);
             ExcUtils.error(ExceptionCode.INTERNAL_SERVER_ERROR, "上传文件失败");
         }
         return key;
@@ -127,68 +130,103 @@ public class CosService {
         try {
             cosClient.deleteObject(bucket, key);
         } catch (Exception e) {
-            throw new RuntimeException("图片删除失败：" + e.getMessage());
+            log.error("COS 删除文件失败: key={}", key, e);
+            throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "图片删除失败，请稍后重试");
         }
     }
 
     /**
-     * 根据 COS 的文件 key 删除文件
-     * 
-     * @param allUrl 文件唯一标识
+     * 根据完整 URL 删除 COS 文件
+     * 通过 URI 解析提取 key，不依赖配置 URL 的精确格式
      */
     public void deletePictureByUrl(String allUrl) {
-        ExcUtils.throwIfTrue(allUrl == null || allUrl.isEmpty(), "文件key不能为空");
-        int length = url.length();
-        String key = allUrl.substring(length);
+        ExcUtils.throwIfTrue(allUrl == null || allUrl.isEmpty(), "文件URL不能为空");
+        // 使用 URI 解析提取路径，避免依赖配置 URL 的精确格式
         try {
+            java.net.URI uri = java.net.URI.create(allUrl);
+            String key = uri.getPath();
+            if (key != null && key.startsWith("/")) {
+                key = key.substring(1);
+            }
+            ExcUtils.throwIfTrue(key == null || key.isEmpty(), "URL格式不正确，无法提取文件key");
             cosClient.deleteObject(bucket, key);
+        } catch (BaseException e) {
+            throw e;
         } catch (Exception e) {
-            throw new RuntimeException("图片删除失败：" + e.getMessage());
+            log.error("COS 通过URL删除文件失败: url={}", allUrl, e);
+            throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "图片删除失败，请稍后重试");
         }
     }
 
     /**
-     * 根据 key 获取图片信息
-     *
-     * @param key 文件唯一标识
-     * @return 图片信息
+     * 根据 COS 的文件 key 获取图片信息（宽高、大小、格式）
+     * 优先使用 imageInfo 查询参数（不下载完整图片）获取精确元数据；
+     * 如果失败（文件不存在、格式不支持等），降级为仅获取文件大小
      */
     public PictureMessage getPictureMessage(String key) {
-        // 构建获取图片信息的请求
-        GetObjectRequest getObj = new GetObjectRequest(bucket, key);
-        // 获取图片基础信息
-        getObj.putCustomQueryParameter("imageInfo", null);
-
-        // 获取 COS 返回的流
-        COSObject cosObject = cosClient.getObject(getObj);
-
         PictureMessage pictureMessage = new PictureMessage();
 
-        try (COSObjectInputStream inputStream = cosObject.getObjectContent()) {
-            // 把流转成字符串
-            String imageInfoJson = IoUtil.readUtf8(inputStream);
-            log.info("图片信息 JSON：{}", imageInfoJson);
+        try {
+            // 优先使用 imageInfo 查询参数，只返回 JSON 元数据，不下载完整图片
+            GetObjectRequest getObj = new GetObjectRequest(bucket, key);
+            getObj.putCustomQueryParameter("imageInfo", null);
+            COSObject cosObject = cosClient.getObject(getObj);
+            if (cosObject == null) {
+                throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "COS 返回为空: " + key);
+            }
 
-            // 转成 Map/对象，方便拿宽、高、格式
-            Map<String, Object> imageInfo = JSONUtil.parseObj(imageInfoJson);
-
-            String width = String.valueOf(imageInfo.get("width")); // 宽
-            String height = String.valueOf(imageInfo.get("height")); // 高
-            String size = String.valueOf(imageInfo.get("size")); // 文件大小 byte
-
-            pictureMessage.setWidth(width);
-            pictureMessage.setHeight(height);
-            pictureMessage.setSize(size);
-
+            try (COSObjectInputStream inputStream = cosObject.getObjectContent()) {
+                String imageInfoJson = IoUtil.readUtf8(inputStream);
+                log.info("图片信息 JSON：{}", imageInfoJson);
+                Map<String, Object> imageInfo = JSONUtil.parseObj(imageInfoJson);
+                pictureMessage.setWidth(String.valueOf(imageInfo.get("width")));
+                pictureMessage.setHeight(String.valueOf(imageInfo.get("height")));
+                pictureMessage.setSize(String.valueOf(imageInfo.get("size")));
+            }
+        } catch (BaseException e) {
+            throw e;
         } catch (Exception e) {
-            throw new RuntimeException("获取图片信息失败", e);
+            // 降级：仅获取文件大小（不下载文件内容）
+            log.warn("获取图片元数据失败，降级为仅获取文件大小: key={}", key, e);
+            try {
+                ObjectMetadata metadata = cosClient.getObjectMetadata(bucket, key);
+                if (metadata == null) {
+                    throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "COS 文件不存在: " + key);
+                }
+                pictureMessage.setSize(String.valueOf(metadata.getContentLength()));
+            } catch (BaseException be) {
+                throw be;
+            } catch (Exception ex) {
+                log.error("获取图片信息最终失败: key={}", key, ex);
+                throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "获取图片信息失败");
+            }
         }
 
-        String[] name = key.split("/")[1].split("\\.");
-        String url = this.getImageUrl(key);
-        pictureMessage.setUrl(url);
-        pictureMessage.setPictureName(name[0]);
+        String[] parts = key.split("/");
+        String fileName = parts[parts.length - 1];
+        String[] nameParts = fileName.split("\\.");
+        pictureMessage.setUrl(this.getImageUrl(key));
+        pictureMessage.setPictureName(nameParts[0]);
         return pictureMessage;
+    }
+
+    // ==================== 预签名 URL ====================
+
+    /**
+     * 生成 COS 预签名 URL（用于分享场景）
+     *
+     * @param key             COS 文件 key
+     * @param expirationSeconds 有效期（秒）
+     * @return 预签名 URL
+     */
+    public String getPresignedUrl(String key, int expirationSeconds) {
+        ExcUtils.throwIfTrue(key == null || key.isEmpty(), "文件key不能为空");
+        Date expiration = new Date(System.currentTimeMillis() + expirationSeconds * 1000L);
+        GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(bucket, key);
+        request.setExpiration(expiration);
+        request.setMethod(HttpMethodName.GET);
+        URL presignedUrl = cosClient.generatePresignedUrl(request);
+        return presignedUrl.toString();
     }
 
     // ==================== 分片上传方法 ====================
@@ -199,6 +237,29 @@ public class CosService {
      * @param cosKey COS 存储路径
      * @return uploadId
      */
+    public byte[] getObjectBytes(String key) {
+        ExcUtils.throwIfTrue(key == null || key.isEmpty(), "文件key不能为空");
+        try (COSObject cosObject = cosClient.getObject(bucket, key);
+             COSObjectInputStream inputStream = cosObject.getObjectContent()) {
+            return IoUtil.readBytes(inputStream);
+        } catch (Exception e) {
+            log.error("读取 COS 文件失败: key={}", key, e);
+            throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "读取文件失败");
+        }
+    }
+
+    public String getObjectContentType(String key) {
+        ExcUtils.throwIfTrue(key == null || key.isEmpty(), "文件key不能为空");
+        try {
+            ObjectMetadata metadata = cosClient.getObjectMetadata(bucket, key);
+            String contentType = metadata != null ? metadata.getContentType() : null;
+            return (contentType == null || contentType.isBlank()) ? "application/octet-stream" : contentType;
+        } catch (Exception e) {
+            log.error("读取 COS 文件类型失败: key={}", key, e);
+            throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "读取文件信息失败");
+        }
+    }
+
     public String initiateMultipartUpload(String cosKey) {
         InitiateMultipartUploadRequest request = new InitiateMultipartUploadRequest(bucket, cosKey);
         InitiateMultipartUploadResult result = cosClient.initiateMultipartUpload(request);

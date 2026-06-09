@@ -67,7 +67,7 @@ public class Picture implements Serializable {
     private Date updateTime;
 
     /**
-     * 0-不公开到首页，1-公开到首页
+     * 是否私有: 0-公开 1-私有
      */
     private Integer isPrivate;
 
@@ -95,6 +95,11 @@ public class Picture implements Serializable {
      * 图片格式
      */
     private String type;
+
+    /**
+     * 是否精选: 1-精选 0-普通
+     */
+    private Integer isSelected;
 
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;

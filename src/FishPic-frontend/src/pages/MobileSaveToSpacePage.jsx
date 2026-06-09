@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { App as AntApp, Button, Tabs, Checkbox, Tag, Spin, Empty, Alert } from 'antd'
 import { SaveOutlined, TeamOutlined, LockOutlined } from '@ant-design/icons'
 import MobilePageWrapper from '../components/MobilePageWrapper'
-import { listSpace, savePictureByUrl } from '../api'
+import { getSaveableSpaces, savePictureByUrl } from '../api'
 import { AuthContext } from '../context/AuthContext'
 import './MobileSaveToSpacePage.css'
 
@@ -27,13 +27,10 @@ function MobileSaveToSpacePage() {
   const loadSpaces = useCallback(async () => {
     setLoading(true)
     try {
-      const result = await listSpace(0)
+      const result = await getSaveableSpaces()
       const list = Array.isArray(result) ? result : []
-      setPrivateSpace(list.length > 0 ? list[0] : null)
-
-      const teamResult = await listSpace(1)
-      const teamList = Array.isArray(teamResult) ? teamResult : []
-      setTeamSpaces(teamList)
+      setPrivateSpace(list.find((space) => space.type === 0) || null)
+      setTeamSpaces(list.filter((space) => space.type === 1))
     } catch {
       setPrivateSpace(null)
       setTeamSpaces([])

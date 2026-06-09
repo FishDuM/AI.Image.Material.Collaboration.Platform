@@ -17,10 +17,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
+import java.util.concurrent.*;
 
 @Slf4j
 @Component
 public class AiDrawTaskHandler implements TaskHandler {
+
+    /** AI 生图超时时间（秒） */
+    private static final int AI_TIMEOUT_SECONDS = 180;
 
     @Resource
     private DashScopeConnectionProperties dashScopeConnectionProperties;
@@ -32,6 +36,10 @@ public class AiDrawTaskHandler implements TaskHandler {
 
     @Override
     public void execute(Task task) throws Exception {
+        // 从任务参数中解析画面描述、排除项、风格和尺寸
+        if (task.getParam() == null || task.getParam().isBlank()) {
+            throw new RuntimeException("任务参数为空，无法执行AI生图");
+        }
         AiDrawPictureDTO dto = JSONUtil.toBean(task.getParam(), AiDrawPictureDTO.class);
 
         String description = dto.getDescription();
@@ -39,14 +47,17 @@ public class AiDrawTaskHandler implements TaskHandler {
         String style = dto.getStyle();
         String size = PictureSizeEnum.getSizeByCode(dto.getSize());
 
+        // 调用 DashScope 多模态对话接口生图（底层走 qwen-image-2.0-pro 模型）
         MultiModalConversation conv = new MultiModalConversation();
         String promptStyle = PicturePromptEnum.getPromptByCode(style);
 
+        // 拼接用户描述 + 风格后缀作为最终 prompt
         MultiModalMessage userMessage = MultiModalMessage.builder()
                 .role(Role.USER.getValue())
                 .content(List.of(Collections.singletonMap("text", description + promptStyle)))
                 .build();
 
+        // 组装模型参数：关闭水印、开启 prompt 扩展、设置反向提示词和尺寸
         Map<String, Object> parameters = new HashMap<>();
         parameters.put("watermark", false);
         parameters.put("prompt_extend", true);
@@ -56,6 +67,9 @@ public class AiDrawTaskHandler implements TaskHandler {
         parameters.put("size", size);
 
         String apiKey = dashScopeConnectionProperties.getApiKey();
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new RuntimeException("AI 服务 API Key 未配置");
+        }
         MultiModalConversationParam param = MultiModalConversationParam.builder()
                 .apiKey(apiKey)
                 .model("qwen-image-2.0-pro")
@@ -63,8 +77,39 @@ public class AiDrawTaskHandler implements TaskHandler {
                 .parameters(parameters)
                 .build();
 
-        MultiModalConversationResult result = conv.call(param);
-        String url = result.getOutput().getChoices().getFirst().getMessage().getContent().getFirst().get("image").toString();
+        MultiModalConversationResult result;
+        CompletableFuture<MultiModalConversationResult> future = CompletableFuture.supplyAsync(() -> {
+            try {
+                return conv.call(param);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+        try {
+            result = future.get(AI_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            throw new RuntimeException("AI 生图超时（" + AI_TIMEOUT_SECONDS + "秒），请重试");
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            throw new RuntimeException("AI 生图失败: " + (cause != null ? cause.getMessage() : e.getMessage()), cause);
+        }
+        // 逐层校验返回结果，拿到生成的图片 URL
+        if (result == null || result.getOutput() == null
+                || result.getOutput().getChoices() == null
+                || result.getOutput().getChoices().isEmpty()) {
+            throw new RuntimeException("AI 生图返回结果为空");
+        }
+        var choice = result.getOutput().getChoices().getFirst();
+        if (choice.getMessage() == null || choice.getMessage().getContent() == null
+                || choice.getMessage().getContent().isEmpty()) {
+            throw new RuntimeException("AI 生图返回内容为空");
+        }
+        var imageEntry = choice.getMessage().getContent().getFirst().get("image");
+        if (imageEntry == null) {
+            throw new RuntimeException("AI 生图返回结果中无图片 URL");
+        }
+        String url = imageEntry.toString();
         log.info("ai draw success: {}", url);
 
         task.setResult(url);
@@ -72,6 +117,6 @@ public class AiDrawTaskHandler implements TaskHandler {
 
     @Override
     public void persist(Task task) {
-        // 生图结果不自动入库，只通过 WebSocket 返回 URL 给前端
+        // 生图结果不自动入库，前端通过轮询获取 URL
     }
 }

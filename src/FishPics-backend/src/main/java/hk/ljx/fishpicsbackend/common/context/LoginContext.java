@@ -47,9 +47,14 @@ public class LoginContext implements Serializable {
     private Integer status;
 
     /**
-     * 用户等级：0=普通，1=VIP，2=SVIP
+     * 用户等级：0=普通，1=VIP，2=SVIP，3=管理员
      */
     private Integer level;
+
+    /**
+     * 是否是管理员（level >= 3）
+     */
+    private Boolean isAdmin;
 
     /**
      * VIP 专属权限（由 level 自动生成，不手动分配）
@@ -67,9 +72,10 @@ public class LoginContext implements Serializable {
     private List<String> systemPerms;
 
     /**
-     * 团队权限映射：key=spaceId, value=团队权限信息
+     * 团队权限映射：key=spaceId(String), value=团队权限信息
+     * 注意：使用 String key 而非 Long，确保 Redis JSON 序列化/反序列化安全
      */
-    private Map<Long, TeamPerm> teams;
+    private Map<String, TeamPerm> teams;
 
     /**
      * 团队权限信息
@@ -99,10 +105,17 @@ public class LoginContext implements Serializable {
     }
 
     /**
-     * 判断是否为系统超管
+     * 判断是否为管理员（level >= 3）
+     */
+    public boolean isAdmin() {
+        return Boolean.TRUE.equals(isAdmin);
+    }
+
+    /**
+     * 判断是否为系统超管（保留兼容性）
      */
     public boolean isSuperAdmin() {
-        return Integer.valueOf(1).equals(systemRole);
+        return isAdmin();
     }
 
     /**
@@ -116,7 +129,8 @@ public class LoginContext implements Serializable {
      * 判断是否在指定团队中
      */
     public boolean inTeam(Long spaceId) {
-        return isSuperAdmin() || (teams != null && teams.containsKey(spaceId));
+        if (spaceId == null) return false;
+        return isSuperAdmin() || (teams != null && teams.containsKey(String.valueOf(spaceId)));
     }
 
     /**
@@ -126,10 +140,10 @@ public class LoginContext implements Serializable {
         if (isSuperAdmin()) {
             return true;
         }
-        if (teams == null) {
+        if (spaceId == null || teams == null) {
             return false;
         }
-        TeamPerm teamPerm = teams.get(spaceId);
+        TeamPerm teamPerm = teams.get(String.valueOf(spaceId));
         if (teamPerm == null) {
             return false;
         }
@@ -143,10 +157,10 @@ public class LoginContext implements Serializable {
         if (isSuperAdmin()) {
             return 1;
         }
-        if (teams == null) {
+        if (spaceId == null || teams == null) {
             return null;
         }
-        TeamPerm teamPerm = teams.get(spaceId);
+        TeamPerm teamPerm = teams.get(String.valueOf(spaceId));
         return teamPerm != null ? teamPerm.getRoleId() : null;
     }
 

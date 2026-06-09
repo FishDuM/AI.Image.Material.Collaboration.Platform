@@ -1,12 +1,13 @@
 package hk.ljx.fishpicsbackend.task.consumer;
 
 import com.alibaba.dashscope.exception.ApiException;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.task.entity.Task;
 import hk.ljx.fishpicsbackend.task.handler.TaskHandler;
 import hk.ljx.fishpicsbackend.mapper.TaskMapper;
 import hk.ljx.fishpicsbackend.task.message.TaskMessage;
-import hk.ljx.fishpicsbackend.websocket.WebSocketHandler;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -27,9 +28,6 @@ public class TaskConsumer {
     @Resource
     private TransactionTemplate transactionTemplate;
 
-    @Resource
-    private WebSocketHandler webSocketHandler;
-
     private final Map<String, TaskHandler> handlerMap;
 
     public TaskConsumer(List<TaskHandler> handlers) {
@@ -37,37 +35,78 @@ public class TaskConsumer {
                 .collect(Collectors.toMap(TaskHandler::getBizType, Function.identity()));
     }
 
+    /**
+     * 消费任务消息（MQ 触发入口）
+     */
     public void onMessage(TaskMessage message) {
         String taskId = message.getTaskId();
-        Task task = taskMapper.selectOne(
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Task>()
-                        .eq(Task::getTaskId, taskId));
-        if (task == null) {
-            log.warn("task not found: taskId={}", taskId);
-            return;
-        }
 
-        // 幂等检查：已完成的任务直接跳过
-        if ("DONE".equals(task.getStatus())) {
-            log.warn("task already done, skipping: taskId={}", taskId);
-            return;
-        }
-        // 处理中的任务：如果超过5分钟认为consumer崩溃，允许重新处理
-        if ("PROCESSING".equals(task.getStatus())) {
-            long elapsed = System.currentTimeMillis() - task.getUpdateTime().getTime();
-            if (elapsed < 5 * 60 * 1000) {
-                log.warn("task is processing, skipping: taskId={}, elapsed={}ms", taskId, elapsed);
+        // 原子抢占：使用条件 UPDATE 将 PENDING → PROCESSING，消除并发竞态
+        int claimed = taskMapper.update(null,
+                new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<Task>()
+                        .eq(Task::getTaskId, taskId)
+                        .eq(Task::getStatus, "PENDING")
+                        .set(Task::getStatus, "PROCESSING"));
+
+        if (claimed == 0) {
+            // 未抢占成功：任务可能已被其他 consumer 处理、已完成、或处于 PROCESSING
+            Task task = taskMapper.selectOne(
+                    new LambdaQueryWrapper<Task>()
+                            .eq(Task::getTaskId, taskId));
+            if (task == null) {
+                log.warn("task not found: taskId={}", taskId);
                 return;
             }
-            log.warn("task stuck in PROCESSING超过5分钟，重新处理: taskId={}", taskId);
+            if ("DONE".equals(task.getStatus())) {
+                log.warn("task already done, skipping: taskId={}", taskId);
+                return;
+            }
+            if ("PROCESSING".equals(task.getStatus())) {
+                // 处理中的任务：如果超过5分钟认为 consumer 崩溃，允许重新处理
+                long elapsed = task.getUpdateTime() != null
+                        ? System.currentTimeMillis() - task.getUpdateTime().getTime()
+                        : Long.MAX_VALUE;
+                if (elapsed < 5 * 60 * 1000) {
+                    log.warn("task is processing, skipping: taskId={}, elapsed={}ms", taskId, elapsed);
+                    return;
+                }
+                log.warn("task stuck in PROCESSING 超过5分钟，重新抢占: taskId={}", taskId);
+                // 重新抢占：WHERE 加时间条件，只有真正卡住的任务才会被重新处理
+                claimed = taskMapper.update(null,
+                        new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<Task>()
+                                .eq(Task::getTaskId, taskId)
+                                .eq(Task::getStatus, "PROCESSING")
+                                .apply("update_time < DATE_SUB(NOW(), INTERVAL 5 MINUTE)")
+                                .set(Task::getStatus, "PROCESSING")
+                                .set(Task::getUpdateTime, new java.util.Date()));
+                if (claimed == 0) {
+                    log.warn("task re-claim failed (another consumer took it), skipping: taskId={}", taskId);
+                    return;
+                }
+            } else {
+                log.warn("task in unexpected status '{}', skipping: taskId={}", task.getStatus(), taskId);
+                return;
+            }
         }
 
-        task.setStatus("PROCESSING");
-        taskMapper.updateById(task);
+        Task task = taskMapper.selectOne(
+                new LambdaQueryWrapper<Task>()
+                        .eq(Task::getTaskId, taskId));
+        if (task == null) {
+            log.warn("task disappeared after claim: taskId={}", taskId);
+            return;
+        }
 
+        processTask(task);
+    }
+
+    /**
+     * 处理单个任务
+     */
+    private void processTask(Task task) {
         TaskHandler handler = handlerMap.get(task.getBizType());
         if (handler == null) {
-            log.error("no handler for bizType={}, taskId={}", task.getBizType(), taskId);
+            log.error("no handler for bizType={}, taskId={}", task.getBizType(), task.getTaskId());
             task.setStatus("FAILED");
             task.setErrorMsg("no handler for bizType: " + task.getBizType());
             taskMapper.updateById(task);
@@ -75,20 +114,21 @@ public class TaskConsumer {
         }
 
         try {
-            handler.execute(task);
+            final Task currentTask = task;
 
+            // execute 负责调用 AI 接口拿结果，不在事务内（避免长事务）
+            handler.execute(currentTask);
+
+            // persist 负责把结果写库，和标记 DONE 放在同一个事务里
             transactionTemplate.executeWithoutResult(status -> {
-                handler.persist(task);
-                task.setStatus("DONE");
-                taskMapper.updateById(task);
+                handler.persist(currentTask);
+                currentTask.setStatus("DONE");
+                taskMapper.updateById(currentTask);
             });
 
-            log.info("task done: taskId={}, bizType={}", taskId, task.getBizType());
-
-            // WebSocket 推送完成通知
-            notifyUser(task, "TASK_DONE", task.getResult(), null);
+            log.info("task done: taskId={}, bizType={}", currentTask.getTaskId(), currentTask.getBizType());
         } catch (Exception e) {
-            log.error("task failed: taskId={}, bizType={}", taskId, task.getBizType(), e);
+            log.error("task failed: taskId={}, bizType={}", task.getTaskId(), task.getBizType(), e);
             task.setStatus("FAILED");
 
             // DashScope 审核类错误使用友好提示，其他错误用原始消息
@@ -99,22 +139,6 @@ public class TaskConsumer {
             }
             task.setErrorMsg(errorMsg);
             taskMapper.updateById(task);
-
-            // WebSocket 推送失败通知
-            notifyUser(task, "TASK_FAILED", null, errorMsg);
-        }
-    }
-
-    private void notifyUser(Task task, String type, String result, String errorMsg) {
-        if (task.getUserId() != null) {
-            webSocketHandler.sendToUser(
-                    task.getUserId(),
-                    type,
-                    task.getTaskId(),
-                    task.getBizType(),
-                    result,
-                    errorMsg
-            );
         }
     }
 }

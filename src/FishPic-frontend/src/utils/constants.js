@@ -18,16 +18,19 @@ export const LEVEL_MAP = {
   2: { label: 'SVIP', color: 'orange', className: 'level-svip', cardClass: 'storage-card-svip' },
 }
 
+export const DEFAULT_LEVEL = { label: '普通', color: 'green', className: 'level-normal', cardClass: 'storage-card-normal' }
+
 export const storageStrokeColor = {
   '0%': '#5A5A5A',
   '100%': '#87d068',
 }
 
 export const formatStorage = (bytes) => {
-  if (!bytes || bytes === 0) return '0 B'
+  const n = Number(bytes)
+  if (!Number.isFinite(n) || n <= 0) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(1024))
-  const val = bytes / Math.pow(1024, i)
+  const i = Math.min(Math.floor(Math.log(n) / Math.log(1024)), units.length - 1)
+  const val = n / Math.pow(1024, i)
   return `${val.toFixed(i > 2 ? 1 : (i > 1 ? 2 : 0))} ${units[i]}`
 }
 
@@ -36,13 +39,10 @@ export const PAGE_SIZE = 20
 // 滚动加载更多阈值（px）
 export const LOAD_MORE_THRESHOLD = 200
 
-// WebSocket 重连间隔（ms）
-export const WS_RECONNECT_INTERVAL = 3000
-
 // API 超时时间（ms）
 export const TIMEOUT_DEFAULT = 10000
 export const TIMEOUT_AVATAR = 60000
-export const TIMEOUT_AI = 60000
+export const TIMEOUT_AI = 180000
 export const TIMEOUT_PICTURE = 120000
 
 export const formatTime = (timeString) => {

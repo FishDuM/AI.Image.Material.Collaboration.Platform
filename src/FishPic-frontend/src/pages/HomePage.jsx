@@ -5,6 +5,7 @@ import { getPictureList, getRecommendPictures } from '../api'
 import { useAuthModal } from '../hooks/useAuthModal.js'
 import { useFetchWithCleanup, useSystemTypes, useMarquee } from '../hooks/useRequestUtils'
 import { PAGE_SIZE } from '../utils/constants'
+import { getThumbnailUrl } from '../utils/image'
 import AuthModals from '../components/shared/AuthModals.jsx'
 import SearchBar from '../components/shared/SearchBar.jsx'
 import CategoryBar from '../components/shared/CategoryBar.jsx'
@@ -39,9 +40,19 @@ function HomePage() {
   const { fetchMarquee } = useMarquee()
 
   const authModal = useAuthModal(() => {
-    const from = location.state?.from?.pathname || '/community'
+    const from = location.state?.from?.pathname || '/'
     navigate(from, { replace: true })
   })
+
+  // 支持从路由 state 打开登录弹窗（如从其他页面跳转而来）
+  useEffect(() => {
+    if (location.state?.showLogin) {
+      authModal.openLogin()
+      // 清除 state 防止刷新后重复打开
+      navigate(location.pathname, { replace: true, state: {} })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handlePrev = useCallback(() => carouselRef.current?.prev(), [])
   const handleNext = useCallback(() => carouselRef.current?.next(), [])
@@ -261,7 +272,7 @@ function HomePage() {
       <div className="home-masonry-section">
         {masonryItems.length > 0 && (
           <Masonry columns={{ xs: 2, sm: 3, md: 4, lg: 5 }} gutter={[12, 12]} fresh items={masonryItems} itemRender={(item) => (
-            <div className="home-masonry-item"><AntImage src={item.data.url} alt={item.data.pictureName || '图片'} className="home-masonry-image" fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzJhMmEyYSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iYXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM2NjYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj7lm77niYfliqDovb3lpLHotKU8L3RleHQ+PC9zdmc+" /></div>
+            <div className="home-masonry-item"><AntImage src={getThumbnailUrl(item.data.url, 400)} alt={item.data.pictureName || '图片'} className="home-masonry-image" preview={{ src: item.data.url }} fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzJhMmEyYSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iYXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM2NjYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj7lm77niYfliqDovb3lpLHotKU8L3RleHQ+PC9zdmc+" /></div>
           )} />
         )}
         {hasMore && <div ref={loadMoreRef} className="home-load-more" />}

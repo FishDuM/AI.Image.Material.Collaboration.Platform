@@ -8,6 +8,7 @@ public enum ExceptionCode {
     PARAMETER_ERROR(40001, "参数错误"),
     UNAUTHORIZED(40002, "无权限"),
     FORBIDDEN(40003, "禁止访问"),
+    CONFLICT(40009, "操作冲突"),
     NOT_FOUND(40004, "资源未找到"),
     NOT_LOGIN(40005, "未登录"),
     UNPROCESSABLE_ENTITY(40022, "无法处理的实体"),
@@ -18,8 +19,8 @@ public enum ExceptionCode {
     AI_DRAW_ERROR(40007, "AI生成图片失败"),
     SERVICE_UNAVAILABLE(50001, "服务不可用");
 
-    private Integer code;
-    private String message;
+    private final Integer code;
+    private final String message;
 
     ExceptionCode(Integer code, String message) {
         this.code = code;

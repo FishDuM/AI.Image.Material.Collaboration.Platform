@@ -1,5 +1,6 @@
 package hk.ljx.fishpicsbackend.common.utils;
 
+import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -44,9 +45,9 @@ public class JwtUtils {
     private static final long RENEW_THRESHOLD_MS = 15 * 60 * 1000L;
 
     /**
-     * JWT 黑名单 Redis Key 前缀
+     * JWT 黑名单 Redis Key 前缀（使用共享常量，避免重复定义）
      */
-    private static final String JWT_BLACKLIST_PREFIX = "JWT_BLACKLIST:";
+    private static final String JWT_BLACKLIST_PREFIX = RedisConstants.JWT_BLACKLIST_KEY;
 
     /**
      * 缓存的签名密钥（避免重复创建）
@@ -154,6 +155,50 @@ public class JwtUtils {
     }
 
     /**
+     * 从 JWT 中提取 userId（允许过期的 JWT，用于登出场景）
+     *
+     * @param jwt JWT 字符串
+     * @return userId，失败返回 null
+     */
+    public Long getUserIdAllowExpired(String jwt) {
+        try {
+            Claims claims = Jwts.parser()
+                    .verifyWith(getSecretKey())
+                    .build()
+                    .parseSignedClaims(jwt)
+                    .getPayload();
+            Object userId = claims.get("userId");
+            return userId instanceof Number ? ((Number) userId).longValue() : null;
+        } catch (io.jsonwebtoken.ExpiredJwtException e) {
+            Object userId = e.getClaims().get("userId");
+            return userId instanceof Number ? ((Number) userId).longValue() : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * 从 JWT 中提取 jti（允许过期的 JWT，用于登出场景的黑名单加入）
+     *
+     * @param jwt JWT 字符串
+     * @return jti，失败返回 null
+     */
+    public String getJtiAllowExpired(String jwt) {
+        try {
+            Claims claims = Jwts.parser()
+                    .verifyWith(getSecretKey())
+                    .build()
+                    .parseSignedClaims(jwt)
+                    .getPayload();
+            return claims.getId();
+        } catch (io.jsonwebtoken.ExpiredJwtException e) {
+            return e.getClaims().getId();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
      * 判断 JWT 是否需要续签（超过 15 分钟）
      *
      * @param jwt JWT 字符串
@@ -174,57 +219,69 @@ public class JwtUtils {
 
     /**
      * 判断 JWT 是否已过期
+     * 仅在 ExpiredJwtException 时返回 true，签名无效等其他错误返回 false
      *
      * @param jwt JWT 字符串
-     * @return true = 已过期
+     * @return true = 已过期，false = 未过期或解析失败（非过期原因）
      */
     public boolean isExpired(String jwt) {
-        Claims claims = parse(jwt);
-        if (claims == null) {
-            return true;
+        try {
+            Jwts.parser()
+                    .verifyWith(getSecretKey())
+                    .build()
+                    .parseSignedClaims(jwt);
+            return false; // 解析成功，未过期
+        } catch (io.jsonwebtoken.ExpiredJwtException e) {
+            return true; // 确实过期
+        } catch (Exception e) {
+            return false; // 签名无效、格式损坏等，不是"过期"
         }
-        Date exp = claims.getExpiration();
-        return exp == null || exp.before(new Date());
     }
 
     /**
-     * 将 JWT 加入黑名单（登出时调用）
+     * 将 JWT 加入黑名单（登出时调用，支持过期 JWT）
      *
      * @param jwt JWT 字符串
      */
     public void addToBlacklist(String jwt) {
-        Claims claims = parse(jwt);
-        if (claims == null) {
+        String jti = getJtiAllowExpired(jwt);
+        if (jti == null) {
             return;
         }
-        String jti = claims.getId();
-        Date exp = claims.getExpiration();
-        if (jti == null || exp == null) {
-            return;
+        // 对于已过期的 JWT，TTL 设为 1 分钟（确保在 Redis 中短暂记录以防并发使用）
+        // 对于未过期的 JWT，TTL = JWT 剩余有效期
+        long ttl = 60_000L; // 默认 1 分钟
+        try {
+            Claims claims = Jwts.parser()
+                    .verifyWith(getSecretKey())
+                    .build()
+                    .parseSignedClaims(jwt)
+                    .getPayload();
+            Date exp = claims.getExpiration();
+            if (exp != null) {
+                ttl = Math.max(exp.getTime() - System.currentTimeMillis(), 60_000L);
+            }
+        } catch (io.jsonwebtoken.ExpiredJwtException e) {
+            // 已过期，使用默认 1 分钟 TTL
+        } catch (Exception e) {
+            // 解析失败，使用默认 TTL
         }
-        // TTL = JWT 剩余有效期
-        long ttl = exp.getTime() - System.currentTimeMillis();
-        if (ttl > 0) {
-            stringRedisTemplate.opsForValue().set(
-                    JWT_BLACKLIST_PREFIX + jti, "1", ttl, TimeUnit.MILLISECONDS);
-            log.info("JWT 已加入黑名单: jti={}", jti);
-        }
+        stringRedisTemplate.opsForValue().set(
+                JWT_BLACKLIST_PREFIX + jti, "1", ttl, TimeUnit.MILLISECONDS);
+        log.info("JWT 已加入黑名单: jti={}", jti);
     }
 
     /**
      * 检查 JWT 是否在黑名单中
+     * 注意：使用 getJtiAllowExpired 提取 jti，避免过期 Token 被误判为黑名单
      *
      * @param jwt JWT 字符串
-     * @return true = 在黑名单中（已登出）
+     * @return true = 在黑名单中（已登出），或无法解析 jti（视为无效）
      */
     public boolean isBlacklisted(String jwt) {
-        Claims claims = parse(jwt);
-        if (claims == null) {
-            return true;
-        }
-        String jti = claims.getId();
+        String jti = getJtiAllowExpired(jwt);
         if (jti == null) {
-            return true;
+            return true; // 无法提取 jti，视为无效
         }
         return Boolean.TRUE.equals(stringRedisTemplate.hasKey(JWT_BLACKLIST_PREFIX + jti));
     }

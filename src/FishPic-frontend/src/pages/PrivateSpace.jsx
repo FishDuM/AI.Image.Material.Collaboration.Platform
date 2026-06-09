@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App as AntApp, Typography, Button, Modal, Form, Input, Select, Masonry, Image as AntImage, Spin, Empty, Popconfirm, Progress, Popover } from 'antd'
-import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowUpOutlined, EditOutlined, CloudUploadOutlined, DatabaseOutlined, HddOutlined, UploadOutlined, ApartmentOutlined } from '@ant-design/icons'
-import { updateSpace, listSpace, getSystemTypes } from '../api'
+import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowUpOutlined, EditOutlined, CloudUploadOutlined, DatabaseOutlined, HddOutlined, UploadOutlined, ApartmentOutlined, ShareAltOutlined } from '@ant-design/icons'
+import { updateSpace, listSpace, getSystemTypes, createShare } from '../api'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { AuthContext } from '../context/AuthContext'
 import { PAGE_SIZE, LEVEL_MAP, storageStrokeColor, formatStorage } from '../utils/constants'
+import { getThumbnailUrl } from '../utils/image'
 import { logError } from '../utils/logger'
 import { useSpacePictures } from './PrivateSpace/useSpacePictures'
 import ImageUploadModal from '../components/shared/ImageUploadModal'
@@ -27,6 +28,46 @@ function PrivateSpace() {
   const [editForm] = Form.useForm()
 
   const [showUpgrade, setShowUpgrade] = useState(false)
+  const [showShare, setShowShare] = useState(false)
+  const [shareForm] = Form.useForm()
+  const [shareLoading, setShareLoading] = useState(false)
+  const [shareLink, setShareLink] = useState('')
+  const handleOpenShare = () => {
+    if (selectedIds.length !== 1) {
+      message.warning('请选择一张图片进行分享')
+      return
+    }
+    shareForm.resetFields()
+    setShareLink('')
+    setShowShare(true)
+  }
+
+  const handleCreateShare = async (values) => {
+    setShareLoading(true)
+    try {
+      const token = await createShare({
+        pictureId: selectedIds[0],
+        expireDays: values.expireDays || 1,
+        allowDownload: values.allowDownload ? 1 : 0,
+      })
+      const link = `${window.location.origin}/s/${token}`
+      setShareLink(link)
+      message.success('分享链接已生成')
+    } catch (error) {
+      message.error(error.message || '创建分享失败')
+    } finally {
+      setShareLoading(false)
+    }
+  }
+
+  const handleCopyShareLink = () => {
+    navigator.clipboard.writeText(shareLink).then(() => {
+      message.success('链接已复制到剪贴板')
+    }).catch(() => {
+      message.error('复制失败，请手动复制')
+    })
+  }
+
   useEffect(() => {
     getSystemTypes().then(result => {
       if (Array.isArray(result)) setSystemTags(result)
@@ -91,8 +132,8 @@ function PrivateSpace() {
   const spaceInfo = useMemo(() => {
     if (!spaces.length) return null
     const s = spaces[0]
-    const sizeBytes = parseFloat(s.size) || 0
-    const storageBytes = parseFloat(s.storageSize) || 0
+    const sizeBytes = Number(s.size) || 0
+    const storageBytes = Number(s.storageSize) || 0
     const percent = storageBytes > 0 ? Math.min(100, Math.round((sizeBytes / storageBytes) * 100)) : 0
     return { ...s, percent, usedText: formatStorage(sizeBytes), totalText: formatStorage(storageBytes) }
   }, [spaces])
@@ -268,9 +309,9 @@ function PrivateSpace() {
                     onClick={batchMode ? () => toggleSelect(item.data.id) : undefined}
                   >
                     <AntImage
-                      src={item.data.url}
+                      src={getThumbnailUrl(item.data.url, 400)}
                       alt={item.data.pictureName || '图片'}
-                      preview={!batchMode}
+                      preview={!batchMode ? { src: item.data.url } : false}
                       className="private-space-masonry-image"
                     />
                     {batchMode && (
@@ -312,6 +353,13 @@ function PrivateSpace() {
                   disabled={selectedIds.length === 0}
                 >
                   编辑图片信息
+                </Button>
+                <Button
+                  icon={<ShareAltOutlined />}
+                  onClick={handleOpenShare}
+                  disabled={selectedIds.length !== 1}
+                >
+                  分享
                 </Button>
                 <Popconfirm
                   title="确认删除"
@@ -458,6 +506,44 @@ function PrivateSpace() {
         onSuccess={handleUploadSuccess}
         onClose={() => setShowImageEditor(false)}
       />
+
+      <Modal
+        title="分享图片"
+        open={showShare}
+        onCancel={() => { setShowShare(false); shareForm.resetFields(); setShareLink('') }}
+        footer={null}
+        width={420}
+      >
+        {!shareLink ? (
+          <Form form={shareForm} layout="vertical" onFinish={handleCreateShare} initialValues={{ expireDays: 1, allowDownload: true }} style={{ marginTop: 16 }}>
+            <Form.Item name="expireDays" label="有效期">
+              <Select options={[
+                { value: 1, label: '1 天' },
+                { value: 3, label: '3 天' },
+                { value: 7, label: '7 天' },
+              ]} />
+            </Form.Item>
+            <Form.Item name="allowDownload" label="权限">
+              <Select options={[
+                { value: true, label: '允许下载' },
+                { value: false, label: '仅预览' },
+              ]} />
+            </Form.Item>
+            <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
+              <Button onClick={() => { setShowShare(false); shareForm.resetFields() }} style={{ marginRight: 8 }}>取消</Button>
+              <Button type="primary" htmlType="submit" loading={shareLoading}>生成链接</Button>
+            </Form.Item>
+          </Form>
+        ) : (
+          <div style={{ marginTop: 16 }}>
+            <Input.TextArea value={shareLink} readOnly autoSize style={{ marginBottom: 12 }} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <Button onClick={() => { setShowShare(false); setShareLink('') }}>关闭</Button>
+              <Button type="primary" onClick={handleCopyShareLink}>复制链接</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </main>
   )
 }

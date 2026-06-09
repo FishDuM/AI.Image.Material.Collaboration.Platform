@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Modal, Upload, Button, App, Tabs, Input, Image, Empty, Progress } from 'antd'
 import {
-  InboxOutlined, LinkOutlined, ImportOutlined, EyeOutlined,
+  InboxOutlined, ImportOutlined,
 } from '@ant-design/icons'
 import SparkMD5 from 'spark-md5'
 import { uploadPicture, savePictureByUrl, checkUpload, uploadChunk, mergeChunks } from '../../api'
@@ -83,6 +83,9 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
     setActiveTab('upload')
     setSelectedFile(null)
     setUploading(false)
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current)
+    }
     objectUrlRef.current = ''
     setUrl('')
     setPreviewUrl('')
@@ -147,7 +150,7 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
         const chunkFile = new File([chunk], `chunk_${index}`, { type: file.type })
         const fd = new FormData()
         fd.append('file', chunkFile)
-        const result = await uploadChunk(fd, md5, index, cosKey)
+        const result = await uploadChunk(fd, md5, index)
         results[index] = result
         completed++
         updateProgress()
@@ -188,9 +191,7 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
     if (file.size <= CHUNK_SIZE) {
       setUploading(true)
       try {
-        const fd = new FormData()
-        fd.append('file', file)
-        const result = await uploadPicture(fd, spaceId)
+        const result = await uploadPicture(file, spaceId)
         message.success('上传成功')
         onSuccess?.({ url: result.url, id: result.id })
         onClose()
@@ -231,12 +232,7 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
     try {
       const canvas = cropper.getCroppedCanvas()
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp'))
-      const fd = new FormData()
-      fd.append('file', blob, selectedFile.name.replace(/\.[^.]+$/, '.webp'))
-      const result = await uploadPicture(fd, spaceId)
-      message.success('上传成功')
-      onSuccess?.({ url: result.url, id: result.id })
-      onClose()
+      await directUpload(blob)
     } catch (error) {
       message.error(error.message || '上传失败')
     } finally {
@@ -247,6 +243,9 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
   const handleBack = () => {
     setStep('select')
     setSelectedFile(null)
+    if (objectUrlRef.current) {
+      URL.revokeObjectURL(objectUrlRef.current)
+    }
     objectUrlRef.current = ''
   }
 

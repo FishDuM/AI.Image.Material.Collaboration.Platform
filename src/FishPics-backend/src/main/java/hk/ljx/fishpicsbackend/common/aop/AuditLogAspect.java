@@ -8,6 +8,10 @@ import hk.ljx.fishpicsbackend.mapper.SysAuditLogMapper;
 import hk.ljx.fishpicsbackend.user.entity.User;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.rocketmq.client.producer.DefaultMQProducer;
+import org.apache.rocketmq.client.producer.SendResult;
+import org.apache.rocketmq.client.producer.SendStatus;
+import org.apache.rocketmq.common.message.Message;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -19,10 +23,11 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import jakarta.annotation.Resource;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 
 /**
- * 审计日志AOP切面
+ * 审计日志AOP切面（异步写入，通过 RocketMQ 解耦）
  */
 @Slf4j
 @Aspect
@@ -32,12 +37,17 @@ public class AuditLogAspect {
     @Resource
     private SysAuditLogMapper sysAuditLogMapper;
 
+    @Resource(name = "auditLogProducer")
+    private DefaultMQProducer auditLogProducer;
+
     @Pointcut("@annotation(hk.ljx.fishpicsbackend.common.annotation.AuditLog)")
     public void auditLogPointcut() {}
 
     @Around("auditLogPointcut()")
     public Object around(ProceedingJoinPoint joinPoint) throws Throwable {
         SysAuditLog auditLog = new SysAuditLog();
+        // 提前记录请求时间，反映真实请求时间点
+        auditLog.setCreateTime(LocalDateTime.now());
 
         try {
             // 获取注解信息
@@ -66,14 +76,28 @@ public class AuditLogAspect {
                 auditLog.setUsername(user.getUsername());
             }
 
-            // 获取请求参数
+            // 获取请求参数（过滤敏感字段，截断过长内容）
             try {
                 Object[] args = joinPoint.getArgs();
                 if (args != null && args.length > 0) {
                     StringBuilder params = new StringBuilder();
                     for (Object arg : args) {
                         if (arg != null && !arg.getClass().getName().startsWith("jakarta.servlet")) {
-                            params.append(JSONUtil.toJsonStr(arg)).append(" ");
+                            String json = JSONUtil.toJsonStr(arg);
+                            // 过滤包含密码/token等敏感字段
+                            json = json.replaceAll("\"password\":\"[^\"]*\"", "\"password\":\"***\"")
+                                      .replaceAll("\"originalPassword\":\"[^\"]*\"", "\"originalPassword\":\"***\"")
+                                      .replaceAll("\"token\":\"[^\"]*\"", "\"token\":\"***\"")
+                                      .replaceAll("\"apiKey\":\"[^\"]*\"", "\"apiKey\":\"***\"")
+                                      .replaceAll("\"secretKey\":\"[^\"]*\"", "\"secretKey\":\"***\"")
+                                      .replaceAll("\"accessToken\":\"[^\"]*\"", "\"accessToken\":\"***\"")
+                                      .replaceAll("\"refreshToken\":\"[^\"]*\"", "\"refreshToken\":\"***\"")
+                                      .replaceAll("\"secret\":\"[^\"]*\"", "\"secret\":\"***\"");
+                            // 截断过长参数（最大1000字符）
+                            if (json.length() > 1000) {
+                                json = json.substring(0, 1000) + "...(truncated)";
+                            }
+                            params.append(json).append(" ");
                         }
                     }
                     auditLog.setParams(params.toString().trim());
@@ -87,8 +111,7 @@ public class AuditLogAspect {
 
             // 记录成功
             auditLog.setResult(1);
-            auditLog.setCreateTime(LocalDateTime.now());
-            saveAuditLog(auditLog);
+            sendAuditLogAsync(auditLog);
 
             return result;
 
@@ -96,14 +119,36 @@ public class AuditLogAspect {
             // 记录失败
             auditLog.setResult(0);
             auditLog.setErrorMsg(e.getMessage());
-            auditLog.setCreateTime(LocalDateTime.now());
-            saveAuditLog(auditLog);
+            log.error("审计方法执行异常: method={}", auditLog.getUrl(), e);
+            sendAuditLogAsync(auditLog);
 
             throw e;
         }
     }
 
-    private void saveAuditLog(SysAuditLog auditLog) {
+    /**
+     * 异步发送审计日志到 RocketMQ
+     * MQ 挂了就降级成同步写 DB，保证日志不丢
+     */
+    private void sendAuditLogAsync(SysAuditLog auditLog) {
+        try {
+            String json = JSONUtil.toJsonStr(auditLog);
+            Message msg = new Message("audit-log-topic", json.getBytes(StandardCharsets.UTF_8));
+            SendResult sendResult = auditLogProducer.send(msg);
+            if (sendResult.getSendStatus() != SendStatus.SEND_OK) {
+                log.warn("审计日志MQ发送非OK，降级为同步写DB: status={}", sendResult.getSendStatus());
+                saveAuditLogDirect(auditLog);
+            }
+        } catch (Exception e) {
+            log.warn("审计日志MQ发送失败，降级为同步写DB", e);
+            saveAuditLogDirect(auditLog);
+        }
+    }
+
+    /**
+     * 降级：直接同步写 DB
+     */
+    private void saveAuditLogDirect(SysAuditLog auditLog) {
         try {
             sysAuditLogMapper.insert(auditLog);
         } catch (Exception e) {
@@ -111,6 +156,11 @@ public class AuditLogAspect {
         }
     }
 
+    /**
+     * 获取客户端真实 IP
+     * 按优先级依次尝试：X-Forwarded-For → Proxy-Client-IP → WL-Proxy-Client-IP → X-Real-IP → remoteAddr
+     * 多层代理下 X-Forwarded-For 可能有多个 IP，取第一个（离客户端最近的那个）
+     */
     private String getClientIp(HttpServletRequest request) {
         String ip = request.getHeader("X-Forwarded-For");
         if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {

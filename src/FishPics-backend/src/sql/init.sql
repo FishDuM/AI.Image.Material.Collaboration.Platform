@@ -3,6 +3,11 @@ CREATE DATABASE IF NOT EXISTS FishPics DEFAULT CHARACTER SET utf8mb4 COLLATE utf
 
 USE FishPics;
 
+-- =====================================================
+-- 简化版 RBAC：使用 user.level 字段判断权限
+-- level: 0=普通用户, 1=VIP, 2=SVIP, 3=管理员
+-- =====================================================
+
 -- 第一部分：业务表
 
 -- 1. 系统配置表
@@ -17,7 +22,7 @@ CREATE TABLE pic_system (
 INSERT INTO pic_system (syskey, sysvalue) VALUES
 ('type_list_key', '["人物","动物","植物","美食","风景","建筑","物品","服饰","数码","家居","插画","二次元","实拍","文档","表情包"]');
 
--- 2. 用户表
+-- 2. 用户表（简化版，使用 level 字段判断权限）
 CREATE TABLE user (
     id          BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '用户ID',
     username    VARCHAR(32)                        NULL COMMENT '用户名（登录用）',
@@ -26,7 +31,7 @@ CREATE TABLE user (
     email       VARCHAR(64)                        NULL COMMENT '邮箱',
     phone       VARCHAR(16)                        NULL COMMENT '手机号',
     nickname    VARCHAR(32)                        NULL COMMENT '昵称（展示用）',
-    level       TINYINT  DEFAULT 0                 NOT NULL COMMENT '用户等级 0=普通 1=VIP 2=SVIP',
+    level       TINYINT  DEFAULT 0                 NOT NULL COMMENT '用户等级: 0=普通 1=VIP 2=SVIP 3=管理员',
     status      TINYINT  DEFAULT 1                 NULL COMMENT '状态 1=正常 0=禁用',
     is_delete   TINYINT  DEFAULT 0                 NOT NULL COMMENT '逻辑删除 0=否 1=是',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL COMMENT '创建时间',
@@ -46,6 +51,8 @@ CREATE TABLE space (
     size         BIGINT  DEFAULT 0         NULL COMMENT '已用大小(Byte)',
     level        TINYINT DEFAULT 0         NOT NULL COMMENT '空间等级 0=普通 1=VIP 2=SVIP',
     status       TINYINT DEFAULT 1         NOT NULL COMMENT '状态 0=禁用 1=正常',
+    create_time  DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL COMMENT '创建时间',
+    update_time  DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_type (type),
     INDEX idx_user_id (user_id)
 ) COMMENT '空间表';
@@ -60,18 +67,20 @@ CREATE TABLE picture (
     height       VARCHAR(32)                        NULL COMMENT '高度',
     size         BIGINT                             NULL COMMENT '文件大小(Byte)',
     status       TINYINT  DEFAULT 2                 NULL COMMENT '状态 1=正常 0=禁用 2=待审核',
-    is_private   TINYINT  DEFAULT 0                 NOT NULL COMMENT '是否公开 0=不公开 1=公开',
+    is_private   TINYINT  DEFAULT 1                 NOT NULL COMMENT '0=公开 1=私有',
     space_id     BIGINT                             NULL COMMENT '所属空间ID',
     resource_id  BIGINT                             NULL COMMENT '关联file_resource.id（文件去重）',
     introduction VARCHAR(256)                       NULL COMMENT '图片介绍',
     tags         VARCHAR(512)                       NULL COMMENT '标签(JSON数组)',
     type         VARCHAR(32)                        NULL COMMENT '图片格式',
+    is_selected  TINYINT  DEFAULT 0                 NOT NULL COMMENT '是否精选 0=普通 1=精选',
     create_time  DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL COMMENT '创建时间',
     update_time  DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_user_id (user_id),
     INDEX idx_space_id (space_id),
     INDEX idx_picture_name (picture_name),
     INDEX idx_introduction (introduction),
+    INDEX idx_status (status),
     INDEX idx_update_time (update_time)
 ) COMMENT '图片表';
 
@@ -115,51 +124,19 @@ CREATE TABLE sys_audit_log (
     INDEX idx_operation (operation)
 ) COMMENT '审计日志表';
 
--- 第二部分：RBAC 三层权限体系
-
--- 7. 角色表（4个固定角色）
-CREATE TABLE role (
-    id          INT PRIMARY KEY COMMENT '角色ID: 1=超管 2=团队管理员 3=普通成员 4=只读',
-    role_name   VARCHAR(50)  NOT NULL COMMENT '角色名称',
-    description VARCHAR(200) NULL COMMENT '角色描述'
-) COMMENT '角色表';
-
--- 8. 权限表（16个权限，三层分布）
-CREATE TABLE permission (
-    id        INT AUTO_INCREMENT PRIMARY KEY COMMENT '权限ID',
-    perm_key  VARCHAR(50)  NOT NULL COMMENT '权限标识，如 system:config',
-    perm_name VARCHAR(100) NOT NULL COMMENT '权限名称',
-    layer     VARCHAR(20)  NOT NULL COMMENT '所属层级: system/space/resource',
-    UNIQUE KEY uk_perm_key (perm_key)
-) COMMENT '权限表';
-
--- 9. 角色-权限绑定表
-CREATE TABLE role_permission (
-    role_id INT NOT NULL COMMENT '角色ID',
-    perm_id INT NOT NULL COMMENT '权限ID',
-    PRIMARY KEY (role_id, perm_id)
-) COMMENT '角色-权限绑定表';
-
--- 10. 用户-系统角色表（仅超管需要登记）
-CREATE TABLE sys_user_role (
-    user_id BIGINT NOT NULL COMMENT '用户ID',
-    role_id INT    NOT NULL COMMENT '角色ID（仅允许1=超管）',
-    PRIMARY KEY (user_id, role_id)
-) COMMENT '用户-系统角色表';
-
--- 11. 团队空间成员表
+-- 7. 团队空间成员表
 CREATE TABLE space_team_member (
     id          BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
-    space_id    BIGINT   NOT NULL COMMENT '空间ID',
-    user_id     BIGINT   NOT NULL COMMENT '用户ID',
-    role_id     INT      NOT NULL COMMENT '角色ID（仅允许2/3/4）',
+    space_id    BIGINT  NOT NULL COMMENT '空间ID',
+    user_id     BIGINT  NOT NULL COMMENT '用户ID',
+    role_id     INT     DEFAULT 2 NOT NULL COMMENT '角色: 1=所有者 2=成员',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '加入时间',
     UNIQUE KEY uk_space_user (space_id, user_id),
     INDEX idx_space_id (space_id),
     INDEX idx_user_id (user_id)
 ) COMMENT '团队空间成员表';
 
--- 12. 物理文件去重表
+-- 8. 物理文件去重表
 CREATE TABLE file_resource (
     id          BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
     md5         VARCHAR(32)  NOT NULL COMMENT '文件MD5',
@@ -167,68 +144,49 @@ CREATE TABLE file_resource (
     cos_key     VARCHAR(512) NOT NULL COMMENT 'COS存储路径',
     ref_count   INT DEFAULT 1 NOT NULL COMMENT '引用计数',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL COMMENT '创建时间',
-    UNIQUE KEY uk_md5_size (md5, size)
+    UNIQUE KEY uk_md5_size (md5, size),
+    CHECK (ref_count >= 0)
 ) COMMENT '物理文件去重表';
 
--- 第三部分：初始数据
+-- 9. 图片分享表
+CREATE TABLE picture_share (
+    id             BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    picture_id     BIGINT      NOT NULL COMMENT '图片ID',
+    share_user_id  BIGINT      NOT NULL COMMENT '分享者用户ID',
+    share_token    VARCHAR(64) NOT NULL COMMENT '分享链接Token(UUID)',
+    expire_time    DATETIME    NOT NULL COMMENT '过期时间',
+    allow_download TINYINT DEFAULT 0 NOT NULL COMMENT '是否允许下载 0=仅预览 1=允许下载',
+    status         TINYINT DEFAULT 1 NOT NULL COMMENT '状态 1=有效 0=已取消',
+    create_time    DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL COMMENT '创建时间',
+    UNIQUE KEY uk_share_token (share_token),
+    INDEX idx_picture_id (picture_id),
+    INDEX idx_share_user_id (share_user_id),
+    INDEX idx_expire_time (expire_time)
+) COMMENT '图片分享表';
 
--- 4 个角色
-INSERT INTO role (id, role_name, description) VALUES
-(1, '系统超级管理员', '全平台最高权限，拥有全部 13 个权限'),
-(2, '团队管理员',     '团队空间管理权限，拥有 space:* + resource:* 共 8 个权限'),
-(3, '普通成员',       '团队内普通操作权限，拥有 resource:* 共 5 个权限'),
-(4, '只读成员',       '仅可查看，拥有 resource:view 1 个权限');
+-- =====================================================
+-- 初始数据
+-- =====================================================
 
--- 16 个权限（含 3 个 VIP 扩展权限）
-INSERT INTO permission (id, perm_key, perm_name, layer) VALUES
--- 第一层：系统全局管理（5个）
-(1,  'system:config',          '系统基础设置',       'system'),
-(2,  'system:user:manage',     '全平台用户管理',     'system'),
-(3,  'system:team:manage',     '全平台团队管理',     'system'),
-(4,  'system:log:manage',      '系统审计日志管理',   'system'),
-(5,  'system:ai:manage',       'AI 功能管理',        'system'),
--- 第二层：团队空间管理（3个）
-(6,  'space:setting',          '空间设置',           'space'),
-(7,  'space:member',           '管理成员',           'space'),
-(8,  'space:recycle',          '管理回收站',         'space'),
--- 第三层：图片资源操作（5个基础 + 3个VIP扩展）
-(9,  'resource:view',          '查看图片/文件夹',    'resource'),
-(10, 'resource:upload',        '上传图片/ZIP 包',    'resource'),
-(11, 'resource:edit',          '编辑图片及元信息',   'resource'),
-(12, 'resource:delete',        '删除资源',           'resource'),
-(13, 'resource:download',      '下载资源',           'resource'),
-(14, 'resource:upload:large',  '大文件上传(>10MB)',  'resource'),
-(15, 'resource:storage:expand','扩展存储配额',       'resource'),
-(16, 'resource:ai:quota',      'AI 高级配额',        'resource');
+-- 插入默认管理员账号（level=3 表示管理员）
+-- 密码：admin123（MD5 加盐后的值）
+INSERT INTO user (username, password, nickname, level, status) VALUES
+('admin', 'e10adc3949ba59abbe56e057f20f883e', '系统管理员', 3, 1);
 
--- 角色-权限绑定
-
--- 超管(1)：全部 16 个权限
-INSERT INTO role_permission (role_id, perm_id) VALUES
-(1, 1), (1, 2), (1, 3), (1, 4), (1, 5),
-(1, 6), (1, 7), (1, 8),
-(1, 9), (1, 10), (1, 11), (1, 12), (1, 13),
-(1, 14), (1, 15), (1, 16);
-
--- 团队管理员(2)：space:* + resource:* = 8 个权限
-INSERT INTO role_permission (role_id, perm_id) VALUES
-(2, 6), (2, 7), (2, 8),
-(2, 9), (2, 10), (2, 11), (2, 12), (2, 13);
-
--- 普通成员(3)：resource:* = 5 个权限
-INSERT INTO role_permission (role_id, perm_id) VALUES
-(3, 9), (3, 10), (3, 11), (3, 12), (3, 13);
-
--- 只读成员(4)：resource:view = 1 个权限
-INSERT INTO role_permission (role_id, perm_id) VALUES
-(4, 9);
-
--- 验证：查看角色-权限绑定矩阵
-SELECT
-    r.id AS role_id,
-    r.role_name,
-    COUNT(rp.perm_id) AS perm_count
-FROM role r
-LEFT JOIN role_permission rp ON r.id = rp.role_id
-GROUP BY r.id, r.role_name
-ORDER BY r.id;
+-- =====================================================
+-- 权限说明（无需数据库表，通过 level 字段判断）
+-- =====================================================
+--
+-- 权限判断逻辑：
+-- 1. 管理员（level >= 3）：拥有所有权限
+-- 2. SVIP（level = 2）：高级功能权限
+-- 3. VIP（level = 1）：VIP 功能权限
+-- 4. 普通用户（level = 0）：基础功能权限
+--
+-- 使用方式：
+-- @RequireAdmin - 只需要管理员权限
+-- user.getLevel() >= 1 - VIP 或更高
+-- user.getLevel() >= 2 - SVIP 或更高
+-- user.getLevel() >= 3 - 管理员
+--
+-- =====================================================

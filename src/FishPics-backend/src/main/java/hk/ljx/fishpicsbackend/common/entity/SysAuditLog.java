@@ -51,5 +51,8 @@ public class SysAuditLog {
     private LocalDateTime createTime;
 
     @TableLogic
-    private Integer isDelete;
+    private Integer isDelete = 0;
+
+    @TableField(exist = false)
+    private static final long serialVersionUID = 1L;
 }

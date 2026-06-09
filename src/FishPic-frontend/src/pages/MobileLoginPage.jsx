@@ -45,7 +45,6 @@ export default function MobileLoginPage() {
       if (!captchaKey) {
         message.error('验证码已过期，请刷新验证码')
         form.setFieldValue('checkCode', '')
-        setLoading(false)
         return
       }
 

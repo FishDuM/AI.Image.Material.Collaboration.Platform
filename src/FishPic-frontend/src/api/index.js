@@ -15,8 +15,12 @@ const pendingRequests = new Map()
 let requestCounter = 0
 
 function getRequestKey(config) {
-  const { method, url, params, data } = config
-  return [method, url, JSON.stringify(params || {}), JSON.stringify(data || {})].join('&')
+  try {
+    const { method, url, params, data } = config
+    return [method, url, JSON.stringify(params || {}), JSON.stringify(data || {})].join('&')
+  } catch {
+    return [config.method, config.url, Date.now()].join('&')
+  }
 }
 
 api.interceptors.request.use(
@@ -68,18 +72,18 @@ api.interceptors.response.use(
       return response
     }
 
-    // JWT 自动续签：检查响应头中的新 Token
-    const newToken = response.headers['x-new-token']
-    if (newToken) {
-      saveToken(newToken)
-    }
-
     const responseData = response.data
     if (!responseData || typeof responseData.code === 'undefined') {
       return Promise.reject(new Error('响应格式异常'))
     }
+    // JWT 自动续签：检查响应头中的新 Token（在业务状态判断之前，避免业务错误时丢弃续签）
+    const newToken = response.headers['x-new-token']
+    if (newToken) {
+      saveToken(newToken)
+    }
     if (responseData.code !== 1) {
-      if (responseData.code === 40001 || responseData.code === 40005 || responseData.code === 40002) {
+      // 只有 40005（未登录）才触发登录过期，40002（无权限）不应清除 token
+      if (responseData.code === 40005) {
         handleAuthExpired()
       }
       return Promise.reject(new Error(responseData.message || '请求失败'))
@@ -123,6 +127,8 @@ export const logout = () => api.post('/user/logout', {})
 
 export const getUser = (config = {}) => api.get('/user/getUser', config)
 
+export const getUserProfile = (userId, config = {}) => api.get('/user/profile', { params: { userId }, ...config })
+
 export const getAdminUser = (userId, config = {}) => api.post('/user/admin/getUser', { userId }, config)
 
 export const editUser = (data) => api.post('/user/editUser', data)
@@ -163,6 +169,8 @@ export const updateSpace = (data) => api.post('/space/update', data)
 
 export const listSpace = (type, config = {}) => api.get('/space/list', { params: { type }, ...config })
 
+export const getSaveableSpaces = (config = {}) => api.get('/space/saveable', config)
+
 export const getSpace = (id) => api.get('/space/getSpace', { params: { id } })
 
 export const spaceListPicture = (data, config = {}) => api.post('/space/pictureList', data, config)
@@ -172,9 +180,16 @@ export const adminUpdateSpace = (data) => api.post('/space/admin/update', data)
 export const adminDeleteSpace = (id) => api.post('/space/admin/delete', { id })
 export const adminSetSpaceStatus = (id, status) => api.post('/space/admin/setStatus', { id, status })
 
-export const deletePicture = (ids) => api.delete('/picture/delete', { data: { ids } })
+export const deletePicture = (ids) => api.post('/picture/delete', { ids })
 
 export const updatePicture = (data) => api.put('/picture/update', data)
+
+export const replacePictureFile = (file, pictureId) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  formData.append('pictureId', pictureId)
+  return api.post('/picture/replace', formData)
+}
 
 export const getPictureEditMessage = (id) => api.get('/picture/pictureEditMessage', { params: { id } })
 
@@ -203,7 +218,6 @@ export const getAiTasks = (data) => api.post('/ai/admin/tasks', data)
 export const getAiStats = () => api.get('/ai/admin/stats')
 export const getAiConfig = () => api.get('/ai/admin/config')
 export const updateAiConfig = (data) => api.post('/ai/admin/config', data)
-export const submitAiGenerate = (data, config = {}) => api.post('/ai/draw', data, { timeout: TIMEOUT_AI, ...config })
 export const submitAiDraw = (data) => api.post('/ai/draw/submit', data)
 export const getAiDrawResult = (taskId) => api.get(`/ai/draw/result/${taskId}`)
 
@@ -219,9 +233,9 @@ export const teamChangeRole = (data) => api.post('/space/team/changeRole', data)
 export const getSystemStats = () => api.get('/system/stats')
 export const getAuditLogs = (params) => api.post('/system/audit-log/list', params)
 
-export const uploadPicture = (formData, targetSpaceId) => {
+export const uploadPicture = (file, targetSpaceId) => {
   const fd = new FormData()
-  fd.append('file', formData.get('file'))
+  fd.append('file', file)
   if (targetSpaceId != null) {
     fd.append('targetSpaceId', targetSpaceId)
   }
@@ -241,12 +255,11 @@ export const checkUpload = (data) => api.post('/picture/check', data)
 /**
  * 分片上传
  */
-export const uploadChunk = (formData, md5, chunkIndex, cosKey) => {
+export const uploadChunk = (formData, md5, chunkIndex) => {
   const fd = new FormData()
   fd.append('file', formData.get ? formData.get('file') : formData)
   fd.append('md5', md5)
   fd.append('chunkIndex', chunkIndex)
-  fd.append('cosKey', cosKey)
   return api.post('/picture/upload-chunk', fd, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: TIMEOUT_PICTURE,
@@ -257,5 +270,15 @@ export const uploadChunk = (formData, md5, chunkIndex, cosKey) => {
  * 合并分片
  */
 export const mergeChunks = (data) => api.post('/picture/merge', data)
+
+// ==================== 分享 API ====================
+
+export const createShare = (data) => api.post('/share/create', data)
+
+export const getShareInfo = (token) => api.get(`/share/info/${token}`)
+
+export const cancelShare = (shareId) => api.post('/share/cancel', { shareId })
+
+export const downloadAiImage = (taskId) => api.get(`/ai/download-image/${taskId}`, { responseType: 'blob' })
 
 export default api

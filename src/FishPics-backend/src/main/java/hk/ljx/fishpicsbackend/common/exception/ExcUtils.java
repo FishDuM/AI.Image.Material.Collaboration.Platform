@@ -16,31 +16,31 @@ public class ExcUtils {
     }
 
     public static void throwIfTrue(Boolean flag, ExceptionCode exceptionCode) {
-        if (flag) {
+        if (flag == null || flag) {
             throw error(exceptionCode);
         }
     }
 
     public static void throwIfTrue(Boolean flag, String message) {
-        if (flag) {
-            throw error(0, message);
+        if (flag == null || flag) {
+            throw error(ExceptionCode.PARAMETER_ERROR.getCode(), message);
         }
     }
 
     public static void throwIfTrue(Boolean flag, ExceptionCode exceptionCode, String message) {
-        if (flag) {
+        if (flag == null || flag) {
             throw error(exceptionCode.getCode(), message);
         }
     }
 
     public static void throwIfFalse(Boolean flag, ExceptionCode exceptionCode) {
-        if (!flag) {
+        if (flag == null || !flag) {
             throw error(exceptionCode);
         }
     }
 
     public static void throwIfFalse(Boolean flag, ExceptionCode exceptionCode, String message) {
-        if (!flag) {
+        if (flag == null || !flag) {
             throw error(exceptionCode, message);
         }
     }

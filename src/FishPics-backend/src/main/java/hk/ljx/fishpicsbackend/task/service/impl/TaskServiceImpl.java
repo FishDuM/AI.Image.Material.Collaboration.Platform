@@ -1,14 +1,20 @@
 package hk.ljx.fishpicsbackend.task.service.impl;
 
 import cn.hutool.core.util.IdUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import hk.ljx.fishpicsbackend.common.exception.BaseException;
+import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
+import hk.ljx.fishpicsbackend.mapper.TaskMapper;
 import hk.ljx.fishpicsbackend.task.entity.Task;
 import hk.ljx.fishpicsbackend.task.service.TaskService;
-import hk.ljx.fishpicsbackend.mapper.TaskMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 @Slf4j
@@ -22,6 +28,7 @@ public class TaskServiceImpl extends ServiceImpl<TaskMapper, Task>
     private RocketMQTemplate rocketMQTemplate;
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public String submitTask(String bizType, String bizId, String param, Long userId) {
         Task task = new Task();
         task.setTaskId(IdUtil.fastSimpleUUID());
@@ -32,16 +39,46 @@ public class TaskServiceImpl extends ServiceImpl<TaskMapper, Task>
         task.setStatus("PENDING");
         taskMapper.insert(task);
 
-        // 直接发送taskId，SimpleMessageConverter会转为原始字节，不做额外编码
-        rocketMQTemplate.syncSend("task-topic", task.getTaskId());
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    try {
+                        dispatchTask(task.getTaskId());
+                    } catch (Exception e) {
+                        log.error("task initial dispatch failed, will retry later: taskId={}, bizType={}",
+                                task.getTaskId(), bizType, e);
+                    }
+                }
+            });
+        } else {
+            dispatchTask(task.getTaskId());
+        }
+
         log.info("task submitted: taskId={}, bizType={}, bizId={}", task.getTaskId(), bizType, bizId);
         return task.getTaskId();
     }
 
     @Override
     public Task getTaskByTaskId(String taskId) {
-        return taskMapper.selectOne(
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Task>()
-                        .eq(Task::getTaskId, taskId));
+        return taskMapper.selectOne(new LambdaQueryWrapper<Task>()
+                .eq(Task::getTaskId, taskId));
+    }
+
+    @Override
+    public void dispatchTask(String taskId) {
+        Task task = taskMapper.selectOne(new LambdaQueryWrapper<Task>()
+                .eq(Task::getTaskId, taskId));
+        if (task == null) {
+            throw new BaseException(ExceptionCode.NOT_FOUND, "task not found");
+        }
+        if (!"PENDING".equals(task.getStatus())) {
+            return;
+        }
+        try {
+            rocketMQTemplate.syncSend("task-topic", taskId);
+        } catch (Exception e) {
+            throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "task dispatch failed");
+        }
     }
 }

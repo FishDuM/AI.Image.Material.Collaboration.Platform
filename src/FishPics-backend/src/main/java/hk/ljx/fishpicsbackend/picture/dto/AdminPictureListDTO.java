@@ -1,5 +1,7 @@
 package hk.ljx.fishpicsbackend.picture.dto;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.Data;
 
 /**
@@ -11,11 +13,14 @@ public class AdminPictureListDTO {
     /**
      * 当前页号
      */
+    @Min(1)
     private int current = 1;
 
     /**
      * 页面大小
      */
+    @Min(1)
+    @Max(100)
     private int pageSize = 20;
 
     /**

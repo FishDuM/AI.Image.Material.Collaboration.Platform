@@ -8,7 +8,6 @@
             <id property="id" column="id" />
             <result property="introduction" column="introduction" />
             <result property="type" column="type" />
-            <result property="teamUsersId" column="team_users_id" />
             <result property="userId" column="user_id" />
             <result property="storageSize" column="storage_size" />
             <result property="level" column="level" />
@@ -17,7 +16,7 @@
     </resultMap>
 
     <sql id="Base_Column_List">
-        id,introduction,type,team_users_id,user_id,storage_size,
+        id,introduction,type,user_id,storage_size,
         level,name,size
     </sql>
 </mapper>

@@ -1,7 +1,6 @@
 package hk.ljx.fishpicsbackend.space.service;
 import hk.ljx.fishpicsbackend.space.entity.Space;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import hk.ljx.fishpicsbackend.space.dto.*;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
@@ -52,13 +51,6 @@ public interface SpaceService extends IService<Space> {
      * @return 图片分页结果
      */
     PicturePageVO pictureList(SpacePictureList spacePictureList);
-
-    /**
-     * 构建空间查询条件
-     * @param spaceQueryWrapper 查询条件包装器
-     * @return QueryWrapper对象
-     */
-    QueryWrapper<Space> getSpaceQueryWrapper(SpaceQueryWrapper spaceQueryWrapper);
 
     /**
      * 管理员分页查看所有空间

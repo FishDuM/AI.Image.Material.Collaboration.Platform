@@ -11,7 +11,6 @@ public class FileTypeUtils {
     private static final Set<String> ALLOWED_TYPES = Set.of(
             "jpg", "jpeg", "png", "bmp", "webp", "tiff", "gif",
             "avif", "heic", "heif", "apng", "astc", "tpg",
-            "psd", "ai", "eps",
             "raw", "dng", "cr3", "crw", "mos", "erf", "3fr", "fff",
             "kdc", "dcr", "rw2", "pef", "sr2", "srf", "arw", "nef",
             "nrw", "orf", "mef", "mrw"

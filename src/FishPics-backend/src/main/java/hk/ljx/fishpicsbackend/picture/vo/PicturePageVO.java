@@ -11,7 +11,7 @@ import java.util.List;
 @AllArgsConstructor
 public class PicturePageVO {
 
-    private List<PictureListVO> records;
+    private List<PictureVO> records;
 
     private long total;
 }

@@ -84,7 +84,7 @@ export function useSpacePictures({ spaces, pageSize = PAGE_SIZE, refreshSpaces, 
 
   useEffect(() => {
     const handleScroll = () => {
-      if (loadingMoreRef.current || !hasMore || spaces.length === 0) return
+      if (loadingMoreRef.current || !hasMore || !spaces.length || !spaces[0]?.id) return
       const scrollTop = document.documentElement.scrollTop || document.body.scrollTop
       const scrollHeight = document.documentElement.scrollHeight || document.body.scrollHeight
       const clientHeight = document.documentElement.clientHeight || window.innerHeight

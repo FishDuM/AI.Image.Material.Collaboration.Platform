@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useContext, useRef } from 'react'
+import { useEffect, useState, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App as AntApp, Table, Button, Modal, Form, Input, InputNumber, Select, Switch, Popconfirm, Space, Tag, Typography, Card } from 'antd'
 import { EditOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons'
@@ -16,8 +16,7 @@ const LEVEL_COLOR = { 0: 'default', 1: 'gold', 2: 'red' }
 function SpaceManagement() {
   const { message } = AntApp.useApp()
   const navigate = useNavigate()
-  const { userInfo } = useContext(AuthContext)
-  const hasFetchedRef = useRef(false)
+  const { userInfo, authLoading } = useContext(AuthContext)
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState([])
   const [total, setTotal] = useState(0)
@@ -29,54 +28,53 @@ function SpaceManagement() {
   const [editingRecord, setEditingRecord] = useState(null)
   const [editForm] = Form.useForm()
   const [submitting, setSubmitting] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
+    if (authLoading) return
     if (!userInfo || !userInfo?.permissions?.includes('system:team:manage')) {
       message.error('无权访问，正在跳转...')
       setTimeout(() => navigate('/404', { replace: true }), 500)
     }
-  }, [userInfo, navigate, message])
-
-  const fetchData = useCallback(async (page = current, size = pageSize) => {
-    setLoading(true)
-    try {
-      const params = { current: page, pageSize: size }
-      if (searchName) params.name = searchName
-      if (searchType !== undefined && searchType !== null) params.type = searchType
-      const result = await adminListSpace(params)
-      setData(result?.records || [])
-      setTotal(result?.total || 0)
-    } catch (err) {
-      message.error(err.message || '获取空间列表失败')
-    } finally {
-      setLoading(false)
-    }
-  }, [current, pageSize, searchName, searchType, message])
+  }, [userInfo, authLoading, navigate, message])
 
   useEffect(() => {
-    if (userInfo?.permissions?.includes('system:team:manage') && !hasFetchedRef.current) {
-      hasFetchedRef.current = true
-      fetchData()
+    if (!userInfo?.permissions?.includes('system:team:manage')) return
+    let ignore = false
+    const fetchData = async () => {
+      setLoading(true)
+      try {
+        const params = { current, pageSize }
+        if (searchName) params.name = searchName
+        if (searchType !== undefined && searchType !== null) params.type = searchType
+        const result = await adminListSpace(params)
+        if (!ignore) {
+          setData(result?.records || [])
+          setTotal(result?.total || 0)
+        }
+      } catch (err) {
+        if (!ignore) message.error(err.message || '获取空间列表失败')
+      } finally {
+        if (!ignore) setLoading(false)
+      }
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    fetchData()
+    return () => { ignore = true }
+  }, [current, pageSize, searchName, searchType, userInfo, message, refreshKey])
 
   const handleSearch = () => {
     setCurrent(1)
-    fetchData(1, pageSize)
   }
 
   const handleReset = () => {
     setSearchName('')
     setSearchType(undefined)
     setCurrent(1)
-    fetchData(1, pageSize)
   }
 
   const handleTableChange = (pagination) => {
-    const { current: c, pageSize: s } = pagination
-    setCurrent(c)
-    setPageSize(s)
-    fetchData(c, s)
+    setCurrent(pagination.current)
+    setPageSize(pagination.pageSize)
   }
 
   const handleEdit = (record) => {
@@ -97,7 +95,7 @@ function SpaceManagement() {
       await adminUpdateSpace({ id: editingRecord.id, ...values })
       message.success('修改成功')
       setEditModalOpen(false)
-      fetchData()
+      setRefreshKey(k => k + 1)
     } catch (err) {
       if (err !== 'cancelled') message.error(err.message || '修改失败')
     } finally {
@@ -109,7 +107,7 @@ function SpaceManagement() {
     try {
       await adminDeleteSpace(id)
       message.success('删除成功')
-      fetchData()
+      setRefreshKey(k => k + 1)
     } catch (err) {
       message.error(err.message || '删除失败')
     }
@@ -119,7 +117,7 @@ function SpaceManagement() {
     try {
       await adminSetSpaceStatus(id, checked ? 1 : 0)
       message.success(checked ? '已启用' : '已禁用')
-      fetchData()
+      setRefreshKey(k => k + 1)
     } catch (err) {
       message.error(err.message || '操作失败')
     }
