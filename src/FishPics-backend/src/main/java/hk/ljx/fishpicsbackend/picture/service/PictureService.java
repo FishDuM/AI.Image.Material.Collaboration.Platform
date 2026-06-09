@@ -98,7 +98,7 @@ public interface PictureService extends IService<Picture> {
      * @param pictureId 图片ID
      * @param file      新的图片文件
      */
-    void replacePictureFile(Long pictureId, MultipartFile file);
+    PictureVO replacePictureFile(Long pictureId, MultipartFile file);
 
     /**
      * 获取推荐图片列表（基于用户兴趣画像标签匹配）

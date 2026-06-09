@@ -17,13 +17,14 @@ import './CollaborativeCanvas.css'
  * 协同编辑画布组件
  * 支持：缩放/旋转实时同步、裁剪、编辑互斥锁、操作历史撤销
  */
-export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId, onSuccess, onClose }) {
+export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId, updatedAt, onSuccess, onClose }) {
   const { message } = App.useApp()
   const [scale, setScale] = useState(1)
   const [rotation, setRotation] = useState(0)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [onlineUsers, setOnlineUsers] = useState([])
+  const [reloadTick, setReloadTick] = useState(0)
 
   // 编辑权状态
   const [lockedBy, setLockedBy] = useState(null)
@@ -54,8 +55,10 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
 
   const proxyUrl = useMemo(() => {
     if (!imageUrl) return ''
-    return imageUrl.replace(/^https?:\/\/[^/]+/, '/cos-proxy')
-  }, [imageUrl])
+    const base = imageUrl.replace(/^https?:\/\/[^/]+/, '/cos-proxy')
+    const v = updatedAt || Date.now()
+    return `${base}?v=${v + reloadTick}`
+  }, [imageUrl, updatedAt, reloadTick])
 
   // 裁剪 clip-path（原图坐标 → 百分比）
   const cropClipPath = useMemo(() => {
@@ -149,6 +152,15 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
       case 'leave':
         setOnlineUsers(prev => prev.filter(u => u.userId !== data.userId))
         setEditRequests(prev => prev.filter(r => r.userId != data.userId))
+        break
+      case 'file-replaced':
+        if (data.pictureId == pictureId) {
+          // 文件被替换：重置 transform 状态，强制重新加载图片
+          setScale(1); setRotation(0); setCropData(null)
+          setHistory([])
+          setReloadTick(prev => prev + 1)
+          message.info('图片已被更新，正在重新加载')
+        }
         break
       default: break
     }
@@ -318,9 +330,11 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
       if (!blob) { message.error('生成图片失败'); return }
 
       const file = new File([blob], 'collab-edit.webp', { type: 'image/webp' })
-      await replacePictureFile(file, pictureId)
+      const result = await replacePictureFile(file, pictureId)
+      // 通知同空间其他用户文件已替换
+      sendMsgRef.current?.({ type: 'file-replaced', pictureId })
       message.success('保存成功')
-      onSuccess?.()
+      onSuccess?.(result)
       onClose()
     } catch (e) {
       message.error(e?.message || '保存失败')

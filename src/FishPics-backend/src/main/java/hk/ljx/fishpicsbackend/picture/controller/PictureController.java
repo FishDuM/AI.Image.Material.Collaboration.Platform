@@ -107,11 +107,11 @@ public class PictureController {
      * 协同编辑：替换图片文件（前端发送变换后的图片 blob，后端上传 COS + 更新记录）
      */
     @PostMapping("/replace")
-    public Response<Boolean> replacePictureFile(@RequestParam("file") MultipartFile file,
+    public Response<PictureVO> replacePictureFile(@RequestParam("file") MultipartFile file,
                                                 @RequestParam("pictureId") Long pictureId) {
         ExcUtils.throwIfTrue(file.isEmpty(), "文件不能为空");
-        pictureService.replacePictureFile(pictureId, file);
-        return ResUtils.success(true);
+        PictureVO result = pictureService.replacePictureFile(pictureId, file);
+        return ResUtils.success(result);
     }
 
     @GetMapping("/pictureEditMessage")

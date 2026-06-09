@@ -597,7 +597,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void replacePictureFile(Long pictureId, MultipartFile file) {
+    public PictureVO replacePictureFile(Long pictureId, MultipartFile file) {
         // 1. 校验
         ExcUtils.throwIfTrue(pictureId == null, "图片ID不能为空");
         ExcUtils.throwIfTrue(file == null || file.isEmpty(), "文件不能为空");
@@ -607,10 +607,17 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         Picture picture = pictureMapper.selectById(pictureId);
         ExcUtils.throwIfTrue(picture == null || picture.getUserId() == null, ExceptionCode.NOT_FOUND, "图片不存在");
 
-        // 权限：图片所有者或管理员
+        // 权限：图片所有者 / 管理员 / 团队成员
         hk.ljx.fishpicsbackend.common.context.LoginContext ctx = UserHolder.getLoginContext();
-        ExcUtils.throwIfFalse(
-                picture.getUserId().equals(user.getId()) || (ctx != null && ctx.hasSystemPerm("system:user:manage")),
+        boolean isOwner = picture.getUserId().equals(user.getId());
+        boolean isAdmin = ctx != null && ctx.hasSystemPerm("system:user:manage");
+        boolean isTeamMember = !isOwner && !isAdmin && spaceTeamMemberMapper.selectCount(
+                new LambdaQueryWrapper<hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember>()
+                        .eq(hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember::getSpaceId, picture.getSpaceId())
+                        .eq(hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember::getUserId, user.getId())
+                        .in(hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember::getRoleId, List.of(1, 2))
+        ) > 0;
+        ExcUtils.throwIfFalse(isOwner || isAdmin || isTeamMember,
                 ExceptionCode.UNAUTHORIZED, "没有权限编辑图片");
 
         // 2. 计算 MD5（必须在 COS 上传之前，因为 InputStream 只能读一次）
@@ -621,8 +628,25 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "计算文件MD5失败");
         }
 
-        // 3. 上传新文件到 COS
-        String newCosKey = cosService.uploadPicture(file);
+        // 2.1 内容未变短路：如果 MD5+size 与旧 resource 完全相同，跳过替换
+        Long oldResourceId = picture.getResourceId();
+        FileResource existingByMd5 = fileResourceService.findByMd5AndSize(md5, file.getSize());
+        if (existingByMd5 != null && oldResourceId != null && existingByMd5.getId().equals(oldResourceId)) {
+            log.info("协同编辑：文件内容未变，跳过替换 pictureId={}", pictureId);
+            PictureVO vo = new PictureVO();
+            vo.setUrl(picture.getUrl());
+            vo.setUpdateTime(picture.getUpdateTime());
+            return vo;
+        }
+
+        // 3. MD5 去重：命中则复用 COS 文件，未命中则上传
+        String newCosKey;
+        if (existingByMd5 != null) {
+            newCosKey = existingByMd5.getCosKey();
+            log.info("协同编辑：MD5 命中秒传 pictureId={}, cosKey={}", pictureId, newCosKey);
+        } else {
+            newCosKey = cosService.uploadPicture(file);
+        }
         PictureMessage pictureMessage = cosService.getPictureMessage(newCosKey);
 
         // 4. 创建 file_resource 记录
@@ -630,9 +654,25 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
         // 5. 更新 picture 记录
         String oldUrl = picture.getUrl();
-        Long oldResourceId = picture.getResourceId();
         long oldSize = picture.getSize() != null ? picture.getSize() : 0;
         long newSize = newResource.getSize();
+
+        // 5.1 空间配额检查（仅当新文件更大时）
+        long sizeDiff = newSize - oldSize;
+        if (sizeDiff > 0) {
+            Space space = spaceService.getById(picture.getSpaceId());
+            if (space != null) {
+                Long storageSize = space.getStorageSize();
+                long currentUsed = space.getSize() != null ? space.getSize() : 0;
+                if (storageSize != null && storageSize > 0 && currentUsed + sizeDiff > storageSize) {
+                    // 配额不足：清理新上传的 COS 文件（仅当是新上传的）
+                    if (existingByMd5 == null) {
+                        try { cosService.deletePicture(newCosKey); } catch (Exception ex) { log.warn("COS 回滚失败: {}", newCosKey, ex); }
+                    }
+                    throw new BaseException(ExceptionCode.PARAMETER_ERROR, "空间容量不足，无法保存");
+                }
+            }
+        }
 
         picture.setUrl(pictureMessage.getUrl());
         picture.setResourceId(newResource.getId());
@@ -654,8 +694,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             }
         }
 
-        // 7. 调整空间已用大小（替换场景：差值可正可负，不做配额拦截）
-        long sizeDiff = newSize - oldSize;
+        // 7. 调整空间已用大小
         if (sizeDiff != 0) {
             Space space = spaceService.getById(picture.getSpaceId());
             if (space != null) {
@@ -664,6 +703,16 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         }
 
         log.info("协同编辑：图片文件已替换 pictureId={}, oldUrl={}, newUrl={}", pictureId, oldUrl, picture.getUrl());
+
+        // 8. 返回更新后的信息（供前端 URL 版本化）
+        PictureVO result = new PictureVO();
+        result.setUrl(picture.getUrl());
+        // 重新查询获取 updateTime（updateById 不会自动填充）
+        Picture updated = pictureMapper.selectById(pictureId);
+        if (updated != null) {
+            result.setUpdateTime(updated.getUpdateTime());
+        }
+        return result;
     }
 
     /**

@@ -188,7 +188,7 @@ export const replacePictureFile = (file, pictureId) => {
   const formData = new FormData()
   formData.append('file', file)
   formData.append('pictureId', pictureId)
-  return api.post('/picture/replace', formData)
+  return api.post('/picture/replace', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
 }
 
 export const getPictureEditMessage = (id) => api.get('/picture/pictureEditMessage', { params: { id } })

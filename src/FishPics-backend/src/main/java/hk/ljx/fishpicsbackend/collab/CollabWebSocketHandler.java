@@ -233,6 +233,11 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
                         event.setNickname(targetUserId.toString());
                     });
                 }
+                case "file-replaced" -> {
+                    // 透传给同空间其他用户（不走 Disruptor，直接广播）
+                    sessionRegistry.broadcast(spaceId, userId, message.getPayload());
+                    log.info("[CollabWS] 文件已替换，通知其他用户: user={}, pictureId={}", userId, data.get("pictureId"));
+                }
                 default -> log.debug("未知消息类型: {}", type);
             }
         } catch (Exception e) {

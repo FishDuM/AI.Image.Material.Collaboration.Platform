@@ -739,16 +739,20 @@ function TeamSpaceDetail() {
         onClose={() => setShowImageEditor(false)}
       />
 
-      {showCollabCanvas && selectedIds.length === 1 && (
-        <CollaborativeCanvas
-          open={showCollabCanvas}
-          imageUrl={pictures.find(p => selectedIds.includes(p.id))?.url}
-          pictureId={selectedIds[0]}
-          spaceId={Number(id)}
-          onSuccess={handleUploadSuccess}
-          onClose={() => setShowCollabCanvas(false)}
-        />
-      )}
+      {showCollabCanvas && selectedIds.length === 1 && (() => {
+        const selectedPic = pictures.find(p => selectedIds.includes(p.id))
+        return (
+          <CollaborativeCanvas
+            open={showCollabCanvas}
+            imageUrl={selectedPic?.url}
+            pictureId={selectedIds[0]}
+            spaceId={Number(id)}
+            updatedAt={selectedPic?.updateTime}
+            onSuccess={handleUploadSuccess}
+            onClose={() => setShowCollabCanvas(false)}
+          />
+        )
+      })()}
 
       <Modal
         title="分享图片"
