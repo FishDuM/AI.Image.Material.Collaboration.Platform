@@ -137,13 +137,23 @@ public class CosService {
 
     /**
      * 根据完整 URL 删除 COS 文件
-     * 通过 URI 解析提取 key，不依赖配置 URL 的精确格式
+     * 校验 URL host 等于当前 bucket，防止通过拼接 URL 误删其他 bucket 的文件
      */
     public void deletePictureByUrl(String allUrl) {
         ExcUtils.throwIfTrue(allUrl == null || allUrl.isEmpty(), "文件URL不能为空");
         // 使用 URI 解析提取路径，避免依赖配置 URL 的精确格式
         try {
             java.net.URI uri = java.net.URI.create(allUrl);
+            // host 必须等于当前配置的 bucket 域名
+            String host = uri.getHost();
+            String configuredUrl = (this.url != null && !this.url.isBlank()) ? this.url : null;
+            String expectedHost1 = bucket + ".cos." + region + ".myqcloud.com";
+            // 解析 configuredUrl 的 host，与入参 host 做 equals 校验
+            boolean hostValid = host == null
+                    || host.equalsIgnoreCase(expectedHost1)
+                    || (configuredUrl != null && host.equalsIgnoreCase(parseHost(configuredUrl)));
+            ExcUtils.throwIfTrue(!hostValid, ExceptionCode.FORBIDDEN,
+                    "URL 域名与当前 COS 配置不匹配");
             String key = uri.getPath();
             if (key != null && key.startsWith("/")) {
                 key = key.substring(1);
@@ -301,5 +311,44 @@ public class CosService {
         CompleteMultipartUploadRequest request = new CompleteMultipartUploadRequest(
                 bucket, cosKey, uploadId, partETags);
         cosClient.completeMultipartUpload(request);
+    }
+
+    /**
+     * 放弃未完成的分片上传，防止 COS 端残留 multipart session
+     */
+    public void abortMultipartUpload(String cosKey, String uploadId) {
+        try {
+            AbortMultipartUploadRequest request = new AbortMultipartUploadRequest(bucket, cosKey, uploadId);
+            cosClient.abortMultipartUpload(request);
+            log.info("COS 分片上传已放弃: cosKey={}", cosKey);
+        } catch (Exception e) {
+            log.warn("放弃 COS 分片上传失败(可忽略,COS 会自动清理): cosKey={}, err={}", cosKey, e.getMessage());
+        }
+    }
+
+    /**
+     * V12-#8:从配置 url 字符串解析 host
+     */
+    private static String parseHost(String url) {
+        if (url == null) return null;
+        try {
+            String s = url.trim();
+            if (!s.contains("://")) {
+                // 裸 host 或 host:port
+                int slash = s.indexOf('/');
+                return slash >= 0 ? s.substring(0, slash) : s;
+            }
+            java.net.URI u = java.net.URI.create(s);
+            String h = u.getHost();
+            if (h == null && u.getAuthority() != null) {
+                // URI 解析失败时回退到 authority
+                String auth = u.getAuthority();
+                int at = auth.indexOf('@');
+                h = at >= 0 ? auth.substring(at + 1) : auth;
+            }
+            return h;
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

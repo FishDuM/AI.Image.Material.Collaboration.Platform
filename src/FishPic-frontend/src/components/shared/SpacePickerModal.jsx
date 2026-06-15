@@ -11,7 +11,8 @@ function SpacePickerModal({ open, onClose, onConfirm, currentImageCount, existin
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(false)
-  const [selectedIds, setSelectedIds] = useState([])
+  const [selectedItems, setSelectedItems] = useState([])
+  const selectedIds = selectedItems.map(it => it.id)
   const prevIdsRef = useRef('')
   const prevPageRef = useRef(1)
   const [teamSpaces, setTeamSpaces] = useState([])
@@ -22,11 +23,13 @@ function SpacePickerModal({ open, onClose, onConfirm, currentImageCount, existin
   const [teamSpaceImagePage, setTeamSpaceImagePage] = useState(1)
   const [teamSpaceImageLoading, setTeamSpaceImageLoading] = useState(false)
   const [teamSpaceView, setTeamSpaceView] = useState('list')
+  // 标记当前请求是否已过期，防止快速切换团队空间时旧请求覆盖新数据
+  const fetchSeqRef = useRef(0)
 
   useEffect(() => {
     if (open) {
       setActiveTab('private')
-      setSelectedIds([])
+      setSelectedItems([])
       setPage(1)
       setSpaceId(null)
       setImages([])
@@ -92,33 +95,31 @@ function SpacePickerModal({ open, onClose, onConfirm, currentImageCount, existin
   }, [spaceId, page, activeTab, open, existingImageIds, fetchImages])
 
   const toggleImage = useCallback((img) => {
-    if (selectedIds.includes(img.id)) {
-      setSelectedIds(prev => prev.filter(id => id !== img.id))
+    if (selectedItems.find(it => it.id === img.id)) {
+      setSelectedItems(prev => prev.filter(it => it.id !== img.id))
       return
     }
     if (img.flag === false) {
       msg.warning('该图片已添加，请勿重复选择')
       return
     }
-    if (currentImageCount + selectedIds.length >= 15) {
+    if (currentImageCount + selectedItems.length >= 15) {
       msg.warning(`最多只能选择15张图片（已选择${currentImageCount}张）`)
       return
     }
-    setSelectedIds(prev => [...prev, img.id])
-  }, [currentImageCount, selectedIds, msg])
+    setSelectedItems(prev => [...prev, img])
+  }, [currentImageCount, selectedItems, msg])
 
   const handleConfirm = useCallback(() => {
-    if (selectedIds.length === 0) {
+    if (selectedItems.length === 0) {
       msg.warning('请先选择图片')
       return
     }
-    const imageMap = new Map(images.map(img => [img.id, img]))
-    const selected = selectedIds.map(id => imageMap.get(id)).filter(Boolean)
-    onConfirm(selected)
-    setSelectedIds([])
+    onConfirm(selectedItems)
+    setSelectedItems([])
     setPage(1)
     onClose()
-  }, [selectedIds, images, onConfirm, msg, onClose])
+  }, [selectedItems, onConfirm, msg, onClose])
 
   const fetchTeamSpaces = useCallback(async () => {
     setTeamSpacesLoading(true)
@@ -138,9 +139,12 @@ function SpacePickerModal({ open, onClose, onConfirm, currentImageCount, existin
 
   const fetchTeamSpaceImages = useCallback(async (p, ids) => {
     if (!teamSpaceId) return
+    const seq = ++fetchSeqRef.current
     setTeamSpaceImageLoading(true)
     try {
       const result = await spaceListPicture({ spaceId: teamSpaceId, pictureIds: ids, current: p, pageSize: 20 })
+      // 快速切换团队空间时，旧请求可能晚于新请求返回，检查序号避免覆盖新数据
+      if (seq !== fetchSeqRef.current) return
       const list = (result?.records ?? []).map(img => ({
         ...img,
         flag: (ids || []).includes(img.id) ? false : true
@@ -148,9 +152,10 @@ function SpacePickerModal({ open, onClose, onConfirm, currentImageCount, existin
       setTeamSpaceImages(list)
       setTeamSpaceImageTotal(result?.total ?? list.length)
     } catch {
+      if (seq !== fetchSeqRef.current) return
       setTeamSpaceImages([])
     } finally {
-      setTeamSpaceImageLoading(false)
+      if (seq === fetchSeqRef.current) setTeamSpaceImageLoading(false)
     }
   }, [teamSpaceId])
 
@@ -167,7 +172,7 @@ function SpacePickerModal({ open, onClose, onConfirm, currentImageCount, existin
   const handleTeamSpaceSelect = useCallback((id) => {
     setTeamSpaceId(id)
     setTeamSpaceImagePage(1)
-    setSelectedIds([])
+    setSelectedItems([])
     setTeamSpaceView('images')
   }, [])
 
@@ -177,41 +182,39 @@ function SpacePickerModal({ open, onClose, onConfirm, currentImageCount, existin
     setTeamSpaceImages([])
     setTeamSpaceImageTotal(0)
     setTeamSpaceImagePage(1)
-    setSelectedIds([])
+    setSelectedItems([])
   }, [])
 
   const handleTeamSpaceImageToggle = useCallback((img) => {
-    if (selectedIds.includes(img.id)) {
-      setSelectedIds(prev => prev.filter(id => id !== img.id))
+    if (selectedItems.find(it => it.id === img.id)) {
+      setSelectedItems(prev => prev.filter(it => it.id !== img.id))
       return
     }
     if (img.flag === false) {
       msg.warning('该图片已添加，请勿重复选择')
       return
     }
-    if (currentImageCount + selectedIds.length >= 15) {
+    if (currentImageCount + selectedItems.length >= 15) {
       msg.warning(`最多只能选择15张图片（已选择${currentImageCount}张）`)
       return
     }
-    setSelectedIds(prev => [...prev, img.id])
-  }, [currentImageCount, selectedIds, msg])
+    setSelectedItems(prev => [...prev, img])
+  }, [currentImageCount, selectedItems, msg])
 
   const handleTeamSpaceConfirm = useCallback(() => {
-    if (selectedIds.length === 0) {
+    if (selectedItems.length === 0) {
       msg.warning('请先选择图片')
       return
     }
-    const imageMap = new Map(teamSpaceImages.map(img => [img.id, img]))
-    const selected = selectedIds.map(id => imageMap.get(id)).filter(Boolean)
-    onConfirm(selected)
-    setSelectedIds([])
+    onConfirm(selectedItems)
+    setSelectedItems([])
     setTeamSpaceImagePage(1)
     onClose()
-  }, [selectedIds, teamSpaceImages, onConfirm, msg, onClose])
+  }, [selectedItems, onConfirm, msg, onClose])
 
   const handleTabChange = (key) => {
     setActiveTab(key)
-    setSelectedIds([])
+    setSelectedItems([])
     setPage(1)
     if (key === 'team') {
       setTeamSpaceView('list')
@@ -225,12 +228,12 @@ function SpacePickerModal({ open, onClose, onConfirm, currentImageCount, existin
   return (
     <Modal
       open={open}
-      onCancel={() => { setSelectedIds([]); setPage(1); onClose() }}
+      onCancel={() => { setSelectedItems([]); setPage(1); onClose() }}
       title="从空间中获取"
       className="space-picker-modal"
       zIndex={1050}
       footer={[
-        <Button key="cancel" onClick={() => { setSelectedIds([]); setPage(1); onClose() }}>
+        <Button key="cancel" onClick={() => { setSelectedItems([]); setPage(1); onClose() }}>
           取消
         </Button>,
         <Button

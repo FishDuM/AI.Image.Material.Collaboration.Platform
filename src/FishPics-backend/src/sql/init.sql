@@ -26,7 +26,7 @@ INSERT INTO pic_system (syskey, sysvalue) VALUES
 CREATE TABLE user (
     id          BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '用户ID',
     username    VARCHAR(32)                        NULL COMMENT '用户名（登录用）',
-    password    VARCHAR(128)                       NULL COMMENT '密码（MD5+盐）',
+    password    VARCHAR(128)                       NULL COMMENT '密码（BCrypt 哈希）',
     avatar      VARCHAR(256)                       NULL COMMENT '头像URL',
     email       VARCHAR(64)                        NULL COMMENT '邮箱',
     phone       VARCHAR(16)                        NULL COMMENT '手机号',
@@ -43,18 +43,26 @@ CREATE TABLE user (
 -- 3. 空间表
 CREATE TABLE space (
     id           BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '空间ID',
-    name         VARCHAR(246)              NOT NULL COMMENT '空间名称',
+    name         VARCHAR(256)              NOT NULL COMMENT '空间名称',
     introduction VARCHAR(256)              NULL COMMENT '空间介绍',
-    type         TINYINT                   NULL COMMENT '类型 0=私人空间 1=团队空间',
+    -- BUG#21 修复:type 改为 NOT NULL DEFAULT 0，修复 MySQL 中 NULL!=NULL 导致唯一约束失效
+    type         TINYINT  DEFAULT 0        NOT NULL COMMENT '类型 0=私人空间 1=团队空间',
     user_id      BIGINT                    NULL COMMENT '创建者用户ID',
     storage_size BIGINT  DEFAULT 536870912 NOT NULL COMMENT '存储配额(Byte)，默认512MB',
     size         BIGINT  DEFAULT 0         NULL COMMENT '已用大小(Byte)',
     level        TINYINT DEFAULT 0         NOT NULL COMMENT '空间等级 0=普通 1=VIP 2=SVIP',
     status       TINYINT DEFAULT 1         NOT NULL COMMENT '状态 0=禁用 1=正常',
+    version      BIGINT  DEFAULT 1         NOT NULL COMMENT '乐观锁版本号',
     create_time  DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL COMMENT '创建时间',
     update_time  DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_type (type),
-    INDEX idx_user_id (user_id)
+    INDEX idx_user_id (user_id),
+    -- V12-#24 修复:每个 user 只能有 1 个私人空间(type=0),用 partial unique 模拟:
+    -- MySQL 8 不支持 partial unique index,这里用 (user_id, type) 联合唯一,type=0 时等价于私人空间唯一。
+    -- 团队空间 type=1 不受此约束(可多个),但 (user_id, type=1) 也唯一(同一 user 不能同名 type 1 多个,实际无此场景)
+    -- 注:MySQL 5.7 也无 partial unique,所以直接用 (user_id, type) 即可,虽然有副作用:user 不能创建 2 个 type=0
+    -- 也能保证 type=1 唯一 — 对当前业务来说两者都符合需求。
+    UNIQUE KEY uk_user_type (user_id, type)
 ) COMMENT '空间表';
 
 -- 4. 图片表
@@ -63,8 +71,9 @@ CREATE TABLE picture (
     user_id      BIGINT                             NOT NULL COMMENT '上传者用户ID',
     picture_name VARCHAR(256)                       NULL COMMENT '图片名称',
     url          VARCHAR(512)                       NOT NULL COMMENT '图片URL',
-    width        VARCHAR(32)                        NULL COMMENT '宽度',
-    height       VARCHAR(32)                        NULL COMMENT '高度',
+    -- BUG#33 修复:宽高改为 INT UNSIGNED（像素值应为整数，非字符串）
+    width        INT UNSIGNED              NULL COMMENT '宽度(像素)',
+    height       INT UNSIGNED              NULL COMMENT '高度(像素)',
     size         BIGINT                             NULL COMMENT '文件大小(Byte)',
     status       TINYINT  DEFAULT 2                 NULL COMMENT '状态 1=正常 0=禁用 2=待审核',
     is_private   TINYINT  DEFAULT 1                 NOT NULL COMMENT '0=公开 1=私有',
@@ -74,6 +83,7 @@ CREATE TABLE picture (
     tags         VARCHAR(512)                       NULL COMMENT '标签(JSON数组)',
     type         VARCHAR(32)                        NULL COMMENT '图片格式',
     is_selected  TINYINT  DEFAULT 0                 NOT NULL COMMENT '是否精选 0=普通 1=精选',
+    version      BIGINT   DEFAULT 1                 NOT NULL COMMENT '乐观锁版本号',
     create_time  DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL COMMENT '创建时间',
     update_time  DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_user_id (user_id),
@@ -81,8 +91,14 @@ CREATE TABLE picture (
     INDEX idx_picture_name (picture_name),
     INDEX idx_introduction (introduction),
     INDEX idx_status (status),
-    INDEX idx_update_time (update_time)
+    INDEX idx_update_time (update_time),
+    -- BUG#6 修复:防止 checkUpload TOCTOU 竞态导致重复图片记录和 ref_count 泄漏
+    -- resource_id 为 NULL 时 MySQL NULL!=NULL 不受约束，非 NULL 时保证每用户每空间每资源只有一条记录
+    UNIQUE KEY uk_resource_user_space (resource_id, user_id, space_id)
 ) COMMENT '图片表';
+
+-- 增加 share_token_hash 字段
+-- (init.sql 见 6.5)
 
 -- 5. 异步任务表
 CREATE TABLE task (
@@ -92,6 +108,7 @@ CREATE TABLE task (
     biz_type    VARCHAR(32)                        NOT NULL COMMENT '业务类型: ai_tag / ai_draw',
     biz_id      VARCHAR(64)                        NULL COMMENT '业务关联ID',
     status      VARCHAR(20) DEFAULT 'PENDING'      NOT NULL COMMENT '状态: PENDING/PROCESSING/DONE/FAILED',
+    retry_count INT          DEFAULT 0              NOT NULL COMMENT '已重试次数',
     param       TEXT                               NULL COMMENT '任务参数(JSON)',
     result      TEXT                               NULL COMMENT '任务结果(JSON)',
     error_msg   TEXT                               NULL COMMENT '错误信息',
@@ -143,6 +160,7 @@ CREATE TABLE file_resource (
     size        BIGINT       NOT NULL COMMENT '文件大小(Byte)',
     cos_key     VARCHAR(512) NOT NULL COMMENT 'COS存储路径',
     ref_count   INT DEFAULT 1 NOT NULL COMMENT '引用计数',
+    version     BIGINT DEFAULT 1 NOT NULL COMMENT '乐观锁版本号',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL COMMENT '创建时间',
     UNIQUE KEY uk_md5_size (md5, size),
     CHECK (ref_count >= 0)
@@ -150,28 +168,44 @@ CREATE TABLE file_resource (
 
 -- 9. 图片分享表
 CREATE TABLE picture_share (
-    id             BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
-    picture_id     BIGINT      NOT NULL COMMENT '图片ID',
-    share_user_id  BIGINT      NOT NULL COMMENT '分享者用户ID',
-    share_token    VARCHAR(64) NOT NULL COMMENT '分享链接Token(UUID)',
-    expire_time    DATETIME    NOT NULL COMMENT '过期时间',
-    allow_download TINYINT DEFAULT 0 NOT NULL COMMENT '是否允许下载 0=仅预览 1=允许下载',
-    status         TINYINT DEFAULT 1 NOT NULL COMMENT '状态 1=有效 0=已取消',
-    create_time    DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL COMMENT '创建时间',
+    id                BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    picture_id        BIGINT      NOT NULL COMMENT '图片ID',
+    share_user_id     BIGINT      NOT NULL COMMENT '分享者用户ID',
+    share_token       VARCHAR(64) NOT NULL COMMENT '分享链接Token(明文,创建时返回一次)',
+    share_token_hash  VARCHAR(64)          NULL COMMENT 'Token SHA-256 哈希',
+    expire_time       DATETIME    NOT NULL COMMENT '过期时间',
+    allow_download    TINYINT DEFAULT 0 NOT NULL COMMENT '是否允许下载 0=仅预览 1=允许下载',
+    status            TINYINT DEFAULT 1 NOT NULL COMMENT '状态 1=有效 0=已取消',
+    max_view_count    INT DEFAULT 0 NULL COMMENT '最大访问次数(0=不限)',
+    create_time       DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL COMMENT '创建时间',
     UNIQUE KEY uk_share_token (share_token),
+    INDEX idx_share_token_hash (share_token_hash),
     INDEX idx_picture_id (picture_id),
     INDEX idx_share_user_id (share_user_id),
     INDEX idx_expire_time (expire_time)
 ) COMMENT '图片分享表';
+
+-- 10. 分享图片关联表（支持多图分享）
+CREATE TABLE picture_share_item (
+    id          BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    share_id    BIGINT   NOT NULL COMMENT '分享ID',
+    picture_id  BIGINT   NOT NULL COMMENT '图片ID',
+    sort_order  INT      NOT NULL DEFAULT 0 COMMENT '排序',
+    KEY idx_share_id (share_id),
+    KEY idx_picture_id (picture_id)
+) COMMENT '分享图片关联表';
 
 -- =====================================================
 -- 初始数据
 -- =====================================================
 
 -- 插入默认管理员账号（level=3 表示管理员）
--- 密码：admin123（MD5 加盐后的值）
+-- 密码：admin123（BCrypt 哈希,rounds=10）
+-- V10-#2 修复:原 MD5 'e10adc3949ba59abbe56e057f20f883e' 无法通过 PasswordUtil.matches (BCrypt-only)
+-- 全新部署后 admin 永久无法登录,必须手动改数据库。
+-- 新 hash 由 Python bcrypt.hashpw(b'admin123', bcrypt.gensalt(rounds=10)) 生成。
 INSERT INTO user (username, password, nickname, level, status) VALUES
-('admin', 'e10adc3949ba59abbe56e057f20f883e', '系统管理员', 3, 1);
+('admin', '$2b$10$6owdZSQbVSKuiA4BL7tC/Oii2g4hlrs3U88e.FX41NK1s/kQeERge', '系统管理员', 3, 1);
 
 -- =====================================================
 -- 权限说明（无需数据库表，通过 level 字段判断）

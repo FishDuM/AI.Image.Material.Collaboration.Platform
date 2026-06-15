@@ -34,8 +34,20 @@ public class FileResourceServiceImpl extends ServiceImpl<FileResourceMapper, Fil
     public FileResource addResource(String md5, Long size, String cosKey) {
         // 原子 upsert：不存在则插入(ref_count=1)，已存在则 ref_count+1
         baseMapper.upsertByMd5Size(md5, size, cosKey);
-        // 查回记录（无论插入还是更新，都能拿到正确的 id 和 ref_count）
-        return findByMd5AndSize(md5, size);
+        // 查回记录后做 null 检查，防止并发 decrement 导致 NPE
+        FileResource resource = findByMd5AndSize(md5, size);
+        if (resource == null) {
+            log.error("[FileResource] addResource 后查询返回 null(可能并发 decrement 删除): md5={}, size={}", md5, size);
+            // 重试一次：再 upsert + 查回
+            baseMapper.upsertByMd5Size(md5, size, cosKey);
+            resource = findByMd5AndSize(md5, size);
+            if (resource == null) {
+                throw new hk.ljx.fishpicsbackend.common.exception.BaseException(
+                        hk.ljx.fishpicsbackend.common.exception.ExceptionCode.INTERNAL_SERVER_ERROR,
+                        "文件资源创建失败，请重试");
+            }
+        }
+        return resource;
     }
 
     @Override

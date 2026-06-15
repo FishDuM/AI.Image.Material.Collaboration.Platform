@@ -8,7 +8,6 @@ import org.springframework.stereotype.Component;
 /**
  * 协同事件发布器
  * 将事件发布到 Disruptor Ring Buffer，由消费者线程异步处理
- * publish() 是非阻塞的，仅将事件写入 Ring Buffer 槽位后立即返回
  */
 @Slf4j
 @Component
@@ -27,11 +26,18 @@ public class CollabEventPublisher {
      */
     public void publish(EventTranslator translator) {
         long sequence = ringBuffer.next();
+        boolean shouldPublish = false;
         try {
             CollabEvent event = ringBuffer.get(sequence);
             translator.translate(event);
+            shouldPublish = true;
+        } catch (Exception e) {
+            // translate 抛异常时放弃发布，避免消费者拿到未填充的 event
+            log.error("[CollabEventPublisher] translate 异常,放弃发布 sequence={}: {}", sequence, e.getMessage(), e);
         } finally {
-            ringBuffer.publish(sequence);
+            if (shouldPublish) {
+                ringBuffer.publish(sequence);
+            }
         }
     }
 

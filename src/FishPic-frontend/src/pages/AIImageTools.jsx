@@ -6,10 +6,10 @@ import {
   SendOutlined, SyncOutlined, ExperimentOutlined, ClearOutlined, CloseCircleOutlined,
   RedoOutlined, SaveOutlined, TeamOutlined, DownloadOutlined,
 } from '@ant-design/icons'
-import { submitAiDraw, getAiDrawResult, savePictureByUrl, downloadAiImage } from '../api'
-import { TIMEOUT_AI } from '../utils/constants'
+import { submitAiDraw, savePictureByUrl, downloadAiImage } from '../api'
 import { logError } from '../utils/logger'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { useAiSse } from '../hooks/useAiSse'
 import SaveToSpaceModal from '../components/shared/SaveToSpaceModal'
 import './AIImageTools.css'
 
@@ -54,69 +54,43 @@ function AIImageTools() {
   const [genError, setGenError] = useState('')
   const [currentTaskId, setCurrentTaskId] = useState(null)
   const genStateRef = useRef('idle')
-  const pollTimerRef = useRef(null)
   const genParamsRef = useRef(null)
-  const startPollingRef = useRef(null)
 
   const setGenStateAndRef = useCallback((s) => {
     setGenState(s)
     genStateRef.current = s
   }, [])
 
-  const stopPolling = useCallback(() => {
-    if (pollTimerRef.current) {
-      clearInterval(pollTimerRef.current)
-      pollTimerRef.current = null
-    }
-  }, [])
+  // SSE 推送（替代轮询）
+  const { result: sseResult, error: sseError } = useAiSse(
+    genState === 'generating' ? currentTaskId : null
+  )
 
-  // 轮询兜底，带超时
-  const startPolling = useCallback((taskId) => {
-    stopPolling()
-    console.log('[AI轮询] 开始轮询 taskId:', taskId)
-    const startTime = Date.now()
-    pollTimerRef.current = setInterval(async () => {
-      // 超时停止轮询
-      if (Date.now() - startTime > TIMEOUT_AI) {
-        setGenStateAndRef('failed')
-        setGenError('生成超时，请重试')
-        message.error('生成超时，请重试')
-        stopPolling()
-        return
-      }
-      try {
-        const task = await getAiDrawResult(taskId)
-        console.log('[AI轮询] taskId:', taskId, 'status:', task?.status, 'result:', task?.result ? 'has-url' : 'no-url')
-        if (task.status === 'DONE') {
-          setGenStateAndRef('done')
-          setGenResults({ url: task.result })
-          message.success('图片生成成功')
-          stopPolling()
-        } else if (task.status === 'FAILED') {
-          setGenStateAndRef('failed')
-          setGenError(task.errorMsg || '生成失败')
-          message.error(task.errorMsg || '图片生成失败')
-          stopPolling()
-        }
-      } catch (error) {
-        console.error('[AI轮询] 请求失败:', error.message, 'taskId:', taskId)
-        logError('getAiDrawResult polling', error)
-      }
-    }, 3000)
-  }, [message, stopPolling, setGenStateAndRef])
-
-  // 保持 ref 指向最新的 startPolling
+  // 处理 SSE 推送结果
   useEffect(() => {
-    startPollingRef.current = startPolling
-  }, [startPolling])
+    if (sseResult) {
+      setGenStateAndRef('done')
+      setGenResults({ url: sseResult.result })
+      message.success('图片生成成功')
+      sessionStorage.removeItem('ai_pending_task')
+    }
+  }, [sseResult, message, setGenStateAndRef])
 
-  // 恢复中断的轮询（导航离开再返回时），只在挂载时执行一次
+  useEffect(() => {
+    if (sseError && genState === 'generating') {
+      setGenStateAndRef('failed')
+      setGenError(sseError)
+      message.error(sseError)
+      sessionStorage.removeItem('ai_pending_task')
+    }
+  }, [sseError, genState, message, setGenStateAndRef])
+
+  // 恢复中断的任务（导航离开再返回时）
   useEffect(() => {
     const savedTaskId = sessionStorage.getItem('ai_pending_task')
     if (savedTaskId && genState === 'idle') {
       setCurrentTaskId(savedTaskId)
       setGenStateAndRef('generating')
-      startPollingRef.current(savedTaskId)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -125,28 +99,22 @@ function AIImageTools() {
   useEffect(() => {
     if (genState === 'generating' && currentTaskId) {
       sessionStorage.setItem('ai_pending_task', currentTaskId)
-    } else {
+    } else if (genState !== 'generating') {
       sessionStorage.removeItem('ai_pending_task')
     }
   }, [genState, currentTaskId])
 
-  // 组件卸载时清理轮询
-  useEffect(() => {
-    return () => stopPolling()
-  }, [stopPolling])
-
   const doSubmit = useCallback(async (params) => {
     try {
       const result = await submitAiDraw(params)
-      const tId = result.taskId
-      setCurrentTaskId(tId)
-      startPolling(tId)
+      setCurrentTaskId(result.taskId)
+      // SSE hook 会自动监听 currentTaskId
     } catch (e) {
       setGenStateAndRef('failed')
       setGenError(e.message || '提交生成任务失败')
       message.error(e.message || '提交生成任务失败')
     }
-  }, [message, startPolling, setGenStateAndRef])
+  }, [message, setGenStateAndRef])
 
   const handleGenerate = async () => {
     if (!genPrompt.trim()) { message.warning('请输入画面描述'); return }
@@ -212,8 +180,7 @@ function AIImageTools() {
     }
 
     try {
-      const response = await downloadAiImage(currentTaskId)
-      const blob = response?.data
+      const blob = await downloadAiImage(currentTaskId)
       if (!(blob instanceof Blob)) {
         throw new Error('下载响应无效')
       }
@@ -236,7 +203,7 @@ function AIImageTools() {
       return (
         <div className="ai-result-placeholder">
           <SyncOutlined className="ai-result-icon" spin />
-          <Text type="secondary">AI 正在创作，完成后将自动展示...</Text>
+          <Text type="secondary">AI 正在创作，完成后将自动推送...</Text>
           {currentTaskId && (
             <Text type="secondary" style={{ display: 'block', marginTop: 8, fontSize: 12 }}>
               任务编号: {currentTaskId}

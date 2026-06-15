@@ -1,6 +1,7 @@
 package hk.ljx.fishpicsbackend.common.exception;
 
 import lombok.Getter;
+import org.springframework.http.HttpStatus;
 
 @Getter
 public enum ExceptionCode {
@@ -25,5 +26,30 @@ public enum ExceptionCode {
     ExceptionCode(Integer code, String message) {
         this.code = code;
         this.message = message;
+    }
+
+    /**
+     * 把业务 code 映射到 HTTP 状态
+     * 4xxxx → 400, 500xx → 500, 其他 → 200
+     */
+    public static HttpStatus toHttpStatus(int code) {
+        if (code == 1) {
+            return HttpStatus.OK;
+        }
+        if (code >= 50000) {
+            return HttpStatus.INTERNAL_SERVER_ERROR;
+        }
+        if (code >= 40000) {
+            return switch (code) {
+                case 40002, 40005 -> HttpStatus.UNAUTHORIZED;
+                case 40003 -> HttpStatus.FORBIDDEN;
+                case 40004 -> HttpStatus.NOT_FOUND;
+                case 40009 -> HttpStatus.CONFLICT;
+                case 40022 -> HttpStatus.UNPROCESSABLE_ENTITY;
+                case 40029 -> HttpStatus.TOO_MANY_REQUESTS;
+                default -> HttpStatus.BAD_REQUEST;
+            };
+        }
+        return HttpStatus.OK;
     }
 }

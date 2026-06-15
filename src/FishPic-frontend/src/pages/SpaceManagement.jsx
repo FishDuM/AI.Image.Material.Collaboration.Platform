@@ -23,6 +23,7 @@ function SpaceManagement() {
   const [current, setCurrent] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [searchName, setSearchName] = useState('')
+  const [searchNameApplied, setSearchNameApplied] = useState('')
   const [searchType, setSearchType] = useState(undefined)
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [editingRecord, setEditingRecord] = useState(null)
@@ -45,7 +46,7 @@ function SpaceManagement() {
       setLoading(true)
       try {
         const params = { current, pageSize }
-        if (searchName) params.name = searchName
+        if (searchNameApplied) params.name = searchNameApplied
         if (searchType !== undefined && searchType !== null) params.type = searchType
         const result = await adminListSpace(params)
         if (!ignore) {
@@ -60,14 +61,16 @@ function SpaceManagement() {
     }
     fetchData()
     return () => { ignore = true }
-  }, [current, pageSize, searchName, searchType, userInfo, message, refreshKey])
+  }, [current, pageSize, searchNameApplied, searchType, userInfo, message, refreshKey])
 
   const handleSearch = () => {
+    setSearchNameApplied(searchName)
     setCurrent(1)
   }
 
   const handleReset = () => {
     setSearchName('')
+    setSearchNameApplied('')
     setSearchType(undefined)
     setCurrent(1)
   }

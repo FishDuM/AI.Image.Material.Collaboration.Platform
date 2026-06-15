@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { Modal, Button, App } from 'antd'
-import { uploadPicture, checkUpload, uploadChunk, mergeChunks } from '../../api'
+import { uploadPicture, replacePictureFile, checkUpload, uploadChunk, mergeChunks } from '../../api'
 import CropperEditor from './CropperEditor'
 import './ImageUploadModal.css'
 
@@ -8,14 +8,14 @@ const COS_BASE = import.meta.env.VITE_COS_BASE_URL || ''
 const CHUNK_SIZE = 2 * 1024 * 1024
 const MAX_CONCURRENT = 5
 
-/** 计算 Blob 的 MD5（读取为 ArrayBuffer 后哈希） */
+/** 计算 Blob 的 MD5 */
 async function computeBlobMD5(blob) {
   const { default: SparkMD5 } = await import('spark-md5')
   const buffer = await blob.arrayBuffer()
   return SparkMD5.ArrayBuffer.hash(buffer)
 }
 
-export default function ImageEditorModal({ open, imageUrl, spaceId, onSuccess, onClose }) {
+export default function ImageEditorModal({ open, imageUrl, spaceId, pictureId, onSuccess, onClose }) {
   const { message } = App.useApp()
   const [loading, setLoading] = useState(false)
   const [localSrc, setLocalSrc] = useState('')
@@ -32,7 +32,9 @@ export default function ImageEditorModal({ open, imageUrl, spaceId, onSuccess, o
       ? imageUrl.replace(COS_BASE, '/cos-proxy')
       : imageUrl
 
-    fetch(proxySrc)
+    // 加 AbortController,快速切换时取消旧 fetch
+    const abortController = new AbortController()
+    fetch(proxySrc, { signal: abortController.signal })
       .then((res) => {
         if (!res.ok) throw new Error(`图片加载失败: ${res.status}`)
         return res.blob()
@@ -42,11 +44,13 @@ export default function ImageEditorModal({ open, imageUrl, spaceId, onSuccess, o
         objectUrlRef.current = url
         setLocalSrc(url)
       })
-      .catch(() => {
+      .catch((err) => {
+        if (err?.name === 'AbortError') return
         setLocalSrc(proxySrc)
       })
 
     return () => {
+      abortController.abort()
       if (objectUrlRef.current) {
         URL.revokeObjectURL(objectUrlRef.current)
         objectUrlRef.current = null
@@ -68,11 +72,14 @@ export default function ImageEditorModal({ open, imageUrl, spaceId, onSuccess, o
         return
       }
 
-      if (blob.size <= CHUNK_SIZE) {
+      if (pictureId) {
+        const file = new File([blob], 'cropped.webp', { type: 'image/webp' })
+        await replacePictureFile(file, pictureId)
+      } else if (blob.size <= CHUNK_SIZE) {
         await uploadPicture(blob, spaceId)
       } else {
-        const md5 = await computeBlobMD5(blob)
         const file = new File([blob], 'cropped.webp', { type: 'image/webp' })
+        const md5 = await computeBlobMD5(blob)
         const checkResult = await checkUpload({ md5, size: file.size, targetSpaceId: spaceId })
         if (checkResult.status === 'duplicate') {
           // 秒传成功

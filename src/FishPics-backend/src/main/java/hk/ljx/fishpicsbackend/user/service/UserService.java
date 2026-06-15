@@ -74,9 +74,10 @@ public interface UserService extends IService<User> {
      * 用户编辑自己信息
      *
      * @param userEditRequest 用户信息
+     * @param currentJwt     当前请求的 JWT(改密码时只黑名单当前 token,避免把同用户其他设备也踢下线)
      * @return 编辑结果
      */
-    Boolean editMyself(UserEditRequest userEditRequest);
+    Boolean editMyself(UserEditRequest userEditRequest, String currentJwt);
 
     /**
      * 判断是否是自己的信息

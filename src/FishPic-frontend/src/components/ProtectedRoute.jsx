@@ -36,7 +36,6 @@ function ProtectedRoute({ children, requireAdmin = false, permission }) {
     return <Navigate to="/" replace state={{ from: location }} />
   }
 
-  // 兼容旧版 requireAdmin（已废弃，建议使用 permission 属性）
   if (requireAdmin) {
     const perms = auth.userInfo?.permissions || []
     if (!perms.includes('system:user:manage')) {
@@ -44,7 +43,7 @@ function ProtectedRoute({ children, requireAdmin = false, permission }) {
     }
   }
 
-  // 新版：按权限码控制
+  // 按权限码控制
   if (permission) {
     const perms = auth.userInfo?.permissions || []
     const required = Array.isArray(permission) ? permission : [permission]

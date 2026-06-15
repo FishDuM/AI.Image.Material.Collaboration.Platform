@@ -10,7 +10,10 @@ import hk.ljx.fishpicsbackend.task.entity.Task;
 import hk.ljx.fishpicsbackend.task.service.TaskService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.rocketmq.client.producer.DefaultMQProducer;
+import org.apache.rocketmq.common.message.Message;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -26,6 +29,10 @@ public class TaskServiceImpl extends ServiceImpl<TaskMapper, Task>
 
     @Resource
     private RocketMQTemplate rocketMQTemplate;
+
+    @Resource
+    @Qualifier("taskProducer")
+    private DefaultMQProducer taskProducer;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -76,7 +83,11 @@ public class TaskServiceImpl extends ServiceImpl<TaskMapper, Task>
             return;
         }
         try {
-            rocketMQTemplate.syncSend("task-topic", taskId);
+            // 按 bizType 分桶到不同 topic
+            String topic = "task-topic-" + (task.getBizType() != null ? task.getBizType() : "default");
+            // 发送纯 taskId 字节,consumer 端用纯字符串解析 taskId
+            Message msg = new Message(topic, taskId.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            taskProducer.send(msg);
         } catch (Exception e) {
             throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "task dispatch failed");
         }

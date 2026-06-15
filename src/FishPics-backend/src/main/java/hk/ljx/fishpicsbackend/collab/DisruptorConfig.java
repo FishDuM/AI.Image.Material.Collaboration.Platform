@@ -14,10 +14,10 @@ import org.springframework.context.annotation.Configuration;
  * Disruptor 无锁队列配置
  *
  * 架构：WebSocket I/O 线程 → publish() → Ring Buffer → 消费者线程（事件处理 + 广播）
- * 消费者线程与 I/O 线程完全隔离，避免事件处理阻塞 WebSocket 消息接收
+ * 消费者线程与 I/O 线程完全隔离
  *
  * 生产者类型 MULTI：支持多个 WebSocket 线程并发发布
- * 等待策略 BlockingWaitStrategy：CPU 友好，适合事件间隔较长的场景
+ * 等待策略 BlockingWaitStrategy：CPU 友好
  */
 @Configuration
 public class DisruptorConfig {

@@ -6,14 +6,6 @@ import 'cropperjs/dist/cropper.css'
 
 /**
  * Shared cropper editor with toolbar.
- *
- * Props:
- *   src          – image URL to crop (pass '' / falsy to skip)
- *   aspectRatio  – optional aspect ratio for Cropper (default: NaN = free)
- *   onReady      – called when cropper is initialized
- *
- * Ref methods:
- *   getCropper() – returns the underlying Cropper instance (or null)
  */
 const CropperEditor = forwardRef(function CropperEditor(
   { src, aspectRatio = NaN, onReady },

@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { getToken, saveToken, clearAuth } from '../utils/storage'
-import { TIMEOUT_DEFAULT, TIMEOUT_AVATAR, TIMEOUT_AI, TIMEOUT_PICTURE } from '../utils/constants'
+import { TIMEOUT_DEFAULT, TIMEOUT_AVATAR, TIMEOUT_PICTURE } from '../utils/constants'
 
 const api = axios.create({
   baseURL: '/api',
@@ -10,18 +10,7 @@ const api = axios.create({
   },
 })
 
-const pendingRequests = new Map()
-
-let requestCounter = 0
-
-function getRequestKey(config) {
-  try {
-    const { method, url, params, data } = config
-    return [method, url, JSON.stringify(params || {}), JSON.stringify(data || {})].join('&')
-  } catch {
-    return [config.method, config.url, Date.now()].join('&')
-  }
-}
+// 删除 dedup 死代码后保留空函数保持 .use() 签名不变
 
 api.interceptors.request.use(
   (config) => {
@@ -29,22 +18,6 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
-    if (!config.dedup) {
-      return config
-    }
-    const key = getRequestKey(config)
-    const oldEntry = pendingRequests.get(key)
-    if (oldEntry) {
-      oldEntry.controller.abort()
-      pendingRequests.delete(key)
-    }
-    const controller = new AbortController()
-    if (!config.signal) {
-      config.signal = controller.signal
-    }
-    config._dedupId = ++requestCounter
-    config._dedupKey = key
-    pendingRequests.set(key, { controller, id: config._dedupId })
     return config
   },
   (error) => {
@@ -52,21 +25,11 @@ api.interceptors.request.use(
   }
 )
 
-function cleanupDedup(config) {
-  if (!config) return
-  const key = config._dedupKey || getRequestKey(config)
-  const entry = pendingRequests.get(key)
-  if (entry && entry.id === config._dedupId) {
-    pendingRequests.delete(key)
-  }
-}
-
 api.interceptors.response.use(
   (response) => {
     if (!response || !response.config) return response
-    cleanupDedup(response.config)
     if (response.config.responseType === 'blob') {
-      return response
+      return response.data
     }
     if (response.config.url && response.config.url.includes('/checkCode/')) {
       return response
@@ -76,37 +39,76 @@ api.interceptors.response.use(
     if (!responseData || typeof responseData.code === 'undefined') {
       return Promise.reject(new Error('响应格式异常'))
     }
-    // JWT 自动续签：检查响应头中的新 Token（在业务状态判断之前，避免业务错误时丢弃续签）
+    // JWT 自动续签：检查响应头中的新 Token
     const newToken = response.headers['x-new-token']
     if (newToken) {
       saveToken(newToken)
     }
     if (responseData.code !== 1) {
-      // 只有 40005（未登录）才触发登录过期，40002（无权限）不应清除 token
       if (responseData.code === 40005) {
         handleAuthExpired()
       }
-      return Promise.reject(new Error(responseData.message || '请求失败'))
+      const businessError = new Error(responseData.message || '请求失败')
+      businessError.code = responseData.code
+      businessError.business = true
+      businessError.data = responseData
+      return Promise.reject(businessError)
     }
     return responseData.data ?? responseData
   },
   (error) => {
-    cleanupDedup(error.config)
     if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED' || axios.isCancel(error)) {
       return Promise.reject(error)
     }
     if (error.response?.status === 401) {
       handleAuthExpired()
-      return Promise.reject(new Error('登录已过期，请重新登录'))
     }
-    const message = error.response?.data?.message || error.message || '请求失败，请重试'
-    return Promise.reject(new Error(message))
+    return Promise.reject(error)
   }
 )
 
+// 401 收敛策略:连续 N 次 401 才触发跳转,登录后 grace period 内不清理
+let consecutiveAuthFailures = 0
+const AUTH_FAIL_THRESHOLD = 3
+let authExpiredHandling = false
+let lastPasswordChangeAt = 0
+const POST_CHANGE_GRACE_MS = 5000
+
+// 注册全局方法,供改密成功后调用
+export function markPasswordChange() {
+  lastPasswordChangeAt = Date.now()
+}
+
 function handleAuthExpired() {
+  if (Date.now() - lastPasswordChangeAt < POST_CHANGE_GRACE_MS) {
+    return
+  }
+  consecutiveAuthFailures++
+  if (consecutiveAuthFailures < AUTH_FAIL_THRESHOLD) {
+    return
+  }
+  if (authExpiredHandling) return
+  authExpiredHandling = true
   clearAuth()
   window.dispatchEvent(new CustomEvent('auth:expired'))
+  const currentPath = window.location.pathname + window.location.search
+  const isAlreadyOnLogin = currentPath.startsWith('/mobile/login') || currentPath.startsWith('/mobile/register')
+  if (!isAlreadyOnLogin) {
+    const isMobile = window.innerWidth < 768
+    if (isMobile) {
+      const redirect = encodeURIComponent(currentPath)
+      window.location.href = `/mobile/login?redirect=${redirect}`
+    } else {
+      window.location.href = '/'
+    }
+  }
+  setTimeout(() => { authExpiredHandling = false }, 5000)
+}
+
+// 登录成功/状态确认成功后,重置 401 失败计数
+export function resetAuthFailureCounter() {
+  consecutiveAuthFailures = 0
+  authExpiredHandling = false
 }
 
 export const getLoginCheckCode = () => api.get('/user/checkCode/login', {
@@ -199,27 +201,11 @@ export const getSystemTypes = () => api.get('/system/list')
 
 // AI 相关 API
 export const submitAiTag = (id) => api.post('/ai/tags', { id })
-export const getAiTagResult = (taskId) => api.get(`/ai/tags/result/${taskId}`)
-export const pollAiTagResult = async (taskId, { interval = 2000, timeout = TIMEOUT_AI, signal } = {}) => {
-  const start = Date.now()
-  while (Date.now() - start < timeout) {
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
-    const task = await getAiTagResult(taskId)
-    if (task.status === 'DONE') return JSON.parse(task.result)
-    if (task.status === 'FAILED') throw new Error(task.errorMsg || 'AI识别失败')
-    await new Promise((r, j) => {
-      const timer = setTimeout(r, interval)
-      signal?.addEventListener('abort', () => { clearTimeout(timer); j(new DOMException('Aborted', 'AbortError')) }, { once: true })
-    })
-  }
-  throw new Error('AI识别超时')
-}
 export const getAiTasks = (data) => api.post('/ai/admin/tasks', data)
 export const getAiStats = () => api.get('/ai/admin/stats')
 export const getAiConfig = () => api.get('/ai/admin/config')
 export const updateAiConfig = (data) => api.post('/ai/admin/config', data)
 export const submitAiDraw = (data) => api.post('/ai/draw/submit', data)
-export const getAiDrawResult = (taskId) => api.get(`/ai/draw/result/${taskId}`)
 
 export const savePictureByUrl = (url, targetSpaceId) =>
   api.post('/picture/save-by-url', { url, targetSpaceId })
@@ -245,7 +231,7 @@ export const uploadPicture = (file, targetSpaceId) => {
   })
 }
 
-// ==================== 分片上传 API ====================
+// 分片上传 API
 
 /**
  * 秒传校验
@@ -271,11 +257,11 @@ export const uploadChunk = (formData, md5, chunkIndex) => {
  */
 export const mergeChunks = (data) => api.post('/picture/merge', data)
 
-// ==================== 分享 API ====================
+// 分享 API
 
 export const createShare = (data) => api.post('/share/create', data)
 
-export const getShareInfo = (token) => api.get(`/share/info/${token}`)
+export const getShareInfo = (token, config) => api.get(`/share/info/${token}`, config)
 
 export const cancelShare = (shareId) => api.post('/share/cancel', { shareId })
 

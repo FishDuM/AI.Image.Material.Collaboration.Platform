@@ -13,10 +13,13 @@
             <result property="level" column="level" />
             <result property="name" column="name" />
             <result property="size" column="size" />
+            <!-- BUG#9 修复:添加 status 和 version 字段映射 -->
+            <result property="status" column="status" />
+            <result property="version" column="version" />
     </resultMap>
 
     <sql id="Base_Column_List">
         id,introduction,type,user_id,storage_size,
-        level,name,size
+        level,name,size,status,version
     </sql>
 </mapper>

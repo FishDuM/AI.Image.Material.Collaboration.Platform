@@ -52,7 +52,9 @@ public class AuditLogServiceImpl implements AuditLogService {
             qw.eq(SysAuditLog::getResult, request.getResult());
         }
         if (request.getUsername() != null && !request.getUsername().isBlank()) {
-            qw.like(SysAuditLog::getUsername, request.getUsername());
+            // 转义 LIKE 通配符
+            String escaped = request.getUsername().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+            qw.like(SysAuditLog::getUsername, escaped);
         }
 
         qw.orderByDesc(SysAuditLog::getCreateTime);

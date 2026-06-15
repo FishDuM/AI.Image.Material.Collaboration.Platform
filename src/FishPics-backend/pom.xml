@@ -169,6 +169,20 @@
             <version>0.12.6</version>
             <scope>runtime</scope>
         </dependency>
+
+        <!-- S-007 修复:BCrypt 密码哈希(spring-security-crypto 单独依赖,不引入完整 security) -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-crypto</artifactId>
+            <version>6.3.0</version>
+        </dependency>
+
+        <!-- M-005 修复:存储 XSS 防御(HTML 清理) -->
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.17.2</version>
+        </dependency>
     </dependencies>
 
     <dependencyManagement>
@@ -194,6 +208,13 @@
                     <target>21</target>
                     <encoding>UTF-8</encoding>
                     <parameters>true</parameters>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>1.18.36</version>
+                        </path>
+                    </annotationProcessorPaths>
                 </configuration>
             </plugin>
             <plugin>
@@ -209,9 +230,7 @@
                         <goals>
                             <goal>repackage</goal>
                         </goals>
-                        <configuration>
-                            <skip>true</skip>
-                        </configuration>
+                        <!-- V10-#7 修复:原 <skip>true</skip> 让 mvn package 产出 JAR 不可 java -jar 启动 -->
                     </execution>
                 </executions>
             </plugin>

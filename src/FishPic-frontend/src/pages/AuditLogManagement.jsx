@@ -35,6 +35,7 @@ function AuditLogManagement() {
   const [current, setCurrent] = useState(1)
   const [pageSize, setPageSize] = useState(20)
   const [searchUsername, setSearchUsername] = useState('')
+  const [searchUsernameApplied, setSearchUsernameApplied] = useState('')
   const [filterOperation, setFilterOperation] = useState('')
   const [filterResult, setFilterResult] = useState(undefined)
 
@@ -53,7 +54,7 @@ function AuditLogManagement() {
       setLoading(true)
       try {
         const params = { current, pageSize }
-        if (searchUsername) params.username = searchUsername
+        if (searchUsernameApplied) params.username = searchUsernameApplied
         if (filterOperation) params.operation = filterOperation
         if (filterResult !== undefined) params.result = filterResult
         const result = await api.post('/system/audit-log/list', params)
@@ -69,14 +70,16 @@ function AuditLogManagement() {
     }
     fetchData()
     return () => { ignore = true }
-  }, [current, pageSize, searchUsername, filterOperation, filterResult, userInfo, message])
+  }, [current, pageSize, searchUsernameApplied, filterOperation, filterResult, userInfo, message])
 
   const handleSearch = () => {
+    setSearchUsernameApplied(searchUsername)
     setCurrent(1)
   }
 
   const handleReset = () => {
     setSearchUsername('')
+    setSearchUsernameApplied('')
     setFilterOperation('')
     setFilterResult(undefined)
     setCurrent(1)

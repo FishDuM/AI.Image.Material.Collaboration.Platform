@@ -17,7 +17,7 @@ public class FileTypeUtils {
     );
 
     /**
-     * 从 MultipartFile 检测合法文件类型（魔数检测 + 扩展名回退）
+     * 从 MultipartFile 检测合法文件类型（严格魔数检测）
      */
     public static String getValidFileType(MultipartFile file) {
         if (file == null || file.isEmpty()) {
@@ -29,17 +29,6 @@ public class FileTypeUtils {
                 realType = realType.toLowerCase();
                 if (ALLOWED_TYPES.contains(realType)) {
                     return realType;
-                }
-            }
-            // 魔数检测失败（如 HEIC 等 Hutool 未覆盖的格式），回退到扩展名判断
-            String fileName = file.getOriginalFilename();
-            if (fileName != null) {
-                int dot = fileName.lastIndexOf('.');
-                if (dot > 0) {
-                    String ext = fileName.substring(dot + 1).toLowerCase();
-                    if (ALLOWED_TYPES.contains(ext)) {
-                        return ext;
-                    }
                 }
             }
             return null;

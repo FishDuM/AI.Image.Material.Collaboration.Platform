@@ -15,7 +15,6 @@ import './CollaborativeCanvas.css'
 
 /**
  * 协同编辑画布组件
- * 支持：缩放/旋转实时同步、裁剪、编辑互斥锁、操作历史撤销
  */
 export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId, updatedAt, onSuccess, onClose }) {
   const { message } = App.useApp()
@@ -44,12 +43,16 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
   const proxyUrlRef = useRef('')
   const containerRef = useRef(null)
   const myUserIdRef = useRef(null)
+  const myNicknameRef = useRef('')
   const cropperRef = useRef(null)
   const pendingLockRef = useRef(false)
+  const wasMyLockRef = useRef(false)
 
   const isMyLock = lockedBy != null && lockedBy == myUserIdRef.current
   const isOtherLock = lockedBy != null && lockedBy != myUserIdRef.current
   const isEditable = lockedBy === null || isMyLock
+  const isMyLockRef = useRef(false)
+  useEffect(() => { isMyLockRef.current = isMyLock }, [isMyLock])
 
   const displayRotation = ((rotation % 360) + 360) % 360
 
@@ -90,12 +93,16 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
           if (myUserIdRef.current && data.userId != myUserIdRef.current) {
             message.info(`${data.nickname || '用户'} 开始编辑`)
           }
+          if (myUserIdRef.current && data.userId == myUserIdRef.current) {
+            wasMyLockRef.current = true
+          }
         }
         break
       case 'lock-denied':
         if (data.pictureId == pictureId) {
           setLockedBy(data.userId)
           setLockedNickname(data.nickname || '')
+          wasMyLockRef.current = false
           message.warning(`${data.nickname || '用户'} 正在编辑，请申请编辑权`)
         }
         break
@@ -121,7 +128,7 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
         }
         break
       case 'request-edit':
-        if (data.pictureId == pictureId && isMyLock) {
+        if (data.pictureId == pictureId && isMyLockRef.current) {
           setEditRequests(prev => {
             if (prev.some(r => r.userId == data.userId)) return prev
             return [...prev, { userId: data.userId, nickname: data.nickname, avatar: data.avatar }]
@@ -155,18 +162,17 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
         break
       case 'file-replaced':
         if (data.pictureId == pictureId) {
-          // 文件被替换：重置 transform 状态，强制重新加载图片
           setScale(1); setRotation(0); setCropData(null)
           setHistory([])
           setReloadTick(prev => prev + 1)
-          message.info('图片已被更新，正在重新加载')
+          const fromName = data.fromNickname || '其他用户'
+          message.info(`图片已被 ${fromName} 更新,正在重新加载`)
         }
         break
       default: break
     }
   }, [pictureId, message, isMyLock])
 
-  const myNicknameRef = useRef('')
   const sendMsgRef = useRef(null)
 
   // WebSocket 就绪时发送 lock
@@ -216,9 +222,12 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
   // 关闭时释放锁
   useEffect(() => {
     return () => {
-      if (open) sendMessage({ type: 'unlock', pictureId })
+      if (open && wasMyLockRef.current) {
+        sendMsgRef.current?.({ type: 'unlock', pictureId })
+        wasMyLockRef.current = false
+      }
     }
-  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, pictureId])
 
   // ---- 操作 ----
 
@@ -286,6 +295,7 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
   }
   const handleReleaseLock = () => {
     sendMessage({ type: 'unlock', pictureId })
+    wasMyLockRef.current = false
     setLockedBy(null); setLockedNickname('')
   }
 
@@ -312,18 +322,27 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
       ctx.rotate(radians); ctx.scale(scale, scale)
       ctx.drawImage(img, -img.width / 2, -img.height / 2)
 
-      // 裁剪：从变换后的 canvas 提取裁剪区域
-      let finalCanvas = canvas
+      let finalCanvas
       if (cropData) {
-        const sx = Math.round(cropData.x * scale)
-        const sy = Math.round(cropData.y * scale)
-        const sw = Math.round(cropData.w * scale)
-        const sh = Math.round(cropData.h * scale)
+        // 1. 在原图上裁剪
         const cropped = document.createElement('canvas')
-        cropped.width = sw; cropped.height = sh
+        cropped.width = cropData.w; cropped.height = cropData.h
         const cctx = cropped.getContext('2d')
-        cctx.drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh)
-        finalCanvas = cropped
+        cctx.drawImage(img, cropData.x, cropData.y, cropData.w, cropData.h, 0, 0, cropData.w, cropData.h)
+        // 2. 对裁剪结果做旋转+缩放
+        const radians = (rotation * Math.PI) / 180
+        const cos = Math.abs(Math.cos(radians)), sin = Math.abs(Math.sin(radians))
+        const rotW = Math.ceil(cropData.w * cos + cropData.h * sin)
+        const rotH = Math.ceil(cropData.w * sin + cropData.h * cos)
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.ceil(rotW * scale); canvas.height = Math.ceil(rotH * scale)
+        const ctx = canvas.getContext('2d')
+        ctx.translate(canvas.width / 2, canvas.height / 2)
+        ctx.rotate(radians); ctx.scale(scale, scale)
+        ctx.drawImage(cropped, -cropData.w / 2, -cropData.h / 2)
+        finalCanvas = canvas
+      } else {
+        finalCanvas = canvas
       }
 
       const blob = await new Promise(r => finalCanvas.toBlob(r, 'image/webp'))
@@ -331,8 +350,6 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
 
       const file = new File([blob], 'collab-edit.webp', { type: 'image/webp' })
       const result = await replacePictureFile(file, pictureId)
-      // 通知同空间其他用户文件已替换
-      sendMsgRef.current?.({ type: 'file-replaced', pictureId })
       message.success('保存成功')
       onSuccess?.(result)
       onClose()

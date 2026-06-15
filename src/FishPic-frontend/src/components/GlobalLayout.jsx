@@ -118,10 +118,10 @@ function GlobalLayout({ children }) {
       if (userInfo?.permissions?.includes('system:user:manage')) {
         adminChildren.push({ key: '/admin/users', icon: <UserOutlined />, label: '用户管理', onClick: () => handleSidebarMenuClick('/admin/users') });
       }
-      if (userInfo?.permissions?.includes('system:user:manage')) {
+      if (userInfo?.permissions?.includes('system:log:manage')) {
         adminChildren.push({ key: '/admin/pictures', icon: <PictureOutlined />, label: '图片管理', onClick: () => handleSidebarMenuClick('/admin/pictures') });
       }
-      if (userInfo?.permissions?.includes('system:user:manage')) {
+      if (userInfo?.permissions?.includes('system:log:manage')) {
         adminChildren.push({ key: '/admin/dashboard', icon: <DashboardOutlined />, label: '数据概览', onClick: () => handleSidebarMenuClick('/admin/dashboard') });
       }
       if (userInfo?.permissions?.includes('system:team:manage')) {
@@ -161,10 +161,10 @@ function GlobalLayout({ children }) {
     if (userInfo?.permissions?.includes('system:user:manage')) {
       items.push({ key: 'user-management', icon: <UserOutlined />, label: '用户管理', onClick: () => navigate('/admin/users') });
     }
-    if (userInfo?.permissions?.includes('system:user:manage')) {
+    if (userInfo?.permissions?.includes('system:log:manage')) {
       items.push({ key: 'picture-management', icon: <PictureOutlined />, label: '图片管理', onClick: () => navigate('/admin/pictures') });
     }
-    if (userInfo?.permissions?.includes('system:user:manage')) {
+    if (userInfo?.permissions?.includes('system:log:manage')) {
       items.push({ key: 'dashboard', icon: <DashboardOutlined />, label: '数据概览', onClick: () => navigate('/admin/dashboard') });
     }
     if (userInfo?.permissions?.includes('system:team:manage')) {

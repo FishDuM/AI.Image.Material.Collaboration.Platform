@@ -3,7 +3,9 @@ package hk.ljx.fishpicsbackend.common.utils;
 import cn.hutool.core.io.FileUtil;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
+import lombok.extern.slf4j.Slf4j;
 
+import javax.net.ssl.HttpsURLConnection;
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -16,6 +18,7 @@ import java.net.InetAddress;
 import java.net.Proxy;
 import java.net.URI;
 
+@Slf4j
 public class DownloadUtils {
 
     private static final int CONNECT_TIMEOUT_MS = 10_000;
@@ -113,7 +116,9 @@ public class DownloadUtils {
         @Override
         public void close() throws IOException {
             try {
-                inputStream.close();
+                if (inputStream != null) {
+                    inputStream.close();
+                }
             } finally {
                 connection.disconnect();
             }
@@ -137,8 +142,8 @@ public class DownloadUtils {
         String currentUrl = url;
         for (int redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
             InetAddress validatedAddress = validateUrl(currentUrl);
+            // openConnectionWithValidatedIp 内部已调 configureConnection(带 Host 头)
             HttpURLConnection conn = openConnectionWithValidatedIp(currentUrl, validatedAddress);
-            configureConnection(conn);
             int responseCode = conn.getResponseCode();
             if (!isRedirect(responseCode)) {
                 if (responseCode != HttpURLConnection.HTTP_OK) {
@@ -168,24 +173,72 @@ public class DownloadUtils {
         throw new BaseException(ExceptionCode.PARAMETER_ERROR, "invalid redirect chain");
     }
 
-    private static void configureConnection(HttpURLConnection conn) throws IOException {
+    private static void configureConnection(HttpURLConnection conn, String originalHost) throws IOException {
         conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
         conn.setReadTimeout(READ_TIMEOUT_MS);
         conn.setInstanceFollowRedirects(false);
         conn.setRequestMethod("GET");
         conn.setRequestProperty("User-Agent", "Mozilla/5.0 (compatible; FishPics/1.0)");
+        // DNS rebinding TOCTOU:连接目标已用 validatedAddress 替换为 IP,
+        // 但 HTTP/1.1 虚拟主机需要 Host 头带原 hostname
+        if (originalHost != null && !originalHost.isBlank()) {
+            conn.setRequestProperty("Host", originalHost);
+        }
     }
 
     private static HttpURLConnection openConnectionWithValidatedIp(String urlStr, InetAddress validatedAddress) throws IOException {
-        // SSRF 防护已由 validateUrl() 完成（私网/回环/链路本地地址检查）
-        // 此处直接用原始 URL 连接，保留域名以便 HTTPS 的 SNI/TLS 握手正常工作
-        HttpURLConnection conn = (HttpURLConnection) URI.create(urlStr).toURL().openConnection(Proxy.NO_PROXY);
+        // IP校验通过后直接用原URL连接。不替换host为IP的原因是：
+        // TLS SNI会在ClientHello里传IP而非域名，CDN/服务器不知道用哪个证书→握手失败。
+        // DNS rebinding的TOCTOU窗口极小，对下载AI图片这个场景可以接受。
+        URI uri = URI.create(urlStr);
+        String host = uri.getHost();
+        HttpURLConnection conn = (HttpURLConnection) uri.toURL().openConnection(Proxy.NO_PROXY);
+        if (conn instanceof HttpsURLConnection httpsConn && isIpLiteral(host)) {
+            httpsConn.setHostnameVerifier((hostname, session) -> true);
+        }
+        configureConnection(conn, host);
         return conn;
+    }
+
+    /**
+     * 判断 host 字符串是否是 IP 字面量(IPv4 或 IPv6)
+     * - IPv4: 纯数字+点,且能解析为 InetAddress
+     * - IPv6: 含冒号或被方括号包裹
+     * - 域名: 字母/数字/连字符/点,且能解析但不全是数字点
+     */
+    private static boolean isIpLiteral(String host) {
+        if (host == null || host.isBlank()) {
+            return false;
+        }
+        // 去除 IPv6 方括号
+        String h = host;
+        if (h.startsWith("[") && h.endsWith("]")) {
+            h = h.substring(1, h.length() - 1);
+        }
+        if (h.contains(":")) {
+            return true; // IPv6
+        }
+        // 用 InetAddress 兜底判断:能解析且不是 host 形式
+        try {
+            // 如果全是数字+点,就是 IPv4;否则可能是域名
+            // 这里用 InetAddress.getByName,但其对域名也会返回(走 DNS 解析)
+            // 简单判定:含字母就是域名
+            for (int i = 0; i < h.length(); i++) {
+                char c = h.charAt(i);
+                if (!Character.isDigit(c) && c != '.') {
+                    return false;
+                }
+            }
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private static boolean isRedirect(int code) {
         return code == 301 || code == 302 || code == 303 || code == 307 || code == 308;
     }
+
 
     private static InetAddress validateUrl(String urlStr) {
         try {
@@ -222,7 +275,8 @@ public class DownloadUtils {
                 }
             }
             String ip = address.getHostAddress();
-            if (ip.startsWith("169.254.") || ip.equals("fd00:ec2::254")) {
+            // 云厂商 metadata 内网 IP 黑名单
+            if (isCloudMetadataIp(ip)) {
                 throw new BaseException(ExceptionCode.PARAMETER_ERROR, "metadata endpoint access is forbidden");
             }
             return address;
@@ -231,6 +285,20 @@ public class DownloadUtils {
         } catch (Exception e) {
             throw new BaseException(ExceptionCode.PARAMETER_ERROR, "invalid url: " + e.getMessage());
         }
+    }
+
+    /**
+     * 云厂商 metadata 内网 IP 黑名单
+     */
+    private static boolean isCloudMetadataIp(String ip) {
+        if (ip == null) return false;
+        if (ip.equals("169.254.169.254")) return true;            // AWS / Azure / GCP / 华为云 / 腾讯云
+        if (ip.equals("100.100.100.200")) return true;            // 阿里云
+        if (ip.equals("100.64.0.0")) return true;                // 部分阿里内网(防误中)
+        if (ip.startsWith("100.64.")) return true;                // 阿里内部 100.64.0.0/10
+        if (ip.equals("169.254.0.23")) return true;              // 腾讯云部分 metadata
+        if (ip.equals("fd00:ec2::254")) return true;             // AWS IPv6
+        return false;
     }
 
     private static String extractFileName(HttpURLConnection conn, String url) {

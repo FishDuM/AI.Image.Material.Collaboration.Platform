@@ -19,7 +19,7 @@ import java.util.Map;
  *
  * 连接生命周期：afterConnectionEstablished → handleTextMessage → afterConnectionClosed
  * 认证：握手阶段从 URL 参数提取 JWT，验证有效性 + 黑名单 + 团队成员资格
- * 事件流：收到消息 → 解析 → 丰富用户信息 → 发布到 Disruptor Ring Buffer（非阻塞）
+ * 事件流：收到消息 → 解析 → 发布到 Disruptor Ring Buffer（非阻塞）
  */
 @Slf4j
 @Component
@@ -40,8 +40,13 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
     @Resource
     private CollabEventPublisher eventPublisher;
 
+    @Resource
+    private org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
+
     private static final String ATTR_USER_ID = "userId";
     private static final String ATTR_SPACE_ID = "spaceId";
+    private static final String ATTR_NICKNAME = "nickname";
+    private static final String ATTR_AVATAR = "avatar";
 
     /**
      * WebSocket 连接建立：JWT 认证 + 团队成员校验 + 注册会话
@@ -90,9 +95,23 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
             session.close(CloseStatus.POLICY_VIOLATION.withReason("用户不存在"));
             return;
         }
+        // 与 HTTP 拦截器对齐，校验 user.status（避免封禁用户绕过拦截器连 WS）
+        if (user.getStatus() == null || !Integer.valueOf(1).equals(user.getStatus())) {
+            session.close(CloseStatus.POLICY_VIOLATION.withReason("账号已被禁用"));
+            return;
+        }
+        // 校验 BANNED_USERS 集合（与 TokenRefreshInterceptor 一致）
+        Boolean isBanned = stringRedisTemplate.opsForSet().isMember(
+                hk.ljx.fishpicsbackend.common.constants.RedisConstants.BANNED_USERS_KEY, userId.toString());
+        if (Boolean.TRUE.equals(isBanned)) {
+            session.close(CloseStatus.POLICY_VIOLATION.withReason("账号已被封禁"));
+            return;
+        }
 
         session.getAttributes().put(ATTR_USER_ID, userId);
         session.getAttributes().put(ATTR_SPACE_ID, spaceId);
+        session.getAttributes().put(ATTR_NICKNAME, user.getNickname() != null ? user.getNickname() : "");
+        session.getAttributes().put(ATTR_AVATAR, user.getAvatar() != null ? user.getAvatar() : "");
         sessionRegistry.addSession(spaceId, userId, session, user.getNickname(), user.getAvatar());
 
         // 6. 发布加入事件到 Disruptor（通知其他用户）
@@ -108,14 +127,22 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
     }
 
     /**
-     * 收到客户端消息：解析 JSON → 丰富用户信息 → 发布到 Disruptor（非阻塞）
-     * I/O 线程仅做 JSON 解析和事件发布，实际处理在 Disruptor 消费者线程
+     * 收到客户端消息：解析 JSON → 发布到 Disruptor（非阻塞）
      */
+    // WS 消息 size 上限 64KB
+    private static final int MAX_WS_MESSAGE_SIZE = 64 * 1024;
+
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
         Long userId = getAttr(session, ATTR_USER_ID);
         Long spaceId = getAttr(session, ATTR_SPACE_ID);
         if (userId == null || spaceId == null) return;
+
+        if (message.getPayloadLength() > MAX_WS_MESSAGE_SIZE) {
+            log.warn("[CollabWS] 消息过大(>{}B),丢弃: user={}, size={}",
+                    MAX_WS_MESSAGE_SIZE, userId, message.getPayloadLength());
+            return;
+        }
 
         try {
             Map<String, Object> data = JSONUtil.parseObj(message.getPayload());
@@ -162,8 +189,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
                     Long pictureId = data.get("pictureId") != null
                             ? Long.parseLong(data.get("pictureId").toString()) : null;
                     if (pictureId == null) return;
-                    User user = userService.getById(userId);
-                    String nickname = user != null ? user.getNickname() : "";
+                    String nickname = getAttrStr(session, ATTR_NICKNAME);
                     log.info("[CollabWS] 收到 lock: user={}, picture={}", userId, pictureId);
                     eventPublisher.publish(event -> {
                         event.setType(CollabEvent.TYPE_LOCK);
@@ -189,9 +215,8 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
                     Long pictureId = data.get("pictureId") != null
                             ? Long.parseLong(data.get("pictureId").toString()) : null;
                     if (pictureId == null) return;
-                    User user = userService.getById(userId);
-                    String nickname = user != null ? user.getNickname() : "";
-                    String avatar = user != null ? user.getAvatar() : "";
+                    String nickname = getAttrStr(session, ATTR_NICKNAME);
+                    String avatar = getAttrStr(session, ATTR_AVATAR);
                     log.info("[CollabWS] 收到 request-edit: user={}, picture={}", userId, pictureId);
                     eventPublisher.publish(event -> {
                         event.setType(CollabEvent.TYPE_REQUEST_EDIT);
@@ -214,8 +239,8 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
                         event.setPictureId(pictureId);
                         event.setSpaceId(spaceId);
                         event.setUserId(userId);
-                        // targetUserId 通过 nickname 字段传递（复用字段）
-                        event.setNickname(targetUserId.toString());
+                        // 从专用字段读取 targetUserId
+                        event.setTargetUserId(targetUserId);
                     });
                 }
                 case "deny" -> {
@@ -230,13 +255,35 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
                         event.setPictureId(pictureId);
                         event.setSpaceId(spaceId);
                         event.setUserId(userId);
-                        event.setNickname(targetUserId.toString());
+                        event.setTargetUserId(targetUserId);
                     });
                 }
                 case "file-replaced" -> {
-                    // 透传给同空间其他用户（不走 Disruptor，直接广播）
-                    sessionRegistry.broadcast(spaceId, userId, message.getPayload());
-                    log.info("[CollabWS] 文件已替换，通知其他用户: user={}, pictureId={}", userId, data.get("pictureId"));
+                    log.warn("[CollabWS] 拒绝客户端伪造的 file-replaced: user={}, pictureId={}",
+                            userId, data.get("pictureId"));
+                }
+                case "resync" -> {
+                    // 重连后遍历 sessionRegistry 给当前 user 重发所有 pictureLocks
+                    sessionRegistry.getAllPictureLocks().forEach((pid, lock) -> {
+                        if (!spaceId.equals(lock.getSpaceId())) return;
+                        try {
+                            String lockMsg = JSONUtil.toJsonStr(java.util.Map.of(
+                                    "type", "lock",
+                                    "pictureId", pid,
+                                    "userId", lock.getUserId(),
+                                    "nickname", lock.getNickname() != null ? lock.getNickname() : ""
+                            ));
+                            sessionRegistry.sendToUser(spaceId, userId, lockMsg);
+                        } catch (Exception ex) {
+                            log.warn("[CollabWS] resync 锁推送失败: {}", ex.getMessage());
+                        }
+                    });
+                    // 重发该空间的 transform 状态
+                    for (String stateJson : sessionRegistry.getSpacePictureStates(spaceId)) {
+                        sessionRegistry.sendToUser(spaceId, userId, stateJson);
+                    }
+                    log.info("[CollabWS] 重连 resync: space={}, user={}, 重发锁数={}", spaceId, userId,
+                            sessionRegistry.getAllPictureLocks().size());
                 }
                 default -> log.debug("未知消息类型: {}", type);
             }
@@ -253,52 +300,15 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         Long userId = getAttr(session, ATTR_USER_ID);
         Long spaceId = getAttr(session, ATTR_SPACE_ID);
         if (userId != null && spaceId != null) {
-            sessionRegistry.removeSession(spaceId, userId);
-            // 清除该用户持有的图片编辑锁，自动转让或广播 unlock
-            java.util.Set<Long> unlockedPictures = sessionRegistry.clearLocksByUser(userId);
-            for (Long pid : unlockedPictures) {
-                // 优先转给排队申请人
-                var requests = sessionRegistry.getEditRequests(pid);
-                if (!requests.isEmpty()) {
-                    var next = requests.iterator().next();
-                    sessionRegistry.removeEditRequest(pid, next.getUserId());
-                    sessionRegistry.tryLockPicture(pid, next.getUserId(), next.getNickname());
-                    String msg = cn.hutool.json.JSONUtil.toJsonStr(java.util.Map.of(
-                            "type", "lock-transfer", "pictureId", pid,
-                            "fromUserId", userId, "toUserId", next.getUserId(),
-                            "toNickname", next.getNickname() != null ? next.getNickname() : ""));
-                    sessionRegistry.broadcastAll(spaceId, msg);
-                    log.info("[CollabWS] 断线转让(排队): picture={}, to={}", pid, next.getUserId());
-                    continue;
-                }
-                // 队列空，转给其他在线用户
-                var sessions = sessionRegistry.getSpaceSessions(spaceId);
-                var nextUser = sessions.entrySet().stream()
-                        .filter(e -> !e.getKey().equals(userId)).findFirst().orElse(null);
-                if (nextUser != null) {
-                    Long toId = nextUser.getKey();
-                    String toName = nextUser.getValue().getNickname() != null ? nextUser.getValue().getNickname() : "";
-                    sessionRegistry.tryLockPicture(pid, toId, toName);
-                    String msg = cn.hutool.json.JSONUtil.toJsonStr(java.util.Map.of(
-                            "type", "lock-transfer", "pictureId", pid,
-                            "fromUserId", userId, "toUserId", toId, "toNickname", toName));
-                    sessionRegistry.broadcastAll(spaceId, msg);
-                    log.info("[CollabWS] 断线转让(在线): picture={}, to={}", pid, toId);
-                } else {
-                    String msg = cn.hutool.json.JSONUtil.toJsonStr(java.util.Map.of(
-                            "type", "unlock", "pictureId", pid, "userId", userId));
-                    sessionRegistry.broadcastAll(spaceId, msg);
-                    sessionRegistry.clearPictureState(spaceId, pid);
-                }
-            }
-            // 清除该用户发起的编辑申请
-            sessionRegistry.clearEditRequestsByUser(userId);
+            // 断连后把锁转移/清理/广播全部通过 Disruptor 异步处理
             eventPublisher.publish(event -> {
-                event.setType(CollabEvent.TYPE_LEAVE);
+                event.setType(CollabEvent.TYPE_DISCONNECT);
                 event.setSpaceId(spaceId);
                 event.setUserId(userId);
+                event.setSessionId(session.getId());
             });
-            log.info("协同编辑连接关闭: space={}, user={}, status={}", spaceId, userId, status);
+        } else {
+            log.info("[CollabWS] disconnect without attrs, status={}", status);
         }
     }
 
@@ -308,18 +318,23 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
     }
 
     private String getParam(WebSocketSession session, String name) {
+        // 用 UriComponentsBuilder 处理 URL 编码（JWT 内含 Base64 可能被 URL 编码）
         var uri = session.getUri();
-        if (uri == null || uri.getQuery() == null) return null;
-        for (String param : uri.getQuery().split("&")) {
-            String[] kv = param.split("=", 2);
-            if (kv.length == 2 && kv[0].equals(name)) return kv[1];
-        }
-        return null;
+        if (uri == null) return null;
+        var queryParams = org.springframework.web.util.UriComponentsBuilder.fromUri(uri)
+                .build()
+                .getQueryParams();
+        return queryParams.getFirst(name);
     }
 
     @SuppressWarnings("unchecked")
     private <T> T getAttr(WebSocketSession session, String key) {
         Object val = session.getAttributes().get(key);
         return val != null ? (T) val : null;
+    }
+
+    private String getAttrStr(WebSocketSession session, String key) {
+        Object val = session.getAttributes().get(key);
+        return val instanceof String ? (String) val : "";
     }
 }

@@ -8,6 +8,7 @@ import hk.ljx.fishpicsbackend.ai.dto.AiConfigDTO;
 import hk.ljx.fishpicsbackend.ai.dto.AiDrawPictureDTO;
 import hk.ljx.fishpicsbackend.ai.dto.AiTaskQueryDTO;
 import hk.ljx.fishpicsbackend.ai.service.AiService;
+import hk.ljx.fishpicsbackend.ai.sse.AiSseEmitterRegistry;
 import hk.ljx.fishpicsbackend.ai.vo.AiStatsVO;
 import hk.ljx.fishpicsbackend.ai.vo.AiTaskSubmitVO;
 import hk.ljx.fishpicsbackend.ai.vo.AiTaskVO;
@@ -37,6 +38,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -57,6 +59,9 @@ public class AiController {
     private AiService aiService;
 
     @Resource
+    private AiSseEmitterRegistry sseEmitterRegistry;
+
+    @Resource
     private TaskMapper taskMapper;
 
     @Resource
@@ -65,6 +70,9 @@ public class AiController {
     @PostMapping("/tags")
     public Response<AiTaskSubmitVO> submitTagTask(@Valid @RequestBody IdRequest request) {
         ExcUtils.throwIfTrue(request.getId() == null, "图片ID不能为空");
+        // 开关关闭时拒绝
+        ExcUtils.throwIfTrue(!isFeatureEnabled("taggingEnabled"),
+                ExceptionCode.FORBIDDEN, "AI 标签功能已关闭");
         String taskId = aiService.submitTagTask(request.getId());
         AiTaskSubmitVO vo = new AiTaskSubmitVO();
         vo.setTaskId(taskId);
@@ -85,6 +93,9 @@ public class AiController {
     @PostMapping("/draw/submit")
     public Response<AiTaskSubmitVO> submitDrawTask(@Valid @RequestBody AiDrawPictureDTO drawPictureDTO) {
         ExcUtils.throwIfTrue(drawPictureDTO == null, "参数不能为空");
+        // 开关关闭时拒绝
+        ExcUtils.throwIfTrue(!isFeatureEnabled("generationEnabled"),
+                ExceptionCode.FORBIDDEN, "AI 生图功能已关闭");
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_LOGIN);
         String taskId = aiService.submitDrawTask(drawPictureDTO, user.getId());
@@ -92,6 +103,13 @@ public class AiController {
         vo.setTaskId(taskId);
         vo.setStatus("PENDING");
         return ResUtils.success(vo);
+    }
+
+    /**
+     * 读取 AiConfig 开关
+     */
+    private boolean isFeatureEnabled(String fieldName) {
+        return aiService.isFeatureEnabled(fieldName);
     }
 
     @GetMapping("/draw/result/{taskId}")
@@ -102,6 +120,48 @@ public class AiController {
         ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_LOGIN);
         ExcUtils.throwIfTrue(!user.getId().equals(task.getUserId()), ExceptionCode.UNAUTHORIZED);
         return ResUtils.success(task);
+    }
+
+    /**
+     * SSE 推送：AI 任务结果
+     */
+    @GetMapping("/result-sse/{taskId}")
+    public SseEmitter subscribeResult(@PathVariable String taskId) {
+        Task task = taskMapper.selectOne(
+                new LambdaQueryWrapper<Task>().eq(Task::getTaskId, taskId));
+        ExcUtils.throwIfTrue(task == null, ExceptionCode.NOT_FOUND, "任务不存在");
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_LOGIN);
+        ExcUtils.throwIfTrue(!user.getId().equals(task.getUserId()), ExceptionCode.UNAUTHORIZED);
+
+        // 任务已完成，直接返回
+        if ("DONE".equals(task.getStatus())) {
+            SseEmitter emitter = new SseEmitter(5_000L);
+            try {
+                emitter.send(SseEmitter.event().name("result")
+                        .data(Map.of("taskId", taskId, "status", "DONE",
+                                "result", task.getResult() != null ? task.getResult() : "")));
+                emitter.complete();
+            } catch (Exception e) {
+                emitter.completeWithError(e);
+            }
+            return emitter;
+        }
+        if ("FAILED".equals(task.getStatus())) {
+            SseEmitter emitter = new SseEmitter(5_000L);
+            try {
+                emitter.send(SseEmitter.event().name("result")
+                        .data(Map.of("taskId", taskId, "status", "FAILED",
+                                "errorMsg", task.getErrorMsg() != null ? task.getErrorMsg() : "")));
+                emitter.complete();
+            } catch (Exception e) {
+                emitter.completeWithError(e);
+            }
+            return emitter;
+        }
+
+        // 任务仍在处理，注册 SSE 等待推送
+        return sseEmitterRegistry.register(taskId);
     }
 
     @GetMapping("/download-image/{taskId}")
@@ -201,19 +261,19 @@ public class AiController {
     @RequireAdmin
     @GetMapping("/admin/config")
     public Response<AiConfigDTO> getConfig() {
-        LambdaQueryWrapper<PicSystem> wrapper = new LambdaQueryWrapper<PicSystem>()
-                .eq(PicSystem::getSyskey, SysConstants.AI_CONFIG_KEY);
-        PicSystem record = picSystemMapper.selectOne(wrapper);
+        // syskey 没有唯一索引，可能有多条脏数据，取最早一条
+        List<PicSystem> records = picSystemMapper.selectList(
+                new LambdaQueryWrapper<PicSystem>().eq(PicSystem::getSyskey, SysConstants.AI_CONFIG_KEY));
 
         AiConfigDTO config;
-        if (record == null || record.getSysvalue() == null) {
+        if (records == null || records.isEmpty() || records.get(0).getSysvalue() == null) {
             config = new AiConfigDTO();
             config.setTaggingEnabled(true);
-            config.setEditingEnabled(true);
+            config.setEditingEnabled(false);
             config.setGenerationEnabled(true);
             config.setRecommendationEnabled(true);
         } else {
-            config = JSONUtil.toBean(record.getSysvalue(), AiConfigDTO.class);
+            config = JSONUtil.toBean(records.get(0).getSysvalue(), AiConfigDTO.class);
         }
         return ResUtils.success(config);
     }
@@ -223,34 +283,47 @@ public class AiController {
     public Response<Boolean> updateConfig(@Valid @RequestBody AiConfigDTO configDTO) {
         configLock.lock();
         try {
-            LambdaQueryWrapper<PicSystem> wrapper = new LambdaQueryWrapper<PicSystem>()
-                    .eq(PicSystem::getSyskey, SysConstants.AI_CONFIG_KEY);
-            PicSystem record = picSystemMapper.selectOne(wrapper);
+            // syskey 没有唯一索引，先查已有记录，再决定 insert 还是 update
+            List<PicSystem> records = picSystemMapper.selectList(
+                    new LambdaQueryWrapper<PicSystem>().eq(PicSystem::getSyskey, SysConstants.AI_CONFIG_KEY));
 
             AiConfigDTO config;
-            if (record == null || record.getSysvalue() == null) {
+            PicSystem target;
+            if (records == null || records.isEmpty() || records.get(0).getSysvalue() == null) {
                 config = new AiConfigDTO();
                 config.setTaggingEnabled(true);
-                config.setEditingEnabled(true);
+                config.setEditingEnabled(false);
                 config.setGenerationEnabled(true);
                 config.setRecommendationEnabled(true);
-                record = new PicSystem();
-                record.setSyskey(SysConstants.AI_CONFIG_KEY);
+                target = new PicSystem();
+                target.setSyskey(SysConstants.AI_CONFIG_KEY);
+                target.setSysvalue(JSONUtil.toJsonStr(applyDtoToConfig(config, configDTO)));
+                picSystemMapper.insert(target);
             } else {
-                config = JSONUtil.toBean(record.getSysvalue(), AiConfigDTO.class);
+                // 取最早一条作为权威记录，清理历史脏数据
+                PicSystem canonical = records.get(0);
+                config = JSONUtil.toBean(canonical.getSysvalue(), AiConfigDTO.class);
+                applyDtoToConfig(config, configDTO);
+                canonical.setSysvalue(JSONUtil.toJsonStr(config));
+                picSystemMapper.updateById(canonical);
+                if (records.size() > 1) {
+                    for (int i = 1; i < records.size(); i++) {
+                        picSystemMapper.deleteById(records.get(i).getId());
+                    }
+                }
             }
-
-            if (configDTO.getTaggingEnabled() != null) config.setTaggingEnabled(configDTO.getTaggingEnabled());
-            if (configDTO.getEditingEnabled() != null) config.setEditingEnabled(configDTO.getEditingEnabled());
-            if (configDTO.getGenerationEnabled() != null) config.setGenerationEnabled(configDTO.getGenerationEnabled());
-            if (configDTO.getRecommendationEnabled() != null) config.setRecommendationEnabled(configDTO.getRecommendationEnabled());
-
-            record.setSysvalue(JSONUtil.toJsonStr(config));
-            picSystemMapper.insertOrUpdate(record);
             return ResUtils.success(true);
         } finally {
             configLock.unlock();
         }
+    }
+
+    private AiConfigDTO applyDtoToConfig(AiConfigDTO config, AiConfigDTO configDTO) {
+        if (configDTO.getTaggingEnabled() != null) config.setTaggingEnabled(configDTO.getTaggingEnabled());
+        if (configDTO.getEditingEnabled() != null) config.setEditingEnabled(configDTO.getEditingEnabled());
+        if (configDTO.getGenerationEnabled() != null) config.setGenerationEnabled(configDTO.getGenerationEnabled());
+        if (configDTO.getRecommendationEnabled() != null) config.setRecommendationEnabled(configDTO.getRecommendationEnabled());
+        return config;
     }
 
     private String resolveContentType(String contentType) {
@@ -262,6 +335,13 @@ public class AiController {
         if (fileName == null || fileName.isBlank()) {
             return "image";
         }
-        return fileName.replace("\\", "_").replace("\"", "_");
+        // 防止 CRLF 注入截断 Content-Disposition，同时去掉 HTML 危险字符
+        return fileName
+                .replace("\\", "_")
+                .replace("\"", "_")
+                .replace("\r", "_")
+                .replace("\n", "_")
+                .replace("<", "_")
+                .replace(">", "_");
     }
 }

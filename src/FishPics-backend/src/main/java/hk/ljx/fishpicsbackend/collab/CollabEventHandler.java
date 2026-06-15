@@ -5,13 +5,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Disruptor 事件消费处理器
  * 运行在 Disruptor 的消费者线程，与 WebSocket I/O 线程完全隔离
- *
- * 职责：接收事件 → 广播给同空间其他用户
- * 变换状态完全存在于内存（Session 级），无人在线时自然丢弃
  */
 @Slf4j
 @Component
@@ -39,6 +37,8 @@ public class CollabEventHandler implements com.lmax.disruptor.EventHandler<Colla
                 case CollabEvent.TYPE_REQUEST_EDIT -> handleRequestEdit(event);
                 case CollabEvent.TYPE_APPROVE -> handleApprove(event);
                 case CollabEvent.TYPE_DENY -> handleDeny(event);
+                case CollabEvent.TYPE_DISCONNECT -> handleDisconnect(event);
+                case CollabEvent.TYPE_FILE_REPLACED -> handleFileReplaced(event);
                 default -> { }
             }
         } catch (Exception e) {
@@ -126,7 +126,7 @@ public class CollabEventHandler implements com.lmax.disruptor.EventHandler<Colla
         Long userId = event.getUserId();
         String nickname = event.getNickname() != null ? event.getNickname() : "";
 
-        boolean acquired = sessionRegistry.tryLockPicture(pictureId, userId, nickname);
+        boolean acquired = sessionRegistry.tryLockPicture(pictureId, userId, nickname, event.getSpaceId());
         if (acquired) {
             // 锁定成功，广播给所有人
             String lockMsg = cn.hutool.json.JSONUtil.toJsonStr(Map.of(
@@ -165,7 +165,7 @@ public class CollabEventHandler implements com.lmax.disruptor.EventHandler<Colla
         if (!requests.isEmpty()) {
             var next = requests.iterator().next();
             sessionRegistry.removeEditRequest(pictureId, next.getUserId());
-            sessionRegistry.tryLockPicture(pictureId, next.getUserId(), next.getNickname());
+            sessionRegistry.tryLockPicture(pictureId, next.getUserId(), next.getNickname(), event.getSpaceId());
             broadcastTransfer(event.getSpaceId(), pictureId, userId, next.getUserId(), next.getNickname());
             log.info("[CollabDisruptor] 转让编辑权(排队): picture={}, from={}, to={}", pictureId, userId, next.getUserId());
             return;
@@ -180,7 +180,7 @@ public class CollabEventHandler implements com.lmax.disruptor.EventHandler<Colla
         if (nextUser != null) {
             Long toUserId = nextUser.getKey();
             String toNickname = nextUser.getValue().getNickname() != null ? nextUser.getValue().getNickname() : "";
-            sessionRegistry.tryLockPicture(pictureId, toUserId, toNickname);
+            sessionRegistry.tryLockPicture(pictureId, toUserId, toNickname, event.getSpaceId());
             broadcastTransfer(event.getSpaceId(), pictureId, userId, toUserId, toNickname);
             log.info("[CollabDisruptor] 转让编辑权(在线): picture={}, from={}, to={}", pictureId, userId, toUserId);
         } else {
@@ -233,10 +233,9 @@ public class CollabEventHandler implements com.lmax.disruptor.EventHandler<Colla
         if (sessionRegistry == null || event.getPictureId() == null) return;
         Long pictureId = event.getPictureId();
         Long editorId = event.getUserId();
-        Long targetUserId;
-        try {
-            targetUserId = Long.parseLong(event.getNickname());
-        } catch (NumberFormatException e) { return; }
+        // 从专用 targetUserId 字段读取
+        Long targetUserId = event.getTargetUserId();
+        if (targetUserId == null) return;
 
         // 验证审批者是当前锁持有者
         var lock = sessionRegistry.getPictureLock(pictureId);
@@ -245,11 +244,25 @@ public class CollabEventHandler implements com.lmax.disruptor.EventHandler<Colla
         // 移除申请记录
         sessionRegistry.removeEditRequest(pictureId, targetUserId);
 
+        // 先检查目标用户是否在线，再解锁和转移锁
+        // 防止锁转给已离线的用户导致锁永久卡住
+        var requester = sessionRegistry.getSpaceSessions(event.getSpaceId()).get(targetUserId);
+        if (requester == null) {
+            // 目标用户已离线，通知审批者，不转移锁
+            String offlineMsg = cn.hutool.json.JSONUtil.toJsonStr(Map.of(
+                    "type", "edit-denied",
+                    "pictureId", pictureId,
+                    "reason", "target_offline"
+            ));
+            sessionRegistry.sendToUser(event.getSpaceId(), editorId, offlineMsg);
+            log.info("[CollabDisruptor] 审批取消(目标离线): picture={}, editor={}, target={}", pictureId, editorId, targetUserId);
+            return;
+        }
+
         // 解除当前锁，转移给申请人
         sessionRegistry.unlockPicture(pictureId, editorId);
-        var requester = sessionRegistry.getSpaceSessions(event.getSpaceId()).get(targetUserId);
-        String requesterName = requester != null ? requester.getNickname() : "";
-        sessionRegistry.tryLockPicture(pictureId, targetUserId, requesterName);
+        String requesterName = requester.getNickname();
+        sessionRegistry.tryLockPicture(pictureId, targetUserId, requesterName, event.getSpaceId());
 
         // 广播锁转移
         String transferMsg = cn.hutool.json.JSONUtil.toJsonStr(Map.of(
@@ -267,10 +280,9 @@ public class CollabEventHandler implements com.lmax.disruptor.EventHandler<Colla
         if (sessionRegistry == null || event.getPictureId() == null) return;
         Long pictureId = event.getPictureId();
         Long editorId = event.getUserId();
-        Long targetUserId;
-        try {
-            targetUserId = Long.parseLong(event.getNickname());
-        } catch (NumberFormatException e) { return; }
+        // 从专用 targetUserId 字段读取
+        Long targetUserId = event.getTargetUserId();
+        if (targetUserId == null) return;
 
         // 验证审批者是当前锁持有者
         var lock = sessionRegistry.getPictureLock(pictureId);
@@ -286,5 +298,65 @@ public class CollabEventHandler implements com.lmax.disruptor.EventHandler<Colla
         ));
         sessionRegistry.sendToUser(event.getSpaceId(), targetUserId, denyMsg);
         log.info("[CollabDisruptor] 编辑申请拒绝: picture={}, editor={}, target={}", pictureId, editorId, targetUserId);
+    }
+
+    /**
+     * 用户断连后由 Disruptor 消费者线程处理锁转移/清理
+     */
+    private void handleDisconnect(CollabEvent event) {
+        if (sessionRegistry == null) return;
+        Long userId = event.getUserId();
+        Long spaceId = event.getSpaceId();
+        if (userId == null || spaceId == null) return;
+
+        // 1. 移除会话（传 sessionId 校验，防快速重连误删新会话）
+        sessionRegistry.removeSession(spaceId, userId, event.getSessionId());
+
+        // 2. 清理该用户在当前空间持有的锁，并逐个处理转移或释放
+        Set<Long> unlockedPictures = sessionRegistry.clearLocksByUserInSpace(userId, spaceId);
+        for (Long pid : unlockedPictures) {
+            // 优先转给排队的申请人
+            var requests = sessionRegistry.getEditRequests(pid);
+            if (!requests.isEmpty()) {
+                var next = requests.iterator().next();
+                sessionRegistry.removeEditRequest(pid, next.getUserId());
+                sessionRegistry.tryLockPicture(pid, next.getUserId(), next.getNickname(), spaceId);
+                broadcastTransfer(spaceId, pid, userId, next.getUserId(), next.getNickname());
+                log.info("[CollabDisruptor] 断连转让(排队): picture={}, from={}, to={}", pid, userId, next.getUserId());
+                continue;
+            }
+            // 队列为空,广播解锁
+            String unlockMsg = cn.hutool.json.JSONUtil.toJsonStr(Map.of(
+                    "type", "unlock", "pictureId", pid, "userId", userId));
+            sessionRegistry.broadcastAll(spaceId, unlockMsg);
+            sessionRegistry.clearPictureState(spaceId, pid);
+            log.info("[CollabDisruptor] 断连解锁(无排队): picture={}", pid);
+        }
+
+        // 3. 清理该用户在当前空间的编辑申请
+        sessionRegistry.clearEditRequestsByUserInSpace(userId, spaceId);
+
+        // 4. 广播 leave
+        String leaveMsg = cn.hutool.json.JSONUtil.toJsonStr(Map.of(
+                "type", "leave", "userId", userId));
+        sessionRegistry.broadcast(spaceId, userId, leaveMsg);
+        log.info("[CollabDisruptor] 用户断连处理完成: user={}, space={}", userId, spaceId);
+    }
+
+    /**
+     * 文件被替换后广播给同空间所有用户（重置 cropper）
+     * 由 HTTP /picture/replace 事务提交后通过 Disruptor 触发
+     */
+    private void handleFileReplaced(CollabEvent event) {
+        if (sessionRegistry == null || event.getPictureId() == null) return;
+        String msg = cn.hutool.json.JSONUtil.toJsonStr(Map.of(
+                "type", "file-replaced",
+                "pictureId", event.getPictureId(),
+                "userId", event.getUserId(),
+                "nickname", event.getNickname() != null ? event.getNickname() : ""));
+        sessionRegistry.broadcastAll(event.getSpaceId(), msg);
+        // 文件已替换,清除旧的 transform 状态
+        sessionRegistry.clearPictureState(event.getSpaceId(), event.getPictureId());
+        log.info("[CollabDisruptor] 文件替换广播: picture={}, space={}", event.getPictureId(), event.getSpaceId());
     }
 }

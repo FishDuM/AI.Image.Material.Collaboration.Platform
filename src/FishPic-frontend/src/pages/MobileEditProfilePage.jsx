@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useContext } from 'react'
 import { Form, Input, Button, Avatar, App, Switch } from 'antd'
 import { UserOutlined, MailOutlined, PhoneOutlined, CameraOutlined, LockOutlined, EyeOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
-import { getUserMyself, editUser, uploadAvatar } from '../api'
+import { getUserMyself, editUser, uploadAvatar, markPasswordChange } from '../api'
 import { AuthContext } from '../context/AuthContext'
 import MobilePageWrapper from '../components/MobilePageWrapper'
 import './MobileLoginRegister.css'
@@ -20,7 +20,7 @@ export default function MobileEditProfilePage() {
   const fetchUserData = useCallback(async () => {
     try {
       const res = await getUserMyself()
-      const data = res?.data?.data || res?.data || res
+      const data = res?.data || res
       setUserData(data)
       form.setFieldsValue({
         username: data.username,
@@ -40,6 +40,10 @@ export default function MobileEditProfilePage() {
   const handleAvatarChange = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
+    if (!userData?.id) {
+      message.error('用户信息尚未加载完成,请稍后再试')
+      return
+    }
     if (file.size > 5 * 1024 * 1024) {
       message.error('图片大小不能超过5MB')
       return
@@ -50,7 +54,7 @@ export default function MobileEditProfilePage() {
       formData.append('file', file)
       formData.append('id', userData.id)
       const res = await uploadAvatar(formData)
-      const newAvatar = res?.data?.data || res
+      const newAvatar = res?.data || res
       if (typeof newAvatar === 'string' && newAvatar.startsWith('http')) {
         setUserData(prev => ({ ...prev, avatar: newAvatar }))
         updateUserInfo(prev => ({ ...prev, avatar: newAvatar }))
@@ -64,6 +68,10 @@ export default function MobileEditProfilePage() {
   }
 
   const handleFinish = async (values) => {
+    if (!userData?.id) {
+      message.error('用户信息尚未加载完成,请稍后再试')
+      return
+    }
     setLoading(true)
     try {
       const submitData = {
@@ -77,6 +85,9 @@ export default function MobileEditProfilePage() {
         submitData.originalPassword = values.originalPassword
       }
       await editUser(submitData)
+      if (submitData.password) {
+        markPasswordChange()
+      }
       updateUserInfo(prev => ({
         ...prev,
         nickname: values.nickname,
@@ -177,7 +188,10 @@ export default function MobileEditProfilePage() {
                     size="large"
                   />
                 </Form.Item>
-                <Form.Item name="originalPassword">
+                <Form.Item
+                  name="originalPassword"
+                  rules={[{ required: true, message: '请输入原始密码' }]}
+                >
                   <Input.Password
                     prefix={<EyeOutlined />}
                     placeholder="请输入原始密码"

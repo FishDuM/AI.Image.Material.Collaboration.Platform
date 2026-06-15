@@ -172,6 +172,7 @@ public class UserVO implements Serializable {
 
     /**
      * 创建管理员查看的 VO（包含状态和角色信息）
+     * email/phone 自动脱敏
      */
     public static UserVO ofAdmin(Long id, String username, String nickname, String avatar,
                                   String email, String phone, Integer status, Integer level,
@@ -181,13 +182,34 @@ public class UserVO implements Serializable {
                 .username(username)
                 .nickname(nickname)
                 .avatar(avatar)
-                .email(email)
-                .phone(phone)
+                .email(maskEmail(email))
+                .phone(maskPhone(phone))
                 .status(status)
                 .level(level)
                 .createTime(createTime)
                 .roleIds(roleIds)
                 .build();
+    }
+
+    /**
+     * 邮箱脱敏
+     */
+    public static String maskEmail(String email) {
+        if (email == null || email.isEmpty()) return email;
+        int at = email.indexOf('@');
+        if (at <= 0) return email;
+        String local = email.substring(0, at);
+        String domain = email.substring(at);
+        if (local.length() <= 1) return local + "***" + domain;
+        return local.charAt(0) + "***" + domain;
+    }
+
+    /**
+     * 手机号脱敏
+     */
+    public static String maskPhone(String phone) {
+        if (phone == null || phone.length() < 7) return phone;
+        return phone.substring(0, 3) + "****" + phone.substring(phone.length() - 4);
     }
 
     public static UserVO ofAdmin(Long id, String username, String nickname, String avatar,

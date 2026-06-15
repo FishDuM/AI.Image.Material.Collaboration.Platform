@@ -20,6 +20,10 @@ public class CollabEvent {
     public static final int TYPE_REQUEST_EDIT = 6;
     public static final int TYPE_APPROVE = 7;
     public static final int TYPE_DENY = 8;
+    /** 文件被替换（由 HTTP /picture/replace 完成后由后端主动推送） */
+    public static final int TYPE_FILE_REPLACED = 9;
+    /** 用户断连（由 Disruptor 消费者处理锁转移） */
+    public static final int TYPE_DISCONNECT = 10;
 
     /** 事件类型 */
     private int type;
@@ -34,6 +38,14 @@ public class CollabEvent {
     private Long userId;
     private String nickname;
     private String avatar;
+
+    /**
+     * 目标用户 ID
+     */
+    private Long targetUserId;
+
+    /** WebSocket session ID（用于 removeSession 时校验，防止误删新 session） */
+    private String sessionId;
 
     /** 缩放比例 */
     private Double scale;
@@ -57,6 +69,8 @@ public class CollabEvent {
         userId = null;
         nickname = null;
         avatar = null;
+        targetUserId = null;
+        sessionId = null;
         scale = null;
         rotation = null;
         cropX = null;

@@ -14,4 +14,9 @@ public interface AiService {
     Task getDrawResult(String taskId);
 
     String getDownloadImageUrl(String taskId);
+
+    /**
+     * 暴露到 Service 层，让其他端点能查 AiConfig 开关
+     */
+    boolean isFeatureEnabled(String fieldName);
 }

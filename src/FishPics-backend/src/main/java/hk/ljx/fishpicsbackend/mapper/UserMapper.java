@@ -2,6 +2,8 @@ package hk.ljx.fishpicsbackend.mapper;
 
 import hk.ljx.fishpicsbackend.user.entity.User;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Update;
 
 /**
 * @author 30574
@@ -11,6 +13,18 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 */
 public interface UserMapper extends BaseMapper<User> {
 
+    /**
+     * 最后一名 admin 保护(并发安全版)。
+     * 条件:目标用户降级后,系统中至少还有 1 个 level >= 3 且 status = 1 的 admin。
+     */
+    @Update("UPDATE user SET level = #{newLevel} " +
+            "WHERE id = #{userId} " +
+            "AND (" +
+            "  SELECT COUNT(*) FROM (" +
+            "    SELECT 1 FROM user WHERE level >= 3 AND status = 1 AND id != #{userId}" +
+            "  ) AS remaining_admins" +
+            ") >= 1")
+    int updateLevelIfNotLastAdmin(@Param("userId") Long userId, @Param("newLevel") Integer newLevel);
 }
 
 

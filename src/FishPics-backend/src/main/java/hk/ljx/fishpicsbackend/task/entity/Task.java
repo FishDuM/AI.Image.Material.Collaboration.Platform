@@ -47,6 +47,11 @@ public class Task implements Serializable {
     private String status;
 
     /**
+     * 已重试次数
+     */
+    private Integer retryCount;
+
+    /**
      * 任务参数JSON
      */
     private String param;

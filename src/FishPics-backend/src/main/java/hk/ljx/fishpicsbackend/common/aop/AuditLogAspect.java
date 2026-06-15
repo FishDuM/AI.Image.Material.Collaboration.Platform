@@ -58,6 +58,7 @@ public class AuditLogAspect {
             if (auditLogAnnotation != null) {
                 auditLog.setModule(auditLogAnnotation.module());
                 auditLog.setOperation(auditLogAnnotation.operation());
+                auditLog.setDetail(auditLogAnnotation.description());
             }
 
             // 获取请求信息
@@ -67,6 +68,14 @@ public class AuditLogAspect {
                 auditLog.setMethod(request.getMethod());
                 auditLog.setUrl(request.getRequestURI());
                 auditLog.setIp(getClientIp(request));
+                // GET query params 也需要脱敏
+                String queryString = request.getQueryString();
+                if (queryString != null && !queryString.isEmpty()) {
+                    String maskedQuery = queryString
+                            .replaceAll("(?i)(password|token|apiKey|secretKey|accessToken|refreshToken|secret|originalPassword)=[^&]*", "$1=***");
+                    // 暂存到 request attribute,避免与 body args 冲突
+                    request.setAttribute("__auditQuery", maskedQuery);
+                }
             }
 
             // 获取当前用户
@@ -78,9 +87,24 @@ public class AuditLogAspect {
 
             // 获取请求参数（过滤敏感字段，截断过长内容）
             try {
+                // 把 query params 拼到 params 前面
+                if (attributes != null) {
+                    HttpServletRequest req = attributes.getRequest();
+                    Object maskedQuery = req.getAttribute("__auditQuery");
+                    if (maskedQuery != null) {
+                        auditLog.setParams(maskedQuery.toString());
+                    }
+                }
                 Object[] args = joinPoint.getArgs();
                 if (args != null && args.length > 0) {
                     StringBuilder params = new StringBuilder();
+                    // 把 query params 拼在前面
+                    if (attributes != null) {
+                        Object maskedQuery = attributes.getRequest().getAttribute("__auditQuery");
+                        if (maskedQuery != null) {
+                            params.append("?").append(maskedQuery).append(" ");
+                        }
+                    }
                     for (Object arg : args) {
                         if (arg != null && !arg.getClass().getName().startsWith("jakarta.servlet")) {
                             String json = JSONUtil.toJsonStr(arg);
@@ -128,21 +152,30 @@ public class AuditLogAspect {
 
     /**
      * 异步发送审计日志到 RocketMQ
-     * MQ 挂了就降级成同步写 DB，保证日志不丢
+     * 用独立线程池异步执行，MQ 挂了就降级成 DB 写
      */
+    private final java.util.concurrent.ExecutorService auditLogExecutor =
+            java.util.concurrent.Executors.newFixedThreadPool(2, r -> {
+                Thread t = new Thread(r, "audit-log-fallback");
+                t.setDaemon(true);
+                return t;
+            });
+
     private void sendAuditLogAsync(SysAuditLog auditLog) {
-        try {
-            String json = JSONUtil.toJsonStr(auditLog);
-            Message msg = new Message("audit-log-topic", json.getBytes(StandardCharsets.UTF_8));
-            SendResult sendResult = auditLogProducer.send(msg);
-            if (sendResult.getSendStatus() != SendStatus.SEND_OK) {
-                log.warn("审计日志MQ发送非OK，降级为同步写DB: status={}", sendResult.getSendStatus());
+        auditLogExecutor.execute(() -> {
+            try {
+                String json = JSONUtil.toJsonStr(auditLog);
+                Message msg = new Message("audit-log-topic", json.getBytes(StandardCharsets.UTF_8));
+                SendResult sendResult = auditLogProducer.send(msg);
+                if (sendResult.getSendStatus() != SendStatus.SEND_OK) {
+                    log.warn("审计日志MQ发送非OK，降级为同步写DB: status={}", sendResult.getSendStatus());
+                    saveAuditLogDirect(auditLog);
+                }
+            } catch (Exception e) {
+                log.warn("审计日志MQ发送失败，降级为同步写DB", e);
                 saveAuditLogDirect(auditLog);
             }
-        } catch (Exception e) {
-            log.warn("审计日志MQ发送失败，降级为同步写DB", e);
-            saveAuditLogDirect(auditLog);
-        }
+        });
     }
 
     /**

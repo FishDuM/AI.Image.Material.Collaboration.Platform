@@ -14,7 +14,7 @@ export const ALLOWED_IMAGE_TYPES = [
   'image/x-eps',
 ]
 
-/** 浏览器 <img> 能渲染的 MIME 类型（可用于裁剪） */
+/** 浏览器 <img> 能渲染的 MIME 类型 */
 export const BROWSER_RENDERABLE_TYPES = [
   'image/jpeg',
   'image/png',
@@ -58,7 +58,6 @@ export function formatMaxUploadSize() {
 
 /**
  * 判断文件是否为允许的图片格式
- * 优先用浏览器上报的MIME类型，不可用时（如Windows上HEIC会报空串）从扩展名回退判断
  */
 export function isAllowedImageFile(file) {
   if (ALLOWED_IMAGE_TYPES.includes(file.type)) return true

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App as AntApp, Typography, Button, Modal, Form, Input, Select, Masonry, Image as AntImage, Spin, Empty, Popconfirm, Progress, Popover } from 'antd'
-import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowUpOutlined, EditOutlined, CloudUploadOutlined, DatabaseOutlined, HddOutlined, UploadOutlined, ApartmentOutlined, ShareAltOutlined } from '@ant-design/icons'
+import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowUpOutlined, EditOutlined, CloudUploadOutlined, DatabaseOutlined, HddOutlined, UploadOutlined, ApartmentOutlined, ShareAltOutlined, StarOutlined } from '@ant-design/icons'
 import { updateSpace, listSpace, getSystemTypes, createShare } from '../api'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { AuthContext } from '../context/AuthContext'
@@ -33,8 +33,15 @@ function PrivateSpace() {
   const [shareLoading, setShareLoading] = useState(false)
   const [shareLink, setShareLink] = useState('')
   const handleOpenShare = () => {
-    if (selectedIds.length !== 1) {
-      message.warning('请选择一张图片进行分享')
+    if (selectedIds.length === 0) {
+      message.warning('请选择至少一张图片进行分享')
+      return
+    }
+    // 检查所选图片是否都属于当前用户
+    const targetPics = pictures.filter(p => selectedIds.includes(p.id))
+    const hasForeignPic = targetPics.some(p => p.userId && userInfo && p.userId !== userInfo.id)
+    if (hasForeignPic) {
+      message.warning('只能分享自己上传的图片')
       return
     }
     shareForm.resetFields()
@@ -46,7 +53,7 @@ function PrivateSpace() {
     setShareLoading(true)
     try {
       const token = await createShare({
-        pictureId: selectedIds[0],
+        pictureIds: selectedIds,
         expireDays: values.expireDays || 1,
         allowDownload: values.allowDownload ? 1 : 0,
       })
@@ -357,9 +364,27 @@ function PrivateSpace() {
                 <Button
                   icon={<ShareAltOutlined />}
                   onClick={handleOpenShare}
-                  disabled={selectedIds.length !== 1}
+                  disabled={selectedIds.length === 0}
                 >
                   分享
+                </Button>
+                <Button
+                  icon={<StarOutlined />}
+                  onClick={async () => {
+                    try {
+                      await updatePicture({ id: selectedIds[0], isSelected: 1 })
+                      message.success('已提交精选申请')
+                      setSelectedIds([])
+                      setBatchMode(false)
+                      doFetchPictures(spaces[0].id, 1, searchKeyword)
+                    } catch (err) {
+                      message.error(err.message || '申请失败')
+                    }
+                  }}
+                  disabled={selectedIds.length !== 1}
+                  style={{ color: '#d4a017', borderColor: '#d4a017' }}
+                >
+                  申请精选
                 </Button>
                 <Popconfirm
                   title="确认删除"
@@ -503,6 +528,7 @@ function PrivateSpace() {
         open={showImageEditor}
         imageUrl={pictures.find(p => selectedIds.includes(p.id))?.url}
         spaceId={spaces[0]?.id}
+        pictureId={selectedIds[0]}
         onSuccess={handleUploadSuccess}
         onClose={() => setShowImageEditor(false)}
       />

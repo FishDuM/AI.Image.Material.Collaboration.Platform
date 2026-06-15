@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URLEncoder;
@@ -40,11 +41,14 @@ public class ShareController {
     public Response<String> createShare(@Valid @RequestBody ShareCreateRequest request) {
         LoginContext ctx = UserHolder.getLoginContext();
         ExcUtils.throwIfTrue(ctx == null || ctx.getUserId() == null, ExceptionCode.NOT_LOGIN);
+        int expireDays = request.getExpireDays() == null ? 1 : request.getExpireDays();
+        int allowDownload = request.getAllowDownload() == null ? 1 : request.getAllowDownload();
         String shareToken = shareService.createShare(
-                request.getPictureId(),
+                request.getPictureIds(),
                 ctx.getUserId(),
-                request.getExpireDays(),
-                request.getAllowDownload()
+                expireDays,
+                allowDownload,
+                request.getMaxViewCount()
         );
         return ResUtils.success(shareToken);
     }
@@ -55,20 +59,31 @@ public class ShareController {
     }
 
     @GetMapping("/preview/{token}")
-    public void preview(@PathVariable String token, HttpServletResponse response) throws Exception {
-        try (ShareFileVO file = shareService.getPreviewFile(token)) {
+    public void preview(@PathVariable String token,
+                        @RequestParam(required = false) Long pictureId,
+                        HttpServletResponse response) throws Exception {
+        try (ShareFileVO file = shareService.getPreviewFile(token, pictureId)) {
             response.setContentType(resolveContentType(file.getContentType()));
             response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
             if (file.getContentLength() != null && file.getContentLength() >= 0) {
                 response.setContentLengthLong(file.getContentLength());
             }
+            String safeName = defaultFileName(file.getPictureName());
+            response.setHeader(
+                    HttpHeaders.CONTENT_DISPOSITION,
+                    "inline; filename=\"" + safeName.replace("\"", "_") + "\"; "
+                            + "filename*=UTF-8''" + URLEncoder.encode(safeName, StandardCharsets.UTF_8)
+            );
+            response.setHeader("X-Content-Type-Options", "nosniff");
             StreamUtils.copy(file.getInputStream(), response.getOutputStream());
         }
     }
 
     @GetMapping("/download/{token}")
-    public void download(@PathVariable String token, HttpServletResponse response) throws Exception {
-        try (ShareFileVO file = shareService.getDownloadFile(token)) {
+    public void download(@PathVariable String token,
+                         @RequestParam(required = false) Long pictureId,
+                         HttpServletResponse response) throws Exception {
+        try (ShareFileVO file = shareService.getDownloadFile(token, pictureId)) {
             response.setContentType(MediaType.APPLICATION_OCTET_STREAM_VALUE);
             response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
             if (file.getContentLength() != null && file.getContentLength() >= 0) {
@@ -78,6 +93,7 @@ public class ShareController {
                     HttpHeaders.CONTENT_DISPOSITION,
                     "attachment; filename*=UTF-8''" + URLEncoder.encode(defaultFileName(file.getPictureName()), StandardCharsets.UTF_8)
             );
+            response.setHeader("X-Content-Type-Options", "nosniff");
             StreamUtils.copy(file.getInputStream(), response.getOutputStream());
         }
     }
@@ -95,7 +111,6 @@ public class ShareController {
         if (contentType == null || contentType.isBlank()) {
             return MediaType.APPLICATION_OCTET_STREAM_VALUE;
         }
-        // 安全限制：仅允许图片类型，防止 XSS（如 text/html 被浏览器渲染执行）
         String lower = contentType.toLowerCase().trim();
         if (lower.startsWith("image/")) {
             return contentType;

@@ -24,18 +24,17 @@ function AdminDashboard() {
 
   useEffect(() => {
     if (hasFetchedRef.current) return
-    if (!userInfo || !userInfo?.permissions?.includes('system:user:manage')) {
+    if (!userInfo || !userInfo?.permissions?.includes('system:log:manage')) {
       message.error('无权访问，正在跳转...')
       setTimeout(() => navigate('/404', { replace: true }), 500)
       return
     }
-    hasFetchedRef.current = true
-
     const fetchStats = async () => {
       setLoading(true)
       try {
         const result = await api.get('/system/stats')
         setStats(result)
+        hasFetchedRef.current = true
       } catch (err) {
         message.error(err.message || '获取统计数据失败')
       } finally {
@@ -45,7 +44,7 @@ function AdminDashboard() {
     fetchStats()
   }, [userInfo, navigate, message])
 
-  if (!userInfo || !userInfo?.permissions?.includes('system:user:manage')) {
+  if (!userInfo || !userInfo?.permissions?.includes('system:log:manage')) {
     return (
       <main className="dashboard-container">
         <div style={{ textAlign: 'center', padding: '100px 0' }}>

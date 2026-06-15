@@ -97,9 +97,9 @@ function App() {
               <Route path="/notifications" element={<RouteWithBoundary><ProtectedRoute><Notifications /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/ai-tools" element={<RouteWithBoundary><ProtectedRoute><AIImageTools /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/admin/users" element={<RouteWithBoundary><ProtectedRoute permission="system:user:manage"><UserManagement /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/admin/pictures" element={<RouteWithBoundary><ProtectedRoute permission="system:user:manage"><AdminPictureManagement /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/pictures" element={<RouteWithBoundary><ProtectedRoute permission="system:log:manage"><AdminPictureManagement /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/admin/spaces" element={<RouteWithBoundary><ProtectedRoute permission="system:team:manage"><SpaceManagement /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/admin/dashboard" element={<RouteWithBoundary><ProtectedRoute permission="system:user:manage"><AdminDashboard /></ProtectedRoute></RouteWithBoundary>} />
+              <Route path="/admin/dashboard" element={<RouteWithBoundary><ProtectedRoute permission="system:log:manage"><AdminDashboard /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/admin/audit-logs" element={<RouteWithBoundary><ProtectedRoute permission="system:log:manage"><AuditLogManagement /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/admin/ai" element={<RouteWithBoundary><ProtectedRoute permission="system:ai:manage"><AIManagement /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/admin/system" element={<RouteWithBoundary><ProtectedRoute permission="system:config"><SystemManagement /></ProtectedRoute></RouteWithBoundary>} />

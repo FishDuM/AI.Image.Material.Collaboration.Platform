@@ -101,6 +101,11 @@ public interface PictureService extends IService<Picture> {
     PictureVO replacePictureFile(Long pictureId, MultipartFile file);
 
     /**
+     * 替换图片文件的事务方法（通过 self 代理调用，使锁包裹整个事务）
+     */
+    PictureVO doReplacePictureFile(Long pictureId, MultipartFile file);
+
+    /**
      * 获取推荐图片列表（基于用户兴趣画像标签匹配）
      */
     IPage<PictureVO> getRecommendPictures(PageRequest pageRequest, Long userId);

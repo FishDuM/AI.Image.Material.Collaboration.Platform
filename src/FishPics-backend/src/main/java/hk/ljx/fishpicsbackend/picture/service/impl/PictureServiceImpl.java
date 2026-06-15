@@ -8,13 +8,14 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
-import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.cache.MultiLevelCacheManager;
+import hk.ljx.fishpicsbackend.collab.CollabEventPublisher;
+import hk.ljx.fishpicsbackend.collab.model.CollabEvent;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
@@ -77,6 +78,9 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     @Resource
     private PictureMapper pictureMapper;
 
+    @Resource
+    private hk.ljx.fishpicsbackend.mapper.SpaceMapper spaceMapper;
+
     @Lazy
     @Resource
     private SpaceService spaceService;
@@ -99,6 +103,23 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
     @Resource
     private MultiLevelCacheManager cacheManager;
+
+    @Resource
+    private CollabEventPublisher collabEventPublisher;
+
+    @Resource
+    private hk.ljx.fishpicsbackend.common.utils.RedisAtomicOps redisAtomicOps;
+
+    @Resource
+    private hk.ljx.fishpicsbackend.mapper.PictureShareMapper pictureShareMapper;
+
+    // 通过 ApplicationContext 获取代理，让 replacePictureFile 的锁包裹整个事务
+    @Resource
+    private org.springframework.context.ApplicationContext applicationContext;
+
+    private PictureService getSelf() {
+        return applicationContext.getBean(PictureService.class);
+    }
 
     private static final long MAX_CHUNK_SIZE = 5L * 1024 * 1024;
 
@@ -167,7 +188,6 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     /**
      * 上传图片
      * 流程：权限校验 → 文件类型/大小校验 → MD5 去重（秒传）→ 上传 COS → 空间配额校验 → 写库
-     * 秒传命中时直接复用已有的 COS 文件，不重复上传
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -181,6 +201,11 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         long maxSize = getMaxUploadSize(userLogin.getLevel());
         ExcUtils.throwIfTrue(file.getSize() > maxSize,
                 "上传图片大小不能超过" + formatSize(maxSize));
+
+        // 大文件强制走分片上传（100MB 阈值）
+        final long DIRECT_UPLOAD_LIMIT = 100L * 1024 * 1024;
+        ExcUtils.throwIfTrue(file.getSize() > DIRECT_UPLOAD_LIMIT,
+                "文件超过 100MB,请使用分片上传(前端应自动走 chunked 路径)");
 
         // 文件类型校验（魔数检测）
         String validFileType = FileTypeUtils.getValidFileType(file);
@@ -243,22 +268,47 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             if (isNewUpload && cosKey != null) {
                 try { cosService.deletePicture(cosKey); } catch (Exception ex) { log.warn("COS 回滚失败: {}", cosKey, ex); }
             }
+            // 配额不足时,addResource 已 ref_count+1 需回滚
+            // (秒传场景下:ref_count 增但没 picture 引用,COS 永不清理)
+            if (resource != null) {
+                try {
+                    fileResourceService.decrementRefCount(resource.getId());
+                } catch (Exception ex) {
+                    log.warn("ref_count 回滚失败(可能 ref_count=0 已触发 COS 删,幂等可接受): resourceId={}", resource.getId(), ex);
+                }
+            }
             throw new BaseException(ExceptionCode.PARAMETER_ERROR, "空间容量不足");
         }
         picture.setSpaceId(space.getId());
-        // 管理员上传直接通过，普通用户上传需要审核
-        hk.ljx.fishpicsbackend.common.context.LoginContext ctx = UserHolder.getLoginContext();
-        if (ctx != null && ctx.hasSystemPerm("system:user:manage")) {
-            picture.setStatus(1);
-        } else {
-            picture.setStatus(2);
-        }
+        // 上传到空间直接通过，无需审核
+        picture.setStatus(1);
         try {
             ExcUtils.throwIfTrue(pictureMapper.insert(picture) != 1, "上传失败，数据库错误");
-        } catch (Exception e) {
-            // DB 失败：如果是新上传的 COS 文件，需要回滚
+        } catch (org.springframework.dao.DuplicateKeyException e) {
+            // 唯一索引兜底：查重没挡住（并发），回滚后返回已有
             if (isNewUpload && cosKey != null) {
                 try { cosService.deletePicture(cosKey); } catch (Exception ex) { log.warn("COS 回滚失败: {}", cosKey, ex); }
+            }
+            try { atomicUpdateSpaceSize(space, -size, false); } catch (Exception ex) { log.warn("空间配额回滚失败: space={}, size={}", space.getId(), size, ex); }
+            if (resource != null) {
+                try { fileResourceService.decrementRefCount(resource.getId()); } catch (Exception ex) { log.warn("ref_count 回滚失败: resourceId={}", resource.getId(), ex); }
+            }
+            Picture existing = pictureMapper.selectOne(new LambdaQueryWrapper<Picture>()
+                    .eq(Picture::getResourceId, resource != null ? resource.getId() : 0)
+                    .eq(Picture::getUserId, userId)
+                    .eq(Picture::getSpaceId, space.getId())
+                    .last("LIMIT 1"));
+            if (existing != null) return existing;
+            throw new BaseException(ExceptionCode.PARAMETER_ERROR, "图片已存在");
+        } catch (Exception e) {
+            // DB insert 失败时，回滚 COS 和空间配额
+            if (isNewUpload && cosKey != null) {
+                try { cosService.deletePicture(cosKey); } catch (Exception ex) { log.warn("COS 回滚失败: {}", cosKey, ex); }
+            }
+            try { atomicUpdateSpaceSize(space, -size, false); } catch (Exception ex) { log.warn("空间配额回滚失败: space={}, size={}", space.getId(), size, ex); }
+            // 回滚引用计数(与 savePictureByUrl 逻辑一致)
+            if (resource != null) {
+                try { fileResourceService.decrementRefCount(resource.getId()); } catch (Exception ex) { log.warn("ref_count 回滚失败: resourceId={}", resource.getId(), ex); }
             }
             throw e;
         }
@@ -267,8 +317,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
     /**
      * 通过 URL 保存图片
-     * 把外部图片下载到临时文件 → 后续走和直接上传一样的去重/配额/审核流程
-     * 用完临时文件在 finally 里删掉，不怕中途异常泄漏
+     * 把外部图片下载到临时文件后走和直接上传一样的去重/配额/审核流程
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -347,30 +396,78 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             // 校验空间写权限
             checkSpaceWritePermission(space, userId);
 
+            // 同一用户在同一个空间已经存过同一张图 → 直接返回已有的图片
+            if (resource != null) {
+                Long existingCount = pictureMapper.selectCount(new LambdaQueryWrapper<Picture>()
+                        .eq(Picture::getResourceId, resource.getId())
+                        .eq(Picture::getUserId, userId)
+                        .eq(Picture::getSpaceId, space.getId()));
+                if (existingCount > 0) {
+                    Picture existingPic = pictureMapper.selectOne(new LambdaQueryWrapper<Picture>()
+                            .eq(Picture::getResourceId, resource.getId())
+                            .eq(Picture::getUserId, userId)
+                            .eq(Picture::getSpaceId, space.getId())
+                            .last("LIMIT 1"));
+                    // 回滚 addResource 增加的 ref_count，因为没创建新图片
+                    fileResourceService.decrementRefCount(resource.getId());
+                    return existingPic;
+                }
+            }
+
             // 5. 空间配额检查（使用原子操作防止竞态条件）
             if (!atomicUpdateSpaceSize(space, size, true)) {
                 // 仅删除新上传的 COS 文件；去重资源的 COS 文件仍被其他图片引用，不可删除
                 if (isNewUpload) {
                     try { cosService.deletePicture(key); } catch (Exception ex) { log.warn("COS 回滚失败: {}", key, ex); }
                 }
+                // 配额不足时,addResource 已 ref_count+1 需回滚
+                if (resource != null) {
+                    try {
+                        fileResourceService.decrementRefCount(resource.getId());
+                    } catch (Exception ex) {
+                        log.warn("savePictureByUrl ref_count 回滚失败(配额不足): resourceId={}", resource.getId(), ex);
+                    }
+                }
                 throw new BaseException(ExceptionCode.PARAMETER_ERROR, "空间容量不足");
             }
             picture.setSpaceId(space.getId());
 
-            // 管理员上传直接通过，普通用户上传需要审核
-            hk.ljx.fishpicsbackend.common.context.LoginContext ctx2 = UserHolder.getLoginContext();
-            if (ctx2 != null && ctx2.hasSystemPerm("system:user:manage")) {
-                picture.setStatus(1);
-            } else {
-                picture.setStatus(2);
-            }
+            // 上传到空间直接通过，无需审核
+            picture.setStatus(1);
             try {
                 ExcUtils.throwIfTrue(pictureMapper.insert(picture) != 1, "上传失败，数据库错误");
+            } catch (org.springframework.dao.DuplicateKeyException e) {
+                // 唯一索引 uk_resource_user_space 兜底：
+                // 查重在前面没挡住（并发 TOCTOU），回滚后返回已有图片
+                atomicUpdateSpaceSize(space, -size, false);
+                if (isNewUpload) {
+                    try { cosService.deletePicture(key); } catch (Exception ex) { log.warn("COS 回滚失败: {}", key, ex); }
+                }
+                if (resource != null) {
+                    try { fileResourceService.decrementRefCount(resource.getId()); } catch (Exception ex) { log.warn("ref_count 回滚失败: resourceId={}", resource.getId(), ex); }
+                }
+                Picture existing = pictureMapper.selectOne(new LambdaQueryWrapper<Picture>()
+                        .eq(Picture::getResourceId, resource != null ? resource.getId() : 0)
+                        .eq(Picture::getUserId, userId)
+                        .eq(Picture::getSpaceId, space.getId())
+                        .last("LIMIT 1"));
+                if (existing != null) return existing;
+                throw new BaseException(ExceptionCode.PARAMETER_ERROR, "图片已存在");
             } catch (Exception e) {
                 // DB 失败：回滚空间配额和 COS 文件
                 atomicUpdateSpaceSize(space, -size, false);
                 if (isNewUpload) {
                     try { cosService.deletePicture(key); } catch (Exception ex) { log.warn("COS 回滚失败: {}", key, ex); }
+                }
+                // 秒传场景 addResource 已 ref_count+1，picture 插失败时也要 decrement
+                // 之前只有 COS 上传场景走 isNewUpload,秒传(ref 复用)时 ref_count 永远 +1 不会回滚,
+                // 导致 file_resource 引用计数虚增,COS 文件永远不清理
+                if (resource != null) {
+                    try {
+                        fileResourceService.decrementRefCount(resource.getId());
+                    } catch (Exception ex) {
+                        log.warn("savePictureByUrl ref_count 回滚失败(非阻塞): resourceId={}", resource.getId(), ex);
+                    }
                 }
                 throw e;
             }
@@ -412,7 +509,12 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         Integer status = dto.getStatus();
         if (status != null) {
             if (status == 4) {
+                // 4=精选申请（isSelected=1 且 status=1）
                 queryWrapper.eq(Picture::getIsPrivate, 0);
+            } else if (status == 5) {
+                // 5=待精选审核(用户申请了精选|手工改了isSelected=2)
+                queryWrapper.eq(Picture::getIsSelected, 2)
+                        .in(Picture::getStatus, 0, 1);
             } else {
                 queryWrapper.eq(Picture::getStatus, status);
             }
@@ -439,13 +541,14 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         ExcUtils.throwIfTrue(pictureId == null, "图片id不能为空");
         Picture picture = pictureMapper.selectById(pictureId);
         ExcUtils.throwIfTrue(picture == null, "图片不存在");
-        if (status != null) {
-            ExcUtils.throwIfTrue((status != 0 && status != 1), "状态值无效");
-            picture.setStatus(status);
-        }
+        // 精选审核：selected=1 通过精选，selected=0 拒绝精选
         if (selected != null) {
             ExcUtils.throwIfTrue((selected != 0 && selected != 1), "精选值无效");
             picture.setIsSelected(selected);
+            // 拒绝精选时把申请状态清掉
+            if (selected == 0 && Integer.valueOf(2).equals(picture.getIsSelected())) {
+                picture.setIsSelected(0);
+            }
         }
         ExcUtils.throwIfTrue(pictureMapper.updateById(picture) != 1, "审核更新失败");
     }
@@ -466,26 +569,34 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         // 批量查询图片
         List<Picture> pictureList = pictureMapper.selectList(new LambdaQueryWrapper<Picture>().in(Picture::getId, ids));
         ExcUtils.throwIfTrue(CollUtil.isEmpty(pictureList), "图片不存在");
-        Set<Long> userIds = new HashSet<>();
-        pictureList.forEach(picture -> userIds.add(picture.getUserId()));
-        // 判断权限：管理员 OR 图片所有者 OR 团队空间成员
-        hk.ljx.fishpicsbackend.common.context.LoginContext ctx3 = UserHolder.getLoginContext();
-        boolean isOwnerOrAdmin = (ctx3 != null && ctx3.hasSystemPerm("system:user:manage"))
-                || (userIds.size() == 1 && userIds.contains(user.getId()));
-        if (!isOwnerOrAdmin) {
-            // 检查是否为团队空间成员（roleId 1=owner 2=member）
-            Set<Long> spaceIds = new HashSet<>();
-            pictureList.forEach(p -> { if (p.getSpaceId() != null) spaceIds.add(p.getSpaceId()); });
-            Long memberCount = spaceTeamMemberMapper.selectCount(
-                    new LambdaQueryWrapper<hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember>()
-                            .eq(hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember::getUserId, user.getId())
-                            .in(hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember::getSpaceId, spaceIds)
-                            .in(hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember::getRoleId, List.of(1, 2)));
-            ExcUtils.throwIfTrue(memberCount == null || memberCount <= 0, ExceptionCode.UNAUTHORIZED, "没有权限删除图片");
+
+        // 按权限过滤出可删的子集
+        List<Long> deletableIds = hk.ljx.fishpicsbackend.picture.service.PicturePermissionUtil
+                .filterDeletableIds(pictureList, ids, spaceTeamMemberMapper);
+        if (deletableIds.isEmpty()) {
+                // 已登录但无权删别人图 → FORBIDDEN
+                throw new BaseException(ExceptionCode.FORBIDDEN, "没有可删除的图片(可能都不是您有权删除的)");
         }
 
-        int i = pictureMapper.delete(new LambdaQueryWrapper<Picture>().in(Picture::getId, ids));
+        // 只删 deletableIds
+        int i = pictureMapper.delete(new LambdaQueryWrapper<Picture>().in(Picture::getId, deletableIds));
         ExcUtils.throwIfTrue(i == 0, "删除失败");
+        // 过滤 pictureList 保留 deletableIds 内的
+        pictureList = pictureList.stream()
+                .filter(p -> deletableIds.contains(p.getId()))
+                .collect(Collectors.toList());
+
+        // 级联清理 picture_share 记录
+        try {
+            int shareDelCount = pictureShareMapper.delete(new LambdaQueryWrapper<hk.ljx.fishpicsbackend.picture.entity.PictureShare>()
+                    .in(hk.ljx.fishpicsbackend.picture.entity.PictureShare::getPictureId, deletableIds));
+            if (shareDelCount > 0) {
+                log.info("级联删除 picture_share: count={}", shareDelCount);
+            }
+        } catch (Exception e) {
+            log.warn("清理 picture_share 失败(非阻塞): {}", e.getMessage());
+        }
+
         // 扣减空间已用大小
         Map<Long, Long> spaceSizeMap = new java.util.HashMap<>();
         pictureList.forEach(picture -> {
@@ -504,7 +615,6 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         });
 
         // file_resource 引用计数递减，ref_count 归零时删除 COS 文件（在事务提交后执行）
-        // 收集需要在事务提交后删除的旧数据 COS URL
         List<String> legacyCosUrls = new java.util.ArrayList<>();
         for (Picture picture : pictureList) {
             if (picture.getResourceId() != null) {
@@ -517,11 +627,9 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                     log.warn("清理图片资源引用失败: pictureId={}, resourceId={}", picture.getId(), picture.getResourceId(), e);
                 }
             } else {
-                // 兼容旧数据（无 resourceId），记录 URL 在事务提交后删除
                 legacyCosUrls.add(picture.getUrl());
             }
         }
-        // 旧数据 COS 文件在事务提交后删除，避免回滚导致数据不一致
         if (!legacyCosUrls.isEmpty()) {
             org.springframework.transaction.support.TransactionSynchronizationManager
                     .registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
@@ -548,64 +656,118 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         ExcUtils.throwIfTrue(user == null || user.getId() == null, ExceptionCode.UNAUTHORIZED, "用户未登录");
         Picture picture = pictureMapper.selectById(id);
         ExcUtils.throwIfTrue(picture == null || picture.getUserId() == null, ExceptionCode.NOT_FOUND, "图片不存在");
-        hk.ljx.fishpicsbackend.common.context.LoginContext ctx4 = UserHolder.getLoginContext();
-        ExcUtils.throwIfFalse(picture.getUserId().equals(user.getId()) || (ctx4 != null && ctx4.hasSystemPerm("system:user:manage")), ExceptionCode.UNAUTHORIZED, "没有权限编辑图片");
+        // 统一走 PicturePermissionUtil
+        hk.ljx.fishpicsbackend.picture.service.PicturePermissionUtil.checkWrite(
+                picture, hk.ljx.fishpicsbackend.picture.service.PicturePermissionUtil.Op.EDIT_META,
+                spaceTeamMemberMapper);
+
+        // updatePicture 不允许改 url（URL 变更走 replace 接口）
+        request.setUrl(null);
+        Long pictureId = request.getId();
+        Integer isSelected = request.getIsSelected();
+        if (isSelected != null) {
+            // 用户申请精选 → isSelected=2（待审核）
+            // 只有图片所属空间的管理员或创建者可以申请精选
+            hk.ljx.fishpicsbackend.picture.service.PicturePermissionUtil.checkWrite(
+                    picture, hk.ljx.fishpicsbackend.picture.service.PicturePermissionUtil.Op.EDIT_META,
+                    spaceTeamMemberMapper);
+            if (isSelected == 1) {
+                ExcUtils.throwIfTrue(picture.getIsSelected() != null && picture.getIsSelected() == 1,
+                        ExceptionCode.PARAMETER_ERROR, "该图片已经是精选");
+                picture.setIsSelected(2);
+            } else if (isSelected == 0) {
+                picture.setIsSelected(0);
+            }
+            pictureMapper.updateById(picture);
+            return;
+        }
 
         String pictureName = request.getPictureName();
         String introduction = request.getIntroduction();
         List<String> tags = request.getTags();
 
+        // pictureName / introduction 入库前清 HTML 标签
         if (ObjUtil.isNotEmpty(pictureName)) {
-            picture.setPictureName(pictureName);
+            String cleanName = hk.ljx.fishpicsbackend.common.utils.XssSanitizer.clean(pictureName);
+            // 清洗后校验长度
+            ExcUtils.throwIfTrue(cleanName.length() > 100, ExceptionCode.PARAMETER_ERROR, "图片名称过长(最多 100 字符)");
+            picture.setPictureName(cleanName);
         }
         if (ObjUtil.isNotEmpty(introduction)) {
-            picture.setIntroduction(introduction);
+            String cleanIntro = hk.ljx.fishpicsbackend.common.utils.XssSanitizer.cleanRelaxed(introduction);
+            ExcUtils.throwIfTrue(cleanIntro.length() > 500, ExceptionCode.PARAMETER_ERROR, "图片描述过长(最多 500 字符)");
+            picture.setIntroduction(cleanIntro);
         }
         if (ObjUtil.isNotEmpty(tags)) {
+            // tags 数量上限 10
+            ExcUtils.throwIfTrue(tags.size() > 10, ExceptionCode.PARAMETER_ERROR, "标签数量不能超过 10 个");
             List<String> typeList = picSystemService.getTypeList();
             Set<String> typeSet = new java.util.HashSet<>(typeList);
-            boolean result = tags.stream().anyMatch(tag -> !typeSet.contains(tag));
+            // tags 也清理一遍
+            List<String> safeTags = tags.stream()
+                    .map(hk.ljx.fishpicsbackend.common.utils.XssSanitizer::clean)
+                    .filter(StrUtil::isNotBlank)
+                    .collect(Collectors.toList());
+            boolean result = safeTags.stream().anyMatch(tag -> !typeSet.contains(tag));
             ExcUtils.throwIfTrue(result, ExceptionCode.PARAMETER_ERROR, "标签不存在");
-            picture.setTags(JSON.toJSONString(tags));
+            picture.setTags(JSONUtil.toJsonStr(safeTags));
         }
 
-        // 协同编辑覆盖：替换图片 URL
-        String newUrl = request.getUrl();
-        if (StrUtil.isNotBlank(newUrl)) {
-            String oldUrl = picture.getUrl();
-            picture.setUrl(newUrl);
-            int i = pictureMapper.updateById(picture);
-            ExcUtils.throwIfFalse(i > 0, ExceptionCode.INTERNAL_SERVER_ERROR, "更新失败");
-            // 异步删除旧 COS 文件（不阻塞主流程）
-            if (StrUtil.isNotBlank(oldUrl)) {
-                try {
-                    cosService.deletePictureByUrl(oldUrl);
-                    log.info("协同编辑：旧图片已删除 url={}", oldUrl);
-                } catch (Exception e) {
-                    log.warn("协同编辑：删除旧图片失败 url={}", oldUrl, e);
-                }
-            }
-            return;
-        }
-
+        // 之前 request.setUrl(null) 已堵掉 url 变更，URL 替换的合法路径是 replacePictureFile
         int i = pictureMapper.updateById(picture);
         ExcUtils.throwIfFalse(i > 0, ExceptionCode.INTERNAL_SERVER_ERROR, "更新失败");
     }
 
     /**
      * 协同编辑替换图片文件：上传新文件到 COS → 更新记录 → 清理旧文件
+     * 锁在事务外获取/释放，确保并发替换不会在事务提交前释放锁
      */
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public PictureVO replacePictureFile(Long pictureId, MultipartFile file) {
         // 1. 校验
         ExcUtils.throwIfTrue(pictureId == null, "图片ID不能为空");
         ExcUtils.throwIfTrue(file == null || file.isEmpty(), "文件不能为空");
+
+        // 并发 replacePictureFile 时的分布式锁防止孤立 file_resource 和配额重复计算
+        hk.ljx.fishpicsbackend.common.utils.DistributedLock replaceLock =
+                new hk.ljx.fishpicsbackend.common.utils.DistributedLock(
+                        stringRedisTemplate,
+                        "lock:replace-picture:" + pictureId,
+                        30L);
+        if (!replaceLock.tryLock()) {
+            throw new BaseException(ExceptionCode.CONFLICT, "该图片正在被替换,请稍后重试");
+        }
+        try {
+            // 通过 ApplicationContext 代理调用，使 @Transactional 在锁保护范围内
+            return getSelf().doReplacePictureFile(pictureId, file);
+        } finally {
+            replaceLock.unlock();
+        }
+    }
+
+    /**
+     * 事务方法独立为 public（通过 self 代理调用），锁在调用方获取/释放
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public PictureVO doReplacePictureFile(Long pictureId, MultipartFile file) {
+        // 文件类型校验（与 uploadPicture 等一致）
+        ExcUtils.throwIfTrue(hk.ljx.fishpicsbackend.common.utils.FileTypeUtils.getValidFileType(file) == null,
+                ExceptionCode.PARAMETER_ERROR, "不支持的文件类型");
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(user == null || user.getId() == null, ExceptionCode.UNAUTHORIZED, "用户未登录");
 
         Picture picture = pictureMapper.selectById(pictureId);
         ExcUtils.throwIfTrue(picture == null || picture.getUserId() == null, ExceptionCode.NOT_FOUND, "图片不存在");
+
+        // 拒绝编辑处于禁用/待审核状态的图片
+        if (picture.getStatus() != null && !Integer.valueOf(1).equals(picture.getStatus())) {
+            // 管理员可以强制替换
+            hk.ljx.fishpicsbackend.common.context.LoginContext ctxForStatus = UserHolder.getLoginContext();
+            boolean isAdminForStatus = ctxForStatus != null && ctxForStatus.hasSystemPerm("system:user:manage");
+            if (!isAdminForStatus) {
+                throw new BaseException(ExceptionCode.FORBIDDEN, "图片当前状态不可编辑");
+            }
+        }
 
         // 权限：图片所有者 / 管理员 / 团队成员
         hk.ljx.fishpicsbackend.common.context.LoginContext ctx = UserHolder.getLoginContext();
@@ -618,7 +780,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                         .in(hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember::getRoleId, List.of(1, 2))
         ) > 0;
         ExcUtils.throwIfFalse(isOwner || isAdmin || isTeamMember,
-                ExceptionCode.UNAUTHORIZED, "没有权限编辑图片");
+                // 已认证但不是 owner/team member → FORBIDDEN
+                ExceptionCode.FORBIDDEN, "没有权限编辑图片");
 
         // 2. 计算 MD5（必须在 COS 上传之前，因为 InputStream 只能读一次）
         String md5;
@@ -657,20 +820,30 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         long oldSize = picture.getSize() != null ? picture.getSize() : 0;
         long newSize = newResource.getSize();
 
-        // 5.1 空间配额检查（仅当新文件更大时）
+        // 5.1 空间配额检查(仅当新文件更大时)
         long sizeDiff = newSize - oldSize;
         if (sizeDiff > 0) {
             Space space = spaceService.getById(picture.getSpaceId());
             if (space != null) {
-                Long storageSize = space.getStorageSize();
-                long currentUsed = space.getSize() != null ? space.getSize() : 0;
-                if (storageSize != null && storageSize > 0 && currentUsed + sizeDiff > storageSize) {
-                    // 配额不足：清理新上传的 COS 文件（仅当是新上传的）
+                // 用 SQL 原子 UPDATE 抢占配额
+                int updated = spaceMapper.conditionalIncrementSize(space.getId(), sizeDiff);
+                if (updated == 0) {
                     if (existingByMd5 == null) {
                         try { cosService.deletePicture(newCosKey); } catch (Exception ex) { log.warn("COS 回滚失败: {}", newCosKey, ex); }
                     }
-                    throw new BaseException(ExceptionCode.PARAMETER_ERROR, "空间容量不足，无法保存");
+                    // addResource 已 ref_count+1,配额不足需回滚
+                    if (newResource != null) {
+                        try {
+                            fileResourceService.decrementRefCount(newResource.getId());
+                        } catch (Exception ex) {
+                            log.warn("replace ref_count 回滚失败: resourceId={}", newResource.getId(), ex);
+                        }
+                    }
+                    throw new BaseException(ExceptionCode.PARAMETER_ERROR, "空间容量不足,无法保存");
                 }
+                // 配额已原子 +sizeDiff,后续 atomicUpdateSpaceSize 不能再 +1
+                sizeDiff = 0;
+                log.info("[replace] 配额原子抢占成功: space={}, +{} bytes", space.getId(), newSize - oldSize);
             }
         }
 
@@ -704,6 +877,36 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
         log.info("协同编辑：图片文件已替换 pictureId={}, oldUrl={}, newUrl={}", pictureId, oldUrl, picture.getUrl());
 
+        // 服务端主动推送 file-replaced 事件（在事务提交后）
+        // 通过 TransactionSynchronization 保证只在 DB 真正落库后再推,避免回滚导致幽灵事件
+        if (picture.getSpaceId() != null) {
+            final Long spaceId = picture.getSpaceId();
+            final Long finalPictureId = pictureId;
+            final Long finalUserId = user.getId();
+            final String finalNickname = user.getNickname();
+            try {
+                org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            try {
+                                collabEventPublisher.publish(event -> {
+                                    event.setType(CollabEvent.TYPE_FILE_REPLACED);
+                                    event.setPictureId(finalPictureId);
+                                    event.setSpaceId(spaceId);
+                                    event.setUserId(finalUserId);
+                                    event.setNickname(finalNickname);
+                                });
+                            } catch (Exception e) {
+                                log.warn("[replacePictureFile] 推送 file-replaced 事件失败: pictureId={}", finalPictureId, e);
+                            }
+                        }
+                    });
+            } catch (Exception e) {
+                log.warn("[replacePictureFile] 注册事务同步器失败,跳过 WS 推送: pictureId={}", pictureId, e);
+            }
+        }
+
         // 8. 返回更新后的信息（供前端 URL 版本化）
         PictureVO result = new PictureVO();
         result.setUrl(picture.getUrl());
@@ -728,8 +931,10 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         ExcUtils.throwIfTrue(user == null || user.getId() == null, ExceptionCode.NOT_LOGIN);
         Picture picture = pictureMapper.selectById(id);
         ExcUtils.throwIfTrue(picture == null || picture.getUserId() == null, ExceptionCode.NOT_FOUND, "图片不存在");
-        hk.ljx.fishpicsbackend.common.context.LoginContext ctx5 = UserHolder.getLoginContext();
-        ExcUtils.throwIfTrue(!picture.getUserId().equals(user.getId()) && (ctx5 == null || !ctx5.hasSystemPerm("system:user:manage")), ExceptionCode.FORBIDDEN, "无权限");
+        // 图片所有者、管理员、团队成员均可查看编辑信息（与 updatePicture 权限一致）
+        hk.ljx.fishpicsbackend.picture.service.PicturePermissionUtil.checkWrite(
+                picture, hk.ljx.fishpicsbackend.picture.service.PicturePermissionUtil.Op.EDIT_META,
+                spaceTeamMemberMapper);
 
         String tags = picture.getTags();
         List<String> tagList = tags != null ? JSONUtil.toList(tags, String.class) : Collections.emptyList();
@@ -789,6 +994,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(ObjUtil.isEmpty(user) || user.getId() == null, ExceptionCode.NOT_LOGIN);
+        // 用 userId-scoped key 确保上传会话绑定到当前用户
         bindUploadOwner(request.getMd5(), user.getId());
 
         long maxSize = getMaxUploadSize(user.getLevel());
@@ -831,15 +1037,16 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         }
 
         // 2. 查 Redis 分片上传状态（断点续传）
-        String chunksKey = RedisConstants.getFileUploadChunksKey(request.getMd5());
+        // 用 userId-scoped key 防止不同用户同 MD5 文件的分片数据互相污染
+        String chunksKey = RedisConstants.getFileUploadChunksKey(user.getId(), request.getMd5());
         Long chunkCount = stringRedisTemplate.opsForSet().size(chunksKey);
         if (chunkCount != null && chunkCount > 0) {
-            String uploadIdKey = RedisConstants.getFileUploadIdKey(request.getMd5());
+            String uploadIdKey = RedisConstants.getFileUploadIdKey(user.getId(), request.getMd5());
             String uploadId = stringRedisTemplate.opsForValue().get(uploadIdKey);
             Set<String> uploadedChunks = stringRedisTemplate.opsForSet().members(chunksKey);
 
             // 恢复原始 cosKey，而非重新生成
-            String cosKeyKey = RedisConstants.getFileCosKeyKey(request.getMd5());
+            String cosKeyKey = RedisConstants.getFileCosKeyKey(user.getId(), request.getMd5());
             String cosKey = stringRedisTemplate.opsForValue().get(cosKeyKey);
             if (StrUtil.isBlank(cosKey)) {
                 // 兜底：如果 cosKey 丢失（极端情况），重新生成
@@ -854,21 +1061,21 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                     uploadedChunks.stream().map(Integer::parseInt).sorted().toList() : List.of());
             result.put("uploadId", uploadId);
             result.put("cosKey", cosKey);
-            refreshUploadSessionTtl(request.getMd5());
+            refreshUploadSessionTtl(request.getMd5(), user.getId());
             return result;
         }
 
         // 3. 新文件
         String cosKey = cosService.generateKey();
         // 将 cosKey 存入 Redis，供断点续传时恢复
-        String cosKeyKey = RedisConstants.getFileCosKeyKey(request.getMd5());
+        String cosKeyKey = RedisConstants.getFileCosKeyKey(user.getId(), request.getMd5());
         stringRedisTemplate.opsForValue().set(cosKeyKey, cosKey,
                 RedisConstants.FILE_UPLOAD_TTL, TimeUnit.HOURS);
         stringRedisTemplate.delete(RedisConstants.getFileMergeResultKey(request.getMd5()));
         Map<String, Object> result = new java.util.LinkedHashMap<>();
         result.put("status", "new");
         result.put("cosKey", cosKey);
-        refreshUploadSessionTtl(request.getMd5());
+        refreshUploadSessionTtl(request.getMd5(), user.getId());
         return result;
     }
 
@@ -887,18 +1094,19 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         validateUploadOwner(md5, user.getId());
 
         // 从 Redis 获取 cosKey（不信任客户端传入，防止越权覆盖他人文件）
-        String cosKeyKey = RedisConstants.getFileCosKeyKey(md5);
+        // 用 userId-scoped key
+        String cosKeyKey = RedisConstants.getFileCosKeyKey(user.getId(), md5);
         String cosKey = stringRedisTemplate.opsForValue().get(cosKeyKey);
         ExcUtils.throwIfTrue(StrUtil.isBlank(cosKey), "上传会话已过期，请重新上传");
 
         // 幂等检查：如果该分片已上传，直接返回
-        String chunksKey = RedisConstants.getFileUploadChunksKey(md5);
+        String chunksKey = RedisConstants.getFileUploadChunksKey(user.getId(), md5);
         Boolean isMember = stringRedisTemplate.opsForSet().isMember(chunksKey, String.valueOf(chunkIndex));
         if (Boolean.TRUE.equals(isMember)) {
-            String etagKey = RedisConstants.getFileChunkEtagKey(md5);
+            String etagKey = RedisConstants.getFileChunkEtagKey(user.getId(), md5);
             Object existingEtagObj = stringRedisTemplate.opsForHash().get(etagKey, String.valueOf(chunkIndex));
             String existingEtag = existingEtagObj != null ? existingEtagObj.toString() : "";
-            refreshUploadSessionTtl(md5);
+            refreshUploadSessionTtl(md5, user.getId());
 
             Map<String, Object> result = new java.util.LinkedHashMap<>();
             result.put("etag", existingEtag);
@@ -906,15 +1114,20 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             return result;
         }
 
-        // 获取或初始化 uploadId（使用 setIfAbsent 防止并发请求重复初始化）
-        String uploadIdKey = RedisConstants.getFileUploadIdKey(md5);
+        // 原子 setIfAbsentOrGet 防止并发请求都 initiateMultipartUpload
+        String uploadIdKey = RedisConstants.getFileUploadIdKey(user.getId(), md5);
         String uploadId = stringRedisTemplate.opsForValue().get(uploadIdKey);
         if (StrUtil.isBlank(uploadId)) {
-            uploadId = cosService.initiateMultipartUpload(cosKey);
-            Boolean set = stringRedisTemplate.opsForValue().setIfAbsent(uploadIdKey, uploadId,
-                    RedisConstants.FILE_UPLOAD_TTL, TimeUnit.HOURS);
-            if (!Boolean.TRUE.equals(set)) {
-                uploadId = stringRedisTemplate.opsForValue().get(uploadIdKey);
+            // 用 Lua 原子抢占:第一个请求拿到新 uploadId 并写入,后续请求拿到已存在的
+            String newUploadId = cosService.initiateMultipartUpload(cosKey);
+            uploadId = redisAtomicOps.setIfAbsentOrGet(uploadIdKey, newUploadId,
+                    RedisConstants.FILE_UPLOAD_TTL * 3600);
+            // 注:如果 newUploadId 跟拿回的不一致(说明另一个请求先写了),
+            // 我们的 newUploadId 实际上没用,但 COS 端会产生一个孤儿 multipart session
+            // (会在 24h 内自动清理,不做 abort 避免额外 COS API 调用)
+            if (!newUploadId.equals(uploadId)) {
+                log.warn("[uploadChunk] uploadId 抢占冲突: cosKey={}, 我的={}, 实际={}",
+                        cosKey, newUploadId, uploadId);
             }
         }
 
@@ -944,13 +1157,13 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         stringRedisTemplate.opsForSet().add(chunksKey, String.valueOf(chunkIndex));
         stringRedisTemplate.expire(chunksKey, RedisConstants.FILE_UPLOAD_TTL, TimeUnit.HOURS);
 
-        String etagKey = RedisConstants.getFileChunkEtagKey(md5);
+        String etagKey = RedisConstants.getFileChunkEtagKey(user.getId(), md5);
         stringRedisTemplate.opsForHash().put(etagKey, String.valueOf(chunkIndex), etag);
         stringRedisTemplate.expire(etagKey, RedisConstants.FILE_UPLOAD_TTL, TimeUnit.HOURS);
-        String chunkSizeKey = RedisConstants.getFileChunkSizeKey(md5);
+        String chunkSizeKey = RedisConstants.getFileChunkSizeKey(user.getId(), md5);
         stringRedisTemplate.opsForHash().put(chunkSizeKey, String.valueOf(chunkIndex), String.valueOf(file.getSize()));
         stringRedisTemplate.expire(chunkSizeKey, RedisConstants.FILE_UPLOAD_TTL, TimeUnit.HOURS);
-        refreshUploadSessionTtl(md5);
+        refreshUploadSessionTtl(md5, user.getId());
 
         Map<String, Object> result = new java.util.LinkedHashMap<>();
         result.put("etag", etag);
@@ -968,7 +1181,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     public PictureVO mergeChunks(MergeChunksRequest request) {
         ExcUtils.throwIfTrue(StrUtil.isBlank(request.getMd5()), "MD5 不能为空");
         ExcUtils.throwIfTrue(request.getSize() == null, "文件大小不能为空");
-        ExcUtils.throwIfTrue(StrUtil.isBlank(request.getCosKey()), "cosKey 不能为空");
+        // cosKey 客户端参数不再使用，从 Redis 读 storedCosKey
         ExcUtils.throwIfTrue(request.getTotalChunks() == null || request.getTotalChunks() <= 0, "分片总数无效");
         ExcUtils.throwIfTrue(request.getTotalChunks() > MAX_CHUNK_COUNT,
                 ExceptionCode.PARAMETER_ERROR, "分片数量超过限制");
@@ -982,7 +1195,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             String mergedCosKey = getMergeResultValue(mergeResult, "cosKey");
             if (StrUtil.isNotBlank(mergedCosKey) && isMergedObjectAvailable(mergedCosKey)) {
                 PictureVO result = buildPictureVOFromMergeResult(mergeResult);
-                cleanupUploadSession(request.getMd5(), true);
+                cleanupUploadSession(request.getMd5(), true, user.getId());
                 return result;
             }
             // 幂等兜底：COS 合并未完成但 picture 已入库（afterCommit 失败 + 客户端重试）
@@ -998,9 +1211,9 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                     restoredData.put("size", String.valueOf(existingPicture.getSize()));
                     stringRedisTemplate.opsForValue().set(
                             RedisConstants.getFileMergeResultKey(request.getMd5()),
-                            JSON.toJSONString(restoredData), RedisConstants.FILE_UPLOAD_TTL, TimeUnit.HOURS);
+                            JSONUtil.toJsonStr(restoredData), RedisConstants.FILE_UPLOAD_TTL, TimeUnit.HOURS);
                     PictureVO result = buildPictureVOFromMergeResult(mergeResult);
-                    cleanupUploadSession(request.getMd5(), true);
+                    cleanupUploadSession(request.getMd5(), true, user.getId());
                     return result;
                 }
             }
@@ -1010,17 +1223,17 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 ExceptionCode.PARAMETER_ERROR, "文件大小超过限制（最大" + formatSize(maxSize) + "）");
 
         // 1. 完整性校验
-        String chunksKey = RedisConstants.getFileUploadChunksKey(request.getMd5());
+        String chunksKey = RedisConstants.getFileUploadChunksKey(user.getId(), request.getMd5());
         Long uploadedCount = stringRedisTemplate.opsForSet().size(chunksKey);
         ExcUtils.throwIfTrue(uploadedCount == null || uploadedCount != request.getTotalChunks().longValue(),
                 ExceptionCode.PARAMETER_ERROR, "分片不完整，已上传 " + uploadedCount + "/" + request.getTotalChunks());
 
         // 2. 获取 uploadId + 所有 ETag（按 chunkIndex 排序）
-        String uploadIdKey = RedisConstants.getFileUploadIdKey(request.getMd5());
+        String uploadIdKey = RedisConstants.getFileUploadIdKey(user.getId(), request.getMd5());
         String uploadId = stringRedisTemplate.opsForValue().get(uploadIdKey);
         ExcUtils.throwIfTrue(StrUtil.isBlank(uploadId), ExceptionCode.PARAMETER_ERROR, "uploadId 不存在");
 
-        String etagKey = RedisConstants.getFileChunkEtagKey(request.getMd5());
+        String etagKey = RedisConstants.getFileChunkEtagKey(user.getId(), request.getMd5());
         Map<Object, Object> etagMap = stringRedisTemplate.opsForHash().entries(etagKey);
         ExcUtils.throwIfTrue(etagMap.size() != request.getTotalChunks(),
                 ExceptionCode.PARAMETER_ERROR, "分片 ETag 不完整，请重试合并");
@@ -1038,7 +1251,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         Space space = resolveTargetSpace(request.getTargetSpaceId(), user.getId());
         // 校验空间写权限
         checkSpaceWritePermission(space, user.getId());
-        long size = sumUploadedChunkSizes(request.getMd5(), request.getTotalChunks());
+        long size = sumUploadedChunkSizes(user.getId(), request.getMd5(), request.getTotalChunks());
         ExcUtils.throwIfTrue(size > maxSize,
                 ExceptionCode.PARAMETER_ERROR, "file size exceeds limit");
         ExcUtils.throwIfFalse(mergeResult != null || atomicUpdateSpaceSize(space, size, true),
@@ -1046,7 +1259,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
         // 4. COS 合并移到事务提交后执行（避免事务回滚时 COS 文件成为孤儿）
         //    使用 Redis 中存储的 cosKey，不信任客户端传入的值（防越权覆盖）
-        String storedCosKey = stringRedisTemplate.opsForValue().get(RedisConstants.getFileCosKeyKey(request.getMd5()));
+        String storedCosKey = stringRedisTemplate.opsForValue().get(RedisConstants.getFileCosKeyKey(user.getId(), request.getMd5()));
         ExcUtils.throwIfTrue(StrUtil.isBlank(storedCosKey), ExceptionCode.PARAMETER_ERROR, "上传会话已过期，请重新上传");
         final String finalCosKey = storedCosKey;
         final String finalUploadId = uploadId;
@@ -1056,6 +1269,10 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         final String finalEtagKey = etagKey;
         final String finalMd5 = request.getMd5();
         final String finalMergeResultKey = RedisConstants.getFileMergeResultKey(request.getMd5());
+        final Long finalUserId = user.getId();
+        // 捕获 space 和 size，用于 COS 合并失败时归还配额
+        final Space finalSpace = space;
+        final long finalSize = size;
 
         // 5. 构造图片记录（不调用 getPictureMessage，因为 COS 尚未合并完成，对象不可读）
         //    url 和 name 从 cosKey 推导；width/height 在 COS 合并后异步获取
@@ -1084,15 +1301,22 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         }
         ExcUtils.throwIfTrue(pictureMapper.insert(picture) != 1, "保存图片失败");
 
-        // 8. 存储合并结果（用于幂等重试：下次 mergeChunks 可直接返回已创建的 picture）
+        // 8. 存储合并结果(用于幂等重试:下次 mergeChunks 可直接返回已创建的 picture)
+        // Redis 写用 try/catch 吞异常，防止 Redis 故障导致 picture insert 回滚
         Map<String, String> mergeResultData = new HashMap<>();
         mergeResultData.put("pictureId", String.valueOf(picture.getId()));
         mergeResultData.put("url", picture.getUrl());
         mergeResultData.put("userId", String.valueOf(user.getId()));
         mergeResultData.put("cosKey", finalCosKey);
         mergeResultData.put("size", String.valueOf(actualSize));
-        stringRedisTemplate.opsForValue().set(finalMergeResultKey,
-                JSON.toJSONString(mergeResultData), RedisConstants.FILE_UPLOAD_TTL, TimeUnit.HOURS);
+        try {
+            stringRedisTemplate.opsForValue().set(finalMergeResultKey,
+                    JSONUtil.toJsonStr(mergeResultData), RedisConstants.FILE_UPLOAD_TTL, TimeUnit.HOURS);
+        } catch (Exception e) {
+            // 不抛,只 warn:幂等兜底路径仍能基于 DB 的 pictureId 重建结果
+            log.warn("mergeChunks 写 Redis 幂等键失败(非阻塞): pictureId={}, err={}",
+                    picture.getId(), e.getMessage());
+        }
 
         // 9. COS 合并移到事务提交后执行（避免回滚时 COS 文件成为孤儿）
         //    合并完成后获取图片元数据（宽高），更新 picture 记录
@@ -1101,8 +1325,34 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 .registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
                     @Override
                     public void afterCommit() {
-                        tryCompleteMultipartUpload(finalCosKey, finalUploadId, finalPartETags,
-                                finalMd5, finalMergeResultKey);
+                        boolean mergeOk = tryCompleteMultipartUpload(finalCosKey, finalUploadId, finalPartETags,
+                                finalMd5, finalMergeResultKey, finalUserId);
+                        // COS 合并失败时 DB 记录已提交，标 status=4（上传失败）
+                        if (!mergeOk) {
+                            try {
+                                Picture fail = new Picture();
+                                fail.setId(pictureId);
+                                fail.setStatus(4); // 4=上传失败
+                                pictureMapper.updateById(fail);
+                                log.error("[mergeChunks] COS 合并失败,DB 记录已标失败: pictureId={}, cosKey={}", pictureId, finalCosKey);
+                            } catch (Exception ex) {
+                                log.error("[mergeChunks] COS 合并失败后回滚 DB status 也失败: pictureId={}", pictureId, ex);
+                            }
+                            // COS 合并失败,归还已扣的配额
+                            try {
+                                atomicUpdateSpaceSize(finalSpace, -finalSize, false);
+                                log.info("[mergeChunks] COS 合并失败,已归还配额: space={}, -{} bytes", finalSpace.getId(), finalSize);
+                            } catch (Exception ex) {
+                                log.error("[mergeChunks] 归还配额失败: space={}, size={}", finalSpace.getId(), finalSize, ex);
+                            }
+                            // 清理 Redis 上传会话,避免残留 24 小时导致后续秒传误判
+                            try {
+                                cleanupUploadSession(finalMd5, true, finalUserId);
+                            } catch (Exception ex) {
+                                log.warn("[mergeChunks] COS 合并失败后清理 Redis 上传会话失败: md5={}", finalMd5, ex);
+                            }
+                            return;
+                        }
                         // COS 合并完成后获取图片宽高等元数据
                         try {
                             PictureMessage meta = cosService.getPictureMessage(finalCosKey);
@@ -1143,13 +1393,20 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         picture.setSpaceId(space.getId());
         picture.setResourceId(resource.getId());
 
-        hk.ljx.fishpicsbackend.common.context.LoginContext ctx = UserHolder.getLoginContext();
-        if (ctx != null && ctx.hasSystemPerm("system:user:manage")) {
-            picture.setStatus(1);
-        } else {
-            picture.setStatus(2);
+        // 上传到空间直接通过，无需审核
+        picture.setStatus(1);
+
+        // 秒传场景 insert 失败时也要回滚配额
+        try {
+            ExcUtils.throwIfTrue(pictureMapper.insert(picture) != 1, "保存图片失败");
+        } catch (Exception e) {
+            try { atomicUpdateSpaceSize(space, -size, false); } catch (Exception ex) { log.warn("空间配额回滚失败(秒传): space={}, size={}", space.getId(), size, ex); }
+            // 回滚引用计数
+            if (resource != null) {
+                try { fileResourceService.decrementRefCount(resource.getId()); } catch (Exception ex) { log.warn("ref_count 回滚失败(秒传): resourceId={}", resource.getId(), ex); }
+            }
+            throw e;
         }
-        ExcUtils.throwIfTrue(pictureMapper.insert(picture) != 1, "保存图片失败");
         return picture;
     }
 
@@ -1190,7 +1447,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_LOGIN);
         // 私人空间只能创建者访问
         if (space.getType() != null && space.getType() == 0) {
-            throw new BaseException(ExceptionCode.UNAUTHORIZED, "无权访问该私人空间");
+            // 已认证但无权访问 → FORBIDDEN
+            throw new BaseException(ExceptionCode.FORBIDDEN, "无权访问该私人空间");
         }
         Long memberCount = spaceTeamMemberMapper.selectCount(
                 new LambdaQueryWrapper<hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember>()
@@ -1198,7 +1456,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                         .eq(hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember::getUserId, userId)
                         .in(hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember::getRoleId, List.of(1, 2))
         );
-        ExcUtils.throwIfTrue(memberCount == null || memberCount <= 0, ExceptionCode.UNAUTHORIZED, "无权写入该团队空间");
+        // 已认证但非团队成员 → FORBIDDEN
+        ExcUtils.throwIfTrue(memberCount == null || memberCount <= 0, ExceptionCode.FORBIDDEN, "无权写入该团队空间");
     }
 
     private void validateSpaceActive(Space space) {
@@ -1266,43 +1525,43 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     }
 
     private void bindUploadOwner(String md5, Long userId) {
-        String ownerKey = RedisConstants.getFileUploadOwnerKey(md5);
-        String existingOwner = stringRedisTemplate.opsForValue().get(ownerKey);
-        ExcUtils.throwIfTrue(StrUtil.isNotBlank(existingOwner)
-                        && !existingOwner.equals(String.valueOf(userId)),
-                ExceptionCode.FORBIDDEN, "该上传会话不属于当前用户");
+        // key 加 userId 后缀,防止 MD5 公开导致跨用户会话劫持
+        // 同一 MD5 不同用户各自独立会话,过期不会相互污染
+        String ownerKey = RedisConstants.getUserFileUploadOwnerKey(userId, md5);
         stringRedisTemplate.opsForValue().set(ownerKey, String.valueOf(userId),
                 RedisConstants.FILE_UPLOAD_TTL, TimeUnit.HOURS);
     }
 
     private void validateUploadOwner(String md5, Long userId) {
-        String owner = stringRedisTemplate.opsForValue().get(RedisConstants.getFileUploadOwnerKey(md5));
+        String owner = stringRedisTemplate.opsForValue()
+                .get(RedisConstants.getUserFileUploadOwnerKey(userId, md5));
         ExcUtils.throwIfTrue(StrUtil.isBlank(owner),
                 ExceptionCode.PARAMETER_ERROR, "上传会话已过期，请重新上传");
         ExcUtils.throwIfTrue(!owner.equals(String.valueOf(userId)),
                 ExceptionCode.FORBIDDEN, "该上传会话不属于当前用户");
     }
 
-    private void refreshUploadSessionTtl(String md5) {
-        stringRedisTemplate.expire(RedisConstants.getFileUploadOwnerKey(md5),
+    private void refreshUploadSessionTtl(String md5, Long userId) {
+        // 用 userId-scoped key 刷新 TTL
+        stringRedisTemplate.expire(RedisConstants.getUserFileUploadOwnerKey(userId, md5),
                 RedisConstants.FILE_UPLOAD_TTL, TimeUnit.HOURS);
-        stringRedisTemplate.expire(RedisConstants.getFileCosKeyKey(md5),
+        stringRedisTemplate.expire(RedisConstants.getFileCosKeyKey(userId, md5),
                 RedisConstants.FILE_UPLOAD_TTL, TimeUnit.HOURS);
-        stringRedisTemplate.expire(RedisConstants.getFileUploadIdKey(md5),
+        stringRedisTemplate.expire(RedisConstants.getFileUploadIdKey(userId, md5),
                 RedisConstants.FILE_UPLOAD_TTL, TimeUnit.HOURS);
-        stringRedisTemplate.expire(RedisConstants.getFileUploadChunksKey(md5),
+        stringRedisTemplate.expire(RedisConstants.getFileUploadChunksKey(userId, md5),
                 RedisConstants.FILE_UPLOAD_TTL, TimeUnit.HOURS);
-        stringRedisTemplate.expire(RedisConstants.getFileChunkEtagKey(md5),
+        stringRedisTemplate.expire(RedisConstants.getFileChunkEtagKey(userId, md5),
                 RedisConstants.FILE_UPLOAD_TTL, TimeUnit.HOURS);
-        stringRedisTemplate.expire(RedisConstants.getFileChunkSizeKey(md5),
+        stringRedisTemplate.expire(RedisConstants.getFileChunkSizeKey(userId, md5),
                 RedisConstants.FILE_UPLOAD_TTL, TimeUnit.HOURS);
         stringRedisTemplate.expire(RedisConstants.getFileMergeResultKey(md5),
                 RedisConstants.FILE_UPLOAD_TTL, TimeUnit.HOURS);
     }
 
-    private long sumUploadedChunkSizes(String md5, Integer totalChunks) {
+    private long sumUploadedChunkSizes(Long userId, String md5, Integer totalChunks) {
         Map<Object, Object> chunkSizeMap = stringRedisTemplate.opsForHash()
-                .entries(RedisConstants.getFileChunkSizeKey(md5));
+                .entries(RedisConstants.getFileChunkSizeKey(userId, md5));
         ExcUtils.throwIfTrue(chunkSizeMap.size() != totalChunks,
                 ExceptionCode.PARAMETER_ERROR, "chunk size data is incomplete");
         long totalSize = 0L;
@@ -1318,7 +1577,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         if (StrUtil.isBlank(raw)) {
             return null;
         }
-        return JSON.parseObject(raw, Map.class);
+        return JSONUtil.toBean(raw, Map.class);
     }
 
     private void validateMergeResultOwner(Map<String, Object> mergeResult, Long userId) {
@@ -1347,30 +1606,41 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         }
     }
 
-    private void tryCompleteMultipartUpload(String cosKey, String uploadId, List<PartETag> partETags,
-                                            String md5, String mergeResultKey) {
+    private boolean tryCompleteMultipartUpload(String cosKey, String uploadId, List<PartETag> partETags,
+                                            String md5, String mergeResultKey, Long userId) {
         try {
             cosService.completeMultipartUpload(cosKey, uploadId, partETags);
             log.info("COS multipart merge completed: cosKey={}", cosKey);
-            cleanupUploadSession(md5, true);
+            cleanupUploadSession(md5, true, userId);
+            return true;
         } catch (Exception e) {
             if (isMergedObjectAvailable(cosKey)) {
                 log.warn("COS merge returned an error but object is already available: cosKey={}", cosKey, e);
-                cleanupUploadSession(md5, true);
-                return;
+                cleanupUploadSession(md5, true, userId);
+                return true;
             }
+            // 合并失败时放弃 COS 分片上传，避免残留 session
+            cosService.abortMultipartUpload(cosKey, uploadId);
             stringRedisTemplate.expire(mergeResultKey, RedisConstants.FILE_UPLOAD_TTL, TimeUnit.HOURS);
-            log.error("COS multipart merge failed and session data was retained: cosKey={}", cosKey, e);
+            // 返回 false 让 caller(afterCommit 回调)把 DB picture 标 status=4
+            log.error("COS multipart merge failed and session data was retained, " +
+                    "需要人工/对账任务介入: cosKey={}, md5={}, error={}", cosKey, md5, e.getMessage());
+            return false;
         }
     }
 
-    private void cleanupUploadSession(String md5, boolean deleteMergeResult) {
-        stringRedisTemplate.delete(RedisConstants.getFileUploadChunksKey(md5));
-        stringRedisTemplate.delete(RedisConstants.getFileUploadIdKey(md5));
-        stringRedisTemplate.delete(RedisConstants.getFileChunkEtagKey(md5));
-        stringRedisTemplate.delete(RedisConstants.getFileChunkSizeKey(md5));
-        stringRedisTemplate.delete(RedisConstants.getFileCosKeyKey(md5));
-        stringRedisTemplate.delete(RedisConstants.getFileUploadOwnerKey(md5));
+    private void cleanupUploadSession(String md5, boolean deleteMergeResult, Long userId) {
+        // 用 userId-scoped key 清理
+        Long uid = userId != null ? userId : 0L;
+        stringRedisTemplate.delete(RedisConstants.getFileUploadChunksKey(uid, md5));
+        stringRedisTemplate.delete(RedisConstants.getFileUploadIdKey(uid, md5));
+        stringRedisTemplate.delete(RedisConstants.getFileChunkEtagKey(uid, md5));
+        stringRedisTemplate.delete(RedisConstants.getFileChunkSizeKey(uid, md5));
+        stringRedisTemplate.delete(RedisConstants.getFileCosKeyKey(uid, md5));
+        if (userId != null) {
+            // userId-scoped owner key
+            stringRedisTemplate.delete(RedisConstants.getUserFileUploadOwnerKey(userId, md5));
+        }
         if (deleteMergeResult) {
             stringRedisTemplate.delete(RedisConstants.getFileMergeResultKey(md5));
         }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useContext } from 'react'
 import { Form, Input, Button, App } from 'antd'
 import { UserOutlined, LockOutlined, SafetyCertificateOutlined } from '@ant-design/icons'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getLoginCheckCode, login } from '../api'
 import { AuthContext } from '../context/AuthContext'
 import MobilePageWrapper from '../components/MobilePageWrapper'
@@ -9,6 +9,7 @@ import './MobileLoginRegister.css'
 
 export default function MobileLoginPage() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { message } = App.useApp()
   const [form] = Form.useForm()
   const { login: authLogin } = useContext(AuthContext)
@@ -56,7 +57,10 @@ export default function MobileLoginPage() {
       message.success('登录成功')
       authLogin(result)
       form.resetFields()
-      navigate('/', { replace: true })
+      // 登录成功后,如果 url 带 ?redirect=...,跳回原页面
+      const redirect = searchParams.get('redirect')
+      const safeRedirect = redirect && /^\/(?!\/)/.test(redirect) ? redirect : '/'
+      navigate(safeRedirect, { replace: true })
     } catch (err) {
       message.error(err.message || '登录失败，请重试')
       form.setFieldValue('checkCode', '')

@@ -29,7 +29,7 @@ function ThemeWrapper({ children }) {
   }, [isDarkMode])
 
   const toggleTheme = () => {
-    setIsDarkMode(!isDarkMode)
+    setIsDarkMode(prev => !prev)
   }
 
   return (

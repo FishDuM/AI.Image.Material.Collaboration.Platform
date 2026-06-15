@@ -24,6 +24,7 @@ import hk.ljx.fishpicsbackend.user.vo.*;
 import java.util.List;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -115,9 +116,25 @@ public class UserController {
     }
 
     @PostMapping("/editUser")
-    public Response<Boolean> editMyself(@Valid @RequestBody UserEditRequest userEditRequest) {
+    public Response<Boolean> editMyself(@Valid @RequestBody UserEditRequest userEditRequest,
+                                        HttpServletRequest request, HttpServletResponse response) {
         ExcUtils.throwIfTrue(ObjectUtil.isNull(userEditRequest), ExceptionCode.PARAMETER_ERROR);
-        return ResUtils.success(userService.editMyself(userEditRequest));
+        // 修复:在 controller 捕获当前 JWT(在拦截器清理 LoginContext 之前仍可读 header),
+        // 改完密码后只黑名单当前 token 而非踢所有 token;同时下发新 token 让前端无感续期
+        String authHeader = request.getHeader("Authorization");
+        String currentJwt = null;
+        if (StrUtil.isNotBlank(authHeader)) {
+            currentJwt = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
+        }
+        Boolean result = userService.editMyself(userEditRequest, currentJwt);
+        // 改完密码 → 给前端下发新 token(走 X-New-Token header,前端 axios 拦截器已自动 saveToken)
+        if (Boolean.TRUE.equals(result) && userEditRequest.getPassword() != null
+                && !userEditRequest.getPassword().isEmpty()) {
+            UserVO me = userService.getMyselfMessage();
+            String newJwt = jwtUtils.sign(me.getId());
+            response.setHeader("X-New-Token", newJwt);
+        }
+        return ResUtils.success(result);
     }
 
     @PostMapping("/logout")
@@ -155,6 +172,7 @@ public class UserController {
     }
 
     @RequireAdmin
+    @AuditLog(module = "用户管理", operation = "查询用户详情")
     @PostMapping("/admin/getUser")
     public Response<UserVO> adminGetUser(@Valid @RequestBody UserIdRequest userIdRequest) {
         Long userId = userIdRequest.getUserId();

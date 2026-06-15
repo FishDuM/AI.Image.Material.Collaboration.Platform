@@ -30,6 +30,11 @@ export function useCollabWebSocket(spaceId, onMessage, onCleanup, onReady) {
     ws.onopen = () => {
       retryRef.current = 0
       console.log('[CollabWS] 已连接')
+      try {
+        ws.send(JSON.stringify({ type: 'resync', spaceId }))
+      } catch (e) {
+        console.warn('[CollabWS] resync 消息发送失败:', e)
+      }
       onReadyRef.current?.()
     }
 
@@ -42,19 +47,20 @@ export function useCollabWebSocket(spaceId, onMessage, onCleanup, onReady) {
     }
 
     ws.onclose = (event) => {
-      // 仅当 wsRef 仍指向本 socket 时才清理引用
       if (wsRef.current === ws) wsRef.current = null
-      // 被 disconnect() 主动关闭的 socket 不重连
       if (closedSockets.current.has(ws)) return
-      if (event.code !== 1000 && spaceId) {
+      if (event.code !== 1000 && spaceId && retryRef.current < 10) {
         const delay = Math.min(1000 * Math.pow(2, retryRef.current), 30000)
         retryRef.current++
         timerRef.current = setTimeout(connect, delay)
+      } else if (retryRef.current >= 10) {
+        console.warn('[CollabWS] 重连超过 10 次,停止重连。请检查网络或刷新页面。')
+        // 不重连,让用户手动刷新
       }
     }
 
     ws.onerror = (err) => {
-      console.warn('[CollabWS] 错误:', err)
+      console.warn('[CollabWS] 错误类型:', err?.type || 'unknown')
       ws.close()
     }
   }, [spaceId])
@@ -69,11 +75,19 @@ export function useCollabWebSocket(spaceId, onMessage, onCleanup, onReady) {
     onCleanupRef.current?.()
   }, [])
 
+  // 用 ref 跟踪 unmounted,避免快速 unmount 后 setTimeout 仍触发 connect
+  const unmountedRef = useRef(false)
   useEffect(() => {
-    // 延迟 150ms 连接：React StrictMode 会在 ~100ms 内完成 unmount→remount，
-    // 延迟可以避免第一次 mount 的 WebSocket 在 CONNECTING 阶段就被 cleanup 关闭
-    const timer = setTimeout(() => connect(), 150)
-    return () => { clearTimeout(timer); disconnect() }
+    unmountedRef.current = false
+    const timer = setTimeout(() => {
+      if (unmountedRef.current) return
+      connect()
+    }, 150)
+    return () => {
+      unmountedRef.current = true
+      clearTimeout(timer)
+      disconnect()
+    }
   }, [connect, disconnect])
 
   useEffect(() => {

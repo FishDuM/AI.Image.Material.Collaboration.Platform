@@ -2,6 +2,7 @@ package hk.ljx.fishpicsbackend.collab;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
@@ -36,6 +37,8 @@ public class CollabSessionRegistry {
         private WebSocketSession session;
         private String nickname;
         private String avatar;
+        /** WebSocket session ID，removeSession 时校验防误删新会话 */
+        private String sessionId;
     }
 
     @lombok.Data
@@ -43,6 +46,8 @@ public class CollabSessionRegistry {
     public static class LockInfo {
         private Long userId;
         private String nickname;
+        /** 锁记录空间 ID，供 resync 时按 spaceId 过滤 */
+        private Long spaceId;
     }
 
     @lombok.Data
@@ -55,18 +60,26 @@ public class CollabSessionRegistry {
 
     public void addSession(Long spaceId, Long userId, WebSocketSession session, String nickname, String avatar) {
         spaces.computeIfAbsent(spaceId, k -> new ConcurrentHashMap<>())
-                .put(userId, new SessionInfo(session, nickname, avatar));
+                .put(userId, new SessionInfo(session, nickname, avatar, session.getId()));
         log.debug("协同会话注册: space={}, user={}", spaceId, userId);
     }
 
-    public void removeSession(Long spaceId, Long userId) {
-        Map<Long, SessionInfo> spaceSessions = spaces.get(spaceId);
-        if (spaceSessions != null) {
-            spaceSessions.remove(userId);
-            if (spaceSessions.isEmpty()) {
-                spaces.remove(spaceId);
+    /**
+     * 移除会话
+     * sessionId 校验，防止快速重连时旧 disconnect 事件误删新会话
+     */
+    public void removeSession(Long spaceId, Long userId, String sessionId) {
+        spaces.computeIfPresent(spaceId, (k, spaceSessions) -> {
+            SessionInfo existing = spaceSessions.get(userId);
+            // sessionId 不匹配说明是旧连接的 disconnect 事件，跳过
+            if (sessionId != null && existing != null && !sessionId.equals(existing.getSessionId())) {
+                log.debug("协同会话跳过移除(sessionId 不匹配): space={}, user={}, expected={}, actual={}",
+                        spaceId, userId, sessionId, existing.getSessionId());
+                return spaceSessions;
             }
-        }
+            spaceSessions.remove(userId);
+            return spaceSessions.isEmpty() ? null : spaceSessions;
+        });
         log.debug("协同会话移除: space={}, user={}", spaceId, userId);
     }
 
@@ -148,8 +161,8 @@ public class CollabSessionRegistry {
      * 尝试锁定图片编辑权
      * @return true=锁定成功，false=已被其他人锁定
      */
-    public boolean tryLockPicture(Long pictureId, Long userId, String nickname) {
-        LockInfo existing = pictureLocks.putIfAbsent(pictureId, new LockInfo(userId, nickname));
+    public boolean tryLockPicture(Long pictureId, Long userId, String nickname, Long spaceId) {
+        LockInfo existing = pictureLocks.putIfAbsent(pictureId, new LockInfo(userId, nickname, spaceId));
         if (existing == null) return true;
         // 自己重复加锁
         return existing.getUserId().equals(userId);
@@ -182,6 +195,23 @@ public class CollabSessionRegistry {
         java.util.Set<Long> unlockedPictures = new java.util.HashSet<>();
         pictureLocks.entrySet().removeIf(entry -> {
             if (entry.getValue().getUserId().equals(userId)) {
+                unlockedPictures.add(entry.getKey());
+                return true;
+            }
+            return false;
+        });
+        return unlockedPictures;
+    }
+
+    /**
+     * 清除用户在指定空间持有的锁（用户从单个空间断连时调用,不影响其他空间）
+     * @return 被解锁的图片 ID 集合
+     */
+    public java.util.Set<Long> clearLocksByUserInSpace(Long userId, Long spaceId) {
+        java.util.Set<Long> unlockedPictures = new java.util.HashSet<>();
+        pictureLocks.entrySet().removeIf(entry -> {
+            if (entry.getValue().getUserId().equals(userId)
+                    && spaceId.equals(entry.getValue().getSpaceId())) {
                 unlockedPictures.add(entry.getKey());
                 return true;
             }
@@ -227,6 +257,31 @@ public class CollabSessionRegistry {
         editRequests.entrySet().removeIf(e -> e.getValue().isEmpty());
     }
 
+    /**
+     * 清除用户在指定空间发起的编辑申请（从单个空间断连时调用）
+     */
+    public void clearEditRequestsByUserInSpace(Long userId, Long spaceId) {
+        // 收集该空间中所有有锁的 pictureId
+        Set<Long> picturesInSpace = new java.util.HashSet<>();
+        pictureLocks.forEach((pictureId, lock) -> {
+            if (spaceId.equals(lock.getSpaceId())) {
+                picturesInSpace.add(pictureId);
+            }
+        });
+        // 同时收集该空间中所有有 transform 状态的 pictureId
+        Map<Long, String> spaceStates = pictureStates.get(spaceId);
+        if (spaceStates != null) {
+            picturesInSpace.addAll(spaceStates.keySet());
+        }
+        // 只清除该空间内图片的编辑申请
+        editRequests.forEach((pictureId, reqs) -> {
+            if (picturesInSpace.contains(pictureId)) {
+                reqs.remove(userId);
+            }
+        });
+        editRequests.entrySet().removeIf(e -> e.getValue().isEmpty());
+    }
+
     // ==================== 图片变换状态缓存 ====================
 
     /**
@@ -263,5 +318,54 @@ public class CollabSessionRegistry {
             space.remove(pictureId);
             if (space.isEmpty()) pictureStates.remove(spaceId);
         }
+    }
+
+    // ==================== V14 补充方法（SpaceService / resync 依赖） ====================
+
+    /**
+     * 获取所有图片锁的快照（供 resync 时按 spaceId 过滤推送）
+     */
+    public Map<Long, LockInfo> getAllPictureLocks() {
+        return new java.util.HashMap<>(pictureLocks);
+    }
+
+    /**
+     * 断开指定空间内的指定用户连接，清除其所有锁和编辑申请
+     * @return 实际受影响的空间 ID 集合（断开成功时包含 spaceId）
+     */
+    public java.util.Set<Long> disconnectUserInSpaces(Long userId, Long spaceId, String code, String reason) {
+        java.util.Set<Long> affected = new java.util.HashSet<>();
+        Map<Long, SessionInfo> spaceSessions = spaces.get(spaceId);
+        if (spaceSessions == null) return affected;
+        SessionInfo info = spaceSessions.remove(userId);
+        if (info != null) {
+            affected.add(spaceId);
+            // 关闭 WebSocket 连接
+            try {
+                WebSocketSession ws = info.getSession();
+                if (ws.isOpen()) {
+                    ws.close(org.springframework.web.socket.CloseStatus.GOING_AWAY.withReason(reason));
+                }
+            } catch (IOException e) {
+                log.warn("[SessionRegistry] 关闭用户连接失败: user={}, space={}", userId, spaceId, e);
+            }
+            // 清理该用户在该空间持有的图片锁
+            pictureLocks.entrySet().removeIf(entry ->
+                    entry.getValue().getUserId().equals(userId)
+                            && spaceId.equals(entry.getValue().getSpaceId()));
+            // 清理该用户的编辑申请
+            clearEditRequestsByUser(userId);
+            if (spaceSessions.isEmpty()) {
+                spaces.remove(spaceId);
+            }
+        }
+        return affected;
+    }
+
+    /**
+     * 清除指定空间的所有图片 transform 状态缓存
+     */
+    public void clearAllPictureStates(Long spaceId) {
+        pictureStates.remove(spaceId);
     }
 }

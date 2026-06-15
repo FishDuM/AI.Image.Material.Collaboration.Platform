@@ -13,21 +13,19 @@ import './ImageUploadModal.css'
 const CHUNK_SIZE = 2 * 1024 * 1024
 /** 最大并发上传分片数 */
 const MAX_CONCURRENT = 5
-
-/** 从文件名推断扩展名 */
 function getExt(file) {
   const dot = file.name?.lastIndexOf('.')
   return dot > 0 ? file.name.substring(dot + 1).toLowerCase() : ''
 }
 
-/** 浏览器能否渲染该图片（能渲才能裁剪） */
+/** 浏览器能否渲染该图片 */
 function canBrowserRender(file) {
   if (BROWSER_RENDERABLE_TYPES.includes(file.type)) return true
   const ext = getExt(file)
   return BROWSER_RENDERABLE_TYPES.some(t => t === `image/${ext}`)
 }
 
-/** 计算文件 MD5（流式，支持大文件） */
+/** 计算文件 MD5（流式） */
 function computeFileMD5(file) {
   return new Promise((resolve, reject) => {
     const blobSlice = File.prototype.slice
@@ -143,6 +141,7 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
       }
       updateProgress()
 
+      // 分片上传带重试
       const uploadSingleChunk = async (index) => {
         const start = index * CHUNK_SIZE
         const end = Math.min(start + CHUNK_SIZE, file.size)
@@ -150,10 +149,23 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
         const chunkFile = new File([chunk], `chunk_${index}`, { type: file.type })
         const fd = new FormData()
         fd.append('file', chunkFile)
-        const result = await uploadChunk(fd, md5, index)
-        results[index] = result
-        completed++
-        updateProgress()
+        let lastErr
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            const result = await uploadChunk(fd, md5, index)
+            results[index] = result
+            completed++
+            updateProgress()
+            return
+          } catch (e) {
+            lastErr = e
+            if (attempt < 3) {
+              // 退避:500ms / 1500ms
+              await new Promise(r => setTimeout(r, 500 * attempt))
+            }
+          }
+        }
+        throw new Error(`分片 ${index} 上传失败(重试 3 次): ${lastErr?.message || lastErr}`)
       }
 
       // 分批并发
@@ -184,10 +196,9 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
   }
 
   /**
-   * 统一上传入口：小文件走直接上传，大文件走分片
+   * 统一上传入口：小文件直接上传，大文件走分片
    */
   const directUpload = async (file) => {
-    // 小于等于 CHUNK_SIZE 的文件直接上传
     if (file.size <= CHUNK_SIZE) {
       setUploading(true)
       try {
@@ -232,6 +243,10 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
     try {
       const canvas = cropper.getCroppedCanvas()
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/webp'))
+      if (!blob) {
+        message.warning('裁剪区域为空，请重新选择裁剪区域')
+        return
+      }
       await directUpload(blob)
     } catch (error) {
       message.error(error.message || '上传失败')

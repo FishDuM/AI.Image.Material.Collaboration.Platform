@@ -14,7 +14,7 @@
 }
 
 .share-page-card {
-  max-width: 720px;
+  max-width: 960px;
   width: 100%;
   background: var(--bg-elevated);
   border-radius: 12px;
@@ -22,7 +22,30 @@
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 }
 
-.share-page-image-wrapper {
+.share-page-header {
+  padding: 20px 24px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-color, rgba(0, 0, 0, 0.06));
+}
+
+.share-page-title {
+  margin: 0 !important;
+  color: var(--text-primary) !important;
+}
+
+.share-page-meta {
+  flex-wrap: wrap;
+}
+
+/* 单图模式（向后兼容） */
+.share-page-grid.single {
+  display: flex;
+  flex-direction: column;
+}
+
+.share-page-grid.single .share-page-grid-image-wrapper {
   display: flex;
   justify-content: center;
   align-items: center;
@@ -31,37 +54,70 @@
   overflow: hidden;
 }
 
-.share-page-image {
+.share-page-grid.single .share-page-grid-image {
   max-width: 100%;
   max-height: 60vh;
   object-fit: contain;
 }
 
-.share-page-info {
+/* 多图网格 */
+.share-page-grid.multi {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
   padding: 20px 24px;
+}
+
+.share-page-grid-item {
+  background: var(--bg-base);
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.06));
+  transition: box-shadow 0.2s;
+}
+
+.share-page-grid-item:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.share-page-grid-image-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #000;
+  height: 200px;
+  overflow: hidden;
+}
+
+.share-page-grid-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.share-page-grid-info {
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
 }
 
-.share-page-title {
-  margin: 0 !important;
-  color: var(--text-primary) !important;
+.share-page-grid-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-primary);
 }
 
-.share-page-desc {
+.share-page-grid-desc {
+  font-size: 12px;
   color: var(--text-secondary);
-  line-height: 1.6;
+  line-height: 1.5;
 }
 
-.share-page-meta {
+.share-page-grid-meta-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.share-page-download-btn {
-  align-self: flex-start;
+  justify-content: space-between;
+  align-items: center;
   margin-top: 4px;
 }
 
@@ -69,7 +125,18 @@
   .share-page-card {
     border-radius: 8px;
   }
-  .share-page-info {
+
+  .share-page-grid.multi {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+    padding: 12px 16px;
+  }
+
+  .share-page-grid-image-wrapper {
+    height: 140px;
+  }
+
+  .share-page-header {
     padding: 16px;
   }
 }

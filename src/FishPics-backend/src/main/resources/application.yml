@@ -12,44 +12,44 @@ spring:
       max-file-size: 25MB
       # 一次请求总大小
       max-request-size: 100MB
-  # 数据库配置
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/FishPics
-    username: # 数据库账号
-    password: # 数据库密码
+    url: ${DB_URL:jdbc:mysql://localhost:3306/FishPics}
+    username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
   data:
     redis:
-      host: # redis 地址
+      host: ${REDIS_HOST:localhost}
       database: 0
-      port: 6379
-  profiles: # 使用本地环境配置文件
-    active: local
+      port: ${REDIS_PORT:6379}
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  # SpringAIAlibaba 配置
+  ai:
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY:}
+      chat:
+        options:
+          model: qwen3.5-plus-2026-04-20
+          multi-model: true
+      image:
+        options:
+          model: qwen-image-2.0
+
+jwt:
+  secret: ${JWT_SECRET:}
 
 rocketmq:
-  name-server: localhost:9876
+  name-server: ${ROCKETMQ_NAME_SERVER:localhost:9876}
   producer:
     group: fish-pics-producer-group
-    send-message-timeout: 3000 # 消息发送超时时间，默认 3s
-    retry-times-when-send-failed: 3 # 同步发送消息失败后，重试的次数
-    retry-times-when-send-async-failed: 3 # 异步发送消息失败后，重试的次数
-    max-message-size: 4096 # 消息最大大小（单位：字节）
+    send-message-timeout: 3000
+    retry-times-when-send-failed: 3
+    retry-times-when-send-async-failed: 3
+    max-message-size: 4096
   consumer:
     group: fish-pics-consumer-group
-    pull-batch-size: 5 # 每次拉取的最大消息数
-
-
-# SpringAIAlibaba 配置
-#  ai:
-#    dashscope:
-#      api-key: # dashscope api-key
-#      chat:
-#        options:
-#          model: qwen3.6-plus-2026-04-02
-#          multi-model: true
-#      image:
-#        options:
-#          model: qwen-image-2.0
+    pull-batch-size: 5
 
 knife4j:
   enable: true
@@ -65,32 +65,30 @@ knife4j:
         api-rule: package
         api-rule-resources:
           - hk.ljx.fishpicsbackend.user
-          - hk.ljx.fishpicsbackend.post
           - hk.ljx.fishpicsbackend.picture
-          - hk.ljx.fishpicsbackend.comment
           - hk.ljx.fishpicsbackend.space
           - hk.ljx.fishpicsbackend.system
+          - hk.ljx.fishpicsbackend.ai
+          - hk.ljx.fishpicsbackend.task
+          - hk.ljx.fishpicsbackend.collab
+          - hk.ljx.fishpicsbackend.picture
+          - hk.ljx.fishpicsbackend.share
 
-# 腾讯云 COS 配置
-#cos:
-#  secretId:
-#  secretKey:
-#  region:
-#  bucket:
-#  url: # 腾讯云图片 url 前缀
+# 腾讯云 COS 配置: 从环境变量读
+cos:
+  secretId: ${COS_SECRET_ID:}
+  secretKey: ${COS_SECRET_KEY:}
+  region: ${COS_REGION:}
+  bucket: ${COS_BUCKET:}
+  url: ${COS_URL:}
 
-# RocketMQ 配置
-#rocketmq:
-#  name-server: # RocketMQ NameServer 地址
-#  producer:
-#    group: # 生产者组名
+collab:
+  websocket:
+    allowed-origins: ${COLLAB_WS_ALLOWED_ORIGINS:}
 
 logging:
   level:
     root: info
-    # 业务包
     hk.ljx.fishpicsbackend: debug
-    # MyBatis 打印 SQL
     org.mybatis: debug
-    # Spring 打印执行的 SQL
     org.springframework.jdbc.core: debug

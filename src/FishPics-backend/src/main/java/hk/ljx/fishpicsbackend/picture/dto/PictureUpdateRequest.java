@@ -16,4 +16,6 @@ public class PictureUpdateRequest implements Serializable {
     private List<String> tags;
     /** 协同编辑覆盖：新图片 URL */
     private String url;
+    /** 精选申请：1=申请精选 0=取消申请 */
+    private Integer isSelected;
 }

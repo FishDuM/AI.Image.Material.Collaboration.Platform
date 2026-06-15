@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.Version;
 import java.io.Serializable;
 import java.util.Date;
 import lombok.Data;
@@ -100,6 +101,12 @@ public class Picture implements Serializable {
      * 是否精选: 1-精选 0-普通
      */
     private Integer isSelected;
+
+    /**
+     * 乐观锁版本号
+     */
+    @Version
+    private Integer version;
 
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;

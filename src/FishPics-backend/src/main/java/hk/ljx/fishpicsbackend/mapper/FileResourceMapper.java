@@ -1,5 +1,6 @@
 package hk.ljx.fishpicsbackend.mapper;
 
+import com.baomidou.mybatisplus.annotation.InterceptorIgnore;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import hk.ljx.fishpicsbackend.picture.entity.FileResource;
 import org.apache.ibatis.annotations.Mapper;
@@ -19,6 +20,7 @@ public interface FileResourceMapper extends BaseMapper<FileResource> {
      * 不存在 → 插入新记录（ref_count=1）
      * 已存在 → ref_count + 1
      */
+    @InterceptorIgnore(blockAttack = "true")
     @Update("INSERT INTO file_resource (md5, size, cos_key, ref_count, create_time) " +
             "VALUES (#{md5}, #{size}, #{cosKey}, 1, NOW()) " +
             "ON DUPLICATE KEY UPDATE ref_count = ref_count + 1")

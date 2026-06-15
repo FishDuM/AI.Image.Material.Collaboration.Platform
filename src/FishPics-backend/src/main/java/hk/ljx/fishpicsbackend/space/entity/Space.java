@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.Version;
 import java.io.Serializable;
 
 import lombok.Data;
@@ -60,6 +61,12 @@ public class Space implements Serializable {
      * 0=禁用, 1=正常
      */
     private Integer status;
+
+    /**
+     * 乐观锁版本号
+     */
+    @Version
+    private Integer version;
 
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;

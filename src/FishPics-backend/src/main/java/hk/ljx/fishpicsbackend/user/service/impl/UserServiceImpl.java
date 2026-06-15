@@ -7,7 +7,6 @@ import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.crypto.digest.DigestUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -24,8 +23,10 @@ import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.common.utils.JwtUtils;
+import hk.ljx.fishpicsbackend.common.utils.PasswordUtil;
 import hk.ljx.fishpicsbackend.common.utils.PermissionUtils;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
+import hk.ljx.fishpicsbackend.common.utils.XssSanitizer;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
 import hk.ljx.fishpicsbackend.space.dto.CreateSpace;
 import hk.ljx.fishpicsbackend.space.service.SpaceService;
@@ -41,18 +42,20 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.web.context.request.ServletRequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.awt.Font;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.DEFAULT_NICK_NAME;
-import static hk.ljx.fishpicsbackend.common.constants.UserConstants.SALT;
 
 @Service
 @Slf4j
@@ -62,6 +65,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     private StringRedisTemplate stringRedisTemplate;
 
     @Resource
+    private hk.ljx.fishpicsbackend.common.utils.RedisAtomicOps redisAtomicOps;
+
+    @Resource
     private SpaceService spaceService;
 
     @Resource
@@ -69,6 +75,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Resource
     private MultiLevelCacheManager cacheManager;
+
+    @Resource
+    private hk.ljx.fishpicsbackend.mapper.SpaceTeamMemberMapper spaceTeamMemberMapper;
 
     @Override
     public String getCheckCode(String str, Integer len, Integer minute) {
@@ -99,22 +108,29 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         ExcUtils.throwIfTrue(!StrUtil.equals(password, checkPassword), ExceptionCode.PARAMETER_ERROR, "两次密码不一致");
 
         String captchaRedisKey = RedisConstants.getRegisterCodeKey(captchaKey);
-        String cachedCode = stringRedisTemplate.opsForValue().get(captchaRedisKey);
+        // 用 getAndDelete 原子消费验证码（防并发复用）
+        String cachedCode = redisAtomicOps.getAndDelete(captchaRedisKey);
         ExcUtils.throwIfTrue(cachedCode == null || !checkCode.equalsIgnoreCase(cachedCode),
                 ExceptionCode.PARAMETER_ERROR, "验证码错误");
 
         Long count = baseMapper.selectCount(new LambdaQueryWrapper<User>().eq(User::getUsername, username));
         ExcUtils.throwIfTrue(count != 0, ExceptionCode.PARAMETER_ERROR, "账号已存在");
 
-        stringRedisTemplate.delete(captchaRedisKey);
-
         User user = new User();
         user.setUsername(username);
-        user.setPassword(DigestUtil.md5Hex(password + SALT));
-        user.setNickname(DEFAULT_NICK_NAME + RandomUtil.randomString(6));
+        user.setPassword(PasswordUtil.encode(password));
+        // nickname 入库前清 HTML 标签
+        user.setNickname(XssSanitizer.clean(DEFAULT_NICK_NAME + RandomUtil.randomString(6)));
         user.setAvatar("https://avatars.githubusercontent.com/u/179127403?v=4");
 
-        int inserted = baseMapper.insert(user);
+        int inserted;
+        try {
+            inserted = baseMapper.insert(user);
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // 并发注册 TOCTOU，unique 索引兜底抛异常
+            log.warn("注册撞 username 唯一索引(并发): username={}", username);
+            throw new BaseException(ExceptionCode.PARAMETER_ERROR, "账号已存在");
+        }
         ExcUtils.throwIfTrue(inserted != 1, ExceptionCode.DATABASE_ERROR, "注册失败");
 
         Boolean spaceCreated = spaceService.createSpace(
@@ -134,19 +150,25 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         ExcUtils.throwIfTrue(StrUtil.hasBlank(username, password, checkCode, captchaKey),
                 ExceptionCode.PARAMETER_ERROR, "参数不能为空");
 
+        // 验证码
         String loginCaptchaKey = RedisConstants.getLoginCodeKey(captchaKey);
-        String cachedCode = stringRedisTemplate.opsForValue().get(loginCaptchaKey);
-        ExcUtils.throwIfTrue(cachedCode == null || !cachedCode.equalsIgnoreCase(checkCode),
+        String cachedCode = redisAtomicOps.getAndDelete(loginCaptchaKey);
+        ExcUtils.throwIfTrue(cachedCode == null || !checkCode.equalsIgnoreCase(cachedCode),
                 ExceptionCode.PARAMETER_ERROR, "验证码错误");
 
+        // 先按 username 查 user，再用 BCrypt 校验 — 防止时序攻击
         User user = baseMapper.selectOne(new LambdaQueryWrapper<User>()
-                .eq(User::getUsername, username)
-                .eq(User::getPassword, DigestUtil.md5Hex(password + SALT)));
-        ExcUtils.throwIfTrue(user == null, ExceptionCode.PARAMETER_ERROR, "账号或密码错误");
-        ExcUtils.throwIfTrue(!Integer.valueOf(1).equals(user.getStatus()), ExceptionCode.PARAMETER_ERROR, "账号已被禁用");
+                .eq(User::getUsername, username));
+        boolean credentialOk = user != null && PasswordUtil.matches(password, user.getPassword());
 
-        stringRedisTemplate.delete(loginCaptchaKey);
+        if (user == null || !credentialOk) {
+            // 统一错误消息，防用户名枚举
+            throw new BaseException(ExceptionCode.PARAMETER_ERROR, "账号或密码错误");
+        }
+        ExcUtils.throwIfTrue(!Integer.valueOf(1).equals(user.getStatus()),
+                ExceptionCode.PARAMETER_ERROR, "账号已被禁用");
 
+        // 登录成功
         String jwt = jwtUtils.sign(user.getId());
         refreshUserInfoCache(user);
         cacheLoginContext(user);
@@ -162,8 +184,33 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         ));
     }
 
+    private String getClientIp() {
+        try {
+            jakarta.servlet.http.HttpServletRequest request =
+                    ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
+            String ip = request.getHeader("X-Forwarded-For");
+            if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+                ip = request.getHeader("X-Real-IP");
+            }
+            if (ip == null || ip.isEmpty()) ip = request.getRemoteAddr();
+            if (ip != null && ip.contains(",")) ip = ip.split(",")[0].trim();
+            return ip == null ? "unknown" : ip;
+        } catch (Exception e) {
+            return "unknown";
+        }
+    }
+
     private void cacheLoginContext(User user) {
-        LoginContext loginContext = PermissionUtils.buildLoginContext(user);
+        // 同时加载该用户的团队成员关系，注入 LoginContext.teams
+        java.util.List<hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember> teamMembers = java.util.Collections.emptyList();
+        try {
+            teamMembers = spaceTeamMemberMapper.selectList(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember>()
+                            .eq(hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember::getUserId, user.getId()));
+        } catch (Exception e) {
+            log.warn("[UserService] 加载用户团队成员关系失败: userId={}", user.getId(), e);
+        }
+        LoginContext loginContext = PermissionUtils.buildLoginContext(user, teamMembers);
         stringRedisTemplate.opsForValue().set(
                 RedisConstants.getUserPermCtxKey(user.getId()),
                 JSONUtil.toJsonStr(loginContext),
@@ -275,13 +322,19 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         ExcUtils.throwIfTrue(affected == 0, ExceptionCode.CONFLICT, "操作冲突，请重试");
 
         user.setStatus(newStatus);
-        refreshUserInfoCache(user);
-        invalidateUserTokens(userId);
-
-        if (newStatus == 0) {
-            stringRedisTemplate.opsForSet().add(RedisConstants.BANNED_USERS_KEY, userId.toString());
-        } else {
-            stringRedisTemplate.opsForSet().remove(RedisConstants.BANNED_USERS_KEY, userId.toString());
+        // Redis 缓存清理包 try-catch，Redis 故障不让封禁失败
+        // BANNED_USERS_KEY 的 add/remove 也包进同一个 try-catch
+        try {
+            refreshUserInfoCache(user);
+            invalidateUserTokens(userId);
+            if (newStatus == 0) {
+                stringRedisTemplate.opsForSet().add(RedisConstants.BANNED_USERS_KEY, userId.toString());
+            } else {
+                stringRedisTemplate.opsForSet().remove(RedisConstants.BANNED_USERS_KEY, userId.toString());
+            }
+        } catch (Exception e) {
+            log.error("[UserService] setStatus 缓存/Token/封禁集合清理失败(Redis 故障,以 DB 为准): userId={}, error={}",
+                    userId, e.getMessage());
         }
         return true;
     }
@@ -292,18 +345,74 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         Long id = userEditByAdminRequest.getId();
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), ExceptionCode.PARAMETER_ERROR, "用户 ID 不能为空");
 
+        User currentOperator = UserHolder.getUser();
+        ExcUtils.throwIfTrue(currentOperator == null, ExceptionCode.NOT_LOGIN);
+        // 不允许 admin 改自己（防止把最后一名 admin 降级或改密码踢自己）
+        ExcUtils.throwIfTrue(Objects.equals(currentOperator.getId(), id),
+                ExceptionCode.FORBIDDEN, "管理员不能通过此接口修改自己,请使用 /user/editUser");
+
         User user = baseMapper.selectById(id);
         ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_FOUND, "未找到该用户");
 
         boolean passwordChanged = StrUtil.isNotBlank(userEditByAdminRequest.getPassword());
+        // 密码改用 BCrypt
         if (passwordChanged) {
-            userEditByAdminRequest.setPassword(DigestUtil.md5Hex(userEditByAdminRequest.getPassword() + SALT));
+            // 同时校验密码强度
+            String pwd = userEditByAdminRequest.getPassword();
+            ExcUtils.throwIfTrue(pwd.length() < 8 || pwd.length() > 32,
+                    ExceptionCode.PARAMETER_ERROR, "密码长度必须为 8-32 位");
+            userEditByAdminRequest.setPassword(PasswordUtil.encode(pwd));
         }
 
         Long originalId = user.getId();
         Integer originalStatus = user.getStatus();
-        // 保留修改前的 level，用于管理员保护检查（检查原始身份，而非修改后的值）
+        // 保留修改前的 level,用于管理员保护检查(检查原始身份,而不是修改后的值)
         Integer originalLevel = user.getLevel();
+        Integer newLevel = userEditByAdminRequest.getLevel();
+
+        // 不允许低级 admin 改高级 admin
+        if (originalLevel != null && originalLevel >= 3) {
+            int currentOpLevel = currentOperator.getLevel() == null ? 0 : currentOperator.getLevel();
+            if (currentOpLevel < 3) {
+                throw new BaseException(ExceptionCode.FORBIDDEN, "只有管理员才能修改管理员信息");
+            }
+            // 用 `<` 而非 `<=`，允许同级 admin 互改
+            ExcUtils.throwIfTrue(currentOpLevel < originalLevel,
+                    ExceptionCode.FORBIDDEN, "不能修改更高级别的管理员");
+        }
+
+        // admin 不能把别人的 level 提升到比自己更高的级别
+        if (newLevel != null && newLevel >= 3) {
+            int currentOpLevel = currentOperator.getLevel() == null ? 0 : currentOperator.getLevel();
+            ExcUtils.throwIfTrue(newLevel > currentOpLevel,
+                    ExceptionCode.FORBIDDEN, "不能将用户提升到比自己更高的级别");
+        }
+
+        // 最后一名 admin 保护：如果改完会让系统无 admin，拒绝
+        if ((originalLevel != null && originalLevel >= 3)
+                && (newLevel != null && newLevel < 3)) {
+            // 防御性预检(避免无效 update),真正的并发保护在 updateById 条件里
+            Long adminCount = baseMapper.selectCount(new LambdaQueryWrapper<User>()
+                    .eq(User::getLevel, 3)
+                    .eq(User::getStatus, 1));
+            ExcUtils.throwIfTrue(adminCount != null && adminCount <= 1,
+                    ExceptionCode.FORBIDDEN, "系统至少需要保留一名管理员,无法降级最后一名 admin");
+        }
+
+        // 管理员编辑接口也需要 XSS 清洗
+        if (StrUtil.isNotBlank(userEditByAdminRequest.getUsername())) {
+            userEditByAdminRequest.setUsername(XssSanitizer.clean(userEditByAdminRequest.getUsername()));
+        }
+        if (StrUtil.isNotBlank(userEditByAdminRequest.getNickname())) {
+            userEditByAdminRequest.setNickname(XssSanitizer.clean(userEditByAdminRequest.getNickname()));
+        }
+        if (StrUtil.isNotBlank(userEditByAdminRequest.getEmail())) {
+            userEditByAdminRequest.setEmail(XssSanitizer.clean(userEditByAdminRequest.getEmail()));
+        }
+        if (StrUtil.isNotBlank(userEditByAdminRequest.getPhone())) {
+            userEditByAdminRequest.setPhone(XssSanitizer.clean(userEditByAdminRequest.getPhone()));
+        }
+
         BeanUtil.copyProperties(
                 userEditByAdminRequest,
                 user,
@@ -312,63 +421,47 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setId(originalId);
         user.setStatus(originalStatus);
 
-        // 使用修改前的 level 判断目标是否为管理员，防止降级管理员时绕过保护
-        boolean targetIsAdmin = originalLevel != null && originalLevel >= 3;
-        if (targetIsAdmin) {
-            LoginContext currentCtx = UserHolder.getLoginContext();
-            ExcUtils.throwIfTrue(currentCtx == null, ExceptionCode.NOT_LOGIN);
-            if (!currentCtx.isAdmin()) {
-                throw new BaseException(ExceptionCode.FORBIDDEN, "只有管理员才能修改管理员信息");
-            }
+        // 如果是"降级 admin"路径，用 updateLevelIfNotLastAdmin 条件 UPDATE
+        int rows;
+        if ((originalLevel != null && originalLevel >= 3)
+                && (newLevel != null && newLevel < 3)) {
+            int levelRows = baseMapper.updateLevelIfNotLastAdmin(originalId, newLevel);
+            ExcUtils.throwIfTrue(levelRows != 1, ExceptionCode.FORBIDDEN,
+                    "系统至少需要保留一名管理员,无法降级最后一名 admin");
+            // level 已用条件 UPDATE 改完,user 内存对象同步
+            user.setLevel(newLevel);
+            // 其他字段照常 update
+            rows = baseMapper.updateById(user);
+            ExcUtils.throwIfTrue(rows != 1, ExceptionCode.DATABASE_ERROR, "更新用户失败");
+        } else {
+            rows = baseMapper.updateById(user);
+            ExcUtils.throwIfTrue(rows != 1, ExceptionCode.DATABASE_ERROR, "更新用户失败");
         }
 
-        int rows = baseMapper.updateById(user);
-        ExcUtils.throwIfTrue(rows != 1, ExceptionCode.DATABASE_ERROR, "更新用户失败");
-
-        User freshUser = baseMapper.selectById(id);
-        ExcUtils.throwIfTrue(freshUser == null, ExceptionCode.NOT_FOUND, "未找到该用户");
-        refreshUserInfoCache(freshUser);
-        if (passwordChanged) {
-            invalidateUserTokens(id);
-        } else {
+        // 管理员编辑后必须清缓存/失效 Token，否则 LoginContext 缓存可能失效
+        try {
+            refreshUserInfoCache(user);
             evictUserLoginContext(id);
+            invalidateUserTokens(id);
+            log.info("[UserService] admin editUser 后缓存/Token 清理: id={}, passwordChanged={}", id, passwordChanged);
+        } catch (Exception e) {
+            // 缓存清理失败不影响主流程(DB 已提交),只 log
+            log.warn("[UserService] admin editUser 缓存清理失败(需关注): id={}", id, e);
         }
         return true;
     }
 
-    @Override
-    public UserVO getMyselfMessage() {
-        User currentUser = UserHolder.getUser();
-        ExcUtils.throwIfTrue(currentUser == null, ExceptionCode.NOT_LOGIN);
-
-        User user = baseMapper.selectById(currentUser.getId());
-        ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_FOUND, "用户不存在");
-
-        return UserVO.ofInfo(
-                user.getId(),
-                user.getUsername(),
-                user.getNickname(),
-                user.getAvatar(),
-                user.getEmail(),
-                user.getPhone(),
-                user.getLevel(),
-                null,
-                user.getCreateTime(),
-                null,
-                null,
-                null,
-                null
-        );
-    }
-
+    /**
+     * 修改自己的信息(用户改自己)
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Boolean editMyself(UserEditRequest userEditRequest) {
+    public Boolean editMyself(UserEditRequest userEditRequest, String currentJwt) {
         Long id = userEditRequest.getId();
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), ExceptionCode.PARAMETER_ERROR);
 
-        // 授权检查前置：先确认是本人操作，再执行任何业务查询
-        ExcUtils.throwIfTrue(!isMe(id), ExceptionCode.UNAUTHORIZED, "只可修改自己的信息");
+        // UNAUTHORIZED(401) 表示"未认证"，此场景是"已认证但不能改别人" → FORBIDDEN(403)
+        ExcUtils.throwIfTrue(!isMe(id), ExceptionCode.FORBIDDEN, "只可修改自己的信息");
 
         String nickname = userEditRequest.getNickname();
         if (nickname != null) {
@@ -380,10 +473,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (username != null) {
             ExcUtils.throwIfTrue(username.length() <= 5 || username.length() >= 12,
                     ExceptionCode.PARAMETER_ERROR, "账号长度必须为 6-11 位");
-            Long dupCount = baseMapper.selectCount(new LambdaQueryWrapper<User>()
-                    .eq(User::getUsername, username)
-                    .ne(User::getId, id));
-            ExcUtils.throwIfTrue(dupCount > 0, ExceptionCode.PARAMETER_ERROR, "用户名已被占用");
         }
 
         String password = userEditRequest.getPassword();
@@ -394,6 +483,26 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
         User user = getById(id);
         ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_FOUND, "用户不存在");
+
+        // XSS 清洗 TOCTOU：先清洗再用清洗后的值查重 + 入库
+        if (StrUtil.isNotBlank(userEditRequest.getNickname())) {
+            userEditRequest.setNickname(XssSanitizer.clean(userEditRequest.getNickname()));
+            // nickname 清洗后（可能清空）再校验长度
+            ExcUtils.throwIfTrue(userEditRequest.getNickname().length() < 6 || userEditRequest.getNickname().length() > 11,
+                    ExceptionCode.PARAMETER_ERROR, "昵称长度必须为 6-11 位");
+        }
+        if (StrUtil.isNotBlank(userEditRequest.getUsername())) {
+            userEditRequest.setUsername(XssSanitizer.clean(userEditRequest.getUsername()));
+        }
+        // 清洗后长度可能变化(被清空),重新校验
+        if (StrUtil.isNotBlank(userEditRequest.getUsername())) {
+            ExcUtils.throwIfTrue(userEditRequest.getUsername().length() <= 5 || userEditRequest.getUsername().length() >= 12,
+                    ExceptionCode.PARAMETER_ERROR, "账号长度必须为 6-11 位");
+            Long dupCount = baseMapper.selectCount(new LambdaQueryWrapper<User>()
+                    .eq(User::getUsername, userEditRequest.getUsername())
+                    .ne(User::getId, id));
+            ExcUtils.throwIfTrue(dupCount > 0, ExceptionCode.PARAMETER_ERROR, "用户名已被占用");
+        }
 
         String oldHashedPassword = user.getPassword();
         BeanUtil.copyProperties(
@@ -406,9 +515,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (passwordChanged) {
             String originalPassword = userEditRequest.getOriginalPassword();
             ExcUtils.throwIfTrue(StrUtil.isBlank(originalPassword), ExceptionCode.PARAMETER_ERROR, "请输入原始密码");
-            ExcUtils.throwIfTrue(!DigestUtil.md5Hex(originalPassword + SALT).equals(oldHashedPassword),
+            ExcUtils.throwIfTrue(!PasswordUtil.matches(originalPassword, oldHashedPassword),
                     ExceptionCode.PARAMETER_ERROR, "原始密码错误");
-            user.setPassword(DigestUtil.md5Hex(password + SALT));
+            ExcUtils.throwIfTrue(password.length() < 8 || password.length() > 32,
+                    ExceptionCode.PARAMETER_ERROR, "密码长度必须为 8-32 位");
+            user.setPassword(PasswordUtil.encode(password));
         }
 
         boolean updated = updateById(user);
@@ -417,10 +528,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         User freshUser = baseMapper.selectById(id);
         ExcUtils.throwIfTrue(freshUser == null, ExceptionCode.NOT_FOUND, "用户不存在");
         refreshUserInfoCache(freshUser);
+        // editMyself 改 nickname/username 后，LoginContext 缓存需更新
+        evictUserLoginContext(id);
+
         if (passwordChanged) {
             invalidateUserTokens(id);
-        } else {
-            evictUserLoginContext(id);
+            if (StrUtil.isNotBlank(currentJwt)) {
+                jwtUtils.addToBlacklist(currentJwt);
+            }
         }
         return true;
     }
@@ -430,6 +545,17 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_LOGIN);
         return user.getId().equals(id);
+    }
+
+    @Override
+    public UserVO getMyselfMessage() {
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_LOGIN);
+        User fresh = baseMapper.selectById(user.getId());
+        ExcUtils.throwIfTrue(fresh == null, ExceptionCode.NOT_FOUND, "用户不存在");
+        return UserVO.ofInfo(fresh.getId(), fresh.getUsername(), fresh.getNickname(), fresh.getAvatar(),
+                fresh.getEmail(), fresh.getPhone(), fresh.getLevel(), null,
+                fresh.getCreateTime(), null, null, null, null);
     }
 
     private boolean isAdmin(User user) {
@@ -459,8 +585,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (StrUtil.isBlank(keyword)) {
             return new ArrayList<>();
         }
+        // 转义 LIKE 通配符（%、_、\）
+        String escaped = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
         LambdaQueryWrapper<User> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.and(wrapper -> wrapper.like(User::getUsername, keyword).or().like(User::getNickname, keyword));
+        queryWrapper.and(wrapper -> wrapper.like(User::getUsername, escaped).or().like(User::getNickname, escaped));
         queryWrapper.eq(User::getStatus, 1);
         queryWrapper.last("LIMIT 20");
         return baseMapper.selectList(queryWrapper).stream()

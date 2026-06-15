@@ -17,6 +17,7 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.content.Media;
 import org.springframework.ai.converter.BeanOutputConverter;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.util.MimeTypeUtils;
 
@@ -36,14 +37,16 @@ public class AiTagTaskHandler implements TaskHandler {
     @Resource
     private PictureService pictureService;
 
+    @Resource
+    @Qualifier("aiTaskExecutor")
+    private java.util.concurrent.Executor aiTaskExecutor;
+
     private static final String TAG_PROMPT = "你需要生成一个图片名称，长度不超过6个汉字。你需要生成一个图片描述，长度不超过100个汉字。你可以根据标签：'人物、动物、植物、美食、风景、建筑、物品、服饰、数码、家居、插画、二次元、实拍、文档、表情包'来描述图片的内容，最多选择不超过3个，最少也要有1个。";
 
     private ReactAgent tagAgent;
 
     /**
      * 初始化标签识别 Agent
-     * 用 BeanOutputConverter 强制模型输出结构化 JSON（pictureName/tags/introduction），
-     * 避免后续解析时拿到自由文本还要手动拆字段
      */
     @PostConstruct
     public void init() {
@@ -81,7 +84,7 @@ public class AiTagTaskHandler implements TaskHandler {
             throw new RuntimeException("图片 URL 为空: " + pictureId);
         }
 
-        // 把图片 URL 作为多模态输入丢给 Agent，让它识别图片内容
+        // 把图片 URL 作为多模态输入丢给 Agent
         UserMessage userMessage = UserMessage.builder()
                 .text("帮我识别这个图片")
                 .media(Media.builder()
@@ -95,7 +98,7 @@ public class AiTagTaskHandler implements TaskHandler {
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
-        });
+        }, aiTaskExecutor);
         try {
             response = future.get(AI_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         } catch (TimeoutException e) {
@@ -110,9 +113,9 @@ public class AiTagTaskHandler implements TaskHandler {
         }
         log.info("AI tag result for picture {}: {}", pictureId, response.getText());
 
-        // Agent 有时会在 JSON 外面包一层 markdown 代码块，需要提取其中的 JSON 内容
+        // Agent 有时会在 JSON 外面包 markdown 代码块，需要提取 JSON 内容
         String text = response.getText().strip();
-        // 处理 ```json ... ``` 或 ``` ... ``` 包裹（兼容大小写和不完整情况）
+        // 处理 ```json ``` 包裹
         if (text.startsWith("```")) {
             int firstNewline = text.indexOf('\n');
             text = firstNewline > 0 ? text.substring(firstNewline + 1) : text.substring(3);
@@ -120,15 +123,23 @@ public class AiTagTaskHandler implements TaskHandler {
             if (lastFence >= 0) {
                 text = text.substring(0, lastFence);
             }
+            text = text.trim();
         }
-        text = text.trim();
+        // 鲁棒提取：如果清洗后仍不是合法 JSON，尝试提取第一个 { 到最后一个 }
+        if (!text.startsWith("{")) {
+            int firstBrace = text.indexOf('{');
+            int lastBrace = text.lastIndexOf('}');
+            if (firstBrace >= 0 && lastBrace > firstBrace) {
+                text = text.substring(firstBrace, lastBrace + 1);
+            }
+        }
 
         task.setResult(text);
     }
 
     /**
-     * 持久化阶段：把 AI 识别结果（名称、描述、标签）写回 picture 表
-     * 和 execute 分开是因为持久化需要在事务内完成，而 AI 调用不应放在事务里
+     * 持久化阶段：把 AI 识别结果写回 picture 表
+     * 和 execute 分开是因为持久化需要在事务内完成
      */
     @Override
     public void persist(Task task) {
@@ -146,14 +157,29 @@ public class AiTagTaskHandler implements TaskHandler {
 
         String text = task.getResult();
         AiPictureMessage aiResult = JSONUtil.toBean(text, AiPictureMessage.class);
-        if (aiResult.getTags() != null && !aiResult.getTags().isEmpty()) {
-            picture.setTags(JSONUtil.toJsonStr(aiResult.getTags()));
+        // XSS 清洗，防存储 XSS
+        // AI 结果只对"用户尚未填写"的字段填充，不覆盖手动编辑的元数据
+        if (aiResult.getTags() != null && !aiResult.getTags().isEmpty()
+                && (picture.getTags() == null || picture.getTags().isBlank() || "[]".equals(picture.getTags()))) {
+            // 标签也清洗一下
+            java.util.List<String> safeTags = aiResult.getTags().stream()
+                    .map(hk.ljx.fishpicsbackend.common.utils.XssSanitizer::clean)
+                    .filter(cn.hutool.core.util.StrUtil::isNotBlank)
+                    .collect(java.util.stream.Collectors.toList());
+            picture.setTags(JSONUtil.toJsonStr(safeTags));
         }
-        if (aiResult.getPictureName() != null && !aiResult.getPictureName().isBlank()) {
-            picture.setPictureName(aiResult.getPictureName());
+        if (aiResult.getPictureName() != null && !aiResult.getPictureName().isBlank()
+                && (picture.getPictureName() == null || picture.getPictureName().isBlank())) {
+            String cleanName = hk.ljx.fishpicsbackend.common.utils.XssSanitizer.clean(aiResult.getPictureName());
+            // AI 生成的名称可能超过 100 字符，截断保底
+            if (cleanName.length() > 100) cleanName = cleanName.substring(0, 100);
+            picture.setPictureName(cleanName);
         }
-        if (aiResult.getIntroduction() != null && !aiResult.getIntroduction().isBlank()) {
-            picture.setIntroduction(aiResult.getIntroduction());
+        if (aiResult.getIntroduction() != null && !aiResult.getIntroduction().isBlank()
+                && (picture.getIntroduction() == null || picture.getIntroduction().isBlank())) {
+            String cleanIntro = hk.ljx.fishpicsbackend.common.utils.XssSanitizer.cleanRelaxed(aiResult.getIntroduction());
+            if (cleanIntro.length() > 500) cleanIntro = cleanIntro.substring(0, 500);
+            picture.setIntroduction(cleanIntro);
         }
         pictureService.updateById(picture);
     }

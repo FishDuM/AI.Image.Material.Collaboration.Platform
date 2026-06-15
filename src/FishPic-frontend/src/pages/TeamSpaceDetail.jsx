@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useContext, useMemo, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { App as AntApp, Typography, Button, Modal, Form, Input, Select, Pagination, Masonry, Image as AntImage, Spin, Empty, Popconfirm, Progress, Popover, Avatar, Tooltip, Tag, List, Alert } from 'antd'
-import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowLeftOutlined, TeamOutlined, UserOutlined, EditOutlined, CloudUploadOutlined, ArrowUpOutlined, UserAddOutlined, SettingOutlined, ShareAltOutlined, SwapOutlined } from '@ant-design/icons'
+import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowLeftOutlined, TeamOutlined, UserOutlined, EditOutlined, CloudUploadOutlined, ArrowUpOutlined, UserAddOutlined, SettingOutlined, ShareAltOutlined, SwapOutlined, StarOutlined } from '@ant-design/icons'
 import { getSpace, updateSpace, spaceListPicture, deletePicture, updatePicture, getSystemTypes, getPictureEditMessage, submitAiTag, searchUsers, getTeamMembers, teamInvite, teamRemove, teamChangeRole, createShare } from '../api'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { ThemeContext } from '../context/ThemeContext'
@@ -40,6 +40,7 @@ function TeamSpaceDetail() {
   const [pictureTotal, setPictureTotal] = useState(0)
   const [pictureLoading, setPictureLoading] = useState(false)
   const [searchKeyword, setSearchKeyword] = useState('')
+  const activeSearchRef = useRef('')
 
   const [batchMode, setBatchMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState([])
@@ -69,10 +70,17 @@ function TeamSpaceDetail() {
   const [inviting, setInviting] = useState(false)
   const searchTimerRef = useRef(null)
 
+  // 切换 space 时旧请求完成后 setState 可能把 A space 数据塞到 B space
+  const currentSpaceIdRef = useRef(null)
+  useEffect(() => {
+    currentSpaceIdRef.current = id
+  }, [id])
+
   const fetchSpace = useCallback(async () => {
     setLoading(true)
     try {
       const result = await getSpace(id)
+      if (currentSpaceIdRef.current !== id) return
       if (result) {
         const sizeBytes = Number(result.size) || 0
         const storageBytes = Number(result.storageSize) || 0
@@ -85,10 +93,11 @@ function TeamSpaceDetail() {
         })
       }
     } catch (error) {
+      if (currentSpaceIdRef.current !== id) return
       message.error(error.message || '加载空间信息失败')
       navigate('/team-space', { replace: true })
     } finally {
-      setLoading(false)
+      if (currentSpaceIdRef.current === id) setLoading(false)
     }
   }, [id, message, navigate])
 
@@ -99,16 +108,18 @@ function TeamSpaceDetail() {
       const params = { spaceId, current: page, pageSize: PAGE_SIZE }
       if (keyword && keyword.trim()) params.keyword = keyword.trim()
       const result = await spaceListPicture(params)
+      if (currentSpaceIdRef.current !== id) return
       const list = Array.isArray(result?.records) ? result.records : []
       const total = typeof result?.total === 'number' ? result.total : list.length
       setPictures(list)
       setPictureTotal(total)
     } catch {
+      if (currentSpaceIdRef.current !== id) return
       setPictures([])
     } finally {
-      setPictureLoading(false)
+      if (currentSpaceIdRef.current === id) setPictureLoading(false)
     }
-  }, [])
+  }, [id])
 
   useEffect(() => {
     getSystemTypes().then(result => {
@@ -136,15 +147,17 @@ function TeamSpaceDetail() {
   const handlePageChange = useCallback((page) => {
     setSelectedIds([])
     setBatchMode(false)
-    if (spaceInfo?.id) fetchPictures(spaceInfo.id, page, searchKeyword)
-  }, [spaceInfo?.id, fetchPictures, searchKeyword])
+    if (spaceInfo?.id) fetchPictures(spaceInfo.id, page, activeSearchRef.current)
+  }, [spaceInfo?.id, fetchPictures])
 
   const handleSearch = useCallback(() => {
+    activeSearchRef.current = searchKeyword
     if (spaceInfo?.id) fetchPictures(spaceInfo.id, 1, searchKeyword)
   }, [spaceInfo?.id, fetchPictures, searchKeyword])
 
   const handleSearchReset = useCallback(() => {
     setSearchKeyword('')
+    activeSearchRef.current = ''
     if (spaceInfo?.id) fetchPictures(spaceInfo.id, 1, '')
   }, [spaceInfo?.id, fetchPictures])
 
@@ -268,8 +281,8 @@ function TeamSpaceDetail() {
   }
 
   const handleOpenShare = () => {
-    if (selectedIds.length !== 1) {
-      message.warning('请选择一张图片进行分享')
+    if (selectedIds.length === 0) {
+      message.warning('请选择至少一张图片进行分享')
       return
     }
     shareForm.resetFields()
@@ -281,7 +294,7 @@ function TeamSpaceDetail() {
     setShareLoading(true)
     try {
       const token = await createShare({
-        pictureId: selectedIds[0],
+        pictureIds: selectedIds,
         expireDays: values.expireDays || 1,
         allowDownload: values.allowDownload ? 1 : 0,
       })
@@ -577,9 +590,27 @@ function TeamSpaceDetail() {
               <Button
                 icon={<ShareAltOutlined />}
                 onClick={handleOpenShare}
-                disabled={selectedIds.length !== 1}
+                disabled={selectedIds.length === 0}
               >
                 分享
+              </Button>
+              <Button
+                icon={<StarOutlined />}
+                onClick={async () => {
+                  try {
+                    await updatePicture({ id: selectedIds[0], isSelected: 1 })
+                    message.success('精选申请已提交')
+                    setSelectedIds([])
+                    setBatchMode(false)
+                    fetchPictures(spaceInfo.id, 1, searchKeyword)
+                  } catch (err) {
+                    message.error(err.message || '申请失败')
+                  }
+                }}
+                disabled={selectedIds.length !== 1}
+                style={{ color: '#d4a017', borderColor: '#d4a017' }}
+              >
+                申请精选
               </Button>
               <Button
                 icon={<SwapOutlined />}
@@ -735,6 +766,7 @@ function TeamSpaceDetail() {
         open={showImageEditor}
         imageUrl={pictures.find(p => selectedIds.includes(p.id))?.url}
         spaceId={Number(id)}
+        pictureId={selectedIds[0]}
         onSuccess={handleUploadSuccess}
         onClose={() => setShowImageEditor(false)}
       />

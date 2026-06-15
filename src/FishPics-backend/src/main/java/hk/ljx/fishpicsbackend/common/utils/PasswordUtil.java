@@ -1,0 +1,34 @@
+package hk.ljx.fishpicsbackend.common.utils;
+
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+
+/**
+ * 密码 BCrypt 工具类
+ */
+public final class PasswordUtil {
+
+    private static final BCryptPasswordEncoder ENCODER = new BCryptPasswordEncoder(10);
+
+    private PasswordUtil() {}
+
+    /**
+     * 加密明文密码
+     */
+    public static String encode(String rawPassword) {
+        return ENCODER.encode(rawPassword);
+    }
+
+    /**
+     * 校验明文密码与 hash 是否匹配
+     */
+    public static boolean matches(String rawPassword, String hashedPassword) {
+        if (rawPassword == null || hashedPassword == null) {
+            return false;
+        }
+        // BCrypt 格式必须以 $2a$ $2b$ $2y$ 开头;对历史 MD5 格式的 hash 返回 false(迁移期使用)
+        if (!hashedPassword.startsWith("$2")) {
+            return false;
+        }
+        return ENCODER.matches(rawPassword, hashedPassword);
+    }
+}

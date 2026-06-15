@@ -24,7 +24,7 @@ import {
   UserOutlined,
   LoadingOutlined,
 } from '@ant-design/icons'
-import { editUser, getUser, getUserMyself, getUserProfile, uploadAvatar } from '../api'
+import { editUser, getUser, getUserMyself, getUserProfile, uploadAvatar, markPasswordChange } from '../api'
 import { AuthContext } from '../context/AuthContext'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { getBase64, beforeUpload } from '../utils/upload'
@@ -45,6 +45,7 @@ function UserProfile() {
   const [userData, setUserData] = useState(null)
   const [avatarVisible, setAvatarVisible] = useState(false)
   const [editModalVisible, setEditModalVisible] = useState(false)
+  const [editModalLoading, setEditModalLoading] = useState(false)
   const [editForm] = Form.useForm()
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(null)
@@ -52,7 +53,9 @@ function UserProfile() {
 
   const fetchUserInfo = async (signal) => {
     try {
-      const data = isOwnProfile ? await getUserMyself() : await getUserProfile(profileUserId)
+      const data = isOwnProfile
+        ? await getUserMyself({ signal })
+        : await getUserProfile(profileUserId, { signal })
       if (signal?.aborted) return
       setUserData(data)
       if (isOwnProfile && userInfo) {
@@ -91,7 +94,7 @@ function UserProfile() {
       if (!controller.signal.aborted) setLoading(false)
     })
     return () => controller.abort()
-  }, [profileUserId, isAuthenticated, isOwnProfile])
+  }, [profileUserId, isAuthenticated, isOwnProfile, navigate])
 
   useEffect(() => {
     if (!editModalVisible) return
@@ -175,6 +178,7 @@ function UserProfile() {
   }
 
   const handleEditModalOk = async () => {
+    setEditModalLoading(true)
     try {
       const values = await editForm.validateFields()
       const submitData = {
@@ -189,6 +193,9 @@ function UserProfile() {
         submitData.originalPassword = values.originalPassword
       }
       await editUser(submitData)
+      if (submitData.password) {
+        markPasswordChange()
+      }
       editForm.resetFields()
       message.success('修改成功')
       setEditModalVisible(false)
@@ -197,6 +204,8 @@ function UserProfile() {
       if (error !== 'cancelled') {
         message.error(error.message || '修改失败')
       }
+    } finally {
+      setEditModalLoading(false)
     }
   }
 
@@ -336,6 +345,7 @@ function UserProfile() {
           className="edit-profile-modal"
           open={editModalVisible}
           onOk={handleEditModalOk}
+          confirmLoading={editModalLoading}
           onCancel={handleEditModalCancel}
           width={600}
           okText="保存"

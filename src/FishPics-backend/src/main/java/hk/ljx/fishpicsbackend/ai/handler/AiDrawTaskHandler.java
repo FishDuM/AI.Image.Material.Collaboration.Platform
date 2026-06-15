@@ -13,6 +13,7 @@ import hk.ljx.fishpicsbackend.common.enums.PictureSizeEnum;
 import hk.ljx.fishpicsbackend.task.entity.Task;
 import hk.ljx.fishpicsbackend.task.handler.TaskHandler;
 import jakarta.annotation.Resource;
+import org.springframework.beans.factory.annotation.Qualifier;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -27,6 +28,13 @@ public class AiDrawTaskHandler implements TaskHandler {
     private static final int AI_TIMEOUT_SECONDS = 180;
 
     @Resource
+    private MultiModalConversation multiModalConversation;
+
+    @Resource
+    @Qualifier("aiTaskExecutor")
+    private java.util.concurrent.Executor aiTaskExecutor;
+
+    @Resource
     private DashScopeConnectionProperties dashScopeConnectionProperties;
 
     @Override
@@ -36,7 +44,6 @@ public class AiDrawTaskHandler implements TaskHandler {
 
     @Override
     public void execute(Task task) throws Exception {
-        // 从任务参数中解析画面描述、排除项、风格和尺寸
         if (task.getParam() == null || task.getParam().isBlank()) {
             throw new RuntimeException("任务参数为空，无法执行AI生图");
         }
@@ -47,17 +54,13 @@ public class AiDrawTaskHandler implements TaskHandler {
         String style = dto.getStyle();
         String size = PictureSizeEnum.getSizeByCode(dto.getSize());
 
-        // 调用 DashScope 多模态对话接口生图（底层走 qwen-image-2.0-pro 模型）
-        MultiModalConversation conv = new MultiModalConversation();
         String promptStyle = PicturePromptEnum.getPromptByCode(style);
 
-        // 拼接用户描述 + 风格后缀作为最终 prompt
         MultiModalMessage userMessage = MultiModalMessage.builder()
                 .role(Role.USER.getValue())
                 .content(List.of(Collections.singletonMap("text", description + promptStyle)))
                 .build();
 
-        // 组装模型参数：关闭水印、开启 prompt 扩展、设置反向提示词和尺寸
         Map<String, Object> parameters = new HashMap<>();
         parameters.put("watermark", false);
         parameters.put("prompt_extend", true);
@@ -78,13 +81,14 @@ public class AiDrawTaskHandler implements TaskHandler {
                 .build();
 
         MultiModalConversationResult result;
+        MultiModalConversation conv = multiModalConversation;
         CompletableFuture<MultiModalConversationResult> future = CompletableFuture.supplyAsync(() -> {
             try {
                 return conv.call(param);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
-        });
+        }, aiTaskExecutor);
         try {
             result = future.get(AI_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         } catch (TimeoutException e) {

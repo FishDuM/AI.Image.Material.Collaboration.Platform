@@ -1,11 +1,14 @@
 package hk.ljx.fishpicsbackend.system.service;
 import hk.ljx.fishpicsbackend.system.entity.PicSystem;
+import hk.ljx.fishpicsbackend.common.utils.XssSanitizer;
 
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import lombok.extern.slf4j.Slf4j;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.cache.MultiLevelCacheManager;
+import hk.ljx.fishpicsbackend.common.utils.DistributedLock;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
@@ -31,6 +34,7 @@ import static hk.ljx.fishpicsbackend.common.constants.SysConstants.TYPE_LIST_KEY
  * 所有配置变更后都会清除多级缓存，保证下次读取拿到最新值
  */
 @Service
+@Slf4j
 public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem>
     implements PicSystemService{
 
@@ -39,6 +43,23 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
 
     @Resource
     private MultiLevelCacheManager cacheManager;
+
+    @Resource
+    private org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
+
+    /**
+     * sysvalue JSON 解析失败兜底返回 empty list
+     */
+    private List<String> safeParseList(String json) {
+        if (json == null || json.isBlank()) return List.of();
+        try {
+            List<String> parsed = JSONUtil.toList(json, String.class);
+            return parsed != null ? parsed : List.of();
+        } catch (Exception e) {
+            log.warn("[PicSystem] sysvalue JSON 解析失败,fallback empty list: {}", e.getMessage());
+            return List.of();
+        }
+    }
 
     @Override
     @SuppressWarnings("unchecked")
@@ -52,10 +73,15 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         // 缓存miss，查数据库
         LambdaQueryWrapper<PicSystem> queryWrapper = new LambdaQueryWrapper<PicSystem>().eq(PicSystem::getSyskey, TYPE_LIST_KEY);
         List<PicSystem> list = baseMapper.selectList(queryWrapper);
-        ExcUtils.throwIfTrue(list == null || list.isEmpty(), "标签不存在");
+        // 无配置时返回空列表（与 getMarquess 行为一致，管理员可通过后台新增）
+        if (list == null || list.isEmpty()) {
+            return List.of();
+        }
         PicSystem picSystem = list.get(0);
-        ExcUtils.throwIfTrue(picSystem.getSysvalue() == null, "标签不存在");
-        List<String> result = JSONUtil.toList(picSystem.getSysvalue(), String.class);
+        if (picSystem.getSysvalue() == null) {
+            return List.of();
+        }
+        List<String> result = safeParseList(picSystem.getSysvalue());
 
         // 写入多级缓存
         cacheManager.getSysConfigCache().put(TYPE_LIST_KEY, result);
@@ -64,18 +90,32 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public synchronized void addTypeList(AddSysPicType addSysPicType) {
+    public void addTypeList(AddSysPicType addSysPicType) {
         ExcUtils.throwIfTrue(addSysPicType.getValue() == null || addSysPicType.getValue().isEmpty(), ExceptionCode.PARAMETER_ERROR, "标签不能为空");
-        LambdaQueryWrapper<PicSystem> queryWrapper = new LambdaQueryWrapper<PicSystem>().eq(PicSystem::getSyskey, TYPE_LIST_KEY);
-        List<PicSystem> list = baseMapper.selectList(queryWrapper);
+        // 管理员输入的标签值过 XSS 清理后再入库
+        List<String> sanitized = addSysPicType.getValue().stream()
+                .map(XssSanitizer::clean)
+                .filter(s -> s != null && !s.isBlank())
+                .collect(Collectors.toList());
+        ExcUtils.throwIfTrue(sanitized.isEmpty(), ExceptionCode.PARAMETER_ERROR, "标签清理后为空,疑似非法输入");
+        addSysPicType.setValue(sanitized);
+        // 锁 TTL 30s（临界区内含多次 DB 操作）
+        DistributedLock lock = new DistributedLock(stringRedisTemplate, "LOCK:SYS:TYPE_LIST", 30);
+        if (!lock.tryLock()) {
+            throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "其他节点正在修改,请稍后再试");
+        }
+        try {
+        List<PicSystem> list = baseMapper.selectList(
+                new LambdaQueryWrapper<PicSystem>().eq(PicSystem::getSyskey, TYPE_LIST_KEY));
         PicSystem picSystem;
         if (list == null || list.isEmpty()) {
             picSystem = new PicSystem();
             picSystem.setSyskey(TYPE_LIST_KEY);
             picSystem.setSysvalue(JSONUtil.toJsonStr(addSysPicType.getValue()));
+            baseMapper.insert(picSystem);
         } else {
             picSystem = list.get(0);
-            List<String> typeList = JSONUtil.toList(picSystem.getSysvalue(), String.class);
+            List<String> typeList = new ArrayList<>(safeParseList(picSystem.getSysvalue()));
             // 去重添加，防止标签列表无限膨胀
             for (String item : addSysPicType.getValue()) {
                 if (!typeList.contains(item)) {
@@ -83,30 +123,46 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
                 }
             }
             picSystem.setSysvalue(JSONUtil.toJsonStr(typeList));
-            for (int i = 1; i < list.size(); i++) {
-                baseMapper.deleteById(list.get(i).getId());
+            baseMapper.updateById(picSystem);
+            // 清理历史脏数据残留(多行)
+            if (list.size() > 1) {
+                for (int i = 1; i < list.size(); i++) {
+                    baseMapper.deleteById(list.get(i).getId());
+                }
             }
         }
-        this.saveOrUpdate(picSystem);
         // 清除缓存
         cacheManager.getSysConfigCache().evict(TYPE_LIST_KEY);
+        } finally {
+            lock.unlock();
+        }
     }
 
     @Override
-    public synchronized void deleteType(String type) {
+    public void deleteType(String type) {
         ExcUtils.throwIfTrue(type == null || type.trim().isEmpty(), ExceptionCode.PARAMETER_ERROR, "标签名不能为空");
-        LambdaQueryWrapper<PicSystem> queryWrapper = new LambdaQueryWrapper<PicSystem>().eq(PicSystem::getSyskey, TYPE_LIST_KEY);
-        List<PicSystem> list = baseMapper.selectList(queryWrapper);
+        // 用 Redis 分布式锁替代 synchronized
+        // 锁 TTL 30s（临界区内含多次 DB 操作）
+        DistributedLock lock = new DistributedLock(stringRedisTemplate, "LOCK:SYS:TYPE_LIST", 30);
+        if (!lock.tryLock()) {
+            throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "其他节点正在修改,请稍后再试");
+        }
+        try {
+        List<PicSystem> list = baseMapper.selectList(
+                new LambdaQueryWrapper<PicSystem>().eq(PicSystem::getSyskey, TYPE_LIST_KEY));
         ExcUtils.throwIfTrue(list == null || list.isEmpty(), ExceptionCode.NOT_FOUND, "标签配置不存在");
         PicSystem picSystem = list.get(0);
         ExcUtils.throwIfTrue(picSystem.getSysvalue() == null, ExceptionCode.NOT_FOUND, "标签配置不存在");
-        List<String> typeList = new ArrayList<>(JSONUtil.toList(picSystem.getSysvalue(), String.class));
+        List<String> typeList = new ArrayList<>(safeParseList(picSystem.getSysvalue()));
         boolean removed = typeList.remove(type);
         ExcUtils.throwIfTrue(!removed, ExceptionCode.NOT_FOUND, "标签不存在");
         picSystem.setSysvalue(JSONUtil.toJsonStr(typeList));
-        this.saveOrUpdate(picSystem);
+        baseMapper.updateById(picSystem);
         // 清除缓存
         cacheManager.getSysConfigCache().evict(TYPE_LIST_KEY);
+        } finally {
+            lock.unlock();
+        }
     }
 
     @Override
@@ -128,7 +184,7 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         if (picSystem.getSysvalue() == null) {
             return List.of();
         }
-        List<String> result = JSONUtil.toList(picSystem.getSysvalue(), String.class);
+        List<String> result = safeParseList(picSystem.getSysvalue());
 
         // 写入多级缓存
         cacheManager.getSysConfigCache().put(MARQUESS_KEY, result);
@@ -136,8 +192,15 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
     }
 
     @Override
-    public synchronized void addMarquee(AddSysMarquee addSysMarquee) {
+    public void addMarquee(AddSysMarquee addSysMarquee) {
         ExcUtils.throwIfTrue(addSysMarquee.getPictureId() == null || addSysMarquee.getPictureId().isEmpty(), ExceptionCode.PARAMETER_ERROR, "图片id不能为空");
+        // 用 Redis 分布式锁替代 synchronized
+        // 锁 TTL 30s（临界区内含多次 DB 操作）
+        DistributedLock lock = new DistributedLock(stringRedisTemplate, "LOCK:SYS:MARQUESS", 30);
+        if (!lock.tryLock()) {
+            throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "其他节点正在修改,请稍后再试");
+        }
+        try {
 
         List<Long> idList;
         try {
@@ -148,21 +211,27 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
             throw new BaseException(ExceptionCode.PARAMETER_ERROR, "图片ID必须为数字");
         }
         List<Picture> pictures = pictureMapper.selectList(new LambdaQueryWrapper<Picture>().in(Picture::getId, idList));
-        ExcUtils.throwIfTrue(pictures.size() != idList.size(), ExceptionCode.NOT_FOUND, "部分图片不存在，请检查所有图片ID");
+        // 之前 pictures.size() != idList.size() 在 pictureId 重复时(如 [1,1,2])会误报,
+        // 改为用 Set 比对唯一 ID 数
+        java.util.Set<Long> requestedIds = new java.util.HashSet<>(idList);
+        java.util.Set<Long> foundIds = pictures.stream().map(Picture::getId).collect(Collectors.toSet());
+        ExcUtils.throwIfTrue(!requestedIds.equals(foundIds), ExceptionCode.NOT_FOUND, "部分图片不存在，请检查所有图片ID");
 
         List<String> marquess = pictures.stream().map(Picture::getUrl).collect(Collectors.toList());
 
-        LambdaQueryWrapper<PicSystem> queryWrapper = new LambdaQueryWrapper<PicSystem>().eq(PicSystem::getSyskey, MARQUESS_KEY);
-        List<PicSystem> list = baseMapper.selectList(queryWrapper);
+        // 修复:同上,selectList + get(0) + insert/updateById 替代 saveOrUpdate(无主键 insert 会污染)
+        List<PicSystem> list = baseMapper.selectList(
+                new LambdaQueryWrapper<PicSystem>().eq(PicSystem::getSyskey, MARQUESS_KEY));
 
         PicSystem picSystem;
         if (list == null || list.isEmpty()) {
             picSystem = new PicSystem();
             picSystem.setSyskey(MARQUESS_KEY);
             picSystem.setSysvalue(JSONUtil.toJsonStr(marquess));
+            baseMapper.insert(picSystem);
         } else {
             picSystem = list.get(0);
-            List<String> oldMarquess = JSONUtil.toList(picSystem.getSysvalue(), String.class);
+            List<String> oldMarquess = new ArrayList<>(safeParseList(picSystem.getSysvalue()));
             // 去重添加，防止跑马灯列表无限膨胀
             for (String url : marquess) {
                 if (!oldMarquess.contains(url)) {
@@ -170,30 +239,46 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
                 }
             }
             picSystem.setSysvalue(JSONUtil.toJsonStr(oldMarquess));
-            for (int i = 1; i < list.size(); i++) {
-                baseMapper.deleteById(list.get(i).getId());
+            baseMapper.updateById(picSystem);
+            if (list.size() > 1) {
+                for (int i = 1; i < list.size(); i++) {
+                    baseMapper.deleteById(list.get(i).getId());
+                }
             }
         }
-        this.saveOrUpdate(picSystem);
         // 清除缓存
         cacheManager.getSysConfigCache().evict(MARQUESS_KEY);
+        } finally {
+            lock.unlock();
+        }
     }
 
     @Override
-    public synchronized void deleteMarquee(String url) {
+    public void deleteMarquee(String url) {
         ExcUtils.throwIfTrue(url == null || url.trim().isEmpty(), ExceptionCode.PARAMETER_ERROR, "图片url不能为空");
-        LambdaQueryWrapper<PicSystem> queryWrapper = new LambdaQueryWrapper<PicSystem>().eq(PicSystem::getSyskey, MARQUESS_KEY);
-        List<PicSystem> list = baseMapper.selectList(queryWrapper);
+        // 用 Redis 分布式锁替代 synchronized
+        // 锁 TTL 30s（临界区内含多次 DB 操作）
+        DistributedLock lock = new DistributedLock(stringRedisTemplate, "LOCK:SYS:MARQUESS", 30);
+        if (!lock.tryLock()) {
+            throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "其他节点正在修改,请稍后再试");
+        }
+        try {
+        // 修复:同上
+        List<PicSystem> list = baseMapper.selectList(
+                new LambdaQueryWrapper<PicSystem>().eq(PicSystem::getSyskey, MARQUESS_KEY));
         ExcUtils.throwIfTrue(list == null || list.isEmpty(), ExceptionCode.NOT_FOUND, "跑马灯配置不存在");
         PicSystem picSystem = list.get(0);
         ExcUtils.throwIfTrue(picSystem.getSysvalue() == null, ExceptionCode.NOT_FOUND, "跑马灯配置不存在");
-        List<String> marquess = new ArrayList<>(JSONUtil.toList(picSystem.getSysvalue(), String.class));
+        List<String> marquess = new ArrayList<>(safeParseList(picSystem.getSysvalue()));
         boolean removed = marquess.remove(url);
         ExcUtils.throwIfTrue(!removed, ExceptionCode.NOT_FOUND, "该图片不在跑马灯列表中");
         picSystem.setSysvalue(JSONUtil.toJsonStr(marquess));
-        this.saveOrUpdate(picSystem);
+        baseMapper.updateById(picSystem);
         // 清除缓存
         cacheManager.getSysConfigCache().evict(MARQUESS_KEY);
+        } finally {
+            lock.unlock();
+        }
     }
 }
 

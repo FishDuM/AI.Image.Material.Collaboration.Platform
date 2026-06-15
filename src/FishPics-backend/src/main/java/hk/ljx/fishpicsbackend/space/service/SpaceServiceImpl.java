@@ -11,6 +11,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
+import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
@@ -33,6 +34,8 @@ import hk.ljx.fishpicsbackend.space.dto.TeamInviteRequest;
 import hk.ljx.fishpicsbackend.space.dto.TeamRemoveRequest;
 import hk.ljx.fishpicsbackend.space.dto.TeamChangeRoleRequest;
 import hk.ljx.fishpicsbackend.mapper.SpaceTeamMemberMapper;
+import hk.ljx.fishpicsbackend.mapper.PictureShareMapper;
+import hk.ljx.fishpicsbackend.collab.CollabSessionRegistry;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.extern.slf4j.Slf4j;
@@ -70,6 +73,15 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
     @Resource
     private SpaceTeamMemberMapper spaceTeamMemberMapper;
 
+    @Resource
+    private CollabSessionRegistry collabSessionRegistry;
+
+    @Resource
+    private PictureShareMapper pictureShareMapper;
+
+    @Resource
+    private org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
+
     /**
      * 创建空间，根据用户等级和空间类型分配存储配额
      *
@@ -90,11 +102,30 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         // 读取用户等级
         Integer level = user.getLevel() != null ? user.getLevel() : 0;
 
+        // 加 per-user 分布式锁防止 check-then-act 竞态
+        hk.ljx.fishpicsbackend.common.utils.DistributedLock privateLock = null;
+        if (type == 0) {
+            privateLock = new hk.ljx.fishpicsbackend.common.utils.DistributedLock(
+                    stringRedisTemplate, "LOCK:SPACE:CREATE:PRIVATE:" + user.getId(), 5);
+            if (!privateLock.tryLock()) {
+                throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "其他请求正在创建您的私人空间,请稍后再试");
+            }
+        }
+        // 团队空间也加分布式锁,防止并发创建绕过数量限制
+        hk.ljx.fishpicsbackend.common.utils.DistributedLock teamLock = null;
+        if (type == 1) {
+            teamLock = new hk.ljx.fishpicsbackend.common.utils.DistributedLock(
+                    stringRedisTemplate, "LOCK:SPACE:CREATE:TEAM:" + user.getId(), 5);
+            if (!teamLock.tryLock()) {
+                throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "其他请求正在创建团队空间,请稍后再试");
+            }
+        }
+        try {
         // 判断空间类型并校验数量限制
         List<Space> spaceList = baseMapper
                 .selectList(new LambdaQueryWrapper<Space>().eq(Space::getUserId, user.getId()).eq(Space::getType, type));
         if (type == 0) {
-            // 私人空间：每人限一个
+            // 私人空间：每人限一个(锁内二次校验,防止锁内其他事务并入)
             ExcUtils.throwIfTrue(!spaceList.isEmpty(), "私人空间已存在");
         } else if (type == 1) {
             // 团队空间：数量上限按等级
@@ -135,6 +166,14 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
             spaceTeamMemberMapper.insert(teamMember);
         }
         return true;
+        } finally {
+            if (privateLock != null) {
+                try { privateLock.unlock(); } catch (Exception e) { log.warn("释放私有空间创建锁失败: {}", e.getMessage()); }
+            }
+            if (teamLock != null) {
+                try { teamLock.unlock(); } catch (Exception e) { log.warn("释放团队空间创建锁失败: {}", e.getMessage()); }
+            }
+        }
     }
 
     /**
@@ -273,7 +312,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
             teamMembers = spaceTeamMemberMapper.selectList(new LambdaQueryWrapper<SpaceTeamMember>().eq(SpaceTeamMember::getSpaceId, space.getId()));
             isTeamMember = teamMembers.stream().anyMatch(m -> m.getUserId().equals(userId));
         }
-        ExcUtils.throwIfTrue(!isCreator && !isTeamMember, ExceptionCode.PARAMETER_ERROR, "无权限访问该空间");
+        ExcUtils.throwIfTrue(!isCreator && !isTeamMember, ExceptionCode.FORBIDDEN, "无权限访问该空间");
 
         SpaceVO vo = new SpaceVO();
         BeanUtil.copyProperties(space, vo);
@@ -352,11 +391,13 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         Space space = baseMapper.selectById(id);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
         validateSpaceActive(space);
-        // 2. 权限校验：空间创建者或系统管理员（level >= 3）可修改
+        // 2. 权限校验：空间创建者 / 系统管理员 / team OWNER 都可修改(与 teamInvite/teamRemove 一致)
         boolean isCreator = java.util.Objects.equals(space.getUserId(), userId);
         boolean isSystemAdmin = user.getLevel() != null && user.getLevel() >= 3;
-        ExcUtils.throwIfFalse(isCreator || isSystemAdmin,
-                ExceptionCode.PARAMETER_ERROR, "无权限修改空间信息");
+        boolean isTeamOwner = !isCreator && Integer.valueOf(1).equals(space.getType()) && isTeamOwner(space.getId(), userId);
+        // 无权限是 FORBIDDEN，不是 PARAMETER_ERROR
+        ExcUtils.throwIfFalse(isCreator || isSystemAdmin || isTeamOwner,
+                ExceptionCode.FORBIDDEN, "无权限修改空间信息");
         // 3. 仅更新允许修改的字段（避免全字段覆盖）
         Space updateObj = new Space();
         updateObj.setId(id);
@@ -386,11 +427,18 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         Long userId = user.getId();
         Space space = baseMapper.selectById(spaceId);
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在或无权限");
+        // 不区分"不存在"和"无权访问",防枚举攻击
+        if (ObjectUtil.isEmpty(space)) {
+            log.debug("space picture list: spaceId={} 不存在或无权访问(user={})", spaceId, userId);
+            throw new BaseException(ExceptionCode.FORBIDDEN, "无权访问该空间");
+        }
         validateSpaceActive(space);
         boolean isCreator = Objects.equals(space.getUserId(), userId);
         boolean isTeamMember = Integer.valueOf(1).equals(space.getType()) && spaceTeamMemberMapper.selectCount(new LambdaQueryWrapper<SpaceTeamMember>().eq(SpaceTeamMember::getSpaceId, spaceId).eq(SpaceTeamMember::getUserId, userId)) > 0;
-        ExcUtils.throwIfTrue(!isCreator && !isTeamMember, ExceptionCode.PARAMETER_ERROR, "空间不存在或无权限");
+        if (!isCreator && !isTeamMember) {
+            log.debug("space picture list: user={} 非 spaceId={} 成员", userId, spaceId);
+            throw new BaseException(ExceptionCode.FORBIDDEN, "无权访问该空间");
+        }
         // 2. 分页查询图片列表
         Page<Picture> picturePage = new Page<>(current, pageSize);
         QueryWrapper<Picture> pictureQueryWrapper = new QueryWrapper<>();
@@ -576,6 +624,40 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
             }
         }
 
+        // 删除空间前先强制断开该空间所有在线用户的 WS 连接
+        final Long spaceIdForWs = id;
+        final List<Picture> picturesForWs = pictures;
+        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                new org.springframework.transaction.support.TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        try {
+                            java.util.Set<Long> onlineUserIds = collabSessionRegistry.getOnlineUserIds(spaceIdForWs);
+                            for (Long uid : onlineUserIds) {
+                                collabSessionRegistry.disconnectUserInSpaces(uid, spaceIdForWs, "space_deleted", "空间已被删除");
+                            }
+                            collabSessionRegistry.clearAllPictureStates(spaceIdForWs);
+                            log.info("[SpaceService] adminDelete 事务提交后断 WS + 清 pictureStates: spaceId={}, affectedUsers={}", spaceIdForWs, onlineUserIds.size());
+                        } catch (Exception e) {
+                            log.warn("[SpaceService] adminDelete 事务提交后断 WS 失败(需关注): spaceId={}", spaceIdForWs, e);
+                        }
+                    }
+                });
+
+        // 级联删除 picture_share 记录
+        // PictureShare 实体没有 spaceId 字段,只能按 pictureId 逐个删
+        try {
+            int shareDeleted = 0;
+            for (Picture pic : pictures) {
+                shareDeleted += pictureShareMapper.delete(
+                        new LambdaQueryWrapper<hk.ljx.fishpicsbackend.picture.entity.PictureShare>()
+                                .eq(hk.ljx.fishpicsbackend.picture.entity.PictureShare::getPictureId, pic.getId()));
+            }
+            log.info("[SpaceService] adminDelete 级联删 picture_share: spaceId={}, count={}", id, shareDeleted);
+        } catch (Exception e) {
+            log.warn("[SpaceService] adminDelete 删 picture_share 失败(需关注): spaceId={}", id, e);
+        }
+
         // 2. 级联删除团队成员
         spaceTeamMemberMapper.delete(new LambdaQueryWrapper<SpaceTeamMember>().eq(SpaceTeamMember::getSpaceId, id));
         // 3. 删除图片记录（物理文件已由 file_resource 引用计数管理）
@@ -594,6 +676,20 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         space.setStatus(status);
         boolean result = this.updateById(space);
         ExcUtils.throwIfTrue(!result, ExceptionCode.DATABASE_ERROR, "更新失败");
+
+        // 空间被禁用时，清掉该空间所有在线用户的 WS 状态
+        if (Integer.valueOf(0).equals(status)) {
+            try {
+                java.util.Set<Long> onlineUserIds = collabSessionRegistry.getOnlineUserIds(id);
+                for (Long uid : onlineUserIds) {
+                    collabSessionRegistry.disconnectUserInSpaces(uid, id, "space_disabled", "空间已被禁用");
+                }
+                collabSessionRegistry.clearAllPictureStates(id);
+                log.info("[SpaceService] adminSetStatus 禁用空间后断 WS: spaceId={}, affectedUsers={}", id, onlineUserIds.size());
+            } catch (Exception e) {
+                log.warn("[SpaceService] adminSetStatus 断 WS 失败(需关注): spaceId={}", id, e);
+            }
+        }
         return true;
     }
 
@@ -611,7 +707,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         boolean isCreator = Objects.equals(space.getUserId(), user.getId());
         boolean isTeamMember = spaceTeamMemberMapper.selectCount(
                 new LambdaQueryWrapper<SpaceTeamMember>().eq(SpaceTeamMember::getSpaceId, spaceId).eq(SpaceTeamMember::getUserId, user.getId())) > 0;
-        ExcUtils.throwIfTrue(!isCreator && !isTeamMember, ExceptionCode.PARAMETER_ERROR, "无权限访问该空间");
+        ExcUtils.throwIfTrue(!isCreator && !isTeamMember, ExceptionCode.FORBIDDEN, "无权限访问该空间");
 
         List<SpaceTeamMember> teamMembers = spaceTeamMemberMapper.selectList(
                 new LambdaQueryWrapper<SpaceTeamMember>().eq(SpaceTeamMember::getSpaceId, spaceId));
@@ -658,14 +754,17 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         ExcUtils.throwIfTrue(!Integer.valueOf(1).equals(space.getType()), ExceptionCode.PARAMETER_ERROR, "非团队空间");
         validateSpaceActive(space);
 
-        // 空间创建者拥有全部团队权限
-        ExcUtils.throwIfTrue(
-                !operator.getId().equals(space.getUserId())
-                        && !(operator.getLevel() != null && operator.getLevel() >= 3),
-                ExceptionCode.PARAMETER_ERROR, "无权限邀请成员");
+        // 空间创建者或 team OWNER 才能邀请
+        boolean isCreator = Objects.equals(operator.getId(), space.getUserId());
+        boolean isTeamOwner = !isCreator && isTeamOwner(space.getId(), operator.getId());
+        ExcUtils.throwIfTrue(!isCreator && !isTeamOwner,
+                ExceptionCode.FORBIDDEN, "仅空间创建者或团队所有者可邀请成员");
 
         User targetUser = userMapper.selectById(userId);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(targetUser), ExceptionCode.PARAMETER_ERROR, "目标用户不存在");
+        // 不能邀请已禁用的用户
+        ExcUtils.throwIfTrue(targetUser.getStatus() == null || !Integer.valueOf(1).equals(targetUser.getStatus()),
+                ExceptionCode.FORBIDDEN, "不能邀请已禁用的用户");
 
         // 验证角色ID（仅允许 1=所有者, 2=成员）
         ExcUtils.throwIfTrue(roleId != 1 && roleId != 2,
@@ -706,10 +805,11 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         ExcUtils.throwIfTrue(!Integer.valueOf(1).equals(space.getType()), ExceptionCode.PARAMETER_ERROR, "非团队空间");
         validateSpaceActive(space);
 
-        ExcUtils.throwIfTrue(
-                !operator.getId().equals(space.getUserId())
-                        && !(operator.getLevel() != null && operator.getLevel() >= 3),
-                ExceptionCode.PARAMETER_ERROR, "无权限移除成员");
+        // 空间创建者或 team OWNER 才能移除
+        boolean isCreator = Objects.equals(operator.getId(), space.getUserId());
+        boolean isTeamOwner = !isCreator && isTeamOwner(space.getId(), operator.getId());
+        ExcUtils.throwIfTrue(!isCreator && !isTeamOwner,
+                ExceptionCode.FORBIDDEN, "仅空间创建者或团队所有者可移除成员");
 
         ExcUtils.throwIfTrue(Objects.equals(space.getUserId(), userId), ExceptionCode.PARAMETER_ERROR, "不能移除空间创建者");
         ExcUtils.throwIfTrue(Objects.equals(operator.getId(), userId), ExceptionCode.PARAMETER_ERROR, "不能移除自己");
@@ -722,6 +822,27 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
                 new LambdaQueryWrapper<SpaceTeamMember>()
                         .eq(SpaceTeamMember::getSpaceId, spaceId)
                         .eq(SpaceTeamMember::getUserId, userId));
+
+        // 被移除后强制断开该用户在该空间的 WS 连接
+        // WS 断开是不可回滚操作，移到事务提交后执行
+        final Long removedUserId = userId;
+        final Long removedSpaceId = spaceId;
+        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                new org.springframework.transaction.support.TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        try {
+                            // 用 disconnectUserInSpaces 只断被移除的那一个 space（不限整个用户的所有空间）
+                            java.util.Set<Long> affected = collabSessionRegistry.disconnectUserInSpaces(
+                                    removedUserId, removedSpaceId, "team_removed", "您已被移出团队空间");
+                            log.info("[SpaceService] 团队成员移除后(事务提交后)强制断 WS: removedUser={}, spaceId={}, affectedSpaces={}",
+                                    removedUserId, removedSpaceId, affected);
+                        } catch (Exception e) {
+                            log.warn("[SpaceService] 团队成员移除后续 WS 清理失败: removedUser={}, spaceId={}",
+                                    removedUserId, removedSpaceId, e);
+                        }
+                    }
+                });
         return true;
     }
 
@@ -741,10 +862,11 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         ExcUtils.throwIfTrue(!Integer.valueOf(1).equals(space.getType()), ExceptionCode.PARAMETER_ERROR, "非团队空间");
         validateSpaceActive(space);
 
-        ExcUtils.throwIfTrue(
-                !operator.getId().equals(space.getUserId())
-                        && !(operator.getLevel() != null && operator.getLevel() >= 3),
-                ExceptionCode.PARAMETER_ERROR, "无权限变更成员角色");
+        // 空间创建者或 team OWNER 才能变更角色
+        boolean isCreator = Objects.equals(operator.getId(), space.getUserId());
+        boolean isTeamOwner = !isCreator && isTeamOwner(space.getId(), operator.getId());
+        ExcUtils.throwIfTrue(!isCreator && !isTeamOwner,
+                ExceptionCode.FORBIDDEN, "仅空间创建者或团队所有者可变更成员角色");
 
         Long count = spaceTeamMemberMapper.selectCount(
                 new LambdaQueryWrapper<SpaceTeamMember>().eq(SpaceTeamMember::getSpaceId, spaceId).eq(SpaceTeamMember::getUserId, userId));
@@ -837,6 +959,18 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
             case 2, 3 -> TEAM_SVIP_STORAGE_SIZE;
             default -> TEAM_DEFAULT_STORAGE_SIZE;
         };
+    }
+
+    /**
+     * 判断 user 在 space 是不是 team OWNER(roleId=1)
+     */
+    private boolean isTeamOwner(Long spaceId, Long userId) {
+        SpaceTeamMember m = spaceTeamMemberMapper.selectOne(
+                new LambdaQueryWrapper<SpaceTeamMember>()
+                        .eq(SpaceTeamMember::getSpaceId, spaceId)
+                        .eq(SpaceTeamMember::getUserId, userId)
+                        .eq(SpaceTeamMember::getRoleId, 1));
+        return m != null;
     }
 
     private void validateSpaceActive(Space space) {
