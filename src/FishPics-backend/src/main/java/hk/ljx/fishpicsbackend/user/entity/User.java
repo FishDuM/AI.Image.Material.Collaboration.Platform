@@ -61,6 +61,11 @@ public class User implements Serializable {
     private Integer level;
 
     /**
+     * 用户角色 0=普通 1=管理员
+     */
+    private Integer role;
+
+    /**
      * 0-逻辑未删除, 1-逻辑删除
      */
     @TableLogic

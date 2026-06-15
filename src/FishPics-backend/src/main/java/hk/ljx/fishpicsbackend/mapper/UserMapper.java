@@ -15,16 +15,17 @@ public interface UserMapper extends BaseMapper<User> {
 
     /**
      * 最后一名 admin 保护(并发安全版)。
-     * 条件:目标用户降级后,系统中至少还有 1 个 level >= 3 且 status = 1 的 admin。
+     * 条件:目标用户降级后,系统中至少还有 1 个 role = 1 且 status = 1 的 admin。
      */
-    @Update("UPDATE user SET level = #{newLevel} " +
+    @Update("UPDATE user SET role = 0 " +
             "WHERE id = #{userId} " +
+            "AND role = 1 " +
             "AND (" +
             "  SELECT COUNT(*) FROM (" +
-            "    SELECT 1 FROM user WHERE level >= 3 AND status = 1 AND id != #{userId}" +
+            "    SELECT 1 FROM user WHERE role = 1 AND status = 1 AND id != #{userId}" +
             "  ) AS remaining_admins" +
             ") >= 1")
-    int updateLevelIfNotLastAdmin(@Param("userId") Long userId, @Param("newLevel") Integer newLevel);
+    int updateRoleIfNotLastAdmin(@Param("userId") Long userId);
 }
 
 

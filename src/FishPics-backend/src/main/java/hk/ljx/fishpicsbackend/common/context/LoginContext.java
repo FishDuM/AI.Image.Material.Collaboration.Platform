@@ -47,12 +47,17 @@ public class LoginContext implements Serializable {
     private Integer status;
 
     /**
-     * 用户等级：0=普通，1=VIP，2=SVIP，3=管理员
+     * 用户等级：0=普通，1=VIP，2=SVIP
      */
     private Integer level;
 
     /**
-     * 是否是管理员（level >= 3）
+     * 用户角色：0=普通，1=管理员
+     */
+    private Integer role;
+
+    /**
+     * 是否是管理员（role == 1）
      */
     private Boolean isAdmin;
 
@@ -105,7 +110,7 @@ public class LoginContext implements Serializable {
     }
 
     /**
-     * 判断是否为管理员（level >= 3）
+     * 判断是否为管理员（role == 1）
      */
     public boolean isAdmin() {
         return Boolean.TRUE.equals(isAdmin);

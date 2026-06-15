@@ -38,6 +38,9 @@ public class AiTagTaskHandler implements TaskHandler {
     private PictureService pictureService;
 
     @Resource
+    private hk.ljx.fishpicsbackend.mapper.PictureTagMapper pictureTagMapper;
+
+    @Resource
     @Qualifier("aiTaskExecutor")
     private java.util.concurrent.Executor aiTaskExecutor;
 
@@ -159,14 +162,23 @@ public class AiTagTaskHandler implements TaskHandler {
         AiPictureMessage aiResult = JSONUtil.toBean(text, AiPictureMessage.class);
         // XSS 清洗，防存储 XSS
         // AI 结果只对"用户尚未填写"的字段填充，不覆盖手动编辑的元数据
-        if (aiResult.getTags() != null && !aiResult.getTags().isEmpty()
-                && (picture.getTags() == null || picture.getTags().isBlank() || "[]".equals(picture.getTags()))) {
-            // 标签也清洗一下
-            java.util.List<String> safeTags = aiResult.getTags().stream()
-                    .map(hk.ljx.fishpicsbackend.common.utils.XssSanitizer::clean)
-                    .filter(cn.hutool.core.util.StrUtil::isNotBlank)
-                    .collect(java.util.stream.Collectors.toList());
-            picture.setTags(JSONUtil.toJsonStr(safeTags));
+        if (aiResult.getTags() != null && !aiResult.getTags().isEmpty()) {
+            // 只有图片尚无标签时才写入 AI 标签
+            Long existingTagCount = pictureTagMapper.selectCount(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<hk.ljx.fishpicsbackend.picture.entity.PictureTag>()
+                            .eq(hk.ljx.fishpicsbackend.picture.entity.PictureTag::getPictureId, pictureId));
+            if (existingTagCount == 0) {
+                java.util.List<String> safeTags = aiResult.getTags().stream()
+                        .map(hk.ljx.fishpicsbackend.common.utils.XssSanitizer::clean)
+                        .filter(cn.hutool.core.util.StrUtil::isNotBlank)
+                        .collect(java.util.stream.Collectors.toList());
+                for (String tag : safeTags) {
+                    hk.ljx.fishpicsbackend.picture.entity.PictureTag pt = new hk.ljx.fishpicsbackend.picture.entity.PictureTag();
+                    pt.setPictureId(pictureId);
+                    pt.setTagName(tag);
+                    pictureTagMapper.insert(pt);
+                }
+            }
         }
         if (aiResult.getPictureName() != null && !aiResult.getPictureName().isBlank()
                 && (picture.getPictureName() == null || picture.getPictureName().isBlank())) {

@@ -88,11 +88,6 @@ public class Picture implements Serializable {
     private String introduction;
 
     /**
-     * 标签 (逗号分隔)
-     */
-    private String tags;
-
-    /**
      * 图片格式
      */
     private String type;

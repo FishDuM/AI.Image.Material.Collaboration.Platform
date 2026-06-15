@@ -106,6 +106,9 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     private MultiLevelCacheManager cacheManager;
 
     @Resource
+    private hk.ljx.fishpicsbackend.mapper.PictureTagMapper pictureTagMapper;
+
+    @Resource
     private DistributedLockService distributedLockService;
 
     @Resource
@@ -485,15 +488,32 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 .ne(Picture::getUrl, "")
                 .orderByDesc(Picture::getCreateTime);
 
-        // 当 tag 参数不为空时，模糊搜索 tags 字段；"热门"标签按默认排序（create_time DESC）
+        // tag 过滤：通过 picture_tag 表子查询
         if (StrUtil.isNotBlank(pictureQueryRequest.getTag())
                 && !"热门".equals(pictureQueryRequest.getTag())) {
-            queryWrapper.like(Picture::getTags, pictureQueryRequest.getTag());
+            List<Long> pictureIdsWithTag = pictureTagMapper.selectList(
+                    new LambdaQueryWrapper<hk.ljx.fishpicsbackend.picture.entity.PictureTag>()
+                            .like(hk.ljx.fishpicsbackend.picture.entity.PictureTag::getTagName, pictureQueryRequest.getTag())
+                            .select(hk.ljx.fishpicsbackend.picture.entity.PictureTag::getPictureId))
+                    .stream()
+                    .map(hk.ljx.fishpicsbackend.picture.entity.PictureTag::getPictureId)
+                    .distinct()
+                    .collect(Collectors.toList());
+            if (pictureIdsWithTag.isEmpty()) {
+                Page<Picture> emptyPage = new Page<>(pictureQueryRequest.getCurrent(), pictureQueryRequest.getPageSize());
+                emptyPage.setRecords(Collections.emptyList());
+                return emptyPage.convert(p -> PictureVO.ofList(p.getId(), p.getUrl(), Collections.emptyList()));
+            }
+            queryWrapper.in(Picture::getId, pictureIdsWithTag);
         }
 
         Page<Picture> page = new Page<>(pictureQueryRequest.getCurrent(), pictureQueryRequest.getPageSize());
         IPage<Picture> picturePage = pictureMapper.selectPage(page, queryWrapper);
-        return picturePage.convert(p -> PictureVO.ofList(p.getId(), p.getUrl(), parseTags(p.getTags())));
+        // 批量加载标签
+        List<Long> pagePictureIds = picturePage.getRecords().stream().map(Picture::getId).collect(Collectors.toList());
+        Map<Long, List<String>> tagsMap = batchLoadTags(pagePictureIds);
+        return picturePage.convert(p -> PictureVO.ofList(p.getId(), p.getUrl(),
+                tagsMap.getOrDefault(p.getId(), Collections.emptyList())));
     }
 
     @Override
@@ -519,6 +539,9 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
         Page<Picture> page = new Page<>(dto.getCurrent(), dto.getPageSize());
         IPage<Picture> picturePage = pictureMapper.selectPage(page, queryWrapper);
+        // 批量加载标签
+        List<Long> pagePictureIds = picturePage.getRecords().stream().map(Picture::getId).collect(Collectors.toList());
+        Map<Long, List<String>> tagsMap = batchLoadTags(pagePictureIds);
         return picturePage.convert(p -> PictureVO.ofAdmin(
                 p.getId(),
                 p.getUrl(),
@@ -530,7 +553,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 p.getUserId(),
                 p.getIsPrivate(),
                 p.getIsSelected(),
-                parseTags(p.getTags())));
+                tagsMap.getOrDefault(p.getId(), Collections.emptyList())));
     }
 
     @Override
@@ -592,6 +615,17 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             }
         } catch (Exception e) {
             log.warn("清理 picture_share 失败(非阻塞): {}", e.getMessage());
+        }
+
+        // 级联清理 picture_tag 记录
+        try {
+            int tagDelCount = pictureTagMapper.delete(new LambdaQueryWrapper<hk.ljx.fishpicsbackend.picture.entity.PictureTag>()
+                    .in(hk.ljx.fishpicsbackend.picture.entity.PictureTag::getPictureId, deletableIds));
+            if (tagDelCount > 0) {
+                log.info("级联删除 picture_tag: count={}", tagDelCount);
+            }
+        } catch (Exception e) {
+            log.warn("清理 picture_tag 失败(非阻塞): {}", e.getMessage());
         }
 
         // 扣减空间已用大小
@@ -707,7 +741,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                     .collect(Collectors.toList());
             boolean result = safeTags.stream().anyMatch(tag -> !typeSet.contains(tag));
             ExcUtils.throwIfTrue(result, ExceptionCode.PARAMETER_ERROR, "标签不存在");
-            picture.setTags(JSONUtil.toJsonStr(safeTags));
+            replacePictureTags(pictureId, safeTags);
         }
 
         // 之前 request.setUrl(null) 已堵掉 url 变更，URL 替换的合法路径是 replacePictureFile
@@ -928,8 +962,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 picture, hk.ljx.fishpicsbackend.picture.service.PicturePermissionUtil.Op.EDIT_META,
                 spaceTeamMemberMapper);
 
-        String tags = picture.getTags();
-        List<String> tagList = tags != null ? JSONUtil.toList(tags, String.class) : Collections.emptyList();
+        List<String> tagList = loadTagsForPicture(picture.getId());
 
         return PictureVO.ofDetail(
                 picture.getId(),
@@ -951,20 +984,38 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
     // ==================== 分片上传方法 ====================
 
-    /**
-     * 解析 tags 字段，兼容 JSON 数组格式和逗号分隔格式
-     */
-    private List<String> parseTags(String tags) {
-        if (tags == null || tags.isBlank()) return Collections.emptyList();
-        String trimmed = tags.strip();
-        if (trimmed.startsWith("[")) {
-            try {
-                return JSONUtil.toList(trimmed, String.class);
-            } catch (Exception e) {
-                return StrUtil.split(trimmed, ',');
-            }
+    // ==================== 标签辅助方法 ====================
+
+    private List<String> loadTagsForPicture(Long pictureId) {
+        return pictureTagMapper.selectList(
+                new LambdaQueryWrapper<hk.ljx.fishpicsbackend.picture.entity.PictureTag>()
+                        .eq(hk.ljx.fishpicsbackend.picture.entity.PictureTag::getPictureId, pictureId))
+                .stream()
+                .map(hk.ljx.fishpicsbackend.picture.entity.PictureTag::getTagName)
+                .collect(Collectors.toList());
+    }
+
+    private Map<Long, List<String>> batchLoadTags(List<Long> pictureIds) {
+        if (pictureIds == null || pictureIds.isEmpty()) return Collections.emptyMap();
+        return pictureTagMapper.selectList(
+                new LambdaQueryWrapper<hk.ljx.fishpicsbackend.picture.entity.PictureTag>()
+                        .in(hk.ljx.fishpicsbackend.picture.entity.PictureTag::getPictureId, pictureIds))
+                .stream()
+                .collect(Collectors.groupingBy(
+                        hk.ljx.fishpicsbackend.picture.entity.PictureTag::getPictureId,
+                        Collectors.mapping(hk.ljx.fishpicsbackend.picture.entity.PictureTag::getTagName, Collectors.toList())));
+    }
+
+    private void replacePictureTags(Long pictureId, List<String> newTags) {
+        pictureTagMapper.delete(
+                new LambdaQueryWrapper<hk.ljx.fishpicsbackend.picture.entity.PictureTag>()
+                        .eq(hk.ljx.fishpicsbackend.picture.entity.PictureTag::getPictureId, pictureId));
+        for (String tag : newTags) {
+            hk.ljx.fishpicsbackend.picture.entity.PictureTag pt = new hk.ljx.fishpicsbackend.picture.entity.PictureTag();
+            pt.setPictureId(pictureId);
+            pt.setTagName(tag);
+            pictureTagMapper.insert(pt);
         }
-        return StrUtil.split(trimmed, ',');
     }
 
     /**
@@ -1426,13 +1477,13 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         if (Objects.equals(space.getUserId(), userId)) {
             return;
         }
-        // 管理员直接通过（level >= 3）
-        User user = UserHolder.getUser();
-        if (user != null && user.getLevel() != null && user.getLevel() >= 3) {
+        // 管理员直接通过（role == 1）
+        hk.ljx.fishpicsbackend.common.context.LoginContext ctx = UserHolder.getLoginContext();
+        if (ctx != null && ctx.isAdmin()) {
             return;
         }
         // 检查是否是团队成员
-        ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_LOGIN);
+        ExcUtils.throwIfTrue(ctx == null || ctx.getUserId() == null, ExceptionCode.NOT_LOGIN);
         // 私人空间只能创建者访问
         if (space.getType() != null && space.getType() == 0) {
             // 已认证但无权访问 → FORBIDDEN

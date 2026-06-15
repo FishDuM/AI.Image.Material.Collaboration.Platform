@@ -49,4 +49,9 @@ public class UserEditByAdminRequest {
      * 用户等级：0-普通，1-VIP，2-SVIP
      */
     private Integer level;
+
+    /**
+     * 用户角色：0-普通，1-管理员
+     */
+    private Integer role;
 }

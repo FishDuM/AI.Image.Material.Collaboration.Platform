@@ -124,6 +124,7 @@ export function AuthProvider({ children }) {
         nickname: rest.nickname,
         avatar: rest.avatar,
         level: rest.level,
+        roleId: rest.roleId,
         permissions: Array.isArray(rest.permissions) ? rest.permissions : [],
       }
       setUserInfo(safeUser)

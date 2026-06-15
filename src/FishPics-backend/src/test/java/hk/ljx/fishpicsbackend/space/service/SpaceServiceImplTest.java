@@ -76,7 +76,7 @@ class SpaceServiceImplTest {
     @DisplayName("图片排序字段白名单应覆盖允许字段")
     void pictureSortWhitelistShouldContainAllowedFields() {
         String[] allowedFields = {
-                "id", "picture_name", "introduction", "tags", "url", "space_id",
+                "id", "picture_name", "introduction", "url", "space_id",
                 "user_id", "create_time", "update_time"
         };
 
@@ -98,7 +98,7 @@ class SpaceServiceImplTest {
         };
 
         String[] allowedFields = {
-                "id", "picture_name", "introduction", "tags", "url", "space_id",
+                "id", "picture_name", "introduction", "url", "space_id",
                 "user_id", "create_time", "update_time"
         };
 

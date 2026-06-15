@@ -14,7 +14,11 @@ const LEVEL_OPTIONS = [
   { value: 0, label: '普通用户' },
   { value: 1, label: 'VIP' },
   { value: 2, label: 'SVIP' },
-  { value: 3, label: '管理员' },
+]
+
+const ROLE_OPTIONS = [
+  { value: 0, label: '普通用户' },
+  { value: 1, label: '管理员' },
 ]
 
 function formatDateTime(value) {
@@ -31,8 +35,8 @@ function formatDateTime(value) {
   })
 }
 
-function renderLevelTag(level) {
-  if (level >= 3) {
+function renderLevelTag(level, roleId) {
+  if (roleId === 1) {
     return <Tag color="red">管理员</Tag>
   }
   if (level === 2) {
@@ -112,6 +116,7 @@ function UserManagement() {
         email: editingUser.email,
         phone: editingUser.phone,
         level: editingUser.level ?? 0,
+        role: editingUser.roleId ?? 0,
       })
     })
   }, [editForm, editingUser, isModalOpen])
@@ -176,6 +181,7 @@ function UserManagement() {
         phone: values.phone || null,
         nickname: values.nickname || null,
         level: values.level,
+        role: values.role,
       })
 
       message.success('编辑用户成功')
@@ -289,7 +295,7 @@ function UserManagement() {
       title: '等级',
       dataIndex: 'level',
       key: 'level',
-      render: (level) => renderLevelTag(level),
+      render: (level, record) => renderLevelTag(level, record.roleId),
     },
     {
       title: '状态',
@@ -541,6 +547,15 @@ function UserManagement() {
                 ]}
               >
                 <Input placeholder="请输入手机号" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                name="role"
+                label="角色"
+                rules={[{ required: true, message: '请选择角色' }]}
+              >
+                <Select placeholder="请选择角色" options={ROLE_OPTIONS} />
               </Form.Item>
             </Col>
             <Col xs={24} sm={12}>

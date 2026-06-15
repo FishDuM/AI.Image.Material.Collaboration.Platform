@@ -3,7 +3,7 @@ const TOKEN_KEY = 'fishpics_auth_token'
 const ENC_KEY_STORAGE = 'fishpics_enc_key'
 
 // 只落安全字段,防止敏感 PII 进 localStorage
-const SAFE_USER_FIELDS = ['id', 'username', 'nickname', 'avatar', 'level', 'permissions']
+const SAFE_USER_FIELDS = ['id', 'username', 'nickname', 'avatar', 'level', 'roleId', 'permissions']
 function pickSafeUser(userInfo) {
   if (!userInfo || typeof userInfo !== 'object') return null
   const safe = {}

@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * 简化的权限拦截器
- * 只需要判断 user.level >= 3 即为管理员
+ * 只需要判断 user.role == 1 即为管理员
  */
 @Slf4j
 @Aspect
@@ -31,9 +31,9 @@ public class AdminInterceptor {
             throw new BaseException(ExceptionCode.NOT_LOGIN, "未登录或登录过期");
         }
 
-        // 2. 检查是否是管理员（level >= 3）
+        // 2. 检查是否是管理员（role == 1）
         if (!ctx.isAdmin()) {
-            log.warn("权限校验失败: userId={}, level={}, 需要管理员权限", ctx.getUserId(), ctx.getLevel());
+            log.warn("权限校验失败: userId={}, role={}, 需要管理员权限", ctx.getUserId(), ctx.getRole());
             throw new BaseException(ExceptionCode.FORBIDDEN, requireAdmin.message());
         }
 

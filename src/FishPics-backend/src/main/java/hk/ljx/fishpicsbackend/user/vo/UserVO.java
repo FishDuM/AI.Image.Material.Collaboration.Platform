@@ -71,6 +71,11 @@ public class UserVO implements Serializable {
     private String role;
 
     /**
+     * 系统角色 0=普通 1=管理员（仅管理端查看用）
+     */
+    private Integer roleId;
+
+    /**
      * 拥有的权限码列表（前端用于控制菜单/按钮显示）
      */
     private List<String> permissions;
@@ -118,13 +123,14 @@ public class UserVO implements Serializable {
      * 创建登录响应 VO（包含 token 和 permissions）
      */
     public static UserVO ofLogin(Long id, String username, String nickname, String avatar,
-                                  Integer level, String token, List<String> permissions) {
+                                  Integer level, Integer roleId, String token, List<String> permissions) {
         return UserVO.builder()
                 .id(id)
                 .username(username)
                 .nickname(nickname)
                 .avatar(avatar)
                 .level(level)
+                .roleId(roleId)
                 .token(token)
                 .permissions(permissions)
                 .build();
@@ -134,7 +140,7 @@ public class UserVO implements Serializable {
      * 创建用户信息 VO（不含敏感信息）
      */
     public static UserVO ofInfo(Long id, String username, String nickname, String avatar,
-                                 String email, String phone, Integer level, String role,
+                                 String email, String phone, Integer level, Integer roleId, String role,
                                  Date createTime, Integer isPrivateFollows,
                                  Integer isPrivatePostCollect, Integer isPrivateLikes,
                                  Integer isPrivateFans) {
@@ -146,6 +152,7 @@ public class UserVO implements Serializable {
                 .email(email)
                 .phone(phone)
                 .level(level)
+                .roleId(roleId)
                 .role(role)
                 .createTime(createTime)
                 .isPrivateFollows(isPrivateFollows)
@@ -176,7 +183,7 @@ public class UserVO implements Serializable {
      */
     public static UserVO ofAdmin(Long id, String username, String nickname, String avatar,
                                   String email, String phone, Integer status, Integer level,
-                                  Date createTime, List<Long> roleIds) {
+                                  Integer roleId, Date createTime, List<Long> roleIds) {
         return UserVO.builder()
                 .id(id)
                 .username(username)
@@ -186,6 +193,7 @@ public class UserVO implements Serializable {
                 .phone(maskPhone(phone))
                 .status(status)
                 .level(level)
+                .roleId(roleId)
                 .createTime(createTime)
                 .roleIds(roleIds)
                 .build();
@@ -214,8 +222,8 @@ public class UserVO implements Serializable {
 
     public static UserVO ofAdmin(Long id, String username, String nickname, String avatar,
                                   String email, String phone, Integer status, Integer level,
-                                  List<Long> roleIds) {
-        return ofAdmin(id, username, nickname, avatar, email, phone, status, level, null, roleIds);
+                                  Integer roleId, List<Long> roleIds) {
+        return ofAdmin(id, username, nickname, avatar, email, phone, status, level, roleId, null, roleIds);
     }
 
     /**

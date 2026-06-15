@@ -176,8 +176,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 user.getNickname(),
                 user.getAvatar(),
                 user.getLevel(),
+                user.getRole(),
                 jwt,
-                PermissionUtils.getPermissionsByLevel(user.getLevel())
+                PermissionUtils.getPermissionsByLevel(user.getLevel(), user.getRole())
         ));
     }
 
@@ -283,6 +284,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 user.getPhone(),
                 user.getStatus(),
                 user.getLevel(),
+                user.getRole(),
                 user.getCreateTime(),
                 null
         ));
@@ -348,34 +350,30 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
         Long originalId = user.getId();
         Integer originalStatus = user.getStatus();
-        // 保留修改前的 level,用于管理员保护检查(检查原始身份,而不是修改后的值)
-        Integer originalLevel = user.getLevel();
-        Integer newLevel = userEditByAdminRequest.getLevel();
+        // 保留修改前的 role,用于管理员保护检查(检查原始身份,而不是修改后的值)
+        Integer originalRole = user.getRole();
+        Integer newRole = userEditByAdminRequest.getRole();
 
-        // 不允许低级 admin 改高级 admin
-        if (originalLevel != null && originalLevel >= 3) {
-            int currentOpLevel = currentOperator.getLevel() == null ? 0 : currentOperator.getLevel();
-            if (currentOpLevel < 3) {
+        // 不允许非 admin 改 admin
+        if (originalRole != null && originalRole == 1) {
+            Integer currentOpRole = currentOperator.getRole();
+            if (currentOpRole == null || currentOpRole != 1) {
                 throw new BaseException(ExceptionCode.FORBIDDEN, "只有管理员才能修改管理员信息");
             }
-            // 用 `<` 而非 `<=`，允许同级 admin 互改
-            ExcUtils.throwIfTrue(currentOpLevel < originalLevel,
-                    ExceptionCode.FORBIDDEN, "不能修改更高级别的管理员");
         }
 
-        // admin 不能把别人的 level 提升到比自己更高的级别
-        if (newLevel != null && newLevel >= 3) {
-            int currentOpLevel = currentOperator.getLevel() == null ? 0 : currentOperator.getLevel();
-            ExcUtils.throwIfTrue(newLevel > currentOpLevel,
-                    ExceptionCode.FORBIDDEN, "不能将用户提升到比自己更高的级别");
+        // 非 admin 不能把别人提升为 admin
+        if (newRole != null && newRole == 1) {
+            Integer currentOpRole = currentOperator.getRole();
+            ExcUtils.throwIfTrue(currentOpRole == null || currentOpRole != 1,
+                    ExceptionCode.FORBIDDEN, "只有管理员才能提升用户为管理员");
         }
 
         // 最后一名 admin 保护：如果改完会让系统无 admin，拒绝
-        if ((originalLevel != null && originalLevel >= 3)
-                && (newLevel != null && newLevel < 3)) {
-            // 防御性预检(避免无效 update),真正的并发保护在 updateById 条件里
+        if ((originalRole != null && originalRole == 1)
+                && (newRole != null && newRole == 0)) {
             Long adminCount = baseMapper.selectCount(new LambdaQueryWrapper<User>()
-                    .eq(User::getLevel, 3)
+                    .eq(User::getRole, 1)
                     .eq(User::getStatus, 1));
             ExcUtils.throwIfTrue(adminCount != null && adminCount <= 1,
                     ExceptionCode.FORBIDDEN, "系统至少需要保留一名管理员,无法降级最后一名 admin");
@@ -403,15 +401,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setId(originalId);
         user.setStatus(originalStatus);
 
-        // 如果是"降级 admin"路径，用 updateLevelIfNotLastAdmin 条件 UPDATE
+        // 如果是"降级 admin"路径，用 updateRoleIfNotLastAdmin 条件 UPDATE
         int rows;
-        if ((originalLevel != null && originalLevel >= 3)
-                && (newLevel != null && newLevel < 3)) {
-            int levelRows = baseMapper.updateLevelIfNotLastAdmin(originalId, newLevel);
-            ExcUtils.throwIfTrue(levelRows != 1, ExceptionCode.FORBIDDEN,
+        if ((originalRole != null && originalRole == 1)
+                && (newRole != null && newRole == 0)) {
+            int roleRows = baseMapper.updateRoleIfNotLastAdmin(originalId);
+            ExcUtils.throwIfTrue(roleRows != 1, ExceptionCode.FORBIDDEN,
                     "系统至少需要保留一名管理员,无法降级最后一名 admin");
-            // level 已用条件 UPDATE 改完,user 内存对象同步
-            user.setLevel(newLevel);
+            // role 已用条件 UPDATE 改完,user 内存对象同步
+            user.setRole(0);
             // 其他字段照常 update
             rows = baseMapper.updateById(user);
             ExcUtils.throwIfTrue(rows != 1, ExceptionCode.DATABASE_ERROR, "更新用户失败");
@@ -536,12 +534,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         User fresh = baseMapper.selectById(user.getId());
         ExcUtils.throwIfTrue(fresh == null, ExceptionCode.NOT_FOUND, "用户不存在");
         return UserVO.ofInfo(fresh.getId(), fresh.getUsername(), fresh.getNickname(), fresh.getAvatar(),
-                fresh.getEmail(), fresh.getPhone(), fresh.getLevel(), null,
+                fresh.getEmail(), fresh.getPhone(), fresh.getLevel(), fresh.getRole(), null,
                 fresh.getCreateTime(), null, null, null, null);
     }
 
     private boolean isAdmin(User user) {
-        return user.getLevel() != null && user.getLevel() >= 3;
+        return user.getRole() != null && user.getRole() == 1;
     }
 
     @Override

@@ -108,6 +108,7 @@ public class UserController {
                 .nickname(ctx.getNickname())
                 .avatar(ctx.getAvatar())
                 .level(ctx.getLevel())
+                .roleId(ctx.getRole())
                 .permissions(allPerms)
                 .build();
 
@@ -188,6 +189,7 @@ public class UserController {
                 user.getPhone(),
                 user.getStatus(),
                 user.getLevel(),
+                user.getRole(),
                 user.getCreateTime(),
                 null  // 不再需要 roleIds，使用 level 判断权限
         );

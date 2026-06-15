@@ -56,6 +56,7 @@ public class UserHolder {
         user.setAvatar(ctx.getAvatar());
         user.setStatus(ctx.getStatus());
         user.setLevel(ctx.getLevel());
+        user.setRole(ctx.getRole());
         return user;
     }
 }

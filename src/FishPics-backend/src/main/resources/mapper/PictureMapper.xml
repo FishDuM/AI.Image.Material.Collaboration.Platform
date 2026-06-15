@@ -18,7 +18,6 @@
             <result property="isPrivate" column="is_private" />
             <result property="spaceId" column="space_id" />
             <result property="introduction" column="introduction" />
-            <result property="tags" column="tags"/>
             <result property="type" column="type"/>
             <result property="resourceId" column="resource_id"/>
             <result property="isSelected" column="is_selected"/>
@@ -27,6 +26,6 @@
     <sql id="Base_Column_List">
         id,user_id,picture_name,url,width,height,
         size,status,create_time,update_time,is_private,
-        space_id,introduction,tags,type,resource_id,is_selected
+        space_id,introduction,type,resource_id,is_selected
     </sql>
 </mapper>

@@ -3,13 +3,6 @@ CREATE DATABASE IF NOT EXISTS FishPics DEFAULT CHARACTER SET utf8mb4 COLLATE utf
 
 USE FishPics;
 
--- =====================================================
--- 简化版 RBAC：使用 user.level 字段判断权限
--- level: 0=普通用户, 1=VIP, 2=SVIP, 3=管理员
--- =====================================================
-
--- 第一部分：业务表
-
 -- 1. 系统配置表
 CREATE TABLE pic_system (
     id       BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
@@ -18,11 +11,10 @@ CREATE TABLE pic_system (
     UNIQUE KEY uk_syskey (syskey)
 ) COMMENT '系统配置表';
 
--- 插入默认分类标签
 INSERT INTO pic_system (syskey, sysvalue) VALUES
 ('type_list_key', '["人物","动物","植物","美食","风景","建筑","物品","服饰","数码","家居","插画","二次元","实拍","文档","表情包"]');
 
--- 2. 用户表（简化版，使用 level 字段判断权限）
+-- 2. 用户表
 CREATE TABLE user (
     id          BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '用户ID',
     username    VARCHAR(32)                        NULL COMMENT '用户名（登录用）',
@@ -31,7 +23,8 @@ CREATE TABLE user (
     email       VARCHAR(64)                        NULL COMMENT '邮箱',
     phone       VARCHAR(16)                        NULL COMMENT '手机号',
     nickname    VARCHAR(32)                        NULL COMMENT '昵称（展示用）',
-    level       TINYINT  DEFAULT 0                 NOT NULL COMMENT '用户等级: 0=普通 1=VIP 2=SVIP 3=管理员',
+    level       TINYINT  DEFAULT 0                 NOT NULL COMMENT '用户等级: 0=普通 1=VIP 2=SVIP',
+    role        TINYINT  DEFAULT 0                 NOT NULL COMMENT '用户角色: 0=普通 1=管理员',
     status      TINYINT  DEFAULT 1                 NULL COMMENT '状态 1=正常 0=禁用',
     is_delete   TINYINT  DEFAULT 0                 NOT NULL COMMENT '逻辑删除 0=否 1=是',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL COMMENT '创建时间',
@@ -39,6 +32,9 @@ CREATE TABLE user (
     UNIQUE KEY uk_username (username),
     UNIQUE KEY uk_nickname (nickname)
 ) COMMENT '用户表';
+
+INSERT INTO user (username, password, nickname, level, role, status) VALUES
+('admin', '$2b$10$6owdZSQbVSKuiA4BL7tC/Oii2g4hlrs3U88e.FX41NK1s/kQeERge', '系统管理员', 0, 1, 1);
 
 -- 3. 空间表
 CREATE TABLE space (
@@ -56,7 +52,6 @@ CREATE TABLE space (
     update_time  DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_type (type),
     INDEX idx_user_id (user_id),
-    -- 每个 user 只能有 1 个私人空间(type=0)
     UNIQUE KEY uk_user_type (user_id, type)
 ) COMMENT '空间表';
 
@@ -66,15 +61,14 @@ CREATE TABLE picture (
     user_id      BIGINT                             NOT NULL COMMENT '上传者用户ID',
     picture_name VARCHAR(256)                       NULL COMMENT '图片名称',
     url          VARCHAR(512)                       NOT NULL COMMENT '图片URL',
-    width        INT UNSIGNED              NULL COMMENT '宽度(像素)',
-    height       INT UNSIGNED              NULL COMMENT '高度(像素)',
+    width        INT UNSIGNED                       NULL COMMENT '宽度(像素)',
+    height       INT UNSIGNED                       NULL COMMENT '高度(像素)',
     size         BIGINT                             NULL COMMENT '文件大小(Byte)',
     status       TINYINT  DEFAULT 2                 NULL COMMENT '状态 1=正常 0=禁用 2=待审核',
     is_private   TINYINT  DEFAULT 1                 NOT NULL COMMENT '0=公开 1=私有',
     space_id     BIGINT                             NULL COMMENT '所属空间ID',
     resource_id  BIGINT                             NULL COMMENT '关联file_resource.id（文件去重）',
     introduction VARCHAR(256)                       NULL COMMENT '图片介绍',
-    tags         VARCHAR(512)                       NULL COMMENT '标签(JSON数组)',
     type         VARCHAR(32)                        NULL COMMENT '图片格式',
     is_selected  TINYINT  DEFAULT 0                 NOT NULL COMMENT '是否精选 0=普通 1=精选',
     version      BIGINT   DEFAULT 1                 NOT NULL COMMENT '乐观锁版本号',
@@ -86,13 +80,21 @@ CREATE TABLE picture (
     INDEX idx_introduction (introduction),
     INDEX idx_status (status),
     INDEX idx_update_time (update_time),
-    -- resource_id 为 NULL 时不受唯一约束，非 NULL 时保证每用户每空间每资源只有一条记录
     UNIQUE KEY uk_resource_user_space (resource_id, user_id, space_id)
 ) COMMENT '图片表';
 
--- 增加 share_token_hash 字段
+-- 5. 图片标签关联表
+CREATE TABLE picture_tag (
+    id          BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    picture_id  BIGINT      NOT NULL COMMENT '图片ID',
+    tag_name    VARCHAR(32) NOT NULL COMMENT '标签名称',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL COMMENT '创建时间',
+    UNIQUE KEY uk_picture_tag (picture_id, tag_name),
+    INDEX idx_picture_id (picture_id),
+    INDEX idx_tag_name (tag_name)
+) COMMENT '图片标签关联表';
 
--- 5. 异步任务表
+-- 6. 异步任务表
 CREATE TABLE task (
     id          BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '任务ID',
     task_id     VARCHAR(32)                        NOT NULL COMMENT '任务唯一标识(UUID)',
@@ -112,7 +114,7 @@ CREATE TABLE task (
     INDEX idx_status (status)
 ) COMMENT '异步任务表';
 
--- 6. 审计日志表
+-- 7. 审计日志表
 CREATE TABLE sys_audit_log (
     id          BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '日志ID',
     user_id     BIGINT       COMMENT '操作者用户ID',
@@ -133,7 +135,7 @@ CREATE TABLE sys_audit_log (
     INDEX idx_operation (operation)
 ) COMMENT '审计日志表';
 
--- 7. 团队空间成员表
+-- 8. 团队空间成员表
 CREATE TABLE space_team_member (
     id          BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
     space_id    BIGINT  NOT NULL COMMENT '空间ID',
@@ -145,7 +147,7 @@ CREATE TABLE space_team_member (
     INDEX idx_user_id (user_id)
 ) COMMENT '团队空间成员表';
 
--- 8. 物理文件去重表
+-- 9. 物理文件去重表
 CREATE TABLE file_resource (
     id          BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
     md5         VARCHAR(32)  NOT NULL COMMENT '文件MD5',
@@ -158,7 +160,7 @@ CREATE TABLE file_resource (
     CHECK (ref_count >= 0)
 ) COMMENT '物理文件去重表';
 
--- 9. 图片分享表
+-- 10. 图片分享表
 CREATE TABLE picture_share (
     id                BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
     picture_id        BIGINT      NOT NULL COMMENT '图片ID',
@@ -177,7 +179,7 @@ CREATE TABLE picture_share (
     INDEX idx_expire_time (expire_time)
 ) COMMENT '图片分享表';
 
--- 10. 分享图片关联表（支持多图分享）
+-- 11. 分享图片关联表（支持多图分享）
 CREATE TABLE picture_share_item (
     id          BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
     share_id    BIGINT   NOT NULL COMMENT '分享ID',
@@ -186,29 +188,3 @@ CREATE TABLE picture_share_item (
     KEY idx_share_id (share_id),
     KEY idx_picture_id (picture_id)
 ) COMMENT '分享图片关联表';
-
--- =====================================================
--- 初始数据
--- =====================================================
-
--- 插入默认管理员账号（level=3 表示管理员）
-INSERT INTO user (username, password, nickname, level, status) VALUES
-('admin', '$2b$10$6owdZSQbVSKuiA4BL7tC/Oii2g4hlrs3U88e.FX41NK1s/kQeERge', '系统管理员', 3, 1);
-
--- =====================================================
--- 权限说明（无需数据库表，通过 level 字段判断）
--- =====================================================
---
--- 权限判断逻辑：
--- 1. 管理员（level >= 3）：拥有所有权限
--- 2. SVIP（level = 2）：高级功能权限
--- 3. VIP（level = 1）：VIP 功能权限
--- 4. 普通用户（level = 0）：基础功能权限
---
--- 使用方式：
--- @RequireAdmin - 只需要管理员权限
--- user.getLevel() >= 1 - VIP 或更高
--- user.getLevel() >= 2 - SVIP 或更高
--- user.getLevel() >= 3 - 管理员
---
--- =====================================================

@@ -23,8 +23,8 @@ public final class PermissionUtils {
      * 未来接入团队权限判断时会有问题。这里注入 teams。
      */
     public static LoginContext buildLoginContext(User user, List<SpaceTeamMember> teamMemberships) {
-        boolean isAdmin = user.getLevel() != null && user.getLevel() >= 3;
-        List<String> permissions = getPermissionsByLevel(user.getLevel());
+        boolean isAdmin = user.getRole() != null && user.getRole() == 1;
+        List<String> permissions = getPermissionsByLevel(user.getLevel(), user.getRole());
         List<String> systemPerms = permissions.stream()
                 .filter(permission -> permission.startsWith("system:"))
                 .collect(Collectors.toList());
@@ -53,6 +53,7 @@ public final class PermissionUtils {
                 .avatar(user.getAvatar())
                 .status(user.getStatus())
                 .level(user.getLevel())
+                .role(user.getRole())
                 .isAdmin(isAdmin)
                 .systemPerms(systemPerms)
                 .vipPerms(vipPerms)
@@ -82,12 +83,10 @@ public final class PermissionUtils {
         };
     }
 
-    public static List<String> getPermissionsByLevel(Integer level) {
+    public static List<String> getPermissionsByLevel(Integer level, Integer role) {
         List<String> permissions = new ArrayList<>();
-        if (level == null) {
-            return permissions;
-        }
-        if (level >= 3) {
+        // 系统权限由 role 决定
+        if (role != null && role == 1) {
             permissions.add("system:user:manage");
             permissions.add("system:team:manage");
             permissions.add("system:ai:manage");
@@ -97,19 +96,25 @@ public final class PermissionUtils {
             permissions.add("space:manage");
             permissions.add("picture:upload");
             permissions.add("picture:manage");
-        } else if (level >= 2) {
-            permissions.add("space:create");
-            permissions.add("picture:upload");
+            return permissions;
+        }
+        // 业务等级权限由 level 决定
+        if (level == null) level = 0;
+        permissions.add("space:create");
+        permissions.add("picture:upload");
+        if (level >= 2) {
             permissions.add("picture:manage");
             permissions.add("ai:advanced");
         } else if (level >= 1) {
-            permissions.add("space:create");
-            permissions.add("picture:upload");
             permissions.add("picture:manage");
-        } else {
-            permissions.add("space:create");
-            permissions.add("picture:upload");
         }
         return permissions;
+    }
+
+    /**
+     * 兼容旧签名（仅 level）
+     */
+    public static List<String> getPermissionsByLevel(Integer level) {
+        return getPermissionsByLevel(level, null);
     }
 }

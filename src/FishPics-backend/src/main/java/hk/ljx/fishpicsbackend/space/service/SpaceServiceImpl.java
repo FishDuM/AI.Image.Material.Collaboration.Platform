@@ -100,8 +100,11 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         ExcUtils.throwIfTrue(type != 0 && type != 1, "空间类型不合法，仅支持 0（私人空间）或 1（团队空间）");
         ExcUtils.throwIfTrue(user == null || user.getId() == null, "用户不存在");
 
-        // 读取用户等级
+        // 读取用户等级（admin 默认按 SVIP 算）
         Integer level = user.getLevel() != null ? user.getLevel() : 0;
+        if (user.getRole() != null && user.getRole() == 1) {
+            level = Math.max(level, 2);
+        }
 
         // 加 per-user 分布式锁防止 check-then-act 竞态
         String privateLockKey = type == 0 ? "LOCK:SPACE:CREATE:PRIVATE:" + user.getId() : null;
@@ -345,7 +348,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         validateSpaceActive(space);
         // 2. 权限校验：空间创建者 / 系统管理员 / team OWNER 都可修改(与 teamInvite/teamRemove 一致)
         boolean isCreator = java.util.Objects.equals(space.getUserId(), userId);
-        boolean isSystemAdmin = user.getLevel() != null && user.getLevel() >= 3;
+        boolean isSystemAdmin = user.getRole() != null && user.getRole() == 1;
         boolean isTeamOwner = !isCreator && Integer.valueOf(1).equals(space.getType()) && isTeamOwner(space.getId(), userId);
         // 无权限是 FORBIDDEN，不是 PARAMETER_ERROR
         ExcUtils.throwIfFalse(isCreator || isSystemAdmin || isTeamOwner,
@@ -403,7 +406,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
                     .like("introduction", keyword));
         }
         // 排序字段白名单，防止 SQL 注入
-        Set<String> allowedPictureSortFields = Set.of("id", "picture_name", "introduction", "tags", "url", "space_id",
+        Set<String> allowedPictureSortFields = Set.of("id", "picture_name", "introduction", "url", "space_id",
                 "user_id", "create_time", "update_time");
         boolean isPictureSortFieldValid = sortField != null && allowedPictureSortFields.contains(sortField);
         if (isPictureSortFieldValid) {

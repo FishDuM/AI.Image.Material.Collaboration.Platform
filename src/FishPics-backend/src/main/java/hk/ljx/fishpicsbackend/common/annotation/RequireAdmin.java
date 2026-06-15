@@ -7,7 +7,7 @@ import java.lang.annotation.Target;
 
 /**
  * 要求管理员权限
- * 只有 level >= 3 的用户才能访问
+ * 只有 role = 1 的用户才能访问
  */
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
