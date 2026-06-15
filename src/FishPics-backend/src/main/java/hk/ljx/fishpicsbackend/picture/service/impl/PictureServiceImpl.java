@@ -20,6 +20,7 @@ import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.utils.CosService;
+import hk.ljx.fishpicsbackend.common.utils.DistributedLockService;
 import hk.ljx.fishpicsbackend.common.utils.DownloadUtils;
 import hk.ljx.fishpicsbackend.common.utils.FileTypeUtils;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
@@ -103,6 +104,9 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
     @Resource
     private MultiLevelCacheManager cacheManager;
+
+    @Resource
+    private DistributedLockService distributedLockService;
 
     @Resource
     private CollabEventPublisher collabEventPublisher;
@@ -729,19 +733,14 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         ExcUtils.throwIfTrue(file == null || file.isEmpty(), "文件不能为空");
 
         // 并发 replacePictureFile 时的分布式锁防止孤立 file_resource 和配额重复计算
-        hk.ljx.fishpicsbackend.common.utils.DistributedLock replaceLock =
-                new hk.ljx.fishpicsbackend.common.utils.DistributedLock(
-                        stringRedisTemplate,
-                        "lock:replace-picture:" + pictureId,
-                        30L);
-        if (!replaceLock.tryLock()) {
+        String lockKey = "lock:replace-picture:" + pictureId;
+        if (!distributedLockService.tryLock(lockKey, 30)) {
             throw new BaseException(ExceptionCode.CONFLICT, "该图片正在被替换,请稍后重试");
         }
         try {
-            // 通过 ApplicationContext 代理调用，使 @Transactional 在锁保护范围内
             return getSelf().doReplacePictureFile(pictureId, file);
         } finally {
-            replaceLock.unlock();
+            distributedLockService.unlock(lockKey);
         }
     }
 

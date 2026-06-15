@@ -26,33 +26,10 @@ public class MvcConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        // Token 刷新拦截器（order=0，最先执行）
-        // JWT 解析 + 黑名单检查 + 自动续签 + 简化版权限上下文加载
-        // 分享页路径需要排除，否则已登录但 JWT 失效的用户无法访问分享页
-        // 注入 SpaceTeamMemberMapper，重建 LoginContext 时填充 teams
+        // Token 刷新拦截器：JWT 解析 + 黑名单检查 + 自动续签 + 简化版权限上下文加载
+        // 分享页和 ws 路径需要排除
         registry.addInterceptor(new TokenRefreshInterceptor(stringRedisTemplate, jwtUtils, userMapper, spaceTeamMemberMapper))
                 .excludePathPatterns("/share/info/*", "/share/preview/*", "/share/download/*", "/ws/**")
                 .order(0);
-
-        // 登录拦截器（order=1，在 Token 刷新之后）
-        registry.addInterceptor(new LoginInterceptor())
-                .excludePathPatterns(
-                        "/user/login",
-                        "/user/register",
-                        "/user/checkCode/register",
-                        "/user/checkCode/login",
-                        "/picture/list",
-                        "/picture/recommend",
-                        "/system/list",
-                        "/system/marquee",
-                        "/doc.html",
-                        "/webjars/**",
-                        "/v3/api-docs/**",
-                        "/favicon.ico",
-                        "/share/info/*",
-                        "/share/preview/*",
-                        "/share/download/*",
-                        "/ws/**")
-                .order(1);
     }
 }

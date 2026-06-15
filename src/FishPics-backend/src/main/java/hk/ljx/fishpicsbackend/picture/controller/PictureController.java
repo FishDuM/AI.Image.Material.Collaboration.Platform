@@ -3,6 +3,7 @@ import hk.ljx.fishpicsbackend.picture.entity.Picture;
 import hk.ljx.fishpicsbackend.picture.service.PictureService;
 import hk.ljx.fishpicsbackend.ai.service.AiService;
 
+import hk.ljx.fishpicsbackend.common.response.Response;
 import cn.hutool.core.util.ObjUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.common.annotation.AuditLog;
@@ -12,8 +13,6 @@ import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.user.entity.User;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
-import hk.ljx.fishpicsbackend.common.response.ResUtils;
-import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.picture.dto.AdminPictureListDTO;
 import hk.ljx.fishpicsbackend.picture.dto.CheckUploadRequest;
 import hk.ljx.fishpicsbackend.picture.dto.DeleteByIdList;
@@ -49,7 +48,7 @@ public class PictureController {
         ExcUtils.throwIfTrue(file.isEmpty(), "文件不能为空");
         ExcUtils.throwIfTrue(file.getSize() > 1024 * 1024 * 5, "文件大小不能超过5MB");
         Long actualTargetUserId = targetUserId != null ? targetUserId : currentUser.getId();
-        return ResUtils.success(pictureService.uploadAvatar(file, actualTargetUserId));
+        return Response.ok(pictureService.uploadAvatar(file, actualTargetUserId));
     }
 
     /**
@@ -67,7 +66,7 @@ public class PictureController {
         ExcUtils.throwIfTrue(file.isEmpty(), "文件不能为空");
         Picture picture = pictureService.uploadPicture(file, targetSpaceId);
         PictureVO pictureVO = PictureVO.ofUpload(picture.getId(), picture.getUrl());
-        return ResUtils.success(pictureVO);
+        return Response.ok(pictureVO);
     }
 
     /**
@@ -77,12 +76,12 @@ public class PictureController {
     public Response<PictureVO> savePictureByUrl(@Valid @RequestBody SavePictureByUrlRequest request) {
         Picture picture = pictureService.savePictureByUrl(request.getUrl(), request.getTargetSpaceId());
         PictureVO pictureVO = PictureVO.ofUpload(picture.getId(), picture.getUrl());
-        return ResUtils.success(pictureVO);
+        return Response.ok(pictureVO);
     }
 
     @PostMapping("/list")
     public Response<IPage<PictureVO>> getPictureList(@Valid @RequestBody PictureQueryRequest pictureQueryRequest) {
-        return ResUtils.success(pictureService.getPictureList(pictureQueryRequest));
+        return Response.ok(pictureService.getPictureList(pictureQueryRequest));
     }
 
     /**
@@ -94,25 +93,25 @@ public class PictureController {
         ExcUtils.throwIfTrue(loginUser == null, ExceptionCode.NOT_LOGIN, "请先登录");
         if (!aiService.isFeatureEnabled("recommendationEnabled")) {
             // 开关关闭：返回空分页
-            return ResUtils.success(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(
+            return Response.ok(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(
                     pageRequest.getCurrent() <= 0 ? 1 : pageRequest.getCurrent(),
                     pageRequest.getPageSize() <= 0 ? 10 : pageRequest.getPageSize()));
         }
-        return ResUtils.success(pictureService.getRecommendPictures(pageRequest, loginUser.getId()));
+        return Response.ok(pictureService.getRecommendPictures(pageRequest, loginUser.getId()));
     }
 
     @PostMapping("/delete")
     @AuditLog(module = "图片管理", operation = "删除图片")
     public Response<String> deletePicture(@Valid @RequestBody DeleteByIdList deleteByIdList) {
         ExcUtils.throwIfTrue(ObjUtil.isEmpty(deleteByIdList), "id不能为空");
-        return ResUtils.successOfMessage(pictureService.deletePicture(deleteByIdList));
+        return Response.okMsg(pictureService.deletePicture(deleteByIdList));
     }
 
     @PutMapping("/update")
     @AuditLog(module = "图片管理", operation = "编辑图片信息")
     public Response<Boolean> updatePicture(@Valid @RequestBody PictureUpdateRequest request) {
         pictureService.updatePicture(request);
-        return ResUtils.success(true);
+        return Response.ok(true);
     }
 
     /**
@@ -123,18 +122,18 @@ public class PictureController {
                                                 @RequestParam("pictureId") Long pictureId) {
         ExcUtils.throwIfTrue(file.isEmpty(), "文件不能为空");
         PictureVO result = pictureService.replacePictureFile(pictureId, file);
-        return ResUtils.success(result);
+        return Response.ok(result);
     }
 
     @GetMapping("/pictureEditMessage")
     public Response<PictureVO> getPictureEditMessage(@RequestParam Long id) {
-        return ResUtils.success(pictureService.getPictureEditMessage(id));
+        return Response.ok(pictureService.getPictureEditMessage(id));
     }
 
     @RequireAdmin
     @PostMapping("/admin/list")
     public Response<IPage<PictureVO>> getPictureListAdmin(@Valid @RequestBody AdminPictureListDTO dto) {
-        return ResUtils.success(pictureService.getAdminPictureList(dto));
+        return Response.ok(pictureService.getAdminPictureList(dto));
     }
 
     @RequireAdmin
@@ -142,7 +141,7 @@ public class PictureController {
     @AuditLog(module = "图片管理", operation = "图片审核")
     public Response<Boolean> reviewPicture(@Valid @RequestBody ReviewPictureDTO dto) {
         pictureService.reviewPicture(dto.getPictureId(), dto.getStatus(), dto.getSelected());
-        return ResUtils.success(true);
+        return Response.ok(true);
     }
 
     // ==================== 分片上传接口 ====================
@@ -153,7 +152,7 @@ public class PictureController {
      */
     @PostMapping("/check")
     public Response<?> checkUpload(@Valid @RequestBody CheckUploadRequest request) {
-        return ResUtils.success(pictureService.checkUpload(request));
+        return Response.ok(pictureService.checkUpload(request));
     }
 
     /**
@@ -164,7 +163,7 @@ public class PictureController {
             @RequestParam("file") MultipartFile file,
             @RequestParam("md5") String md5,
             @RequestParam("chunkIndex") Integer chunkIndex) {
-        return ResUtils.success(pictureService.uploadChunk(file, md5, chunkIndex));
+        return Response.ok(pictureService.uploadChunk(file, md5, chunkIndex));
     }
 
     /**
@@ -172,6 +171,6 @@ public class PictureController {
      */
     @PostMapping("/merge")
     public Response<PictureVO> mergeChunks(@Valid @RequestBody MergeChunksRequest request) {
-        return ResUtils.success(pictureService.mergeChunks(request));
+        return Response.ok(pictureService.mergeChunks(request));
     }
 }

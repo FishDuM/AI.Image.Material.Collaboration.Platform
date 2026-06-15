@@ -6,6 +6,10 @@ server:
 spring:
   application:
     name: FishPic-backend
+  web:
+    client:
+      connect-timeout: 30s
+      read-timeout: 30s
   servlet:
     multipart:
       # 单个文件最大大小

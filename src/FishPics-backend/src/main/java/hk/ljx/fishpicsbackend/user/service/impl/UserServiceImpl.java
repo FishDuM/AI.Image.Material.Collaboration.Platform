@@ -20,8 +20,8 @@ import hk.ljx.fishpicsbackend.common.context.LoginContext;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
-import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
+import hk.ljx.fishpicsbackend.common.utils.IpUtils;
 import hk.ljx.fishpicsbackend.common.utils.JwtUtils;
 import hk.ljx.fishpicsbackend.common.utils.PasswordUtil;
 import hk.ljx.fishpicsbackend.common.utils.PermissionUtils;
@@ -138,7 +138,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 user
         );
         ExcUtils.throwIfTrue(!Boolean.TRUE.equals(spaceCreated), ExceptionCode.DATABASE_ERROR, "创建私人空间失败");
-        return ResUtils.success(true);
+        return Response.ok(true);
     }
 
     @Override
@@ -173,7 +173,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         refreshUserInfoCache(user);
         cacheLoginContext(user);
 
-        return ResUtils.success(UserVO.ofLogin(
+        return Response.ok(UserVO.ofLogin(
                 user.getId(),
                 user.getUsername(),
                 user.getNickname(),
@@ -188,13 +188,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         try {
             jakarta.servlet.http.HttpServletRequest request =
                     ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
-            String ip = request.getHeader("X-Forwarded-For");
-            if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-                ip = request.getHeader("X-Real-IP");
-            }
-            if (ip == null || ip.isEmpty()) ip = request.getRemoteAddr();
-            if (ip != null && ip.contains(",")) ip = ip.split(",")[0].trim();
-            return ip == null ? "unknown" : ip;
+            return IpUtils.getClientIp(request);
         } catch (Exception e) {
             return "unknown";
         }

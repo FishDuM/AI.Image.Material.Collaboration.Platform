@@ -8,7 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.cache.MultiLevelCacheManager;
-import hk.ljx.fishpicsbackend.common.utils.DistributedLock;
+import hk.ljx.fishpicsbackend.common.utils.DistributedLockService;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
@@ -45,7 +45,7 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
     private MultiLevelCacheManager cacheManager;
 
     @Resource
-    private org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
+    private DistributedLockService distributedLockService;
 
     /**
      * sysvalue JSON 解析失败兜底返回 empty list
@@ -100,8 +100,7 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         ExcUtils.throwIfTrue(sanitized.isEmpty(), ExceptionCode.PARAMETER_ERROR, "标签清理后为空,疑似非法输入");
         addSysPicType.setValue(sanitized);
         // 锁 TTL 30s（临界区内含多次 DB 操作）
-        DistributedLock lock = new DistributedLock(stringRedisTemplate, "LOCK:SYS:TYPE_LIST", 30);
-        if (!lock.tryLock()) {
+        if (!distributedLockService.tryLock("LOCK:SYS:TYPE_LIST", 30)) {
             throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "其他节点正在修改,请稍后再试");
         }
         try {
@@ -116,7 +115,6 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         } else {
             picSystem = list.get(0);
             List<String> typeList = new ArrayList<>(safeParseList(picSystem.getSysvalue()));
-            // 去重添加，防止标签列表无限膨胀
             for (String item : addSysPicType.getValue()) {
                 if (!typeList.contains(item)) {
                     typeList.add(item);
@@ -124,27 +122,22 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
             }
             picSystem.setSysvalue(JSONUtil.toJsonStr(typeList));
             baseMapper.updateById(picSystem);
-            // 清理历史脏数据残留(多行)
             if (list.size() > 1) {
                 for (int i = 1; i < list.size(); i++) {
                     baseMapper.deleteById(list.get(i).getId());
                 }
             }
         }
-        // 清除缓存
         cacheManager.getSysConfigCache().evict(TYPE_LIST_KEY);
         } finally {
-            lock.unlock();
+            distributedLockService.unlock("LOCK:SYS:MARQUESS");
         }
     }
 
     @Override
     public void deleteType(String type) {
         ExcUtils.throwIfTrue(type == null || type.trim().isEmpty(), ExceptionCode.PARAMETER_ERROR, "标签名不能为空");
-        // 用 Redis 分布式锁替代 synchronized
-        // 锁 TTL 30s（临界区内含多次 DB 操作）
-        DistributedLock lock = new DistributedLock(stringRedisTemplate, "LOCK:SYS:TYPE_LIST", 30);
-        if (!lock.tryLock()) {
+        if (!distributedLockService.tryLock("LOCK:SYS:TYPE_LIST", 30)) {
             throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "其他节点正在修改,请稍后再试");
         }
         try {
@@ -158,10 +151,9 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         ExcUtils.throwIfTrue(!removed, ExceptionCode.NOT_FOUND, "标签不存在");
         picSystem.setSysvalue(JSONUtil.toJsonStr(typeList));
         baseMapper.updateById(picSystem);
-        // 清除缓存
         cacheManager.getSysConfigCache().evict(TYPE_LIST_KEY);
         } finally {
-            lock.unlock();
+            distributedLockService.unlock("LOCK:SYS:MARQUESS");
         }
     }
 
@@ -196,8 +188,8 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         ExcUtils.throwIfTrue(addSysMarquee.getPictureId() == null || addSysMarquee.getPictureId().isEmpty(), ExceptionCode.PARAMETER_ERROR, "图片id不能为空");
         // 用 Redis 分布式锁替代 synchronized
         // 锁 TTL 30s（临界区内含多次 DB 操作）
-        DistributedLock lock = new DistributedLock(stringRedisTemplate, "LOCK:SYS:MARQUESS", 30);
-        if (!lock.tryLock()) {
+        // 锁 TTL 30s
+        if (!distributedLockService.tryLock("LOCK:SYS:MARQUESS", 30)) {
             throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "其他节点正在修改,请稍后再试");
         }
         try {
@@ -249,7 +241,7 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         // 清除缓存
         cacheManager.getSysConfigCache().evict(MARQUESS_KEY);
         } finally {
-            lock.unlock();
+            distributedLockService.unlock("LOCK:SYS:MARQUESS");
         }
     }
 
@@ -258,8 +250,8 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         ExcUtils.throwIfTrue(url == null || url.trim().isEmpty(), ExceptionCode.PARAMETER_ERROR, "图片url不能为空");
         // 用 Redis 分布式锁替代 synchronized
         // 锁 TTL 30s（临界区内含多次 DB 操作）
-        DistributedLock lock = new DistributedLock(stringRedisTemplate, "LOCK:SYS:MARQUESS", 30);
-        if (!lock.tryLock()) {
+        // 锁 TTL 30s
+        if (!distributedLockService.tryLock("LOCK:SYS:MARQUESS", 30)) {
             throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "其他节点正在修改,请稍后再试");
         }
         try {
@@ -277,7 +269,7 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         // 清除缓存
         cacheManager.getSysConfigCache().evict(MARQUESS_KEY);
         } finally {
-            lock.unlock();
+            distributedLockService.unlock("LOCK:SYS:MARQUESS");
         }
     }
 }

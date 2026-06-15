@@ -4,7 +4,6 @@ import hk.ljx.fishpicsbackend.common.annotation.AuditLog;
 import hk.ljx.fishpicsbackend.common.context.LoginContext;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
-import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.picture.dto.ShareCancelRequest;
@@ -50,12 +49,12 @@ public class ShareController {
                 allowDownload,
                 request.getMaxViewCount()
         );
-        return ResUtils.success(shareToken);
+        return Response.ok(shareToken);
     }
 
     @GetMapping("/info/{token}")
     public Response<Map<String, Object>> getShareInfo(@PathVariable String token) {
-        return ResUtils.success(shareService.getShareInfo(token));
+        return Response.ok(shareService.getShareInfo(token));
     }
 
     @GetMapping("/preview/{token}")
@@ -104,7 +103,7 @@ public class ShareController {
         LoginContext ctx = UserHolder.getLoginContext();
         ExcUtils.throwIfTrue(ctx == null || ctx.getUserId() == null, ExceptionCode.NOT_LOGIN);
         shareService.cancelShare(request.getShareId(), ctx.getUserId());
-        return ResUtils.successOfMessage("已取消分享");
+        return Response.okMsg("已取消分享");
     }
 
     private String resolveContentType(String contentType) {

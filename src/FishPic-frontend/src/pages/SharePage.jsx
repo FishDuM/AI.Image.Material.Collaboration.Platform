@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Spin, Result, Button, Typography, Space, Tag } from 'antd'
+import { Spin, Result, Button, Typography, Tag } from 'antd'
 import { DownloadOutlined, ClockCircleOutlined, PictureOutlined } from '@ant-design/icons'
 import { getShareInfo } from '../api'
 import './SharePage.css'
 
-const { Title, Text } = Typography
+const { Text } = Typography
 
 function SharePage() {
   const { token } = useParams()
@@ -83,10 +83,11 @@ function SharePage() {
     <div className="share-page">
       <div className="share-page-card">
         <div className="share-page-header">
-          <Title level={4} className="share-page-title">
-            <PictureOutlined /> 图片分享
-          </Title>
-          <Space size="middle" className="share-page-meta">
+          <div className="share-page-header-top">
+            <PictureOutlined className="share-page-header-icon" />
+            <span className="share-page-header-title">图片分享</span>
+          </div>
+          <div className="share-page-header-meta">
             <Tag icon={<ClockCircleOutlined />} color="orange">
               {expireDate} 过期
             </Tag>
@@ -94,46 +95,84 @@ function SharePage() {
               {shareData.allowDownload === 1 ? '允许下载' : '仅预览'}
             </Tag>
             <Tag>{pictures.length} 张图片</Tag>
-          </Space>
+          </div>
         </div>
 
-        <div className={`share-page-grid ${isMulti ? 'multi' : 'single'}`}>
-          {pictures.map((pic) => (
-            <div key={pic.pictureId} className="share-page-grid-item">
-              <div className="share-page-grid-image-wrapper">
+        <div className={`share-page-body ${isMulti ? 'multi' : 'single'}`}>
+          {isMulti ? (
+            <div className="share-page-grid">
+              {pictures.map((pic) => (
+                <div key={pic.pictureId} className="share-page-grid-item">
+                  <div className="share-page-grid-image-wrapper">
+                    <img
+                      src={pic.previewUrl}
+                      alt={pic.pictureName || '分享图片'}
+                      className="share-page-grid-image"
+                    />
+                  </div>
+                  <div className="share-page-grid-info">
+                    <Text className="share-page-grid-name" ellipsis>
+                      {pic.pictureName || '未命名图片'}
+                    </Text>
+                    {pic.introduction && (
+                      <Text className="share-page-grid-desc" ellipsis>
+                        {pic.introduction}
+                      </Text>
+                    )}
+                    <div className="share-page-grid-meta-row">
+                      {pic.width && pic.height && (
+                        <Tag>{pic.width} x {pic.height}</Tag>
+                      )}
+                      {shareData.allowDownload === 1 && pic.downloadUrl && (
+                        <Button
+                          type="primary"
+                          size="small"
+                          icon={<DownloadOutlined />}
+                          onClick={() => handleDownload(pic.downloadUrl, pic.pictureName)}
+                        >
+                          下载
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="share-page-single">
+              <div className="share-page-single-image-wrapper">
                 <img
-                  src={pic.previewUrl}
-                  alt={pic.pictureName || '分享图片'}
-                  className="share-page-grid-image"
+                  src={pictures[0]?.previewUrl}
+                  alt={pictures[0]?.pictureName || '分享图片'}
+                  className="share-page-single-image"
                 />
               </div>
-              <div className="share-page-grid-info">
-                <Text className="share-page-grid-name" ellipsis>
-                  {pic.pictureName || '未命名图片'}
+              <div className="share-page-single-info">
+                <Text className="share-page-single-name">
+                  <PictureOutlined /> {pictures[0]?.pictureName || '未命名图片'}
                 </Text>
-                {pic.introduction && (
-                  <Text className="share-page-grid-desc" ellipsis>
-                    {pic.introduction}
-                  </Text>
+                {pictures[0]?.introduction && (
+                  <Text className="share-page-single-desc">{pictures[0].introduction}</Text>
                 )}
-                <div className="share-page-grid-meta-row">
-                  {pic.width && pic.height && (
-                    <Tag>{pic.width} x {pic.height}</Tag>
+                <div className="share-page-single-meta">
+                  {pictures[0]?.width && pictures[0]?.height && (
+                    <Tag>{pictures[0].width} x {pictures[0].height}</Tag>
                   )}
-                  {shareData.allowDownload === 1 && pic.downloadUrl && (
+                  {shareData.allowDownload === 1 && pictures[0]?.downloadUrl && (
                     <Button
                       type="primary"
-                      size="small"
                       icon={<DownloadOutlined />}
-                      onClick={() => handleDownload(pic.downloadUrl, pic.pictureName)}
+                      size="large"
+                      className="share-page-download-btn"
+                      onClick={() => handleDownload(pictures[0].downloadUrl, pictures[0].pictureName)}
                     >
-                      下载
+                      下载原图
                     </Button>
                   )}
                 </div>
               </div>
             </div>
-          ))}
+          )}
         </div>
       </div>
     </div>

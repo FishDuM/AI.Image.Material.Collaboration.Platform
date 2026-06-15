@@ -1,10 +1,9 @@
 package hk.ljx.fishpicsbackend.system.controller;
 
+import hk.ljx.fishpicsbackend.common.response.Response;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.common.annotation.RequireAdmin;
 import hk.ljx.fishpicsbackend.common.entity.SysAuditLog;
-import hk.ljx.fishpicsbackend.common.response.ResUtils;
-import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.system.dto.AuditLogQueryRequest;
 import hk.ljx.fishpicsbackend.system.service.AuditLogService;
 import hk.ljx.fishpicsbackend.system.vo.SystemStatsVO;
@@ -30,7 +29,7 @@ public class AuditLogController {
     @RequireAdmin
     @PostMapping("/audit-log/list")
     public Response<IPage<SysAuditLog>> auditLogList(@Valid @RequestBody AuditLogQueryRequest request) {
-        return ResUtils.success(auditLogService.pageQuery(request));
+        return Response.ok(auditLogService.pageQuery(request));
     }
 
     /**
@@ -39,6 +38,6 @@ public class AuditLogController {
     @RequireAdmin
     @GetMapping("/stats")
     public Response<SystemStatsVO> stats() {
-        return ResUtils.success(auditLogService.getStats());
+        return Response.ok(auditLogService.getStats());
     }
 }

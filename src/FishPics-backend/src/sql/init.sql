@@ -45,7 +45,6 @@ CREATE TABLE space (
     id           BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '空间ID',
     name         VARCHAR(256)              NOT NULL COMMENT '空间名称',
     introduction VARCHAR(256)              NULL COMMENT '空间介绍',
-    -- BUG#21 修复:type 改为 NOT NULL DEFAULT 0，修复 MySQL 中 NULL!=NULL 导致唯一约束失效
     type         TINYINT  DEFAULT 0        NOT NULL COMMENT '类型 0=私人空间 1=团队空间',
     user_id      BIGINT                    NULL COMMENT '创建者用户ID',
     storage_size BIGINT  DEFAULT 536870912 NOT NULL COMMENT '存储配额(Byte)，默认512MB',
@@ -57,11 +56,7 @@ CREATE TABLE space (
     update_time  DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_type (type),
     INDEX idx_user_id (user_id),
-    -- V12-#24 修复:每个 user 只能有 1 个私人空间(type=0),用 partial unique 模拟:
-    -- MySQL 8 不支持 partial unique index,这里用 (user_id, type) 联合唯一,type=0 时等价于私人空间唯一。
-    -- 团队空间 type=1 不受此约束(可多个),但 (user_id, type=1) 也唯一(同一 user 不能同名 type 1 多个,实际无此场景)
-    -- 注:MySQL 5.7 也无 partial unique,所以直接用 (user_id, type) 即可,虽然有副作用:user 不能创建 2 个 type=0
-    -- 也能保证 type=1 唯一 — 对当前业务来说两者都符合需求。
+    -- 每个 user 只能有 1 个私人空间(type=0)
     UNIQUE KEY uk_user_type (user_id, type)
 ) COMMENT '空间表';
 
@@ -71,7 +66,6 @@ CREATE TABLE picture (
     user_id      BIGINT                             NOT NULL COMMENT '上传者用户ID',
     picture_name VARCHAR(256)                       NULL COMMENT '图片名称',
     url          VARCHAR(512)                       NOT NULL COMMENT '图片URL',
-    -- BUG#33 修复:宽高改为 INT UNSIGNED（像素值应为整数，非字符串）
     width        INT UNSIGNED              NULL COMMENT '宽度(像素)',
     height       INT UNSIGNED              NULL COMMENT '高度(像素)',
     size         BIGINT                             NULL COMMENT '文件大小(Byte)',
@@ -92,13 +86,11 @@ CREATE TABLE picture (
     INDEX idx_introduction (introduction),
     INDEX idx_status (status),
     INDEX idx_update_time (update_time),
-    -- BUG#6 修复:防止 checkUpload TOCTOU 竞态导致重复图片记录和 ref_count 泄漏
-    -- resource_id 为 NULL 时 MySQL NULL!=NULL 不受约束，非 NULL 时保证每用户每空间每资源只有一条记录
+    -- resource_id 为 NULL 时不受唯一约束，非 NULL 时保证每用户每空间每资源只有一条记录
     UNIQUE KEY uk_resource_user_space (resource_id, user_id, space_id)
 ) COMMENT '图片表';
 
 -- 增加 share_token_hash 字段
--- (init.sql 见 6.5)
 
 -- 5. 异步任务表
 CREATE TABLE task (
@@ -200,10 +192,6 @@ CREATE TABLE picture_share_item (
 -- =====================================================
 
 -- 插入默认管理员账号（level=3 表示管理员）
--- 密码：admin123（BCrypt 哈希,rounds=10）
--- V10-#2 修复:原 MD5 'e10adc3949ba59abbe56e057f20f883e' 无法通过 PasswordUtil.matches (BCrypt-only)
--- 全新部署后 admin 永久无法登录,必须手动改数据库。
--- 新 hash 由 Python bcrypt.hashpw(b'admin123', bcrypt.gensalt(rounds=10)) 生成。
 INSERT INTO user (username, password, nickname, level, status) VALUES
 ('admin', '$2b$10$6owdZSQbVSKuiA4BL7tC/Oii2g4hlrs3U88e.FX41NK1s/kQeERge', '系统管理员', 3, 1);
 

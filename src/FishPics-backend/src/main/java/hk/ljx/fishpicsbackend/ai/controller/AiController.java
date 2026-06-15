@@ -1,5 +1,6 @@
 package hk.ljx.fishpicsbackend.ai.controller;
 
+import hk.ljx.fishpicsbackend.common.response.Response;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -17,8 +18,6 @@ import hk.ljx.fishpicsbackend.common.constants.SysConstants;
 import hk.ljx.fishpicsbackend.common.dto.IdRequest;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
-import hk.ljx.fishpicsbackend.common.response.ResUtils;
-import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.common.utils.DownloadUtils;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.mapper.PicSystemMapper;
@@ -77,7 +76,7 @@ public class AiController {
         AiTaskSubmitVO vo = new AiTaskSubmitVO();
         vo.setTaskId(taskId);
         vo.setStatus("PENDING");
-        return ResUtils.success(vo);
+        return Response.ok(vo);
     }
 
     @GetMapping("/tags/result/{taskId}")
@@ -87,7 +86,7 @@ public class AiController {
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_LOGIN);
         ExcUtils.throwIfTrue(!user.getId().equals(task.getUserId()), ExceptionCode.UNAUTHORIZED);
-        return ResUtils.success(task);
+        return Response.ok(task);
     }
 
     @PostMapping("/draw/submit")
@@ -102,7 +101,7 @@ public class AiController {
         AiTaskSubmitVO vo = new AiTaskSubmitVO();
         vo.setTaskId(taskId);
         vo.setStatus("PENDING");
-        return ResUtils.success(vo);
+        return Response.ok(vo);
     }
 
     /**
@@ -119,7 +118,7 @@ public class AiController {
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_LOGIN);
         ExcUtils.throwIfTrue(!user.getId().equals(task.getUserId()), ExceptionCode.UNAUTHORIZED);
-        return ResUtils.success(task);
+        return Response.ok(task);
     }
 
     /**
@@ -239,7 +238,7 @@ public class AiController {
 
         Page<AiTaskVO> result = new Page<>(taskPage.getCurrent(), taskPage.getSize(), taskPage.getTotal());
         result.setRecords(voList);
-        return ResUtils.success(result);
+        return Response.ok(result);
     }
 
     @RequireAdmin
@@ -255,7 +254,7 @@ public class AiController {
         typeCounts.put("0", taskMapper.selectCount(new LambdaQueryWrapper<Task>().eq(Task::getBizType, "ai_tag")));
         typeCounts.put("2", taskMapper.selectCount(new LambdaQueryWrapper<Task>().eq(Task::getBizType, "ai_draw")));
         stats.setTypeCounts(typeCounts);
-        return ResUtils.success(stats);
+        return Response.ok(stats);
     }
 
     @RequireAdmin
@@ -275,7 +274,7 @@ public class AiController {
         } else {
             config = JSONUtil.toBean(records.get(0).getSysvalue(), AiConfigDTO.class);
         }
-        return ResUtils.success(config);
+        return Response.ok(config);
     }
 
     @RequireAdmin
@@ -312,7 +311,7 @@ public class AiController {
                     }
                 }
             }
-            return ResUtils.success(true);
+            return Response.ok(true);
         } finally {
             configLock.unlock();
         }

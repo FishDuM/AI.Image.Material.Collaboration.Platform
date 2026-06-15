@@ -13,6 +13,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
+import hk.ljx.fishpicsbackend.common.utils.DistributedLockService;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
@@ -80,7 +81,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
     private PictureShareMapper pictureShareMapper;
 
     @Resource
-    private org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
+    private DistributedLockService distributedLockService;
 
     /**
      * 创建空间，根据用户等级和空间类型分配存储配额
@@ -103,22 +104,13 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         Integer level = user.getLevel() != null ? user.getLevel() : 0;
 
         // 加 per-user 分布式锁防止 check-then-act 竞态
-        hk.ljx.fishpicsbackend.common.utils.DistributedLock privateLock = null;
-        if (type == 0) {
-            privateLock = new hk.ljx.fishpicsbackend.common.utils.DistributedLock(
-                    stringRedisTemplate, "LOCK:SPACE:CREATE:PRIVATE:" + user.getId(), 5);
-            if (!privateLock.tryLock()) {
-                throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "其他请求正在创建您的私人空间,请稍后再试");
-            }
+        String privateLockKey = type == 0 ? "LOCK:SPACE:CREATE:PRIVATE:" + user.getId() : null;
+        String teamLockKey = type == 1 ? "LOCK:SPACE:CREATE:TEAM:" + user.getId() : null;
+        if (privateLockKey != null && !distributedLockService.tryLock(privateLockKey, 5)) {
+            throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "其他请求正在创建您的私人空间,请稍后再试");
         }
-        // 团队空间也加分布式锁,防止并发创建绕过数量限制
-        hk.ljx.fishpicsbackend.common.utils.DistributedLock teamLock = null;
-        if (type == 1) {
-            teamLock = new hk.ljx.fishpicsbackend.common.utils.DistributedLock(
-                    stringRedisTemplate, "LOCK:SPACE:CREATE:TEAM:" + user.getId(), 5);
-            if (!teamLock.tryLock()) {
-                throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "其他请求正在创建团队空间,请稍后再试");
-            }
+        if (teamLockKey != null && !distributedLockService.tryLock(teamLockKey, 5)) {
+            throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "其他请求正在创建团队空间,请稍后再试");
         }
         try {
         // 判断空间类型并校验数量限制
@@ -167,11 +159,11 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         }
         return true;
         } finally {
-            if (privateLock != null) {
-                try { privateLock.unlock(); } catch (Exception e) { log.warn("释放私有空间创建锁失败: {}", e.getMessage()); }
+            if (privateLockKey != null) {
+                try { distributedLockService.unlock(privateLockKey); } catch (Exception e) { log.warn("释放私有空间创建锁失败: {}", e.getMessage()); }
             }
-            if (teamLock != null) {
-                try { teamLock.unlock(); } catch (Exception e) { log.warn("释放团队空间创建锁失败: {}", e.getMessage()); }
+            if (teamLockKey != null) {
+                try { distributedLockService.unlock(teamLockKey); } catch (Exception e) { log.warn("释放团队空间创建锁失败: {}", e.getMessage()); }
             }
         }
     }

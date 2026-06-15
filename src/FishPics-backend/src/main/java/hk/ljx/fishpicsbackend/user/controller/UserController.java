@@ -12,7 +12,6 @@ import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
 import hk.ljx.fishpicsbackend.common.constants.UserConstants;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
-import hk.ljx.fishpicsbackend.common.response.ResUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
@@ -62,7 +61,7 @@ public class UserController {
         String register = UUID.randomUUID().toString(true);
         String redisKey = RedisConstants.getRegisterCodeKey(register);
         String base64Image = userService.getCheckCode(redisKey, 5, 5);
-        return ResUtils.success(CheckCodeVO.builder()
+        return Response.ok(CheckCodeVO.builder()
                 .captchaKey(register)
                 .base64Image(UserConstants.getCheckCode(base64Image))
                 .build());
@@ -73,7 +72,7 @@ public class UserController {
         String login = UUID.randomUUID().toString(true);
         String redisKey = RedisConstants.getLoginCodeKey(login);
         String base64Image = userService.getCheckCode(redisKey, 5, 5);
-        return ResUtils.success(CheckCodeVO.builder()
+        return Response.ok(CheckCodeVO.builder()
                 .captchaKey(login)
                 .base64Image(UserConstants.getCheckCode(base64Image))
                 .build());
@@ -82,7 +81,7 @@ public class UserController {
     @GetMapping("/myself")
     public Response<UserVO> getMyself() {
         UserVO userVO = userService.getMyselfMessage();
-        return ResUtils.success(userVO);
+        return Response.ok(userVO);
     }
 
     @Resource
@@ -112,7 +111,7 @@ public class UserController {
                 .permissions(allPerms)
                 .build();
 
-        return ResUtils.success(userVO);
+        return Response.ok(userVO);
     }
 
     @PostMapping("/editUser")
@@ -134,7 +133,7 @@ public class UserController {
             String newJwt = jwtUtils.sign(me.getId());
             response.setHeader("X-New-Token", newJwt);
         }
-        return ResUtils.success(result);
+        return Response.ok(result);
     }
 
     @PostMapping("/logout")
@@ -155,20 +154,20 @@ public class UserController {
             }
         }
         UserHolder.removeLoginContext();
-        return ResUtils.success();
+        return Response.ok();
     }
 
     @GetMapping("/profile")
     public Response<UserVO> getUserProfile(@RequestParam Long userId) {
         ExcUtils.throwIfTrue(userId == null, ExceptionCode.PARAMETER_ERROR);
-        return ResUtils.success(userService.getUserProfile(userId));
+        return Response.ok(userService.getUserProfile(userId));
     }
 
     @GetMapping("/search")
     public Response<List<UserVO>> searchUsers(@RequestParam(required = false) String keyword) {
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
-        return ResUtils.success(userService.searchUsers(keyword));
+        return Response.ok(userService.searchUsers(keyword));
     }
 
     @RequireAdmin
@@ -193,7 +192,7 @@ public class UserController {
                 null  // 不再需要 roleIds，使用 level 判断权限
         );
 
-        return ResUtils.success(userVO);
+        return Response.ok(userVO);
     }
 
     @RequireAdmin
@@ -203,7 +202,7 @@ public class UserController {
         long current = userQueryWrapper.getCurrent();
         long pageSize = userQueryWrapper.getPageSize();
         IPage<UserVO> userList = userService.getUserList(userQueryWrapper, current, pageSize);
-        return ResUtils.success(userList);
+        return Response.ok(userList);
     }
 
     @RequireAdmin
@@ -212,7 +211,7 @@ public class UserController {
     public Response<Boolean> setStatus(@Valid @RequestBody UserIdRequest userIdRequest) {
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(userIdRequest), ExceptionCode.PARAMETER_ERROR);
         Long userId = userIdRequest.getUserId();
-        return ResUtils.success(userService.setStatus(userId));
+        return Response.ok(userService.setStatus(userId));
     }
 
     @RequireAdmin
@@ -220,6 +219,6 @@ public class UserController {
     @AuditLog(module = "用户管理", operation = "编辑用户")
     public Response<Boolean> editUser(@Valid @RequestBody UserEditByAdminRequest userEditByAdminRequest) {
         ExcUtils.throwIfTrue(ObjectUtil.isNull(userEditByAdminRequest), ExceptionCode.PARAMETER_ERROR);
-        return ResUtils.success(userService.editUser(userEditByAdminRequest));
+        return Response.ok(userService.editUser(userEditByAdminRequest));
     }
 }

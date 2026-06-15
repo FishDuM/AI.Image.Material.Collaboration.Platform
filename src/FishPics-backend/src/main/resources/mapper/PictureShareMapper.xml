@@ -13,7 +13,6 @@
         <result property="allowDownload" column="allow_download"/>
         <result property="status" column="status"/>
         <result property="createTime" column="create_time"/>
-        <!-- BUG#10 修复:添加 shareTokenHash 和 maxViewCount 字段映射 -->
         <result property="shareTokenHash" column="share_token_hash"/>
         <result property="maxViewCount" column="max_view_count"/>
     </resultMap>

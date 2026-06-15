@@ -75,6 +75,7 @@ function App() {
   return (
     <AuthProvider>
       <Routes>
+        <Route path="/s/:token" element={<RouteWithBoundary><SharePage /></RouteWithBoundary>} />
         {/* 移动端页面 - 使用路由级错误边界 */}
         <Route path="/mobile/login" element={<RouteWithBoundary><MobileLoginPage /></RouteWithBoundary>} />
         <Route path="/mobile/register" element={<RouteWithBoundary><MobileRegisterPage /></RouteWithBoundary>} />
@@ -89,7 +90,7 @@ function App() {
           <GlobalLayout>
             <Routes>
               <Route path="/" element={<RouteWithBoundary><HomePage /></RouteWithBoundary>} />
-              <Route path="/s/:token" element={<RouteWithBoundary><SharePage /></RouteWithBoundary>} />
+              
               <Route path="/profile" element={<RouteWithBoundary><ProtectedRoute><UserProfile /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/private-space" element={<RouteWithBoundary><ProtectedRoute><PrivateSpace /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/team-space" element={<RouteWithBoundary><ProtectedRoute><TeamSpace /></ProtectedRoute></RouteWithBoundary>} />

@@ -1,16 +1,22 @@
+/* ===== 独立分享页布局（无导航栏） ===== */
+/* 跟随主项目 data-theme=light/dark 主题，与主项目 CSS 变量保持一致 */
+
 .share-page-loading,
 .share-page-error {
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: 80vh;
+  min-height: 100vh;
+  background: var(--bg-primary);
 }
 
 .share-page {
   display: flex;
   justify-content: center;
-  padding: 24px 16px;
-  min-height: 80vh;
+  align-items: flex-start;
+  min-height: 100vh;
+  padding: 48px 16px;
+  background: var(--bg-primary);
 }
 
 .share-page-card {
@@ -19,65 +25,115 @@
   background: var(--bg-elevated);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-light);
 }
 
+/* ===== 头部 ===== */
 .share-page-header {
-  padding: 20px 24px 12px;
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.share-page-header-top {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 8px;
-  border-bottom: 1px solid var(--border-color, rgba(0, 0, 0, 0.06));
+  margin-bottom: 8px;
 }
 
-.share-page-title {
-  margin: 0 !important;
-  color: var(--text-primary) !important;
+.share-page-header-icon {
+  font-size: 20px;
+  color: var(--text-secondary);
 }
 
-.share-page-meta {
+.share-page-header-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.share-page-header-meta {
+  display: flex;
   flex-wrap: wrap;
+  gap: 8px;
 }
 
-/* 单图模式（向后兼容） */
-.share-page-grid.single {
+/* ===== 单图模式 ===== */
+.share-page-single {
   display: flex;
   flex-direction: column;
 }
 
-.share-page-grid.single .share-page-grid-image-wrapper {
+.share-page-single-image-wrapper {
   display: flex;
   justify-content: center;
   align-items: center;
   background: #000;
-  max-height: 60vh;
+  max-height: 70vh;
   overflow: hidden;
 }
 
-.share-page-grid.single .share-page-grid-image {
+.share-page-single-image {
   max-width: 100%;
-  max-height: 60vh;
+  max-height: 70vh;
+  width: auto;
+  height: auto;
   object-fit: contain;
+  display: block;
 }
 
-/* 多图网格 */
-.share-page-grid.multi {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 16px;
+.share-page-single-info {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.share-page-single-name {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--text-primary) !important;
+}
+
+.share-page-single-desc {
+  color: var(--text-secondary) !important;
+  line-height: 1.6;
+}
+
+.share-page-single-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.share-page-download-btn {
+  align-self: flex-start;
+}
+
+/* ===== 多图网格 ===== */
+.share-page-body.multi {
   padding: 20px 24px;
 }
 
+.share-page-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
 .share-page-grid-item {
-  background: var(--bg-base);
+  background: var(--bg-secondary);
   border-radius: 8px;
   overflow: hidden;
-  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.06));
-  transition: box-shadow 0.2s;
+  border: 1px solid var(--border-light);
+  transition: box-shadow 0.2s, border-color 0.2s;
 }
 
 .share-page-grid-item:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-color);
 }
 
 .share-page-grid-image-wrapper {
@@ -105,12 +161,12 @@
 .share-page-grid-name {
   font-weight: 600;
   font-size: 14px;
-  color: var(--text-primary);
+  color: var(--text-primary) !important;
 }
 
 .share-page-grid-desc {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-secondary) !important;
   line-height: 1.5;
 }
 
@@ -119,24 +175,61 @@
   justify-content: space-between;
   align-items: center;
   margin-top: 4px;
+  gap: 8px;
 }
 
+/* ===== 暗色微调：让卡片在深色背景下仍有清晰层次 ===== */
+[data-theme='dark'] .share-page-card {
+  background: var(--bg-elevated);
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.5);
+}
+
+[data-theme='dark'] .share-page-grid-item {
+  background: var(--bg-secondary);
+}
+
+[data-theme='dark'] .share-page-grid-item:hover {
+  background: var(--bg-hover);
+}
+
+[data-theme='dark'] .share-page-single-image-wrapper,
+[data-theme='dark'] .share-page-grid-image-wrapper {
+  background: #000;
+}
+
+/* ===== 响应式 ===== */
 @media (max-width: 600px) {
+  .share-page {
+    padding: 0;
+    align-items: stretch;
+  }
+
   .share-page-card {
-    border-radius: 8px;
-  }
-
-  .share-page-grid.multi {
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 10px;
-    padding: 12px 16px;
-  }
-
-  .share-page-grid-image-wrapper {
-    height: 140px;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    box-shadow: none;
+    min-height: 100vh;
   }
 
   .share-page-header {
     padding: 16px;
+  }
+
+  .share-page-single-info {
+    padding: 16px;
+  }
+
+  .share-page-body.multi {
+    padding: 12px 16px;
+  }
+
+  .share-page-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+  }
+
+  .share-page-grid-image-wrapper {
+    height: 140px;
   }
 }

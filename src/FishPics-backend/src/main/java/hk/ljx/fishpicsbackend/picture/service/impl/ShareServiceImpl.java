@@ -6,6 +6,7 @@ import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.utils.DownloadUtils;
+import hk.ljx.fishpicsbackend.common.utils.IpUtils;
 import hk.ljx.fishpicsbackend.mapper.PictureShareItemMapper;
 import hk.ljx.fishpicsbackend.mapper.PictureShareMapper;
 import hk.ljx.fishpicsbackend.picture.entity.Picture;
@@ -226,8 +227,8 @@ public class ShareServiceImpl implements ShareService {
     /**
      * 把 viewCount 计数 + maxViewCount 检查合并到原子操作中
      */
-    private long incrementViewCount(String shareToken, Date expireTime, int maxViewCount) {
-        String viewCountKey = "SHARE:VIEW:COUNT:" + hashShareToken(shareToken);
+    private long incrementViewCount(String tokenHash, Date expireTime, int maxViewCount) {
+        String viewCountKey = "SHARE:VIEW:COUNT:" + tokenHash;
         long ttlSec;
         if (expireTime != null) {
             long remainingMs = Math.max(expireTime.getTime() - System.currentTimeMillis() + 3600_000L, 60_000L);
@@ -278,7 +279,7 @@ public class ShareServiceImpl implements ShareService {
 
         if (countView) {
             Integer maxView = share.getMaxViewCount() != null ? share.getMaxViewCount() : DEFAULT_MAX_VIEW_COUNT;
-            long newView = incrementViewCount(shareToken, share.getExpireTime(), maxView);
+            long newView = incrementViewCount(tokenHash, share.getExpireTime(), maxView);
             if (newView == -1L) {
                 share.setStatus(0);
                 try {
@@ -294,7 +295,7 @@ public class ShareServiceImpl implements ShareService {
                     share.getId(), shareToken.substring(0, Math.min(8, shareToken.length())), newView, maxView);
         }
 
-        return new ShareResolved(share, null);
+        return new ShareResolved(share);
     }
 
     private void recordShareAccess(PictureShare share, Picture picture) {
@@ -318,17 +319,7 @@ public class ShareServiceImpl implements ShareService {
     }
 
     private String getClientIp(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("X-Real-IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr();
-        }
-        if (ip != null && ip.contains(",")) {
-            ip = ip.split(",")[0].trim();
-        }
-        return ip;
+        return IpUtils.getClientIp(request);
     }
 
     private ShareFileVO buildShareFile(PictureShare share, Picture picture) {
@@ -343,6 +334,6 @@ public class ShareServiceImpl implements ShareService {
         );
     }
 
-    private record ShareResolved(PictureShare share, Picture picture) {
+    private record ShareResolved(PictureShare share) {
     }
 }

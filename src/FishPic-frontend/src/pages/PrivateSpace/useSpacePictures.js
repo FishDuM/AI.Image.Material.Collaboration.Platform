@@ -255,5 +255,6 @@ export function useSpacePictures({ spaces, pageSize = PAGE_SIZE, refreshSpaces, 
     handleUploadSuccess,
     handleEditPictureSubmit,
     handleAiTag,
+    refreshPictures: doFetchPictures,
   }
 }

@@ -119,6 +119,7 @@ function PrivateSpace() {
     handleUploadSuccess,
     handleEditPictureSubmit,
     handleAiTag,
+    refreshPictures,
   } = useSpacePictures({
     spaces,
     pageSize: PAGE_SIZE,
@@ -376,7 +377,7 @@ function PrivateSpace() {
                       message.success('已提交精选申请')
                       setSelectedIds([])
                       setBatchMode(false)
-                      doFetchPictures(spaces[0].id, 1, searchKeyword)
+                      refreshPictures(spaces[0].id, 1, searchKeyword)
                     } catch (err) {
                       message.error(err.message || '申请失败')
                     }

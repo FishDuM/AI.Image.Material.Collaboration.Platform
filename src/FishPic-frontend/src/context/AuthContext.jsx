@@ -40,6 +40,11 @@ export function AuthProvider({ children }) {
     let ignore = false
 
     const verifyLoginState = async () => {
+      // 分享页不验证登录态，避免过期 JWT 触发 handleAuthExpired 清掉其他页面的登录信息
+      if (window.location.pathname.startsWith('/s/')) {
+        setAuthLoading(false)
+        return
+      }
       const token = getToken()
       if (!token) {
         clearAuth()

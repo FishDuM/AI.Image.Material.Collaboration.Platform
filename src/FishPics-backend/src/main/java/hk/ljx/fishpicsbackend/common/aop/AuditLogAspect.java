@@ -3,6 +3,7 @@ package hk.ljx.fishpicsbackend.common.aop;
 import cn.hutool.json.JSONUtil;
 import hk.ljx.fishpicsbackend.common.annotation.AuditLog;
 import hk.ljx.fishpicsbackend.common.entity.SysAuditLog;
+import hk.ljx.fishpicsbackend.common.utils.IpUtils;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.mapper.SysAuditLogMapper;
 import hk.ljx.fishpicsbackend.user.entity.User;
@@ -195,22 +196,6 @@ public class AuditLogAspect {
      * 多层代理下 X-Forwarded-For 可能有多个 IP，取第一个（离客户端最近的那个）
      */
     private String getClientIp(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("Proxy-Client-IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("WL-Proxy-Client-IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("X-Real-IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr();
-        }
-        if (ip != null && ip.contains(",")) {
-            ip = ip.split(",")[0].trim();
-        }
-        return ip;
+        return IpUtils.getClientIp(request);
     }
 }
