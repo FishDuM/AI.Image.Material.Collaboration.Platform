@@ -162,33 +162,4 @@ public class PictureVO {
                 .tags(tags)
                 .build();
     }
-
-    /**
-     * 创建完整信息 VO（包含所有字段）
-     */
-    public static PictureVO ofFull(Long id, String url, String pictureName,
-                                    String introduction, List<String> tags,
-                                    String width, String height, Long size,
-                                    String type, Integer status, Integer isPrivate,
-                                    Integer isSelected, Long spaceId, Long userId,
-                                    Date createTime, Date updateTime) {
-        return PictureVO.builder()
-                .id(id)
-                .url(url)
-                .pictureName(pictureName)
-                .introduction(introduction)
-                .tags(tags)
-                .width(width)
-                .height(height)
-                .size(size)
-                .type(type)
-                .status(status)
-                .isPrivate(isPrivate)
-                .isSelected(isSelected)
-                .spaceId(spaceId)
-                .userId(userId)
-                .createTime(createTime)
-                .updateTime(updateTime)
-                .build();
-    }
 }

@@ -252,27 +252,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
             }
             if (type == 1) {
                 List<SpaceTeamMember> teamMembers = membersBySpaceId.getOrDefault(space.getId(), Collections.emptyList());
-                Map<Long, Long> userIdRoleIdMap = teamMembers.stream()
-                        .collect(Collectors.toMap(SpaceTeamMember::getUserId,
-                                tm -> tm.getRoleId() != null ? tm.getRoleId().longValue() : 0L, (a, b) -> a));
-                List<Long> roleIds = teamMembers.stream()
-                        .map(tm -> tm.getRoleId() != null ? tm.getRoleId().longValue() : null)
-                        .filter(Objects::nonNull).distinct().collect(Collectors.toList());
-                Map<Long, String> roleNameMap = new HashMap<>();
-                for (Long roleId : roleIds) {
-                    roleNameMap.put(roleId, ROLE_NAME_MAP.getOrDefault(roleId.intValue(), "未知角色"));
-                }
-                List<SpaceMemberVO> members = teamMembers.stream()
-                        .limit(10)
-                        .map(SpaceTeamMember::getUserId)
-                        .map(userMap::get)
-                        .filter(Objects::nonNull)
-                        .map(m -> {
-                            Long roleId = userIdRoleIdMap.get(m.getId());
-                            return new SpaceMemberVO(m.getId(), m.getNickname(), m.getAvatar(), roleId, roleNameMap.getOrDefault(roleId, ""));
-                        })
-                        .collect(Collectors.toList());
-                vo.setTeamMembers(members);
+                vo.setTeamMembers(buildTeamMemberVOs(teamMembers, userMap, 10));
             }
             voList.add(vo);
         }
@@ -336,27 +316,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         vo.setPictureCount(picCount);
 
         if (Integer.valueOf(1).equals(space.getType()) && !teamMembers.isEmpty()) {
-            Map<Long, Long> userIdRoleIdMap = teamMembers.stream()
-                    .collect(Collectors.toMap(SpaceTeamMember::getUserId,
-                            tm -> tm.getRoleId() != null ? tm.getRoleId().longValue() : 0L, (a, b) -> a));
-            List<Long> roleIds = teamMembers.stream()
-                    .map(tm -> tm.getRoleId() != null ? tm.getRoleId().longValue() : null)
-                    .filter(Objects::nonNull).distinct().collect(Collectors.toList());
-            Map<Long, String> roleNameMap = new HashMap<>();
-            for (Long roleId : roleIds) {
-                roleNameMap.put(roleId, ROLE_NAME_MAP.getOrDefault(roleId.intValue(), "未知角色"));
-            }
-            List<SpaceMemberVO> members = teamMembers.stream()
-                    .limit(10)
-                    .map(SpaceTeamMember::getUserId)
-                    .map(userMap::get)
-                    .filter(Objects::nonNull)
-                    .map(m -> {
-                        Long roleId = userIdRoleIdMap.get(m.getId());
-                        return new SpaceMemberVO(m.getId(), m.getNickname(), m.getAvatar(), roleId, roleNameMap.getOrDefault(roleId, ""));
-                    })
-                    .collect(Collectors.toList());
-            vo.setTeamMembers(members);
+            vo.setTeamMembers(buildTeamMemberVOs(teamMembers, userMap, 0));
         }
 
         return vo;
@@ -542,27 +502,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
             }
             if (Integer.valueOf(1).equals(space.getType())) {
                 List<SpaceTeamMember> teamMembers = membersBySpaceId.getOrDefault(space.getId(), Collections.emptyList());
-                Map<Long, Long> userIdRoleIdMap = teamMembers.stream()
-                        .collect(Collectors.toMap(SpaceTeamMember::getUserId,
-                                tm -> tm.getRoleId() != null ? tm.getRoleId().longValue() : 0L, (a, b) -> a));
-                List<Long> roleIds = teamMembers.stream()
-                        .map(tm -> tm.getRoleId() != null ? tm.getRoleId().longValue() : null)
-                        .filter(Objects::nonNull).distinct().collect(Collectors.toList());
-                Map<Long, String> roleNameMap = new HashMap<>();
-                for (Long roleId : roleIds) {
-                    roleNameMap.put(roleId, ROLE_NAME_MAP.getOrDefault(roleId.intValue(), "未知角色"));
-                }
-                List<SpaceMemberVO> members = teamMembers.stream()
-                        .limit(10)
-                        .map(SpaceTeamMember::getUserId)
-                        .map(userMap::get)
-                        .filter(Objects::nonNull)
-                        .map(m -> {
-                            Long roleId = userIdRoleIdMap.get(m.getId());
-                            return new SpaceMemberVO(m.getId(), m.getNickname(), m.getAvatar(), roleId, roleNameMap.getOrDefault(roleId, ""));
-                        })
-                        .collect(Collectors.toList());
-                vo.setTeamMembers(members);
+                vo.setTeamMembers(buildTeamMemberVOs(teamMembers, userMap, 10));
             }
             voList.add(vo);
         }
@@ -966,7 +906,39 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
     }
 
     private void validateSpaceActive(Space space) {
-        ExcUtils.throwIfTrue(space == null, ExceptionCode.PARAMETER_ERROR, "空间不存在");
-        ExcUtils.throwIfTrue(!Integer.valueOf(1).equals(space.getStatus()), ExceptionCode.FORBIDDEN, "空间已被禁用");
+        Space.validateActive(space);
+    }
+
+    /**
+     * 将团队成员列表转换为 SpaceMemberVO 列表（消除 listSpace/getSpace/adminList 三处重复）
+     *
+     * @param teamMembers 该空间的团队成员列表
+     * @param userMap     userId → User 映射
+     * @param maxMembers  最多返回的成员数，传 0 或负数表示不限制
+     */
+    private List<SpaceMemberVO> buildTeamMemberVOs(List<SpaceTeamMember> teamMembers, Map<Long, User> userMap, int maxMembers) {
+        Map<Long, Long> userIdRoleIdMap = teamMembers.stream()
+                .collect(Collectors.toMap(SpaceTeamMember::getUserId,
+                        tm -> tm.getRoleId() != null ? tm.getRoleId().longValue() : 0L, (a, b) -> a));
+        List<Long> roleIds = teamMembers.stream()
+                .map(tm -> tm.getRoleId() != null ? tm.getRoleId().longValue() : null)
+                .filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        Map<Long, String> roleNameMap = new HashMap<>();
+        for (Long roleId : roleIds) {
+            roleNameMap.put(roleId, ROLE_NAME_MAP.getOrDefault(roleId.intValue(), "未知角色"));
+        }
+        java.util.stream.Stream<SpaceTeamMember> stream = teamMembers.stream();
+        if (maxMembers > 0) {
+            stream = stream.limit(maxMembers);
+        }
+        return stream
+                .map(SpaceTeamMember::getUserId)
+                .map(userMap::get)
+                .filter(Objects::nonNull)
+                .map(m -> {
+                    Long roleId = userIdRoleIdMap.get(m.getId());
+                    return new SpaceMemberVO(m.getId(), m.getNickname(), m.getAvatar(), roleId, roleNameMap.getOrDefault(roleId, ""));
+                })
+                .collect(Collectors.toList());
     }
 }

@@ -68,7 +68,7 @@ public class AuditLogAspect {
                 HttpServletRequest request = attributes.getRequest();
                 auditLog.setMethod(request.getMethod());
                 auditLog.setUrl(request.getRequestURI());
-                auditLog.setIp(getClientIp(request));
+                auditLog.setIp(IpUtils.getClientIp(request));
                 // GET query params 也需要脱敏
                 String queryString = request.getQueryString();
                 if (queryString != null && !queryString.isEmpty()) {
@@ -144,7 +144,12 @@ public class AuditLogAspect {
             // 记录失败
             auditLog.setResult(0);
             auditLog.setErrorMsg(e.getMessage());
-            log.error("审计方法执行异常: method={}", auditLog.getUrl(), e);
+            // 业务异常（BaseException）用 WARN，系统异常用 ERROR
+            if (e instanceof hk.ljx.fishpicsbackend.common.exception.BaseException) {
+                log.warn("审计方法业务异常: method={}, msg={}", auditLog.getUrl(), e.getMessage());
+            } else {
+                log.error("审计方法执行异常: method={}", auditLog.getUrl(), e);
+            }
             sendAuditLogAsync(auditLog);
 
             throw e;
@@ -188,14 +193,5 @@ public class AuditLogAspect {
         } catch (Exception e) {
             log.error("保存审计日志失败", e);
         }
-    }
-
-    /**
-     * 获取客户端真实 IP
-     * 按优先级依次尝试：X-Forwarded-For → Proxy-Client-IP → WL-Proxy-Client-IP → X-Real-IP → remoteAddr
-     * 多层代理下 X-Forwarded-For 可能有多个 IP，取第一个（离客户端最近的那个）
-     */
-    private String getClientIp(HttpServletRequest request) {
-        return IpUtils.getClientIp(request);
     }
 }

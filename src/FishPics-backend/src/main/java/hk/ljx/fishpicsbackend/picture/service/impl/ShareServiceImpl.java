@@ -302,7 +302,7 @@ public class ShareServiceImpl implements ShareService {
         try {
             ServletRequestAttributes attr = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
             if (attr == null) return;
-            String ip = getClientIp(attr.getRequest());
+            String ip = IpUtils.getClientIp(attr.getRequest());
             String ua = attr.getRequest().getHeader("User-Agent");
             if (ua != null && ua.length() > 256) ua = ua.substring(0, 256);
             java.util.Map<String, Object> logEntry = new LinkedHashMap<>();
@@ -316,10 +316,6 @@ public class ShareServiceImpl implements ShareService {
         } catch (Exception e) {
             log.warn("record share access failed: {}", e.getMessage());
         }
-    }
-
-    private String getClientIp(HttpServletRequest request) {
-        return IpUtils.getClientIp(request);
     }
 
     private ShareFileVO buildShareFile(PictureShare share, Picture picture) {

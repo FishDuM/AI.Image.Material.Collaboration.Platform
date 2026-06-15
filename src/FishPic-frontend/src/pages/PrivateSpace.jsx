@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback, useMemo, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App as AntApp, Typography, Button, Modal, Form, Input, Select, Masonry, Image as AntImage, Spin, Empty, Popconfirm, Progress, Popover } from 'antd'
 import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowUpOutlined, EditOutlined, CloudUploadOutlined, DatabaseOutlined, HddOutlined, UploadOutlined, ApartmentOutlined, ShareAltOutlined, StarOutlined } from '@ant-design/icons'
-import { updateSpace, listSpace, getSystemTypes, createShare } from '../api'
+import { updateSpace, listSpace, createShare } from '../api'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { useSystemTypes } from '../hooks/useRequestUtils'
 import { AuthContext } from '../context/AuthContext'
 import { PAGE_SIZE, LEVEL_MAP, storageStrokeColor, formatStorage } from '../utils/constants'
 import { getThumbnailUrl } from '../utils/image'
@@ -22,6 +23,7 @@ function PrivateSpace() {
   const { message, modal } = AntApp.useApp()
   const [systemTags, setSystemTags] = useState([])
   const { userInfo } = useContext(AuthContext)
+  const { fetchSystemTypes } = useSystemTypes()
   const [spaces, setSpaces] = useState([])
   const [showEdit, setShowEdit] = useState(false)
   const [updateLoading, setUpdateLoading] = useState(false)
@@ -76,9 +78,9 @@ function PrivateSpace() {
   }
 
   useEffect(() => {
-    getSystemTypes().then(result => {
+    fetchSystemTypes().then(result => {
       if (Array.isArray(result)) setSystemTags(result)
-    }).catch((error) => { logError('getSystemTypes', error) })
+    }).catch((error) => { logError('fetchSystemTypes', error) })
   }, [])
 
   const fetchSpaces = useCallback(async () => {

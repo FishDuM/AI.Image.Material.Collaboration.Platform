@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback, useContext, useMemo, useRef } from 'r
 import { useParams, useNavigate } from 'react-router-dom'
 import { App as AntApp, Typography, Button, Modal, Form, Input, Select, Pagination, Masonry, Image as AntImage, Spin, Empty, Popconfirm, Progress, Popover, Avatar, Tooltip, Tag, List, Alert } from 'antd'
 import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowLeftOutlined, TeamOutlined, UserOutlined, EditOutlined, CloudUploadOutlined, ArrowUpOutlined, UserAddOutlined, SettingOutlined, ShareAltOutlined, SwapOutlined, StarOutlined } from '@ant-design/icons'
-import { getSpace, updateSpace, spaceListPicture, deletePicture, updatePicture, getSystemTypes, getPictureEditMessage, submitAiTag, searchUsers, getTeamMembers, teamInvite, teamRemove, teamChangeRole, createShare } from '../api'
+import { getSpace, updateSpace, spaceListPicture, deletePicture, updatePicture, getPictureEditMessage, submitAiTag, searchUsers, getTeamMembers, teamInvite, teamRemove, teamChangeRole, createShare } from '../api'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { useSystemTypes } from '../hooks/useRequestUtils'
 import { ThemeContext } from '../context/ThemeContext'
 import { AuthContext } from '../context/AuthContext'
 import { PAGINATION_LOCALE, PAGE_SIZE, LEVEL_MAP, DEFAULT_LEVEL, storageStrokeColor, formatStorage } from '../utils/constants'
@@ -29,6 +30,7 @@ function TeamSpaceDetail() {
   const isMobile = useIsMobile()
   const { message, modal } = AntApp.useApp()
   const [systemTags, setSystemTags] = useState([])
+  const { fetchSystemTypes } = useSystemTypes()
   const { isDarkMode } = useContext(ThemeContext)
   const { userInfo } = useContext(AuthContext)
 
@@ -122,7 +124,7 @@ function TeamSpaceDetail() {
   }, [id])
 
   useEffect(() => {
-    getSystemTypes().then(result => {
+    fetchSystemTypes().then(result => {
       if (Array.isArray(result)) setSystemTags(result)
     }).catch(() => {})
   }, [])

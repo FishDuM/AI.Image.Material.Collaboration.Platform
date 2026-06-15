@@ -99,4 +99,10 @@ public interface UserService extends IService<User> {
      * @return 匹配的用户列表
      */
     List<UserVO> searchUsers(String keyword);
+
+    /**
+     * 刷新用户信息缓存（Redis + Caffeine L1）
+     * 更新用户的昵称/头像等展示字段，不含密码/邮箱/手机号
+     */
+    void refreshUserInfoCache(User user);
 }

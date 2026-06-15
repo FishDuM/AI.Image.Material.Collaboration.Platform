@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { App as AntApp, Card, Typography, Tag, Input, Button, Space, Spin, Empty, Popconfirm, Modal, Image, Checkbox, Pagination } from 'antd'
 import { PlusOutlined, ReloadOutlined, TagOutlined, PictureOutlined, DeleteOutlined, EyeOutlined } from '@ant-design/icons'
 import { AuthContext } from '../context/AuthContext.jsx'
-import api, { getAdminPictureList, getMarquee, getSystemTypes } from '../api'
+import api, { getAdminPictureList, getMarquee } from '../api'
+import { useSystemTypes } from '../hooks/useRequestUtils'
 import { logError } from '../utils/logger'
 import { PAGINATION_LOCALE } from '../utils/constants'
 import './SystemManagement.css'
@@ -14,6 +15,7 @@ function SystemManagement() {
   const { message: antMessage } = AntApp.useApp()
   const navigate = useNavigate()
   const { userInfo } = useContext(AuthContext)
+  const { fetchSystemTypes } = useSystemTypes()
   const [loading, setLoading] = useState(false)
   const [typeList, setTypeList] = useState([])
   const [newTag, setNewTag] = useState('')
@@ -40,7 +42,7 @@ function SystemManagement() {
   const fetchTypeList = useCallback(async () => {
     setLoading(true)
     try {
-      const result = await getSystemTypes()
+      const result = await fetchSystemTypes()
       if (Array.isArray(result)) {
         setTypeList(result)
       }

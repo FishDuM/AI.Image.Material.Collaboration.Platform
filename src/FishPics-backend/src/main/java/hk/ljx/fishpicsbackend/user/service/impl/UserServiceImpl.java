@@ -21,7 +21,6 @@ import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.Response;
-import hk.ljx.fishpicsbackend.common.utils.IpUtils;
 import hk.ljx.fishpicsbackend.common.utils.JwtUtils;
 import hk.ljx.fishpicsbackend.common.utils.PasswordUtil;
 import hk.ljx.fishpicsbackend.common.utils.PermissionUtils;
@@ -42,8 +41,6 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.web.context.request.ServletRequestAttributes;
-import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.awt.Font;
@@ -184,16 +181,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         ));
     }
 
-    private String getClientIp() {
-        try {
-            jakarta.servlet.http.HttpServletRequest request =
-                    ((ServletRequestAttributes) RequestContextHolder.currentRequestAttributes()).getRequest();
-            return IpUtils.getClientIp(request);
-        } catch (Exception e) {
-            return "unknown";
-        }
-    }
-
     private void cacheLoginContext(User user) {
         // 同时加载该用户的团队成员关系，注入 LoginContext.teams
         java.util.List<hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember> teamMembers = java.util.Collections.emptyList();
@@ -213,7 +200,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         );
     }
 
-    private void refreshUserInfoCache(User user) {
+    @Override
+    public void refreshUserInfoCache(User user) {
         User cacheUser = new User();
         BeanUtil.copyProperties(user, cacheUser, "password", "email", "phone");
         stringRedisTemplate.opsForValue().set(

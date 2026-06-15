@@ -130,15 +130,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     private static final int MAX_CHUNK_COUNT = 6000;
 
     private void refreshUserSessionState(User user) {
-        User cacheUser = new User();
-        BeanUtil.copyProperties(user, cacheUser, "password", "email", "phone");
-        stringRedisTemplate.opsForValue().set(
-                RedisConstants.getUserInfoKey(user.getId()),
-                JSONUtil.toJsonStr(cacheUser),
-                RedisConstants.USER_PERM_CTX_TTL,
-                TimeUnit.DAYS
-        );
-        cacheManager.getUserInfoCache().evict(String.valueOf(user.getId()));
+        userService.refreshUserInfoCache(user);
+        // 头像变更需要额外清除权限上下文缓存，强制下游重新加载
         stringRedisTemplate.delete(RedisConstants.getUserPermCtxKey(user.getId()));
         cacheManager.getUserPermCache().evict(String.valueOf(user.getId()));
     }
@@ -949,15 +942,11 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
     @Override
     public IPage<PictureVO> getRecommendPictures(PageRequest pageRequest, Long userId) {
-        // 直接返回公开图片（移除社区推荐逻辑）
-        Page<Picture> page = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
-        Page<Picture> picturePage = baseMapper.selectPage(page, new LambdaQueryWrapper<Picture>()
-                .eq(Picture::getStatus, 1)
-                .eq(Picture::getIsPrivate, 0)
-                .isNotNull(Picture::getUrl)
-                .ne(Picture::getUrl, "")
-                .orderByDesc(Picture::getCreateTime));
-        return picturePage.convert(p -> PictureVO.ofList(p.getId(), p.getUrl(), parseTags(p.getTags())));
+        // 复用 getPictureList（不传 tag，即返回全部公开图片）
+        PictureQueryRequest query = new PictureQueryRequest();
+        query.setCurrent(pageRequest.getCurrent());
+        query.setPageSize(pageRequest.getPageSize());
+        return getPictureList(query);
     }
 
     // ==================== 分片上传方法 ====================
@@ -1460,8 +1449,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     }
 
     private void validateSpaceActive(Space space) {
-        ExcUtils.throwIfTrue(space == null, ExceptionCode.PARAMETER_ERROR, "空间不存在");
-        ExcUtils.throwIfTrue(!Integer.valueOf(1).equals(space.getStatus()), ExceptionCode.FORBIDDEN, "空间已被禁用");
+        Space.validateActive(space);
     }
 
     /**

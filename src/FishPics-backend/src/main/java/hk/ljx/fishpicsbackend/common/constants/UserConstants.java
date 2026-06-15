@@ -5,9 +5,6 @@ package hk.ljx.fishpicsbackend.common.constants;
  */
 public interface UserConstants {
 
-    // 密码加密盐值
-    String SALT = "fish";
-
     // 验证码
     String CHECK_CODE = "data:image/png;base64,";
 

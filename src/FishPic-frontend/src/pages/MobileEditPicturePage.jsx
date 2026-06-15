@@ -2,7 +2,8 @@ import { useState, useCallback, useEffect, useContext } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Form, Input, Select, Button, message } from 'antd'
 import MobilePageWrapper from '../components/MobilePageWrapper'
-import { updatePicture, getSystemTypes, getPictureEditMessage, submitAiTag } from '../api'
+import { updatePicture, getPictureEditMessage, submitAiTag } from '../api'
+import { useSystemTypes } from '../hooks/useRequestUtils'
 import { AuthContext } from '../context/AuthContext'
 import './MobileEditPicturePage.css'
 
@@ -13,11 +14,12 @@ export default function MobileEditPicturePage() {
   const [loading, setLoading] = useState(false)
   const [systemTags, setSystemTags] = useState([])
   const { userInfo } = useContext(AuthContext)
+  const { fetchSystemTypes } = useSystemTypes()
 
   const { pictureId, pictureUrl, pictureName, introduction, tags } = location.state || {}
 
   useEffect(() => {
-    getSystemTypes().then(result => {
+    fetchSystemTypes().then(result => {
       if (Array.isArray(result)) setSystemTags(result)
     }).catch(() => {})
   }, [])

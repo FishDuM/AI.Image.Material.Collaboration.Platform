@@ -130,7 +130,7 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         }
         cacheManager.getSysConfigCache().evict(TYPE_LIST_KEY);
         } finally {
-            distributedLockService.unlock("LOCK:SYS:MARQUESS");
+            distributedLockService.unlock("LOCK:SYS:TYPE_LIST");
         }
     }
 
@@ -153,7 +153,7 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         baseMapper.updateById(picSystem);
         cacheManager.getSysConfigCache().evict(TYPE_LIST_KEY);
         } finally {
-            distributedLockService.unlock("LOCK:SYS:MARQUESS");
+            distributedLockService.unlock("LOCK:SYS:TYPE_LIST");
         }
     }
 
