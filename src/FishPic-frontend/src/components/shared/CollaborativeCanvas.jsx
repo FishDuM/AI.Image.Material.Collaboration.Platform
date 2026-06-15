@@ -183,13 +183,21 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
     }
   }, [pictureId])
 
-  const { sendMessage } = useCollabWebSocket(
+  const { sendMessage, connected } = useCollabWebSocket(
     open ? spaceId : null,
     handleMessage,
     () => { setOnlineUsers([]); setEditRequests([]) },
     handleWsReady
   )
   sendMsgRef.current = sendMessage
+
+  // 连接就绪后自动发送待发的 lock 请求（解决首次连接慢导致 lock 丢失的问题）
+  useEffect(() => {
+    if (connected && pendingLockRef.current) {
+      pendingLockRef.current = false
+      sendMessage({ type: 'lock', pictureId })
+    }
+  }, [connected, sendMessage, pictureId])
 
   // 打开时重置状态
   useEffect(() => {
@@ -208,14 +216,6 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
           myUserIdRef.current = Number(payload.userId || payload.sub)
         }
       } catch {}
-
-      const timer = setTimeout(() => {
-        if (pendingLockRef.current) {
-          pendingLockRef.current = false
-          sendMessage({ type: 'lock', pictureId })
-        }
-      }, 500)
-      return () => clearTimeout(timer)
     }
   }, [open, proxyUrl]) // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import { getToken } from '../utils/storage'
 
 export function useCollabWebSocket(spaceId, onMessage, onCleanup, onReady) {
@@ -9,6 +9,7 @@ export function useCollabWebSocket(spaceId, onMessage, onCleanup, onReady) {
   const onMessageRef = useRef(onMessage)
   const onCleanupRef = useRef(onCleanup)
   const onReadyRef = useRef(onReady)
+  const [connected, setConnected] = useState(false)
 
   useEffect(() => { onMessageRef.current = onMessage }, [onMessage])
   useEffect(() => { onCleanupRef.current = onCleanup }, [onCleanup])
@@ -29,6 +30,7 @@ export function useCollabWebSocket(spaceId, onMessage, onCleanup, onReady) {
 
     ws.onopen = () => {
       retryRef.current = 0
+      setConnected(true)
       console.log('[CollabWS] 已连接')
       try {
         ws.send(JSON.stringify({ type: 'resync', spaceId }))
@@ -47,7 +49,7 @@ export function useCollabWebSocket(spaceId, onMessage, onCleanup, onReady) {
     }
 
     ws.onclose = (event) => {
-      if (wsRef.current === ws) wsRef.current = null
+      if (wsRef.current === ws) { wsRef.current = null; setConnected(false) }
       if (closedSockets.current.has(ws)) return
       if (event.code !== 1000 && spaceId && retryRef.current < 10) {
         const delay = Math.min(1000 * Math.pow(2, retryRef.current), 30000)
@@ -72,6 +74,7 @@ export function useCollabWebSocket(spaceId, onMessage, onCleanup, onReady) {
       try { wsRef.current.close(1000) } catch { /* 忽略 */ }
       wsRef.current = null
     }
+    setConnected(false)
     onCleanupRef.current?.()
   }, [])
 
@@ -110,5 +113,5 @@ export function useCollabWebSocket(spaceId, onMessage, onCleanup, onReady) {
     }
   }, [])
 
-  return { sendMessage, disconnect, wsRef }
+  return { sendMessage, disconnect, wsRef, connected }
 }
