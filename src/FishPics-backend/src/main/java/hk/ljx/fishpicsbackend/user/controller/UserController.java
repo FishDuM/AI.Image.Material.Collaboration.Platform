@@ -9,13 +9,14 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.common.annotation.AuditLog;
 import hk.ljx.fishpicsbackend.common.annotation.RequireAdmin;
 import hk.ljx.fishpicsbackend.common.annotation.RequireLogin;
+import hk.ljx.fishpicsbackend.common.cache.RedisCacheManager;
 import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
 import hk.ljx.fishpicsbackend.common.constants.UserConstants;
 import hk.ljx.fishpicsbackend.common.context.LoginContext;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.Response;
-import hk.ljx.fishpicsbackend.common.utils.JwtUtils;
+import hk.ljx.fishpicsbackend.common.infra.JwtUtils;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
 import hk.ljx.fishpicsbackend.user.dto.*;
@@ -46,6 +47,9 @@ public class UserController {
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
+
+    @Resource
+    private RedisCacheManager cacheManager;
 
     @PostMapping("/login")
     @AuditLog(module = "用户管理", operation = "用户登录")
@@ -145,13 +149,21 @@ public class UserController {
         String authHeader = request.getHeader("Authorization");
         if (StrUtil.isNotBlank(authHeader)) {
             String jwt = authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
-            jwtUtils.addToBlacklist(jwt);
+            try {
+                jwtUtils.addToBlacklist(jwt);
+            } catch (Exception e) {
+                log.warn("addToBlacklist 失败(Redis 故障,token 将自然过期): err={}", e.getMessage());
+            }
             // 2. 从 JWT 中获取 userId 并删除 Redis 会话
             //    仅在 JWT 未过期时清理，防止过期 JWT 被利用强制他人登出
             if (!jwtUtils.isExpired(jwt)) {
                 Long userId = jwtUtils.getUserId(jwt);
                 if (userId != null) {
-                    stringRedisTemplate.delete(RedisConstants.getUserPermCtxKey(userId));
+                    try {
+                        cacheManager.getUserPermCache().evict(String.valueOf(userId));
+                    } catch (Exception e) {
+                        log.warn("删除用户会话缓存失败(Redis 故障): userId={}, err={}", userId, e.getMessage());
+                    }
                 }
             }
         }

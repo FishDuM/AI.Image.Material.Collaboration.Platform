@@ -1,43 +1,32 @@
-import { useState, useEffect, useCallback, useContext } from 'react'
+import { useContext, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { App as AntApp, Button, Tabs, Checkbox, Tag, Spin, Empty, Alert } from 'antd'
-import { SaveOutlined, TeamOutlined, LockOutlined } from '@ant-design/icons'
+import { Alert, App as AntApp, Button, Checkbox, Empty, Spin, Tabs, Tag } from 'antd'
+import { LockOutlined, SaveOutlined, TeamOutlined } from '@ant-design/icons'
 import MobilePageWrapper from '../components/MobilePageWrapper'
-import { getSaveableSpaces, savePictureByUrl } from '../api'
 import { AuthContext } from '../context/AuthContext'
+import { formatStorage } from '../utils/constants'
+import { SPACE_TYPE_COLOR, SPACE_TYPE_MAP, useSaveToSpace } from '../hooks/useSaveToSpace'
 import './MobileSaveToSpacePage.css'
-
-const SPACE_TYPE_MAP = { 0: '私人空间', 1: '团队空间' }
-const SPACE_TYPE_COLOR = { 0: 'blue', 1: 'green' }
 
 function MobileSaveToSpacePage() {
   const { message } = AntApp.useApp()
   const location = useLocation()
   const navigate = useNavigate()
   const { userInfo } = useContext(AuthContext)
-
   const { imageUrl } = location.state || {}
-  const [activeTab, setActiveTab] = useState('private')
-  const [privateSpace, setPrivateSpace] = useState(null)
-  const [teamSpaces, setTeamSpaces] = useState([])
-  const [selectedSpaceIds, setSelectedSpaceIds] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
 
-  const loadSpaces = useCallback(async () => {
-    setLoading(true)
-    try {
-      const result = await getSaveableSpaces()
-      const list = Array.isArray(result) ? result : []
-      setPrivateSpace(list.find((space) => space.type === 0) || null)
-      setTeamSpaces(list.filter((space) => space.type === 1))
-    } catch {
-      setPrivateSpace(null)
-      setTeamSpaces([])
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const {
+    activeTab,
+    setActiveTab,
+    privateSpace,
+    teamSpaces,
+    selectedSpaceIds,
+    loading,
+    saving,
+    loadSpaces,
+    toggleSpace,
+    saveSelectedSpaces,
+  } = useSaveToSpace({ imageUrl, message, onSaved: () => navigate(-1) })
 
   useEffect(() => {
     if (!userInfo) {
@@ -51,54 +40,6 @@ function MobileSaveToSpacePage() {
     }
     loadSpaces()
   }, [userInfo, imageUrl, navigate, message, loadSpaces])
-
-  const toggleSpace = useCallback((spaceId) => {
-    setSelectedSpaceIds((prev) =>
-      prev.includes(spaceId) ? prev.filter((id) => id !== spaceId) : [...prev, spaceId]
-    )
-  }, [])
-
-  const handleConfirm = async () => {
-    if (selectedSpaceIds.length === 0) {
-      message.warning('请至少选择一个空间')
-      return
-    }
-
-    setSaving(true)
-    let successCount = 0
-    let failCount = 0
-
-    try {
-      const results = await Promise.allSettled(
-        selectedSpaceIds.map((spaceId) => savePictureByUrl(imageUrl, spaceId))
-      )
-
-      results.forEach((r) => {
-        if (r.status === 'fulfilled') successCount++
-        else failCount++
-      })
-
-      if (successCount > 0) {
-        message.success(`已保存到 ${successCount} 个空间`)
-      }
-      if (failCount > 0) {
-        message.error(`${failCount} 个空间保存失败`)
-      }
-
-      navigate(-1)
-    } catch {
-      message.error('保存失败')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const formatStorage = (bytes) => {
-    if (!bytes) return '-'
-    if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB'
-    if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB'
-    return (bytes / 1024).toFixed(0) + ' KB'
-  }
 
   const renderSpaceItem = (space, isPrivate) => {
     const isChecked = selectedSpaceIds.includes(space.id)
@@ -118,7 +59,7 @@ function MobileSaveToSpacePage() {
             <Tag color={SPACE_TYPE_COLOR[space.type]} style={{ marginRight: 8 }}>
               {SPACE_TYPE_MAP[space.type]}
             </Tag>
-            <span>已用 {formatStorage(space.size)} / {formatStorage(space.storageSize)}</span>
+            <span>已用 {formatStorage(space.size, '-')} / {formatStorage(space.storageSize, '-')}</span>
           </div>
         </div>
       </div>
@@ -150,7 +91,7 @@ function MobileSaveToSpacePage() {
             {teamSpaces.length === 0 ? (
               <Empty description="暂无团队空间" style={{ padding: '40px 0' }} />
             ) : (
-              teamSpaces.map((sp) => renderSpaceItem(sp, false))
+              teamSpaces.map(space => renderSpaceItem(space, false))
             )}
           </div>
         </Spin>
@@ -174,11 +115,7 @@ function MobileSaveToSpacePage() {
           </div>
         )}
 
-        <Tabs
-          activeKey={activeTab}
-          onChange={setActiveTab}
-          items={tabItems}
-        />
+        <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
 
         <div className="mobile-save-actions">
           <Button
@@ -188,7 +125,7 @@ function MobileSaveToSpacePage() {
             size="large"
             loading={saving}
             disabled={selectedSpaceIds.length === 0}
-            onClick={handleConfirm}
+            onClick={saveSelectedSpaces}
           >
             确认保存{selectedSpaceIds.length > 0 ? ` (${selectedSpaceIds.length} 个空间)` : ''}
           </Button>

@@ -74,6 +74,7 @@ public class PictureController {
     /**
      * 通过 URL 保存图片到空间
      */
+    @RequireLogin
     @PostMapping("/save-by-url")
     public Response<PictureVO> savePictureByUrl(@Valid @RequestBody SavePictureByUrlRequest request) {
         Picture picture = pictureService.savePictureByUrl(request.getUrl(), request.getTargetSpaceId());
@@ -121,9 +122,10 @@ public class PictureController {
     @RequireLogin
     @PostMapping("/replace")
     public Response<PictureVO> replacePictureFile(@RequestParam("file") MultipartFile file,
-                                                @RequestParam("pictureId") Long pictureId) {
+                                                @RequestParam("pictureId") Long pictureId,
+                                                @RequestParam(value = "collab", defaultValue = "false") Boolean collab) {
         ExcUtils.throwIfTrue(file.isEmpty(), "文件不能为空");
-        PictureVO result = pictureService.replacePictureFile(pictureId, file);
+        PictureVO result = pictureService.replacePictureFile(pictureId, file, Boolean.TRUE.equals(collab));
         return Response.ok(result);
     }
 

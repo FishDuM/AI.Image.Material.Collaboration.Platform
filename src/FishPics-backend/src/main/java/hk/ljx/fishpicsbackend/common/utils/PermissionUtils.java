@@ -64,10 +64,6 @@ public final class PermissionUtils {
     /**
      * 旧签名(无 teams 注入)— 保留以兼容外部调用,内部用空列表
      */
-    public static LoginContext buildLoginContext(User user) {
-        return buildLoginContext(user, null);
-    }
-
     /**
      * 根据团队角色 ID 给出该角色拥有的权限码列表
      * roleId: 1=所有者(全部), 2=管理员(管理), 3=编辑(编辑+查看), 4=查看者(仅查看)
@@ -114,7 +110,4 @@ public final class PermissionUtils {
     /**
      * 兼容旧签名（仅 level）
      */
-    public static List<String> getPermissionsByLevel(Integer level) {
-        return getPermissionsByLevel(level, null);
-    }
 }

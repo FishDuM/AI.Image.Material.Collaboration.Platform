@@ -1,4 +1,4 @@
-package hk.ljx.fishpicsbackend.system.service;
+package hk.ljx.fishpicsbackend.system.service.impl;
 import hk.ljx.fishpicsbackend.system.entity.PicSystem;
 import hk.ljx.fishpicsbackend.common.utils.XssSanitizer;
 
@@ -7,8 +7,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.extern.slf4j.Slf4j;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import hk.ljx.fishpicsbackend.common.cache.MultiLevelCacheManager;
-import hk.ljx.fishpicsbackend.common.utils.DistributedLockService;
+import hk.ljx.fishpicsbackend.common.cache.RedisCacheManager;
+import hk.ljx.fishpicsbackend.common.infra.DistributedLockService;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
@@ -17,6 +17,7 @@ import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.picture.entity.Picture;
 import hk.ljx.fishpicsbackend.system.dto.AddSysMarqueeRequest;
 import hk.ljx.fishpicsbackend.system.dto.AddSysPicTypeRequest;
+import hk.ljx.fishpicsbackend.system.service.PicSystemService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -44,7 +45,7 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
     private PictureMapper pictureMapper;
 
     @Resource
-    private MultiLevelCacheManager cacheManager;
+    private RedisCacheManager cacheManager;
 
     @Resource
     private DistributedLockService distributedLockService;
@@ -66,10 +67,9 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
     @Override
     @SuppressWarnings("unchecked")
     public List<String> getTypeList() {
-        // 多级缓存：L1(Caffeine) → L2(Redis)
-        Object cached = cacheManager.getSysConfigCache().get(TYPE_LIST_KEY);
-        if (cached instanceof List) {
-            return (List<String>) cached;
+        List<String> cached = cacheManager.getSysConfigCache().getList(TYPE_LIST_KEY, String.class);
+        if (cached != null) {
+            return cached;
         }
 
         // 缓存miss，查数据库
@@ -85,7 +85,6 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         }
         List<String> result = safeParseList(picSystem.getSysvalue());
 
-        // 写入多级缓存
         cacheManager.getSysConfigCache().put(TYPE_LIST_KEY, result);
         return result;
     }
@@ -113,10 +112,9 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
     @Override
     @SuppressWarnings("unchecked")
     public List<String> getMarquess() {
-        // 多级缓存：L1(Caffeine) → L2(Redis)
-        Object cached = cacheManager.getSysConfigCache().get(MARQUESS_KEY);
-        if (cached instanceof List) {
-            return (List<String>) cached;
+        List<String> cached = cacheManager.getSysConfigCache().getList(MARQUESS_KEY, String.class);
+        if (cached != null) {
+            return cached;
         }
 
         // 缓存miss，查数据库
@@ -131,7 +129,6 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         }
         List<String> result = safeParseList(picSystem.getSysvalue());
 
-        // 写入多级缓存
         cacheManager.getSysConfigCache().put(MARQUESS_KEY, result);
         return result;
     }
@@ -243,7 +240,5 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         }
     }
 }
-
-
 
 

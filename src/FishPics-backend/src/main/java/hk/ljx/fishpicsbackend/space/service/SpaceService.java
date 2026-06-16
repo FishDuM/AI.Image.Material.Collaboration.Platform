@@ -5,7 +5,7 @@ import hk.ljx.fishpicsbackend.space.dto.*;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.service.IService;
 import hk.ljx.fishpicsbackend.user.entity.User;
-import hk.ljx.fishpicsbackend.picture.vo.PicturePageVO;
+import hk.ljx.fishpicsbackend.picture.vo.PictureVO;
 import hk.ljx.fishpicsbackend.space.vo.SpaceMemberVO;
 import hk.ljx.fishpicsbackend.space.vo.SpaceVO;
 
@@ -50,7 +50,7 @@ public interface SpaceService extends IService<Space> {
      * @param spacePictureList 查询参数
      * @return 图片分页结果
      */
-    PicturePageVO pictureList(SpacePictureListRequest spacePictureList);
+    IPage<PictureVO> pictureList(SpacePictureListRequest spacePictureList);
 
     /**
      * 管理员分页查看所有空间

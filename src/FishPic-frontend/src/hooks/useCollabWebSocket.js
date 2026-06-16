@@ -5,6 +5,7 @@ export function useCollabWebSocket(spaceId, onMessage, onCleanup, onReady) {
   const wsRef = useRef(null)
   const retryRef = useRef(0)
   const timerRef = useRef(null)
+  const connectRef = useRef(null)
   const closedSockets = useRef(new WeakSet())
   const onMessageRef = useRef(onMessage)
   const onCleanupRef = useRef(onCleanup)
@@ -54,7 +55,9 @@ export function useCollabWebSocket(spaceId, onMessage, onCleanup, onReady) {
       if (event.code !== 1000 && spaceId && retryRef.current < 10) {
         const delay = Math.min(1000 * Math.pow(2, retryRef.current), 30000)
         retryRef.current++
-        timerRef.current = setTimeout(connect, delay)
+        timerRef.current = setTimeout(() => {
+          connectRef.current?.()
+        }, delay)
       } else if (retryRef.current >= 10) {
         console.warn('[CollabWS] 重连超过 10 次,停止重连。请检查网络或刷新页面。')
         // 不重连,让用户手动刷新
@@ -66,6 +69,10 @@ export function useCollabWebSocket(spaceId, onMessage, onCleanup, onReady) {
       ws.close()
     }
   }, [spaceId])
+
+  useEffect(() => {
+    connectRef.current = connect
+  }, [connect])
 
   const disconnect = useCallback(() => {
     if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }

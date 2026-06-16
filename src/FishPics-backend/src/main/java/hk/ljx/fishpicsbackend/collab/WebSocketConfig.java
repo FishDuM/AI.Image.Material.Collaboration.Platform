@@ -12,11 +12,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/**
- * WebSocket 端点配置
- *
- * 从 application.yml 读取允许列表，防止跨站 WebSocket 劫持
- */
+// allowed-origins 从 yml 读，防跨站 WebSocket 劫持
 @Slf4j
 @Configuration
 @EnableWebSocket

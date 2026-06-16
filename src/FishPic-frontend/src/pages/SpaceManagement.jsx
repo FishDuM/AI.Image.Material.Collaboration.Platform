@@ -4,6 +4,7 @@ import { App as AntApp, Table, Button, Modal, Form, Input, InputNumber, Select, 
 import { EditOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons'
 import { adminListSpace, adminUpdateSpace, adminDeleteSpace, adminSetSpaceStatus } from '../api'
 import { AuthContext } from '../context/AuthContext'
+import { formatStorage } from '../utils/constants'
 import './SpaceManagement.css'
 
 const { Title } = Typography
@@ -126,14 +127,6 @@ function SpaceManagement() {
     }
   }
 
-  const formatStorageSize = (bytes) => {
-    if (!bytes) return '-'
-    if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB'
-    if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB'
-    if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB'
-    return bytes + ' B'
-  }
-
   if (!userInfo || !userInfo?.permissions?.includes('system:team:manage')) {
     return (
       <main className="space-management-container">
@@ -154,7 +147,7 @@ function SpaceManagement() {
     { title: '创建者', dataIndex: 'userName', key: 'userName', width: 120 },
     {
       title: '存储用量', key: 'storage', width: 140,
-      render: (_, r) => `${formatStorageSize(r.size)} / ${formatStorageSize(r.storageSize)}`,
+      render: (_, r) => `${formatStorage(r.size, '-')} / ${formatStorage(r.storageSize, '-')}`,
     },
     {
       title: '等级', dataIndex: 'level', key: 'level', width: 80,

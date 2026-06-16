@@ -8,10 +8,7 @@ public interface RedisConstants {
     String LOGIN_CODE_KEY = "LOGIN_CODE";
     String REGISTER_CODE_KEY = "REGISTER_CODE";
     String USER_ID_KEY = "USER_ID:";
-    String USER_MESSAGE_KEY = "USER_MESSAGE:";
-
-    String USER_PERM_CTX_KEY = "USER_PERM_CTX:";
-    long USER_PERM_CTX_TTL = 7;
+    long USER_TOKEN_INVALID_TTL_DAYS = 7;
 
     String JWT_BLACKLIST_KEY = "JWT_BLACKLIST:";
     String USER_TOKEN_INVALID_BEFORE_KEY = "USER_TOKEN_INVALID_BEFORE:";
@@ -38,14 +35,6 @@ public interface RedisConstants {
 
     static String getUserIdKey(String token) {
         return USER_ID_KEY + token;
-    }
-
-    static String getUserInfoKey(Long userId) {
-        return USER_MESSAGE_KEY + userId;
-    }
-
-    static String getUserPermCtxKey(Long userId) {
-        return USER_PERM_CTX_KEY + userId;
     }
 
     static String getJwtBlacklistKey(String jti) {

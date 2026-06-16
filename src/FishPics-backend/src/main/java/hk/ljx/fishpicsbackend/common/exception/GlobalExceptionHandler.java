@@ -16,36 +16,32 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.dao.DuplicateKeyException;
 
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
 
-    /**
-     * 根据 ExceptionCode 显式设 HTTP 状态,使基础设施能正确感知错误。
-     */
     private static <T> ResponseEntity<Response<T>> wrap(Response<T> body) {
         HttpStatus status = ExceptionCode.toHttpStatus(body.getCode());
         return ResponseEntity.status(status).body(body);
     }
 
-    /**
-     * 重载(用于返回类型 ResponseEntity&lt;Response&lt;?&gt;&gt; 的 handler)
-     */
     @SuppressWarnings({"rawtypes", "unchecked"})
     private static ResponseEntity<Response<?>> wrapRaw(Response body) {
         HttpStatus status = ExceptionCode.toHttpStatus(body.getCode());
         return ResponseEntity.status(status).body(body);
     }
 
+    // 业务异常，不打堆栈，避免日志刷屏
     @ExceptionHandler(BaseException.class)
     public ResponseEntity<Response<?>> handleException(BaseException be) {
-        // 业务异常用 WARN，不打印堆栈（这些是预期的校验错误，不是系统故障）
         log.warn("Business exception, code={}, message={}", be.getCode(), be.getMessage());
         return wrapRaw(Response.fail(be));
     }
 
+    // DashScope 调用失败，需要区分内容审核和真正的 API 错误
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<Response<?>> handleDashScopeError(ApiException e) {
         log.error("DashScope API exception", e);
@@ -63,65 +59,67 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<Response<?>> handleMaxUploadSize(MaxUploadSizeExceededException e) {
-        log.warn("Upload size exceeded: {}", e.getMessage());
+        log.warn("上传文件超限: {}", e.getMessage());
         return wrapRaw(Response.fail(new BaseException(ExceptionCode.PARAMETER_ERROR, "文件大小超出限制")));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<Response<?>> handleMethodArgumentNotValid(MethodArgumentNotValidException e) {
+    public ResponseEntity<Response<?>> handleValidation(MethodArgumentNotValidException e) {
         FieldError fieldError = e.getBindingResult().getFieldError();
         String message = fieldError != null ? fieldError.getDefaultMessage() : "请求参数校验失败";
-        log.warn("Validation failed: {}", message);
+        log.warn("参数校验失败: {}", message);
         return wrapRaw(Response.fail(new BaseException(ExceptionCode.PARAMETER_ERROR, message)));
     }
 
     @ExceptionHandler(MissingServletRequestParameterException.class)
-    public ResponseEntity<Response<?>> handleMissingParameter(MissingServletRequestParameterException e) {
-        String message = "缺少参数: " + e.getParameterName();
-        log.warn("Missing request parameter: {}", message);
-        return wrapRaw(Response.fail(new BaseException(ExceptionCode.PARAMETER_ERROR, message)));
+    public ResponseEntity<Response<?>> handleMissingParam(MissingServletRequestParameterException e) {
+        return wrapRaw(Response.fail(new BaseException(ExceptionCode.PARAMETER_ERROR, "缺少参数: " + e.getParameterName())));
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<Response<?>> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
-        String message = "参数类型错误: " + e.getName();
-        log.warn("Type mismatch: {}", message);
-        return wrapRaw(Response.fail(new BaseException(ExceptionCode.PARAMETER_ERROR, message)));
+        return wrapRaw(Response.fail(new BaseException(ExceptionCode.PARAMETER_ERROR, "参数类型错误: " + e.getName())));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<Response<?>> handleMessageNotReadable(HttpMessageNotReadableException e) {
-        log.warn("Request body parse failed: {}", e.getMessage());
+    public ResponseEntity<Response<?>> handleBodyParseError(HttpMessageNotReadableException e) {
+        log.warn("请求体解析失败: {}", e.getMessage());
         return wrapRaw(Response.fail(new BaseException(ExceptionCode.PARAMETER_ERROR, "请求体格式错误或字段类型不匹配")));
     }
 
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
-    public ResponseEntity<Response<?>> handleMethodNotSupported(HttpRequestMethodNotSupportedException e) {
-        log.warn("Method not supported: {}", e.getMessage());
+    public ResponseEntity<Response<?>> handleMethodNotAllowed(HttpRequestMethodNotSupportedException e) {
         return wrapRaw(Response.fail(new BaseException(ExceptionCode.PARAMETER_ERROR, "请求方法不支持")));
     }
 
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
-    public ResponseEntity<Response<?>> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException e) {
-        log.warn("Media type not supported: {}", e.getMessage());
+    public ResponseEntity<Response<?>> handleMediaType(HttpMediaTypeNotSupportedException e) {
         return wrapRaw(Response.fail(new BaseException(ExceptionCode.PARAMETER_ERROR, "不支持的 Content-Type: " + e.getContentType())));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<Response<?>> handleIllegalArgument(IllegalArgumentException e) {
-        log.warn("Illegal argument: {}", e.getMessage());
+    public ResponseEntity<Response<?>> handleIllegalArg(IllegalArgumentException e) {
+        log.warn("非法参数: {}", e.getMessage());
         return wrapRaw(Response.fail(new BaseException(ExceptionCode.PARAMETER_ERROR, e.getMessage())));
     }
 
+    // 唯一键冲突，比如重复注册
     @ExceptionHandler(DuplicateKeyException.class)
     public ResponseEntity<Response<?>> handleDuplicateKey(DuplicateKeyException e) {
-        log.warn("Duplicate key: {}", e.getMessage());
+        log.warn("数据重复: {}", e.getMessage());
         return wrapRaw(Response.fail(new BaseException(ExceptionCode.PARAMETER_ERROR, "数据重复，请检查后重试")));
     }
 
+    @ExceptionHandler(NoHandlerFoundException.class)
+    public ResponseEntity<Response<?>> handle404(NoHandlerFoundException e, HttpServletRequest request) {
+        log.warn("接口不存在: {} {}", e.getHttpMethod(), e.getRequestURL());
+        return wrapRaw(Response.fail(new BaseException(ExceptionCode.NOT_FOUND, "接口不存在")));
+    }
+
+    // 兜底：没被上面捕获的异常都走这里
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<Response<?>> runtimeException(Exception e, HttpServletRequest request) {
-        log.error("Unhandled exception, uri={}", request.getRequestURI(), e);
+    public ResponseEntity<Response<?>> handleUnknown(Exception e, HttpServletRequest request) {
+        log.error("未处理异常, uri={}", request.getRequestURI(), e);
         return wrapRaw(Response.fail(new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "服务器内部错误，请稍后重试")));
     }
 }

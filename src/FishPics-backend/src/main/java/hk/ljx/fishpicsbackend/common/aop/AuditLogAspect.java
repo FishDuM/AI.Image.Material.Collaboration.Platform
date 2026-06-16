@@ -4,16 +4,12 @@ import cn.hutool.json.JSONUtil;
 import hk.ljx.fishpicsbackend.common.annotation.AuditLog;
 import hk.ljx.fishpicsbackend.common.entity.SysAuditLog;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
+import hk.ljx.fishpicsbackend.common.service.AuditLogWriter;
 import hk.ljx.fishpicsbackend.common.utils.IpUtils;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
-import hk.ljx.fishpicsbackend.mapper.SysAuditLogMapper;
 import hk.ljx.fishpicsbackend.user.entity.User;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.rocketmq.client.producer.DefaultMQProducer;
-import org.apache.rocketmq.client.producer.SendResult;
-import org.apache.rocketmq.client.producer.SendStatus;
-import org.apache.rocketmq.common.message.Message;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -24,15 +20,11 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import jakarta.annotation.Resource;
-import jakarta.annotation.PreDestroy;
 import java.lang.reflect.Method;
-import java.nio.charset.StandardCharsets;
 import java.util.Date;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
- * 审计日志AOP切面（异步写入，通过 RocketMQ 解耦）
+ * 审计日志 AOP 切面，异步写入数据库。
  */
 @Slf4j
 @Aspect
@@ -40,12 +32,9 @@ import java.util.concurrent.Executors;
 public class AuditLogAspect {
 
     @Resource
-    private SysAuditLogMapper sysAuditLogMapper;
+    private AuditLogWriter auditLogWriter;
 
-    @Resource(name = "auditLogProducer")
-    private DefaultMQProducer auditLogProducer;
-
-    @Pointcut("@annotation(AuditLog)")
+    @Pointcut("@annotation(hk.ljx.fishpicsbackend.common.annotation.AuditLog)")
     public void auditLogPointcut() {}
 
     @Around("auditLogPointcut()")
@@ -140,7 +129,7 @@ public class AuditLogAspect {
 
             // 记录成功
             auditLog.setResult(1);
-            sendAuditLogAsync(auditLog);
+            auditLogWriter.saveAsync(auditLog);
 
             return result;
 
@@ -154,54 +143,10 @@ public class AuditLogAspect {
             } else {
                 log.error("审计方法执行异常: method={}", auditLog.getUrl(), e);
             }
-            sendAuditLogAsync(auditLog);
+            auditLogWriter.saveAsync(auditLog);
 
             throw e;
         }
     }
 
-    /**
-     * 异步发送审计日志到 RocketMQ
-     * 用独立线程池异步执行，MQ 挂了就降级成 DB 写
-     */
-    private final ExecutorService auditLogExecutor =
-            Executors.newFixedThreadPool(2, r -> {
-                Thread t = new Thread(r, "audit-log-fallback");
-                t.setDaemon(true);
-                return t;
-            });
-
-    @PreDestroy
-    public void destroy() {
-        auditLogExecutor.shutdown();
-        log.info("[AuditLogAspect] 审计日志线程池已关闭");
-    }
-
-    private void sendAuditLogAsync(SysAuditLog auditLog) {
-        auditLogExecutor.execute(() -> {
-            try {
-                String json = JSONUtil.toJsonStr(auditLog);
-                Message msg = new Message("audit-log-topic", json.getBytes(StandardCharsets.UTF_8));
-                SendResult sendResult = auditLogProducer.send(msg);
-                if (sendResult.getSendStatus() != SendStatus.SEND_OK) {
-                    log.warn("审计日志MQ发送非OK，降级为同步写DB: status={}", sendResult.getSendStatus());
-                    saveAuditLogDirect(auditLog);
-                }
-            } catch (Exception e) {
-                log.warn("审计日志MQ发送失败，降级为同步写DB", e);
-                saveAuditLogDirect(auditLog);
-            }
-        });
-    }
-
-    /**
-     * 降级：直接同步写 DB
-     */
-    private void saveAuditLogDirect(SysAuditLog auditLog) {
-        try {
-            sysAuditLogMapper.insert(auditLog);
-        } catch (Exception e) {
-            log.error("保存审计日志失败", e);
-        }
-    }
 }

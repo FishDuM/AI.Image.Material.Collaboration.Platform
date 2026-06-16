@@ -4,11 +4,7 @@
 /src/FishPics-backend/.idea/
 /src/FishPics-backend/target/
 /src/FishPics-backend/src/main/resources/application-local.yml
-.gstack/
-/.claude/
 /.vscode/
 .env
 .env.local
 .env.*.local
-/.mavis/
-/.opencode/

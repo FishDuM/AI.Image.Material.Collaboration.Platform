@@ -186,10 +186,13 @@ export const deletePicture = (ids) => api.post('/picture/delete', { ids })
 
 export const updatePicture = (data) => api.put('/picture/update', data)
 
-export const replacePictureFile = (file, pictureId) => {
+export const replacePictureFile = (file, pictureId, options = {}) => {
   const formData = new FormData()
   formData.append('file', file)
   formData.append('pictureId', pictureId)
+  if (options.collab) {
+    formData.append('collab', 'true')
+  }
   return api.post('/picture/replace', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
 }
 

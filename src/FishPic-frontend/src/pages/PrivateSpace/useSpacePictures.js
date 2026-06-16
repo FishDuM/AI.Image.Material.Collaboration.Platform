@@ -5,7 +5,7 @@ import { useFetchWithCleanup } from '../../hooks/useRequestUtils'
 import { PAGE_SIZE, LOAD_MORE_THRESHOLD } from '../../utils/constants'
 import { logError } from '../../utils/logger'
 
-export function useSpacePictures({ spaces, pageSize = PAGE_SIZE, refreshSpaces, message, modal, navigate, isMobile, userInfo, systemTags }) {
+export function useSpacePictures({ spaces, pageSize = PAGE_SIZE, refreshSpaces, message, modal, navigate, isMobile }) {
   const [pictures, setPictures] = useState([])
   const [pictureLoading, setPictureLoading] = useState(false)
   const [searchKeyword, setSearchKeyword] = useState('')
@@ -237,6 +237,8 @@ export function useSpacePictures({ spaces, pageSize = PAGE_SIZE, refreshSpaces, 
     loadingMore,
     batchMode,
     selectedIds,
+    setSelectedIds,
+    setBatchMode,
     showEditPicture,
     setShowEditPicture,
     editPictureLoading,

@@ -21,13 +21,13 @@ async function getOrCreateEncKey() {
       const raw = Uint8Array.from(atob(existing), c => c.charCodeAt(0))
       return crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt'])
     }
-  } catch (e) { /* fall through to create */ }
+  } catch { /* fall through to create */ }
   try {
     const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt'])
     const raw = new Uint8Array(await crypto.subtle.exportKey('raw', key))
     sessionStorage.setItem(ENC_KEY_STORAGE, btoa(String.fromCharCode(...raw)))
     return key
-  } catch (e) {
+  } catch {
     return null // 极旧浏览器:fallback 到明文
   }
 }
@@ -58,7 +58,7 @@ async function decryptJson(payload) {
     const ct = b64ToBytes(parsed.ct)
     const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct)
     return JSON.parse(new TextDecoder().decode(plaintext))
-  } catch (e) {
+  } catch {
     return null
   }
 }
@@ -71,7 +71,7 @@ export const saveUserInfo = (userInfo) => {
       _cachedAt = Date.now()
       try {
         localStorage.setItem(USER_KEY, JSON.stringify(safe))
-      } catch (_) {}
+      } catch { /* ignore storage quota failures */ }
       // 异步加密覆盖明文
       encryptJson(safe).then(encrypted => {
         if (encrypted) {
@@ -166,5 +166,5 @@ export const removeToken = () => {
 export const clearAuth = () => {
   removeUserInfo()
   removeToken()
-  try { sessionStorage.removeItem(ENC_KEY_STORAGE) } catch (e) {}
+  try { sessionStorage.removeItem(ENC_KEY_STORAGE) } catch { /* ignore storage failures */ }
 }

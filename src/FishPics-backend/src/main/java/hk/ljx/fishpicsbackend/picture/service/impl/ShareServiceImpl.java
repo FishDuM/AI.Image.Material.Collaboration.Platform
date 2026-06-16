@@ -8,7 +8,7 @@ import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.utils.DownloadUtils;
 import hk.ljx.fishpicsbackend.common.utils.IpUtils;
-import hk.ljx.fishpicsbackend.common.utils.RedisAtomicOps;
+import hk.ljx.fishpicsbackend.common.infra.RedisAtomicOps;
 import hk.ljx.fishpicsbackend.mapper.PictureShareItemMapper;
 import hk.ljx.fishpicsbackend.mapper.PictureShareMapper;
 import hk.ljx.fishpicsbackend.picture.entity.Picture;

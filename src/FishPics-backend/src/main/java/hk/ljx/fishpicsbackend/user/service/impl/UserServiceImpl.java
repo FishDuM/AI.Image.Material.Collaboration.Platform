@@ -7,24 +7,23 @@ import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import hk.ljx.fishpicsbackend.common.cache.MultiLevelCacheManager;
+import hk.ljx.fishpicsbackend.common.cache.RedisCacheManager;
 import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
 import hk.ljx.fishpicsbackend.common.context.LoginContext;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.Response;
-import hk.ljx.fishpicsbackend.common.utils.JwtUtils;
+import hk.ljx.fishpicsbackend.common.infra.JwtUtils;
 import hk.ljx.fishpicsbackend.common.utils.PasswordUtil;
 import hk.ljx.fishpicsbackend.common.utils.PermissionUtils;
-import hk.ljx.fishpicsbackend.common.utils.RedisAtomicOps;
+import hk.ljx.fishpicsbackend.common.infra.RedisAtomicOps;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.common.utils.XssSanitizer;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
@@ -82,7 +81,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     private JwtUtils jwtUtils;
 
     @Resource
-    private MultiLevelCacheManager cacheManager;
+    private RedisCacheManager cacheManager;
 
     @Resource
     private SpaceTeamMemberMapper spaceTeamMemberMapper;
@@ -204,29 +203,18 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             log.warn("[UserService] 加载用户团队成员关系失败: userId={}", user.getId(), e);
         }
         LoginContext loginContext = PermissionUtils.buildLoginContext(user, teamMembers);
-        stringRedisTemplate.opsForValue().set(
-                RedisConstants.getUserPermCtxKey(user.getId()),
-                JSONUtil.toJsonStr(loginContext),
-                RedisConstants.USER_PERM_CTX_TTL,
-                TimeUnit.DAYS
-        );
+        cacheManager.getUserPermCache().put(String.valueOf(user.getId()), loginContext);
     }
 
     @Override
     public void refreshUserInfoCache(User user) {
         User cacheUser = new User();
         BeanUtil.copyProperties(user, cacheUser, "password", "email", "phone");
-        stringRedisTemplate.opsForValue().set(
-                RedisConstants.getUserInfoKey(user.getId()),
-                JSONUtil.toJsonStr(cacheUser),
-                RedisConstants.USER_PERM_CTX_TTL,
-                TimeUnit.DAYS
-        );
         cacheManager.getUserInfoCache().evict(String.valueOf(user.getId()));
+        cacheManager.getUserInfoCache().put(String.valueOf(user.getId()), cacheUser);
     }
 
     private void evictUserLoginContext(Long userId) {
-        stringRedisTemplate.delete(RedisConstants.getUserPermCtxKey(userId));
         cacheManager.getUserPermCache().evict(String.valueOf(userId));
     }
 
@@ -234,7 +222,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         stringRedisTemplate.opsForValue().set(
                 RedisConstants.getUserTokenInvalidBeforeKey(userId),
                 String.valueOf(System.currentTimeMillis()),
-                RedisConstants.USER_PERM_CTX_TTL,
+                RedisConstants.USER_TOKEN_INVALID_TTL_DAYS,
                 TimeUnit.DAYS
         );
         evictUserLoginContext(userId);

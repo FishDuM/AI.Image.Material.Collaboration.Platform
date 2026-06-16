@@ -1,20 +1,12 @@
 package hk.ljx.fishpicsbackend.common.constants;
 
-// 多级缓存常量
 public interface CacheConstants {
 
-    // 缓存名称（L2 Redis key前缀）
-    String USER_INFO = "ml:userInfo";
-    String USER_PERMISSIONS = "ml:userPerm";
-    String SYSTEM_CONFIG = "ml:sysConfig";
+    String USER_INFO = "cache:userInfo";
+    String USER_PERMISSIONS = "cache:userPerm";
+    String SYSTEM_CONFIG = "cache:sysConfig";
 
-    // L1 Caffeine TTL（秒）
-    long L1_USER_INFO = 30;
-    long L1_USER_PERMISSIONS = 300;
-    long L1_SYSTEM_CONFIG = 600;
-
-    // L2 Redis TTL（分钟）
-    long L2_USER_INFO = 60;
-    long L2_USER_PERMISSIONS = 60;
-    long L2_SYSTEM_CONFIG = 1440;
+    long USER_INFO_TTL_MINUTES = 60;
+    long USER_PERMISSIONS_TTL_MINUTES = 60;
+    long SYSTEM_CONFIG_TTL_MINUTES = 1440;
 }

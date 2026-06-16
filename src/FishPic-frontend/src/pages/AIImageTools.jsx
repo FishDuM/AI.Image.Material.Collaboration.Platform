@@ -7,7 +7,6 @@ import {
   RedoOutlined, SaveOutlined, TeamOutlined, DownloadOutlined,
 } from '@ant-design/icons'
 import { submitAiDraw, savePictureByUrl, downloadAiImage } from '../api'
-import { logError } from '../utils/logger'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { useAiSse } from '../hooks/useAiSse'
 import SaveToSpaceModal from '../components/shared/SaveToSpaceModal'

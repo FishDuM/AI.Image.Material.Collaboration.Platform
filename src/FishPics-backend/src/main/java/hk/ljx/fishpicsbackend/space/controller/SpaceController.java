@@ -8,7 +8,8 @@ import hk.ljx.fishpicsbackend.common.annotation.RequireLogin;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
-import hk.ljx.fishpicsbackend.picture.vo.PicturePageVO;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import hk.ljx.fishpicsbackend.picture.vo.PictureVO;
 import hk.ljx.fishpicsbackend.space.dto.*;
 import hk.ljx.fishpicsbackend.space.service.SpaceService;
 import hk.ljx.fishpicsbackend.space.vo.SpaceMemberVO;
@@ -93,7 +94,7 @@ public class SpaceController {
      */
     @RequireLogin
     @PostMapping("/pictureList")
-    public Response<PicturePageVO> pictureList(@Valid @RequestBody SpacePictureListRequest spacePictureList) {
+    public Response<IPage<PictureVO>> pictureList(@Valid @RequestBody SpacePictureListRequest spacePictureList) {
         return Response.ok(spaceService.pictureList(spacePictureList));
     }
 

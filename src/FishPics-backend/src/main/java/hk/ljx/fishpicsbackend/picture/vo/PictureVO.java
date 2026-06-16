@@ -10,108 +10,41 @@ import lombok.NoArgsConstructor;
 import java.util.Date;
 import java.util.List;
 
-/**
- * 统一图片 VO
- * 合并了原来的 PictureListVO、PictureEditVO、PicturePostVO
- *
- * 设计原则：
- * - 使用 @JsonInclude 控制不同场景返回不同字段
- * - 简化前端接口，一个 VO 适配多种场景
- */
+// 列表/详情/上传/管理端复用，@JsonInclude(NON_NULL) 控制返回字段
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@JsonInclude(JsonInclude.Include.NON_NULL)  // 只返回非空字段
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class PictureVO {
 
-    /**
-     * 图片ID
-     */
     private Long id;
-
-    /**
-     * 图片URL
-     */
     private String url;
-
-    /**
-     * 图片名称
-     */
     private String pictureName;
-
-    /**
-     * 图片介绍
-     */
     private String introduction;
-
-    /**
-     * 图片标签
-     */
     private List<String> tags;
-
-    /**
-     * 图片宽度
-     */
     private String width;
-
-    /**
-     * 图片高度
-     */
     private String height;
-
-    /**
-     * 文件大小（字节）
-     */
     private Long size;
-
-    /**
-     * 图片格式
-     */
     private String type;
 
-    /**
-     * 状态：1=正常 0=禁用 2=待审核
-     */
+    // 1=正常 0=禁用 2=待审核
     private Integer status;
-
-    /**
-     * 是否公开：0=不公开 1=公开
-     */
+    // 0=公开 1=私有
     @JsonProperty("isPrivate")
     private Integer isPrivate;
-
-    /**
-     * 是否精选：0=普通 1=精选
-     */
+    // 0=普通 1=精选
     @JsonProperty("isSelected")
     private Integer isSelected;
 
-    /**
-     * 所属空间ID
-     */
     private Long spaceId;
-
-    /**
-     * 上传者用户ID
-     */
     private Long userId;
-
-    /**
-     * 创建时间
-     */
     private Date createTime;
-
-    /**
-     * 更新时间
-     */
     private Date updateTime;
 
-    // ==================== 静态工厂方法 ====================
+    // ---- 工厂方法 ----
 
-    /**
-     * 创建图片列表 VO（用于图片列表、分页查询）
-     */
+    // 列表页只返回 id + url + tags
     public static PictureVO ofList(Long id, String url, List<String> tags) {
         return PictureVO.builder()
                 .id(id)
@@ -120,9 +53,7 @@ public class PictureVO {
                 .build();
     }
 
-    /**
-     * 创建图片详情 VO（用于编辑图片）
-     */
+    // 编辑页
     public static PictureVO ofDetail(Long id, String url, String pictureName,
                                       String introduction, List<String> tags) {
         return PictureVO.builder()
@@ -134,9 +65,7 @@ public class PictureVO {
                 .build();
     }
 
-    /**
-     * 创建图片上传响应 VO
-     */
+    // 上传完成返回
     public static PictureVO ofUpload(Long id, String url) {
         return PictureVO.builder()
                 .id(id)
@@ -144,9 +73,7 @@ public class PictureVO {
                 .build();
     }
 
-    /**
-     * 创建管理员查看的 VO（包含完整信息）
-     */
+    // 管理端，带完整信息
     public static PictureVO ofAdmin(Long id, String url, String width, String height,
                                      Long size, Integer status, Date createTime,
                                      Long userId, Integer isPrivate, Integer isSelected,

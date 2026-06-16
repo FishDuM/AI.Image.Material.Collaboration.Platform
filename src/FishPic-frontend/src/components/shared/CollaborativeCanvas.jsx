@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
-import { Modal, Button, Spin, App, Avatar, Tooltip, Badge, Select } from 'antd'
+import { Modal, Button, Spin, App, Avatar, Tooltip } from 'antd'
 import {
   ZoomInOutlined, ZoomOutOutlined,
   RotateLeftOutlined, RotateRightOutlined,
@@ -24,14 +24,12 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
   const [loading, setLoading] = useState(true)
   const [onlineUsers, setOnlineUsers] = useState([])
   const [reloadTick, setReloadTick] = useState(0)
+  const [myUserId, setMyUserId] = useState(null)
+  const [imageNaturalSize, setImageNaturalSize] = useState(null)
 
   // 编辑权状态
   const [lockedBy, setLockedBy] = useState(null)
   const [lockedNickname, setLockedNickname] = useState('')
-  const [editRequests, setEditRequests] = useState([])
-  const [hasRequested, setHasRequested] = useState(false)
-  const [showRequestModal, setShowRequestModal] = useState(false)
-  const [selectedRequester, setSelectedRequester] = useState(null)
 
   // 裁剪状态
   const [cropMode, setCropMode] = useState(false)
@@ -48,9 +46,9 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
   const pendingLockRef = useRef(false)
   const wasMyLockRef = useRef(false)
 
-  const isMyLock = lockedBy != null && lockedBy == myUserIdRef.current
-  const isOtherLock = lockedBy != null && lockedBy != myUserIdRef.current
-  const isEditable = lockedBy === null || isMyLock
+  const isMyLock = lockedBy != null && lockedBy == myUserId
+  const isOtherLock = lockedBy != null && lockedBy != myUserId
+  const isEditable = isMyLock
   const isMyLockRef = useRef(false)
   useEffect(() => { isMyLockRef.current = isMyLock }, [isMyLock])
 
@@ -59,22 +57,21 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
   const proxyUrl = useMemo(() => {
     if (!imageUrl) return ''
     const base = imageUrl.replace(/^https?:\/\/[^/]+/, '/cos-proxy')
-    const v = updatedAt || Date.now()
+    const v = updatedAt || 0
     return `${base}?v=${v + reloadTick}`
   }, [imageUrl, updatedAt, reloadTick])
 
   // 裁剪 clip-path（原图坐标 → 百分比）
   const cropClipPath = useMemo(() => {
     if (!cropData) return 'none'
-    const imgEl = containerRef.current?.querySelector('.collab-image')
-    if (!imgEl || !imgEl.naturalWidth) return 'none'
-    const nw = imgEl.naturalWidth, nh = imgEl.naturalHeight
+    if (!imageNaturalSize?.width || !imageNaturalSize?.height) return 'none'
+    const nw = imageNaturalSize.width, nh = imageNaturalSize.height
     const top = (cropData.y / nh * 100)
     const left = (cropData.x / nw * 100)
     const bottom = ((nh - cropData.y - cropData.h) / nh * 100)
     const right = ((nw - cropData.x - cropData.w) / nw * 100)
     return `inset(${top}% ${right}% ${bottom}% ${left}%)`
-  }, [cropData])
+  }, [cropData, imageNaturalSize])
 
   // ---- WebSocket 消息处理 ----
   const handleMessage = useCallback((data) => {
@@ -90,6 +87,7 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
         if (data.pictureId == pictureId) {
           setLockedBy(data.userId)
           setLockedNickname(data.nickname || '')
+          pendingLockRef.current = false
           if (myUserIdRef.current && data.userId != myUserIdRef.current) {
             message.info(`${data.nickname || '用户'} 开始编辑`)
           }
@@ -102,45 +100,15 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
         if (data.pictureId == pictureId) {
           setLockedBy(data.userId)
           setLockedNickname(data.nickname || '')
+          pendingLockRef.current = false
           wasMyLockRef.current = false
-          message.warning(`${data.nickname || '用户'} 正在编辑，请申请编辑权`)
-        }
-        break
-      case 'lock-transfer':
-        if (data.pictureId == pictureId) {
-          setLockedBy(data.toUserId)
-          setLockedNickname(data.toNickname || '')
-          setEditRequests(prev => prev.filter(r => r.userId != data.toUserId))
-          if (data.toUserId == myUserIdRef.current) {
-            message.success('你已获得编辑权')
-            setHasRequested(false)
-          } else if (data.fromUserId == myUserIdRef.current) {
-            message.info(`编辑权已转移给 ${data.toNickname || '用户'}`)
-          } else {
-            message.info(`编辑权已转移给 ${data.toNickname || '用户'}`)
-          }
+          message.warning(`${data.nickname || '用户'} 正在编辑，当前仅查看`)
         }
         break
       case 'unlock':
         if (data.pictureId == pictureId) {
           setLockedBy(null); setLockedNickname('')
-          setEditRequests([]); setHasRequested(false)
-        }
-        break
-      case 'request-edit':
-        if (data.pictureId == pictureId && isMyLockRef.current) {
-          setEditRequests(prev => {
-            if (prev.some(r => r.userId == data.userId)) return prev
-            return [...prev, { userId: data.userId, nickname: data.nickname, avatar: data.avatar }]
-          })
-          message.info(`${data.nickname || '用户'} 申请编辑权`)
-          setShowRequestModal(true)
-        }
-        break
-      case 'edit-denied':
-        if (data.pictureId == pictureId) {
-          setHasRequested(false)
-          message.warning('编辑申请被拒绝')
+          wasMyLockRef.current = false
         }
         break
       case 'presence':
@@ -158,7 +126,6 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
         break
       case 'leave':
         setOnlineUsers(prev => prev.filter(u => u.userId !== data.userId))
-        setEditRequests(prev => prev.filter(r => r.userId != data.userId))
         break
       case 'file-replaced':
         if (data.pictureId == pictureId) {
@@ -186,10 +153,10 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
   const { sendMessage, connected } = useCollabWebSocket(
     open ? spaceId : null,
     handleMessage,
-    () => { setOnlineUsers([]); setEditRequests([]) },
+    () => { setOnlineUsers([]) },
     handleWsReady
   )
-  sendMsgRef.current = sendMessage
+  useEffect(() => { sendMsgRef.current = sendMessage }, [sendMessage])
 
   // 连接就绪后自动发送待发的 lock 请求（解决首次连接慢导致 lock 丢失的问题）
   useEffect(() => {
@@ -204,7 +171,6 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
     if (open) {
       setScale(1); setRotation(0); setOnlineUsers([])
       setLoading(true); setLockedBy(null); setLockedNickname('')
-      setEditRequests([]); setHasRequested(false); setShowRequestModal(false)
       setHistory([]); setCropMode(false); setCropData(null)
       proxyUrlRef.current = proxyUrl
       pendingLockRef.current = true
@@ -213,9 +179,14 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
         const token = getToken()
         if (token) {
           const payload = JSON.parse(atob(token.split('.')[1]))
-          myUserIdRef.current = Number(payload.userId || payload.sub)
+          const userId = Number(payload.userId || payload.sub)
+          myUserIdRef.current = userId
+          setMyUserId(userId)
         }
-      } catch {}
+      } catch {
+        myUserIdRef.current = null
+        setMyUserId(null)
+      }
     }
   }, [open, proxyUrl]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -276,31 +247,22 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
     emitTransform(scale, rotation, null)
   }
 
-  // 编辑权申请
-  const handleRequestEdit = () => {
-    sendMessage({ type: 'request-edit', pictureId })
-    setHasRequested(true)
-    message.info('已发送编辑申请，等待审批')
-  }
-  const handleApprove = () => {
-    if (!selectedRequester) return
-    sendMessage({ type: 'approve', pictureId, targetUserId: selectedRequester })
-    setSelectedRequester(null); setShowRequestModal(false)
-  }
-  const handleDeny = () => {
-    if (!selectedRequester) return
-    sendMessage({ type: 'deny', pictureId, targetUserId: selectedRequester })
-    setSelectedRequester(null)
-    if (editRequests.length <= 1) setShowRequestModal(false)
-  }
   const handleReleaseLock = () => {
     sendMessage({ type: 'unlock', pictureId })
     wasMyLockRef.current = false
     setLockedBy(null); setLockedNickname('')
   }
+  const handleAcquireLock = () => {
+    pendingLockRef.current = true
+    sendMessage({ type: 'lock', pictureId })
+  }
 
   // ---- 保存 ----
   const handleSave = async () => {
+    if (!isMyLockRef.current) {
+      message.warning('只有当前编辑者可以保存')
+      return
+    }
     setSaving(true)
     try {
       const img = new Image()
@@ -349,7 +311,7 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
       if (!blob) { message.error('生成图片失败'); return }
 
       const file = new File([blob], 'collab-edit.webp', { type: 'image/webp' })
-      const result = await replacePictureFile(file, pictureId)
+      const result = await replacePictureFile(file, pictureId, { collab: true })
       message.success('保存成功')
       onSuccess?.(result)
       onClose()
@@ -364,7 +326,7 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
   const renderStatusBar = () => {
     if (isMyLock) return <div className="collab-status-bar collab-status-editing">✏️ 你正在编辑</div>
     if (isOtherLock) return <div className="collab-status-bar collab-status-viewing">👁️ {lockedNickname} 正在编辑（仅查看）</div>
-    return null
+    return <div className="collab-status-bar collab-status-viewing">正在获取编辑权，当前仅查看</div>
   }
 
   const displayUsers = onlineUsers.slice(0, 5)
@@ -397,11 +359,8 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
               {isMyLock && (
                 <Button icon={<UnlockOutlined />} onClick={handleReleaseLock}>释放编辑权</Button>
               )}
-              {isOtherLock && !hasRequested && (
-                <Button type="primary" ghost icon={<LockOutlined />} onClick={handleRequestEdit}>申请编辑</Button>
-              )}
-              {isOtherLock && hasRequested && (
-                <Button disabled>已申请，等待审批...</Button>
+              {!lockedBy && (
+                <Button type="primary" ghost icon={<LockOutlined />} onClick={handleAcquireLock}>获取编辑权</Button>
               )}
               <Button onClick={onClose}>取消</Button>
               {isEditable && (
@@ -429,7 +388,13 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
                   transform: `scale(${scale}) rotate(${rotation}deg)`,
                   clipPath: cropClipPath,
                 }}
-                onLoad={() => setLoading(false)}
+                onLoad={(event) => {
+                  setLoading(false)
+                  setImageNaturalSize({
+                    width: event.currentTarget.naturalWidth,
+                    height: event.currentTarget.naturalHeight,
+                  })
+                }}
                 onError={() => { setLoading(false); message.error('图片加载失败') }}
                 draggable={false}
               />
@@ -473,51 +438,7 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
               )}
             </div>
           )}
-          {isMyLock && editRequests.length > 0 && !cropMode && (
-            <div className="collab-toolbar-group">
-              <Badge count={editRequests.length} size="small">
-                <Button icon={<LockOutlined />} size="small" onClick={() => setShowRequestModal(true)}>审批</Button>
-              </Badge>
-            </div>
-          )}
         </div>
-      </Modal>
-
-      {/* 编辑申请审批弹窗 */}
-      <Modal
-        title="编辑权申请"
-        open={showRequestModal}
-        onCancel={() => { setShowRequestModal(false); setSelectedRequester(null) }}
-        width={400}
-        destroyOnHidden
-        footer={null}
-      >
-        {editRequests.length === 0 ? (
-          <p style={{ color: '#999', textAlign: 'center' }}>暂无申请</p>
-        ) : (
-          <div>
-            <p>以下用户申请编辑权：</p>
-            <Select
-              placeholder="选择申请人"
-              style={{ width: '100%', marginBottom: 16 }}
-              value={selectedRequester}
-              onChange={setSelectedRequester}
-              options={editRequests.map(r => ({
-                value: r.userId,
-                label: (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Avatar size={20} src={r.avatar} icon={<UserOutlined />} />
-                    <span>{r.nickname || `用户${r.userId}`}</span>
-                  </div>
-                )
-              }))}
-            />
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <Button danger onClick={handleDeny} disabled={!selectedRequester}>拒绝</Button>
-              <Button type="primary" onClick={handleApprove} disabled={!selectedRequester}>同意</Button>
-            </div>
-          </div>
-        )}
       </Modal>
     </>
   )

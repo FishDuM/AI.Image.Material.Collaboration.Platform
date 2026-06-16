@@ -58,7 +58,7 @@ public class AiConfig {
         executor.setQueueCapacity(64);
         executor.setKeepAliveSeconds(60);
         executor.setThreadNamePrefix("ai-task-");
-        // CallerRunsPolicy 会阻塞 RocketMQ consumer 线程（AI 调用 120-180s）
+        // CallerRunsPolicy 会阻塞任务提交线程，AI 调用耗时较长时不合适。
         // 改为 AbortPolicy，由调用方捕获 RejectedExecutionException 标记任务 FAILED
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
         executor.setWaitForTasksToCompleteOnShutdown(true);

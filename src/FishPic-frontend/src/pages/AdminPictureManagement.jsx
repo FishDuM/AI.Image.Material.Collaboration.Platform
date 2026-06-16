@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useRef, useContext } from 'react'
+import { useState, useEffect, useCallback, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { App as AntApp, Table, Typography, Button, Image, Tag, Space, Select, Popconfirm } from 'antd'
+import { App as AntApp, Table, Typography, Button, Image, Tag, Space, Select, Popconfirm, Card } from 'antd'
 import { PictureOutlined, ReloadOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons'
 import { getAdminPictureList, reviewPicture } from '../api'
 import { AuthContext } from '../context/AuthContext.jsx'

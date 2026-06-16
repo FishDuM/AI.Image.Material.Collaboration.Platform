@@ -1,4 +1,4 @@
-package hk.ljx.fishpicsbackend.common.utils;
+package hk.ljx.fishpicsbackend.common.infra;
 
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.lang.UUID;

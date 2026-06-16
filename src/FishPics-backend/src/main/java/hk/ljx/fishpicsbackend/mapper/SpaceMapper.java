@@ -5,16 +5,9 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Update;
 
-/**
- * @description 针对表【space(空间表)】的数据库操作Mapper
- */
 public interface SpaceMapper extends BaseMapper<Space> {
 
-    /**
-     * 原子地 + delta 配额,仅当 size+delta <= storageSize 时成功
-     *
-     * @return affectedRows: 1=成功,0=配额不足
-     */
+    // 原子 +delta，只在没超配额时成功，返回 0 说明空间满了
     @Update("UPDATE space SET size = size + #{delta} " +
             "WHERE id = #{spaceId} AND (storage_size IS NULL OR size + #{delta} <= storage_size)")
     int conditionalIncrementSize(@Param("spaceId") Long spaceId,

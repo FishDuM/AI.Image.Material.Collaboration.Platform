@@ -1,4 +1,4 @@
-package hk.ljx.fishpicsbackend.common.utils;
+package hk.ljx.fishpicsbackend.common.infra;
 
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;

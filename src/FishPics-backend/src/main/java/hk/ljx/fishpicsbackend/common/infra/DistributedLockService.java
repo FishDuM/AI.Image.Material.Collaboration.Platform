@@ -1,4 +1,4 @@
-package hk.ljx.fishpicsbackend.common.utils;
+package hk.ljx.fishpicsbackend.common.infra;
 
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;

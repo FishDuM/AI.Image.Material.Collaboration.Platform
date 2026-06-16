@@ -32,9 +32,4 @@ public final class XssSanitizer {
     /**
      * 校验是否含危险 HTML — 用于日志/告警(不阻断,只记录)
      */
-    public static boolean containsDangerousHtml(String input) {
-        if (input == null) return false;
-        String cleaned = clean(input);
-        return !cleaned.equals(input);
-    }
 }

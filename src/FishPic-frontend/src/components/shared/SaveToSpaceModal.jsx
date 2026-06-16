@@ -1,94 +1,31 @@
-import { useState, useEffect, useCallback } from 'react'
-import { App, Modal, Button, Tabs, Checkbox, Tag, Spin, Empty, Alert } from 'antd'
-import { SaveOutlined, TeamOutlined, LockOutlined } from '@ant-design/icons'
-import { getSaveableSpaces, savePictureByUrl } from '../../api'
-
-const SPACE_TYPE_MAP = { 0: '私人空间', 1: '团队空间' }
-const SPACE_TYPE_COLOR = { 0: 'blue', 1: 'green' }
+import { useEffect } from 'react'
+import { Alert, App, Button, Checkbox, Empty, Modal, Spin, Tabs, Tag } from 'antd'
+import { LockOutlined, SaveOutlined, TeamOutlined } from '@ant-design/icons'
+import { formatStorage } from '../../utils/constants'
+import { SPACE_TYPE_COLOR, SPACE_TYPE_MAP, useSaveToSpace } from '../../hooks/useSaveToSpace'
 
 function SaveToSpaceModal({ open, onClose, imageUrl }) {
   const { message } = App.useApp()
-  const [activeTab, setActiveTab] = useState('private')
-  const [privateSpace, setPrivateSpace] = useState(null)
-  const [teamSpaces, setTeamSpaces] = useState([])
-  const [selectedSpaceIds, setSelectedSpaceIds] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
-
-  const loadSpaces = useCallback(async () => {
-    setLoading(true)
-    try {
-      const result = await getSaveableSpaces()
-      const list = Array.isArray(result) ? result : []
-      setPrivateSpace(list.find((space) => space.type === 0) || null)
-      setTeamSpaces(list.filter((space) => space.type === 1))
-    } catch {
-      setPrivateSpace(null)
-      setTeamSpaces([])
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const {
+    activeTab,
+    setActiveTab,
+    privateSpace,
+    teamSpaces,
+    selectedSpaceIds,
+    loading,
+    saving,
+    reset,
+    loadSpaces,
+    toggleSpace,
+    saveSelectedSpaces,
+  } = useSaveToSpace({ imageUrl, message, onSaved: onClose })
 
   useEffect(() => {
     if (open) {
-      setActiveTab('private')
-      setSelectedSpaceIds([])
+      reset()
       loadSpaces()
     }
-  }, [open, loadSpaces])
-
-  const toggleSpace = useCallback((spaceId) => {
-    setSelectedSpaceIds((prev) =>
-      prev.includes(spaceId) ? prev.filter((id) => id !== spaceId) : [...prev, spaceId]
-    )
-  }, [])
-
-  const handleConfirm = async () => {
-    if (selectedSpaceIds.length === 0) {
-      message.warning('请至少选择一个空间')
-      return
-    }
-    if (!imageUrl) {
-      message.error('图片URL为空')
-      return
-    }
-
-    setSaving(true)
-    let successCount = 0
-    let failCount = 0
-
-    try {
-      const results = await Promise.allSettled(
-        selectedSpaceIds.map((spaceId) => savePictureByUrl(imageUrl, spaceId))
-      )
-
-      results.forEach((r) => {
-        if (r.status === 'fulfilled') successCount++
-        else failCount++
-      })
-
-      if (successCount > 0) {
-        message.success(`已保存到 ${successCount} 个空间`)
-      }
-      if (failCount > 0) {
-        message.error(`${failCount} 个空间保存失败`)
-      }
-
-      onClose()
-    } catch {
-      message.error('保存失败')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const formatStorage = (bytes) => {
-    if (!bytes) return '-'
-    if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB'
-    if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB'
-    return (bytes / 1024).toFixed(0) + ' KB'
-  }
+  }, [open, loadSpaces, reset])
 
   const renderSpaceItem = (space, isPrivate) => {
     const isChecked = selectedSpaceIds.includes(space.id)
@@ -108,7 +45,7 @@ function SaveToSpaceModal({ open, onClose, imageUrl }) {
             <Tag color={SPACE_TYPE_COLOR[space.type]} style={{ marginRight: 8 }}>
               {SPACE_TYPE_MAP[space.type]}
             </Tag>
-            <span>已用 {formatStorage(space.size)} / {formatStorage(space.storageSize)}</span>
+            <span>已用 {formatStorage(space.size, '-')} / {formatStorage(space.storageSize, '-')}</span>
           </div>
         </div>
       </div>
@@ -118,9 +55,7 @@ function SaveToSpaceModal({ open, onClose, imageUrl }) {
   const tabItems = [
     {
       key: 'private',
-      label: (
-        <span><LockOutlined style={{ marginRight: 4 }} />私人空间</span>
-      ),
+      label: <span><LockOutlined style={{ marginRight: 4 }} />私人空间</span>,
       children: (
         <Spin spinning={loading}>
           <div className="save-space-list">
@@ -135,16 +70,14 @@ function SaveToSpaceModal({ open, onClose, imageUrl }) {
     },
     {
       key: 'team',
-      label: (
-        <span><TeamOutlined style={{ marginRight: 4 }} />团队空间</span>
-      ),
+      label: <span><TeamOutlined style={{ marginRight: 4 }} />团队空间</span>,
       children: (
         <Spin spinning={loading}>
           <div className="save-space-list">
             {teamSpaces.length === 0 ? (
               <Empty description="暂无团队空间" style={{ padding: '40px 0' }} />
             ) : (
-              teamSpaces.map((sp) => renderSpaceItem(sp, false))
+              teamSpaces.map(space => renderSpaceItem(space, false))
             )}
           </div>
         </Spin>
@@ -169,7 +102,7 @@ function SaveToSpaceModal({ open, onClose, imageUrl }) {
           icon={<SaveOutlined />}
           loading={saving}
           disabled={selectedSpaceIds.length === 0}
-          onClick={handleConfirm}
+          onClick={saveSelectedSpaces}
         >
           确认保存{selectedSpaceIds.length > 0 ? ` (${selectedSpaceIds.length} 个空间)` : ''}
         </Button>,
@@ -181,11 +114,7 @@ function SaveToSpaceModal({ open, onClose, imageUrl }) {
         showIcon
         style={{ marginBottom: 16 }}
       />
-      <Tabs
-        activeKey={activeTab}
-        onChange={setActiveTab}
-        items={tabItems}
-      />
+      <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
     </Modal>
   )
 }

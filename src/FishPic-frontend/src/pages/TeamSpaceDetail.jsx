@@ -11,6 +11,7 @@ import { PAGINATION_LOCALE, PAGE_SIZE, LEVEL_MAP, DEFAULT_LEVEL, storageStrokeCo
 import { getThumbnailUrl } from '../utils/image'
 import ImageUploadModal from '../components/shared/ImageUploadModal'
 import ImageEditorModal from '../components/shared/ImageEditorModal'
+import PictureEditModal from '../components/shared/PictureEditModal'
 import CollaborativeCanvas from '../components/shared/CollaborativeCanvas'
 import UpgradeModal from '../components/shared/UpgradeModal'
 import './TeamSpaceDetail.css'
@@ -693,69 +694,30 @@ function TeamSpaceDetail() {
         />
       )}
 
-      <Modal
-        className="edit-picture-modal"
-        title={null}
+      <PictureEditModal
         open={showEditPicture}
+        form={editPictureForm}
+        picture={pictures.find(p => selectedIds.includes(p.id))}
+        tags={systemTags}
+        loading={editPictureLoading}
+        canUseAi={userInfo?.level === 1 || userInfo?.level === 2}
+        onSubmit={handleEditPictureSubmit}
+        onAiTag={async () => {
+          try {
+            await submitAiTag(selectedIds[0])
+            setShowEditPicture(false)
+            modal.info({
+              title: 'AI正在执行',
+              content: 'AI正在后台识别图片信息，完成后将自动填充，请稍后重新打开编辑查看',
+              okText: '知道了',
+            })
+          } catch (e) {
+            message.error(e.message || 'AI识别提交失败')
+          }
+        }}
+        onEditImage={() => setShowImageEditor(true)}
         onCancel={() => { setShowEditPicture(false); editPictureForm.resetFields() }}
-        width="80vw"
-        style={{ maxHeight: '75vh' }}
-        footer={null}
-        closable={false}
-      >
-        <div className="edit-picture-layout">
-          <div className="edit-picture-left">
-            {(() => {
-              const first = pictures.find(p => selectedIds.includes(p.id))
-              return first ? <img src={first.url} alt="编辑中的图片" className="edit-picture-img" /> : null
-            })()}
-          </div>
-          <div className="edit-picture-right">
-            <div className="edit-picture-right-header">
-              <span className="edit-picture-title">编辑图片信息</span>
-            </div>
-            <Form form={editPictureForm} layout="vertical" onFinish={handleEditPictureSubmit} className="edit-picture-form">
-              <Form.Item name="pictureName" label="图片名称">
-                <Input placeholder="留空则不修改" maxLength={50} allowClear />
-              </Form.Item>
-              <Form.Item name="introduction" label="图片介绍">
-                <Input.TextArea placeholder="留空则不修改" maxLength={500} rows={3} allowClear />
-              </Form.Item>
-              <Form.Item name="tags" label="标签">
-                <Select mode="multiple" placeholder="请选择标签" allowClear options={systemTags.map(t => ({ label: t, value: t }))} />
-              </Form.Item>
-            </Form>
-            <div className="edit-picture-right-footer">
-              <div>
-                {(userInfo?.level === 1 || userInfo?.level === 2) && (
-                  <Button onClick={async () => {
-                    try {
-                      await submitAiTag(selectedIds[0])
-                      setShowEditPicture(false)
-                      modal.info({
-                        title: 'AI正在执行',
-                        content: 'AI正在后台识别图片信息，完成后将自动填充，请稍后重新打开编辑查看',
-                        okText: '知道了',
-                      })
-                    } catch (e) {
-                      message.error(e.message || 'AI识别提交失败')
-                    }
-                  }}>AI一键填写</Button>
-                )}
-                <Button icon={<EditOutlined />} onClick={() => setShowImageEditor(true)}>编辑图片</Button>
-              </div>
-              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                <Button onClick={() => { setShowEditPicture(false); editPictureForm.resetFields() }}>
-                  取消
-                </Button>
-                <Button type="primary" onClick={() => editPictureForm.submit()} loading={editPictureLoading}>
-                  保存
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </Modal>
+      />
 
       <ImageUploadModal
         open={showUploadModal}

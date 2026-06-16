@@ -11,33 +11,21 @@ import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.springframework.stereotype.Component;
 
-/**
- * 简化的权限拦截器
- * 只需要判断 user.role == 1 即为管理员
- */
 @Slf4j
 @Aspect
 @Component
 public class AdminCheckAspect {
 
-    /**
-     * 拦截 @RequireAdmin 注解
-     */
     @Around("@annotation(requireAdmin)")
     public Object doRequireAdmin(ProceedingJoinPoint joinPoint, RequireAdmin requireAdmin) throws Throwable {
-        // 1. 检查登录状态
         LoginContext ctx = UserHolder.getLoginContext();
         if (ctx == null || ctx.getUserId() == null) {
             throw new BaseException(ExceptionCode.NOT_LOGIN, "未登录或登录过期");
         }
-
-        // 2. 检查是否是管理员（role == 1）
         if (!ctx.isAdmin()) {
             log.warn("权限校验失败: userId={}, role={}, 需要管理员权限", ctx.getUserId(), ctx.getRole());
             throw new BaseException(ExceptionCode.FORBIDDEN, requireAdmin.message());
         }
-
-        // 3. 权限校验通过，继续执行
         return joinPoint.proceed();
     }
 }

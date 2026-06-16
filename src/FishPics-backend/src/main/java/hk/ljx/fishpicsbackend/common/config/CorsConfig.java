@@ -13,7 +13,7 @@ import java.util.stream.Collectors;
 public class CorsConfig implements WebMvcConfigurer {
 
     /** CORS 允许的来源列表,逗号分隔;生产环境通过环境变量注入真实域名 */
-    @Value("${cors.allowed-origins:http://localhost:*,http://127.0.0.1:*}")
+    @Value("${cors.allowed-origins:http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:3000}")
     private String allowedOriginsConfig;
 
     @Override

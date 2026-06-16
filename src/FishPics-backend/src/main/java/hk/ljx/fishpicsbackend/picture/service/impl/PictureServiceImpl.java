@@ -13,14 +13,14 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import hk.ljx.fishpicsbackend.common.cache.MultiLevelCacheManager;
-import hk.ljx.fishpicsbackend.collab.CollabEventPublisher;
-import hk.ljx.fishpicsbackend.collab.model.CollabEvent;
+import hk.ljx.fishpicsbackend.common.cache.RedisCacheManager;
+import hk.ljx.fishpicsbackend.collab.CollabCoordinator;
+import hk.ljx.fishpicsbackend.collab.CollabSessionRegistry;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
-import hk.ljx.fishpicsbackend.common.utils.CosService;
-import hk.ljx.fishpicsbackend.common.utils.DistributedLockService;
+import hk.ljx.fishpicsbackend.common.infra.CosService;
+import hk.ljx.fishpicsbackend.common.infra.DistributedLockService;
 import hk.ljx.fishpicsbackend.common.utils.DownloadUtils;
 import hk.ljx.fishpicsbackend.common.utils.FileTypeUtils;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
@@ -61,7 +61,7 @@ import com.qcloud.cos.model.PartETag;
 import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
 import hk.ljx.fishpicsbackend.common.context.LoginContext;
 import hk.ljx.fishpicsbackend.common.dto.PageRequest;
-import hk.ljx.fishpicsbackend.common.utils.RedisAtomicOps;
+import hk.ljx.fishpicsbackend.common.infra.RedisAtomicOps;
 import hk.ljx.fishpicsbackend.mapper.PictureShareMapper;
 import hk.ljx.fishpicsbackend.mapper.PictureTagMapper;
 import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
@@ -79,11 +79,6 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
-/**
- * @author 30574
- * @description 针对表【picture(图片表)】的数据库操作Service实现
- * @createDate 2026-04-13 21:24:49
- */
 @Slf4j
 @Service
 public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
@@ -119,7 +114,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     private SpaceTeamMemberMapper spaceTeamMemberMapper;
 
     @Resource
-    private MultiLevelCacheManager cacheManager;
+    private RedisCacheManager cacheManager;
 
     @Resource
     private PictureTagMapper pictureTagMapper;
@@ -128,7 +123,10 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     private DistributedLockService distributedLockService;
 
     @Resource
-    private CollabEventPublisher collabEventPublisher;
+    private CollabCoordinator collabCoordinator;
+
+    @Resource
+    private CollabSessionRegistry collabSessionRegistry;
 
     @Resource
     private RedisAtomicOps redisAtomicOps;
@@ -162,7 +160,6 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     private void refreshUserSessionState(User user) {
         userService.refreshUserInfoCache(user);
         // 头像变更需要额外清除权限上下文缓存，强制下游重新加载
-        stringRedisTemplate.delete(RedisConstants.getUserPermCtxKey(user.getId()));
         cacheManager.getUserPermCache().evict(String.valueOf(user.getId()));
     }
 
@@ -220,9 +217,9 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     @Transactional(rollbackFor = Exception.class)
     public Picture uploadPicture(MultipartFile file, Long targetSpaceId) {
         User userLogin = UserHolder.getUser();
-        ExcUtils.throwIfTrue(ObjUtil.isEmpty(userLogin), "请先登录");
+        ExcUtils.throwIfTrue(ObjUtil.isEmpty(userLogin), ExceptionCode.NOT_LOGIN);
         Long userId = userLogin.getId();
-        ExcUtils.throwIfTrue(userId == null, "请先登录");
+        ExcUtils.throwIfTrue(userId == null, ExceptionCode.NOT_LOGIN);
 
         // 按用户等级动态限制上传大小
         long maxSize = getMaxUploadSize(userLogin.getLevel());
@@ -451,7 +448,9 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         if (status != null) {
             if (status == 4) {
                 // 4=精选申请（isSelected=1 且 status=1）
-                queryWrapper.eq(Picture::getIsPrivate, 0);
+                queryWrapper.eq(Picture::getIsPrivate, 0)
+                        .eq(Picture::getIsSelected, 1)
+                        .eq(Picture::getStatus, 1);
             } else if (status == 5) {
                 // 5=待精选审核(用户申请了精选|手工改了isSelected=2)
                 queryWrapper.eq(Picture::getIsSelected, 2)
@@ -535,26 +534,18 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 .filter(p -> deletableIds.contains(p.getId()))
                 .collect(Collectors.toList());
 
-        // 级联清理 picture_share 记录
-        try {
-            int shareDelCount = pictureShareMapper.delete(new LambdaQueryWrapper<PictureShare>()
-                    .in(PictureShare::getPictureId, deletableIds));
-            if (shareDelCount > 0) {
-                log.info("级联删除 picture_share: count={}", shareDelCount);
-            }
-        } catch (Exception e) {
-            log.warn("清理 picture_share 失败(非阻塞): {}", e.getMessage());
+        // 级联清理 picture_share / picture_tag 记录
+        // 不吞异常：失败时让 @Transactional 回滚 picture 删除，避免孤儿数据
+        int shareDelCount = pictureShareMapper.delete(new LambdaQueryWrapper<PictureShare>()
+                .in(PictureShare::getPictureId, deletableIds));
+        if (shareDelCount > 0) {
+            log.info("级联删除 picture_share: count={}", shareDelCount);
         }
 
-        // 级联清理 picture_tag 记录
-        try {
-            int tagDelCount = pictureTagMapper.delete(new LambdaQueryWrapper<PictureTag>()
-                    .in(PictureTag::getPictureId, deletableIds));
-            if (tagDelCount > 0) {
-                log.info("级联删除 picture_tag: count={}", tagDelCount);
-            }
-        } catch (Exception e) {
-            log.warn("清理 picture_tag 失败(非阻塞): {}", e.getMessage());
+        int tagDelCount = pictureTagMapper.delete(new LambdaQueryWrapper<PictureTag>()
+                .in(PictureTag::getPictureId, deletableIds));
+        if (tagDelCount > 0) {
+            log.info("级联删除 picture_tag: count={}", tagDelCount);
         }
 
         // 扣减空间已用大小
@@ -684,6 +675,11 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
      */
     @Override
     public PictureVO replacePictureFile(Long pictureId, MultipartFile file) {
+        return replacePictureFile(pictureId, file, false);
+    }
+
+    @Override
+    public PictureVO replacePictureFile(Long pictureId, MultipartFile file, boolean requireCollabLock) {
         // 1. 校验
         ExcUtils.throwIfTrue(pictureId == null, "图片ID不能为空");
         ExcUtils.throwIfTrue(file == null || file.isEmpty(), "文件不能为空");
@@ -694,7 +690,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             throw new BaseException(ExceptionCode.CONFLICT, "该图片正在被替换,请稍后重试");
         }
         try {
-            return getSelf().doReplacePictureFile(pictureId, file);
+            return getSelf().doReplacePictureFile(pictureId, file, requireCollabLock);
         } finally {
             distributedLockService.unlock(lockKey);
         }
@@ -705,6 +701,12 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
      */
     @Transactional(rollbackFor = Exception.class)
     public PictureVO doReplacePictureFile(Long pictureId, MultipartFile file) {
+        return doReplacePictureFile(pictureId, file, false);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public PictureVO doReplacePictureFile(Long pictureId, MultipartFile file, boolean requireCollabLock) {
         // 文件类型校验（与 uploadPicture 等一致）
         ExcUtils.throwIfTrue(FileTypeUtils.getValidFileType(file) == null,
                 ExceptionCode.PARAMETER_ERROR, "不支持的文件类型");
@@ -737,6 +739,10 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         ExcUtils.throwIfFalse(isOwner || isAdmin || isTeamMember,
                 // 已认证但不是 owner/team member → FORBIDDEN
                 ExceptionCode.FORBIDDEN, "没有权限编辑图片");
+
+        if (requireCollabLock && !collabSessionRegistry.isLockHolder(picture.getSpaceId(), pictureId, user.getId())) {
+            throw new BaseException(ExceptionCode.FORBIDDEN, "请先获取协同编辑权");
+        }
 
         // 2. 计算 MD5（必须在 COS 上传之前，因为 InputStream 只能读一次）
         String md5;
@@ -845,13 +851,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                         @Override
                         public void afterCommit() {
                             try {
-                                collabEventPublisher.publish(event -> {
-                                    event.setType(CollabEvent.TYPE_FILE_REPLACED);
-                                    event.setPictureId(finalPictureId);
-                                    event.setSpaceId(spaceId);
-                                    event.setUserId(finalUserId);
-                                    event.setNickname(finalNickname);
-                                });
+                                collabCoordinator.handleFileReplaced(spaceId, finalPictureId, finalUserId, finalNickname);
                             } catch (Exception e) {
                                 log.warn("[replacePictureFile] 推送 file-replaced 事件失败: pictureId={}", finalPictureId, e);
                             }
@@ -1207,9 +1207,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 ExceptionCode.PARAMETER_ERROR, "分片 ETag 不完整，请重试合并");
 
         List<PartETag> partETags = etagMap.entrySet().stream()
-                .sorted((a, b) -> Integer.compare(
-                        Integer.parseInt(a.getKey().toString()),
-                        Integer.parseInt(b.getKey().toString())))
+                .sorted(Comparator.comparingInt(a -> Integer.parseInt(a.getKey().toString())))
                 .map(entry -> new PartETag(
                         Integer.parseInt(entry.getKey().toString()) + 1,
                         entry.getValue().toString()))
@@ -1232,9 +1230,6 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         final String finalCosKey = storedCosKey;
         final String finalUploadId = uploadId;
         final List<PartETag> finalPartETags = partETags;
-        final String finalChunksKey = chunksKey;
-        final String finalUploadIdKey = uploadIdKey;
-        final String finalEtagKey = etagKey;
         final String finalMd5 = request.getMd5();
         final String finalMergeResultKey = RedisConstants.getFileMergeResultKey(request.getMd5());
         final Long finalUserId = user.getId();

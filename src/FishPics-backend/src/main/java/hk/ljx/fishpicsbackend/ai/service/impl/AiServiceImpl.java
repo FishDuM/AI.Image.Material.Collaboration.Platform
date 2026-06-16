@@ -1,4 +1,4 @@
-package hk.ljx.fishpicsbackend.ai.service;
+package hk.ljx.fishpicsbackend.ai.service.impl;
 
 import cn.hutool.crypto.digest.DigestUtil;
 import cn.hutool.json.JSONUtil;
@@ -8,14 +8,15 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import hk.ljx.fishpicsbackend.ai.dto.AiDrawPictureDTO;
 import hk.ljx.fishpicsbackend.ai.dto.AiConfigDTO;
 import hk.ljx.fishpicsbackend.ai.dto.AiTaskQueryDTO;
+import hk.ljx.fishpicsbackend.ai.service.AiService;
 import hk.ljx.fishpicsbackend.ai.vo.AiStatsVO;
 import hk.ljx.fishpicsbackend.ai.vo.AiTaskVO;
-import hk.ljx.fishpicsbackend.common.cache.MultiLevelCacheManager;
+import hk.ljx.fishpicsbackend.common.cache.RedisCacheManager;
 import hk.ljx.fishpicsbackend.common.constants.SysConstants;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
-import hk.ljx.fishpicsbackend.common.utils.RateLimiter;
+import hk.ljx.fishpicsbackend.common.infra.RateLimiter;
 import hk.ljx.fishpicsbackend.mapper.PicSystemMapper;
 import hk.ljx.fishpicsbackend.system.entity.PicSystem;
 import hk.ljx.fishpicsbackend.task.entity.Task;
@@ -75,7 +76,7 @@ public class AiServiceImpl implements AiService {
     private PicSystemMapper picSystemMapper;
 
     @Resource
-    private MultiLevelCacheManager cacheManager;
+    private RedisCacheManager cacheManager;
 
     /**
      * 提交图片标签任务
@@ -201,17 +202,13 @@ public class AiServiceImpl implements AiService {
      * 从 AiController 移到 AiService，让其他端点能查 AiConfig 开关
      * 无配置记录/null 字段 = 全开
      * editingEnabled 特殊：默认 false（无对应端点实现）
-     * 多级缓存：复用 sysConfigCache（L1 Caffeine + L2 Redis）
+     * Redis TTL 缓存：复用 sysConfigCache
      */
     @Override
     public boolean isFeatureEnabled(String fieldName) {
         try {
-            // 先查多级缓存
-            Object cached = cacheManager.getSysConfigCache().get(SysConstants.AI_CONFIG_KEY);
-            AiConfigDTO config;
-            if (cached instanceof AiConfigDTO dto) {
-                config = dto;
-            } else {
+            AiConfigDTO config = cacheManager.getSysConfigCache().get(SysConstants.AI_CONFIG_KEY, AiConfigDTO.class);
+            if (config == null) {
                 // 缓存miss，查数据库
                 List<PicSystem> records = picSystemMapper.selectList(
                         new LambdaQueryWrapper<PicSystem>().eq(PicSystem::getSyskey, SysConstants.AI_CONFIG_KEY));

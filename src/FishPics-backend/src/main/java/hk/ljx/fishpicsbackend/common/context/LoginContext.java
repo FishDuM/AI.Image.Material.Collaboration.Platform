@@ -69,8 +69,6 @@ public class LoginContext implements Serializable {
     /**
      * 系统角色ID（null 表示不是系统角色）
      */
-    private Integer systemRole;
-
     /**
      * 系统权限列表
      */
@@ -119,15 +117,11 @@ public class LoginContext implements Serializable {
     /**
      * 判断是否为系统超管（保留兼容性）
      */
-    public boolean isSuperAdmin() {
-        return isAdmin();
-    }
-
     /**
      * 判断是否拥有指定系统权限
      */
     public boolean hasSystemPerm(String perm) {
-        return isSuperAdmin() || (systemPerms != null && systemPerms.contains(perm));
+        return isAdmin() || (systemPerms != null && systemPerms.contains(perm));
     }
 
     /**
@@ -135,14 +129,14 @@ public class LoginContext implements Serializable {
      */
     public boolean inTeam(Long spaceId) {
         if (spaceId == null) return false;
-        return isSuperAdmin() || (teams != null && teams.containsKey(String.valueOf(spaceId)));
+        return isAdmin() || (teams != null && teams.containsKey(String.valueOf(spaceId)));
     }
 
     /**
      * 判断是否拥有指定团队权限
      */
     public boolean hasTeamPerm(Long spaceId, String perm) {
-        if (isSuperAdmin()) {
+        if (isAdmin()) {
             return true;
         }
         if (spaceId == null || teams == null) {
@@ -159,7 +153,7 @@ public class LoginContext implements Serializable {
      * 获取指定团队的角色ID
      */
     public Integer getTeamRoleId(Long spaceId) {
-        if (isSuperAdmin()) {
+        if (isAdmin()) {
             return 1;
         }
         if (spaceId == null || teams == null) {

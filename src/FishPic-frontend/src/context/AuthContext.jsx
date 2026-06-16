@@ -1,6 +1,6 @@
 import { createContext, useState, useEffect, useCallback, useRef } from 'react'
 import { getUserInfo, getUserInfoAsync, saveUserInfo, saveToken, getToken, clearAuth } from '../utils/storage'
-import { resetAuthFailureCounter, markPasswordChange } from '../api'
+import { resetAuthFailureCounter } from '../api'
 import { getUser, logout as logoutApi } from '../api'
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -75,7 +75,6 @@ export function AuthProvider({ children }) {
           setUserInfo(null)
           setIsAuthenticated(false)
           window.dispatchEvent(new CustomEvent('auth:expired'))
-        } else {
         }
       } finally {
         if (!ignore) {
@@ -106,7 +105,6 @@ export function AuthProvider({ children }) {
         if (status === 401 || code === 40005 || code === 40002) {
           return
         }
-        // eslint-disable-next-line no-console
         console.warn('[AuthContext] 静默刷新失败:', error?.message || error)
       }
     }, 5 * 60 * 1000)

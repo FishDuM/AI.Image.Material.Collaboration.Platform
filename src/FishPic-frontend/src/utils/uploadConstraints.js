@@ -67,3 +67,15 @@ export function isAllowedImageFile(file) {
   const ext = file.name.substring(dot).toLowerCase()
   return ALLOWED_EXTENSIONS.includes(ext)
 }
+
+export function validateImageUpload(file) {
+  if (!isAllowedImageFile(file)) {
+    return { valid: false, reason: 'type', message: '不支持的图片格式' }
+  }
+
+  if (file.size > getMaxUploadSize()) {
+    return { valid: false, reason: 'size', message: `图片大小不能超过${formatMaxUploadSize()}` }
+  }
+
+  return { valid: true }
+}

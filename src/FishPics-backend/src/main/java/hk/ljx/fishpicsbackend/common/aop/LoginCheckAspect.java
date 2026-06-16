@@ -10,10 +10,6 @@ import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.springframework.stereotype.Component;
 
-/**
- * @RequireLogin 注解的 AOP 拦截器
- * 替代 Controller 中重复的 UserHolder.getLoginContext() → null 检查 → throw NOT_LOGIN 模式
- */
 @Aspect
 @Component
 public class LoginCheckAspect {

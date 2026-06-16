@@ -1,4 +1,4 @@
-package hk.ljx.fishpicsbackend.space.service;
+package hk.ljx.fishpicsbackend.space.service.impl;
 import hk.ljx.fishpicsbackend.space.entity.Space;
 
 import cn.hutool.core.bean.BeanUtil;
@@ -13,7 +13,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
-import hk.ljx.fishpicsbackend.common.utils.DistributedLockService;
+import hk.ljx.fishpicsbackend.common.infra.DistributedLockService;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
@@ -22,12 +22,12 @@ import hk.ljx.fishpicsbackend.picture.entity.PictureShare;
 import hk.ljx.fishpicsbackend.picture.service.FileResourceService;
 import hk.ljx.fishpicsbackend.picture.service.PictureService;
 import hk.ljx.fishpicsbackend.picture.vo.PictureVO;
-import hk.ljx.fishpicsbackend.picture.vo.PicturePageVO;
 import hk.ljx.fishpicsbackend.space.dto.CreateSpaceRequest;
 import hk.ljx.fishpicsbackend.space.dto.SpaceAdminUpdateRequest;
 import hk.ljx.fishpicsbackend.space.dto.SpacePictureListRequest;
 import hk.ljx.fishpicsbackend.space.dto.SpaceQueryWrapper;
 import hk.ljx.fishpicsbackend.space.dto.UpdateSpaceRequest;
+import hk.ljx.fishpicsbackend.space.service.SpaceService;
 import hk.ljx.fishpicsbackend.space.vo.SpaceMemberVO;
 import hk.ljx.fishpicsbackend.space.vo.SpaceVO;
 import hk.ljx.fishpicsbackend.user.entity.User;
@@ -348,7 +348,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
      * @return 图片分页结果
      */
     @Override
-    public PicturePageVO pictureList(SpacePictureListRequest spacePictureList) {
+    public IPage<PictureVO> pictureList(SpacePictureListRequest spacePictureList) {
         Long spaceId = spacePictureList.getSpaceId();
         int current = spacePictureList.getCurrent();
         int pageSize = spacePictureList.getPageSize();
@@ -379,12 +379,12 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         }
         Page<Picture> pictureList = pictureService.page(picturePage, pictureQueryWrapper);
         // 3. 转换为VO（仅返回id和url，不暴露完整图片元数据）
-        ArrayList<PictureVO> pictureVOS = new ArrayList<>();
-        pictureList.getRecords().forEach(picture -> {
-            PictureVO pictureVO = PictureVO.ofUpload(picture.getId(), picture.getUrl());
-            pictureVOS.add(pictureVO);
-        });
-        return new PicturePageVO(pictureVOS, pictureList.getTotal());
+        Page<PictureVO> resultPage = new Page<>(pictureList.getCurrent(), pictureList.getSize(), pictureList.getTotal());
+        resultPage.setPages(pictureList.getPages());
+        resultPage.setRecords(pictureList.getRecords().stream()
+                .map(picture -> PictureVO.ofUpload(picture.getId(), picture.getUrl()))
+                .toList());
+        return resultPage;
     }
 
     /**

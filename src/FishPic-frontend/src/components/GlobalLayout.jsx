@@ -30,8 +30,17 @@ import { useAuthModal } from '../hooks/useAuthModal.js'
 import { SettingsModal } from './shared/LoginModal.jsx'
 import AuthModals from './shared/AuthModals.jsx'
 import MobileBottomNav from './shared/MobileBottomNav.jsx'
-import ErrorBoundary from './ErrorBoundary.jsx'
 import './shared/MobileBottomNav.css'
+
+const ADMIN_MENU_CONFIG = [
+  { permission: 'system:user:manage', path: '/admin/users', icon: <UserOutlined />, label: '用户管理' },
+  { permission: 'system:log:manage', path: '/admin/pictures', icon: <PictureOutlined />, label: '图片管理' },
+  { permission: 'system:log:manage', path: '/admin/dashboard', icon: <DashboardOutlined />, label: '数据概览' },
+  { permission: 'system:team:manage', path: '/admin/spaces', icon: <AppstoreOutlined />, label: '空间管理' },
+  { permission: 'system:log:manage', path: '/admin/audit-logs', icon: <FileTextOutlined />, label: '审计日志' },
+  { permission: 'system:ai:manage', path: '/admin/ai', icon: <RobotOutlined />, label: 'AI 管理' },
+  { permission: 'system:config', path: '/admin/system', icon: <ToolOutlined />, label: '系统管理' },
+]
 
 function GlobalLayout({ children }) {
   const { message } = AntApp.useApp()
@@ -46,7 +55,6 @@ function GlobalLayout({ children }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [loginForm] = Form.useForm()
   const [registerForm] = Form.useForm()
-
   const authModal = useAuthModal()
   const [showBackToTop, setShowBackToTop] = useState(false)
 
@@ -67,14 +75,6 @@ function GlobalLayout({ children }) {
     navigate('/')
   }, [authLogout, message, navigate])
 
-  const handleScrollToTop = useCallback(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }, [])
-
-  const handleRefresh = useCallback(() => {
-    window.location.reload()
-  }, [])
-
   const handleLoginButtonClick = useCallback(() => {
     if (isMobile) {
       navigate('/mobile/login')
@@ -91,6 +91,11 @@ function GlobalLayout({ children }) {
     navigate(path)
     setSidebarVisible(false)
   }, [navigate])
+
+  const adminMenuConfig = useMemo(() => {
+    const permissions = userInfo?.permissions || []
+    return ADMIN_MENU_CONFIG.filter((item) => permissions.includes(item.permission))
+  }, [userInfo?.permissions])
 
   const sidebarMenuItems = useMemo(() => {
     const items = [
@@ -110,78 +115,35 @@ function GlobalLayout({ children }) {
       items.push({ key: '/login', icon: <LoginOutlined />, label: '登录', onClick: () => { handleLoginButtonClick(); setSidebarVisible(false) } })
     }
 
-    const hasAdminAccess = userInfo?.permissions?.includes('system:user:manage') || userInfo?.permissions?.includes('system:team:manage') || userInfo?.permissions?.includes('system:ai:manage') || userInfo?.permissions?.includes('system:log:manage') || userInfo?.permissions?.includes('system:config') || false;
-    if (hasAdminAccess) {
+    if (adminMenuConfig.length > 0) {
       items.push({ type: 'divider' })
-      const adminChildren = [];
-
-      if (userInfo?.permissions?.includes('system:user:manage')) {
-        adminChildren.push({ key: '/admin/users', icon: <UserOutlined />, label: '用户管理', onClick: () => handleSidebarMenuClick('/admin/users') });
-      }
-      if (userInfo?.permissions?.includes('system:log:manage')) {
-        adminChildren.push({ key: '/admin/pictures', icon: <PictureOutlined />, label: '图片管理', onClick: () => handleSidebarMenuClick('/admin/pictures') });
-      }
-      if (userInfo?.permissions?.includes('system:log:manage')) {
-        adminChildren.push({ key: '/admin/dashboard', icon: <DashboardOutlined />, label: '数据概览', onClick: () => handleSidebarMenuClick('/admin/dashboard') });
-      }
-      if (userInfo?.permissions?.includes('system:team:manage')) {
-        adminChildren.push({ key: '/admin/spaces', icon: <AppstoreOutlined />, label: '空间管理', onClick: () => handleSidebarMenuClick('/admin/spaces') });
-      }
-      if (userInfo?.permissions?.includes('system:log:manage')) {
-        adminChildren.push({ key: '/admin/audit-logs', icon: <FileTextOutlined />, label: '审计日志', onClick: () => handleSidebarMenuClick('/admin/audit-logs') });
-      }
-      if (userInfo?.permissions?.includes('system:ai:manage')) {
-        adminChildren.push({ key: '/admin/ai', icon: <RobotOutlined />, label: 'AI 管理', onClick: () => handleSidebarMenuClick('/admin/ai') });
-      }
-      if (userInfo?.permissions?.includes('system:config')) {
-        adminChildren.push({ key: '/admin/system', icon: <ToolOutlined />, label: '系统管理', onClick: () => handleSidebarMenuClick('/admin/system') });
-      }
-
-      if (adminChildren.length > 0) {
-        items.push({
-          key: 'admin',
-          icon: <SettingOutlined />,
-          label: '管理页面',
-          children: adminChildren,
-        });
-      }
+      items.push({
+        key: 'admin',
+        icon: <SettingOutlined />,
+        label: '管理页面',
+        children: adminMenuConfig.map((item) => ({
+          key: item.path,
+          icon: item.icon,
+          label: item.label,
+          onClick: () => handleSidebarMenuClick(item.path),
+        })),
+      })
     }
 
     return items
-  }, [userInfo, handleSidebarMenuClick, handleLogout, handleLoginButtonClick])
+  }, [userInfo, adminMenuConfig, handleSidebarMenuClick, handleLogout, handleLoginButtonClick])
 
   const userMenuItems = useMemo(() => [
     { key: 'profile', icon: <UserOutlined />, label: '个人中心', onClick: () => navigate('/profile') },
     { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', onClick: handleLogout },
   ], [navigate, handleLogout])
 
-  const adminMenuItems = useMemo(() => {
-    const items = [];
-
-    if (userInfo?.permissions?.includes('system:user:manage')) {
-      items.push({ key: 'user-management', icon: <UserOutlined />, label: '用户管理', onClick: () => navigate('/admin/users') });
-    }
-    if (userInfo?.permissions?.includes('system:log:manage')) {
-      items.push({ key: 'picture-management', icon: <PictureOutlined />, label: '图片管理', onClick: () => navigate('/admin/pictures') });
-    }
-    if (userInfo?.permissions?.includes('system:log:manage')) {
-      items.push({ key: 'dashboard', icon: <DashboardOutlined />, label: '数据概览', onClick: () => navigate('/admin/dashboard') });
-    }
-    if (userInfo?.permissions?.includes('system:team:manage')) {
-      items.push({ key: 'space-management', icon: <AppstoreOutlined />, label: '空间管理', onClick: () => navigate('/admin/spaces') });
-    }
-    if (userInfo?.permissions?.includes('system:log:manage')) {
-      items.push({ key: 'audit-log', icon: <FileTextOutlined />, label: '审计日志', onClick: () => navigate('/admin/audit-logs') });
-    }
-    if (userInfo?.permissions?.includes('system:ai:manage')) {
-      items.push({ key: 'ai-management', icon: <RobotOutlined />, label: 'AI 管理', onClick: () => navigate('/admin/ai') });
-    }
-    if (userInfo?.permissions?.includes('system:config')) {
-      items.push({ key: 'system-management', icon: <ToolOutlined />, label: '系统管理', onClick: () => navigate('/admin/system') });
-    }
-
-    return items;
-  }, [navigate, userInfo?.permissions])
+  const adminMenuItems = useMemo(() => adminMenuConfig.map((item) => ({
+    key: item.path,
+    icon: item.icon,
+    label: item.label,
+    onClick: () => navigate(item.path),
+  })), [adminMenuConfig, navigate])
 
   const navActiveClass = (path) => location.pathname === path ? ' nav-btn-active' : ''
 
@@ -198,7 +160,7 @@ function GlobalLayout({ children }) {
             {userInfo && (
               <Button type="text" size="large" icon={<RobotOutlined />} onClick={() => navigate('/ai-tools')} className={`desktop-only${navActiveClass('/ai-tools')}`}>AI 工具</Button>
             )}
-            {(userInfo?.permissions?.includes('system:user:manage') || userInfo?.permissions?.includes('system:team:manage') || userInfo?.permissions?.includes('system:ai:manage') || userInfo?.permissions?.includes('system:log:manage') || userInfo?.permissions?.includes('system:config')) && (
+            {adminMenuConfig.length > 0 && (
               <Dropdown menu={{ items: adminMenuItems }} placement="bottomLeft" className="desktop-only">
                 <Button type="text" size="large" className="system-management-btn desktop-only"><SettingOutlined /><span>管理页面</span></Button>
               </Dropdown>
@@ -230,7 +192,7 @@ function GlobalLayout({ children }) {
         <Menu mode="vertical" selectedKeys={[location.pathname]} className="sidebar-menu" items={sidebarMenuItems} triggerSubMenuAction="click" />
       </Drawer>
 
-      <ErrorBoundary onReset={() => navigate('/')}>{children}</ErrorBoundary>
+      {children}
 
       <div className="float-actions">
         {showBackToTop && (
@@ -238,7 +200,7 @@ function GlobalLayout({ children }) {
             type="text"
             shape="circle"
             icon={<UpOutlined />}
-            onClick={handleScrollToTop}
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
             className="float-action-btn float-back-top"
             aria-label="返回顶部"
           />
@@ -248,7 +210,7 @@ function GlobalLayout({ children }) {
             type="text"
             shape="circle"
             icon={<ReloadOutlined />}
-            onClick={handleRefresh}
+            onClick={() => window.location.reload()}
             className="float-action-btn float-refresh"
             aria-label="刷新"
           />
@@ -256,7 +218,6 @@ function GlobalLayout({ children }) {
       </div>
 
       <AuthModals authModal={authModal} loginForm={loginForm} registerForm={registerForm} />
-
       <SettingsModal open={settingsOpen} onCancel={() => setSettingsOpen(false)} />
       <MobileBottomNav />
     </div>

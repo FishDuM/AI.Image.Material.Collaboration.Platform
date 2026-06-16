@@ -1,5 +1,5 @@
 import { useRef, useCallback, useEffect } from 'react'
-import api from '../api'
+import { getMarquee, getSystemTypes } from '../api'
 
 export function useFetchWithCleanup() {
   const abortRef = useRef(null)
@@ -39,7 +39,7 @@ export function useSystemTypes() {
       return systemTypesCache.data
     }
     try {
-      const result = await api.get('/system/list')
+      const result = await getSystemTypes()
       systemTypesCache.data = result
       systemTypesCache.timestamp = now
       return result
@@ -73,7 +73,7 @@ export function useMarquee() {
       return marqueeCache.data
     }
     try {
-      const result = await api.get('/system/marquee')
+      const result = await getMarquee()
       marqueeCache.data = result
       marqueeCache.timestamp = now
       return result
@@ -89,65 +89,3 @@ export function useMarquee() {
   return { fetchMarquee }
 }
 
-export function useDebounce(fn, delay = 300) {
-  const timerRef = useRef(null)
-  const fnRef = useRef(fn)
-
-  useEffect(() => {
-    fnRef.current = fn
-  }, [fn])
-
-  const debouncedFn = useCallback((...args) => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current)
-    }
-    timerRef.current = setTimeout(() => {
-      fnRef.current(...args)
-    }, delay)
-  }, [delay])
-
-  const cancel = useCallback(() => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
-  }, [])
-
-  useEffect(() => {
-    return () => cancel()
-  }, [cancel])
-
-  return { debouncedFn, cancel }
-}
-
-export function useThrottle(fn, delay = 300) {
-  const lastRunRef = useRef(0)
-  const timerRef = useRef(null)
-  const fnRef = useRef(fn)
-
-  useEffect(() => {
-    fnRef.current = fn
-  }, [fn])
-
-  const throttledFn = useCallback((...args) => {
-    const now = Date.now()
-    if (now - lastRunRef.current >= delay) {
-      lastRunRef.current = now
-      fnRef.current(...args)
-    } else {
-      if (timerRef.current) clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => {
-        lastRunRef.current = Date.now()
-        fnRef.current(...args)
-      }, delay - (now - lastRunRef.current))
-    }
-  }, [delay])
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-    }
-  }, [])
-
-  return throttledFn
-}
