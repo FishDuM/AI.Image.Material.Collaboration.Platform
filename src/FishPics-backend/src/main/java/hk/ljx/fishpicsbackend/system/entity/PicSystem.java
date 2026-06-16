@@ -30,6 +30,5 @@ public class PicSystem implements Serializable {
      */
     private String sysvalue;
 
-    @TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }

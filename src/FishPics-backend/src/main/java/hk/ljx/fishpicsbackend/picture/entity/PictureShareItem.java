@@ -21,6 +21,5 @@ public class PictureShareItem implements Serializable {
 
     private Integer sortOrder;
 
-    @TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }

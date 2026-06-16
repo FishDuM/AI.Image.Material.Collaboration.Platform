@@ -1,5 +1,6 @@
 package hk.ljx.fishpicsbackend.picture.service.impl;
 
+import cn.hutool.crypto.digest.DigestUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
@@ -7,6 +8,7 @@ import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.utils.DownloadUtils;
 import hk.ljx.fishpicsbackend.common.utils.IpUtils;
+import hk.ljx.fishpicsbackend.common.utils.RedisAtomicOps;
 import hk.ljx.fishpicsbackend.mapper.PictureShareItemMapper;
 import hk.ljx.fishpicsbackend.mapper.PictureShareMapper;
 import hk.ljx.fishpicsbackend.picture.entity.Picture;
@@ -60,7 +62,7 @@ public class ShareServiceImpl implements ShareService {
     private StringRedisTemplate stringRedisTemplate;
 
     @Resource
-    private hk.ljx.fishpicsbackend.common.utils.RedisAtomicOps redisAtomicOps;
+    private RedisAtomicOps redisAtomicOps;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -111,10 +113,7 @@ public class ShareServiceImpl implements ShareService {
      * 256bit SecureRandom 随机 token
      */
     private String generateSecureToken() {
-        java.security.SecureRandom sr = new java.security.SecureRandom();
-        byte[] buf = new byte[32]; // 256bit
-        sr.nextBytes(buf);
-        return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(buf);
+        return cn.hutool.core.util.RandomUtil.randomString(43);
     }
 
     /**
@@ -122,13 +121,7 @@ public class ShareServiceImpl implements ShareService {
      */
     private String hashShareToken(String token) {
         if (token == null) return null;
-        try {
-            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
-            byte[] hash = md.digest(token.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            return java.util.HexFormat.of().formatHex(hash);
-        } catch (java.security.NoSuchAlgorithmException e) {
-            throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "SHA-256 不可用,无法计算 token hash");
-        }
+        return DigestUtil.sha256Hex(token);
     }
 
     @Override

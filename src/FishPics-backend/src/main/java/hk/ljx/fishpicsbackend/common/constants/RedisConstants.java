@@ -56,34 +56,6 @@ public interface RedisConstants {
         return USER_TOKEN_INVALID_BEFORE_KEY + userId;
     }
 
-    static String getFileUploadChunksKey(String md5) {
-        return FILE_UPLOAD_CHUNKS_KEY + md5;
-    }
-
-    static String getFileUploadIdKey(String md5) {
-        return FILE_UPLOAD_ID_KEY + md5;
-    }
-
-    static String getFileChunkEtagKey(String md5) {
-        return FILE_CHUNK_ETAG_KEY + md5;
-    }
-
-    static String getFileChunkSizeKey(String md5) {
-        return FILE_CHUNK_SIZE_KEY + md5;
-    }
-
-    static String getFileCosKeyKey(String md5) {
-        return FILE_COS_KEY + md5;
-    }
-
-    static String getFileUploadOwnerKey(String md5) {
-        return FILE_UPLOAD_OWNER_KEY + md5;
-    }
-
-    static String getFileMergeResultKey(String md5) {
-        return FILE_MERGE_RESULT_KEY + md5;
-    }
-
     // upload 会话 key 加上 userId 维度
     // 原 key 用纯 md5,改成 userId:md5 联合键,确保每个用户的上传会话完全隔离
     static String getUserFileUploadOwnerKey(Long userId, String md5) {
@@ -109,5 +81,9 @@ public interface RedisConstants {
 
     static String getFileCosKeyKey(Long userId, String md5) {
         return FILE_COS_KEY + userId + ":" + md5;
+    }
+
+    static String getFileMergeResultKey(String md5) {
+        return FILE_MERGE_RESULT_KEY + md5;
     }
 }

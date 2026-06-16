@@ -3,15 +3,15 @@ package hk.ljx.fishpicsbackend.common.exception;
 import com.alibaba.dashscope.exception.ApiException;
 
 public class ExcUtils {
-    public static BaseException error(ExceptionCode exceptionCode) {
+    public static RuntimeException error(ExceptionCode exceptionCode) {
         throw new BaseException(exceptionCode.getCode(), exceptionCode.getMessage());
     }
 
-    public static BaseException error(ExceptionCode exceptionCode, String message) {
+    public static RuntimeException error(ExceptionCode exceptionCode, String message) {
         throw new BaseException(exceptionCode.getCode(), message);
     }
 
-    public static BaseException error(Integer code, String message) {
+    public static RuntimeException error(Integer code, String message) {
         throw new BaseException(code, message);
     }
 

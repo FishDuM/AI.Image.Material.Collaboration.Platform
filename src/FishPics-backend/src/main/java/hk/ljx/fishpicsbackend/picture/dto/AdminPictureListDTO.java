@@ -1,27 +1,15 @@
 package hk.ljx.fishpicsbackend.picture.dto;
 
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
+import hk.ljx.fishpicsbackend.common.dto.PageRequest;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 /**
  * 管理员图片列表查询请求
  */
 @Data
-public class AdminPictureListDTO {
-
-    /**
-     * 当前页号
-     */
-    @Min(1)
-    private int current = 1;
-
-    /**
-     * 页面大小
-     */
-    @Min(1)
-    @Max(100)
-    private int pageSize = 20;
+@EqualsAndHashCode(callSuper = true)
+public class AdminPictureListDTO extends PageRequest {
 
     /**
      * 图片状态筛选: 0-禁用 1-正常 2-待审核 4-精选，不传则查全部

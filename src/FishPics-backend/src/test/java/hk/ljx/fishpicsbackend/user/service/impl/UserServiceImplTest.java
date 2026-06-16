@@ -85,6 +85,7 @@ class UserServiceImplTest {
                 "13800138000",
                 1,
                 0,
+                null,
                 null
         );
 

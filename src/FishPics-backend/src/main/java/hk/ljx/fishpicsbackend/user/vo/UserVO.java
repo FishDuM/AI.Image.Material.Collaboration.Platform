@@ -1,6 +1,7 @@
 package hk.ljx.fishpicsbackend.user.vo;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import cn.hutool.core.util.StrUtil;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -206,10 +207,8 @@ public class UserVO implements Serializable {
         if (email == null || email.isEmpty()) return email;
         int at = email.indexOf('@');
         if (at <= 0) return email;
-        String local = email.substring(0, at);
-        String domain = email.substring(at);
-        if (local.length() <= 1) return local + "***" + domain;
-        return local.charAt(0) + "***" + domain;
+        if (at <= 1) return email.substring(0, at) + "***" + email.substring(at);
+        return StrUtil.hide(email, 1, at) + email.substring(at);
     }
 
     /**
@@ -217,7 +216,7 @@ public class UserVO implements Serializable {
      */
     public static String maskPhone(String phone) {
         if (phone == null || phone.length() < 7) return phone;
-        return phone.substring(0, 3) + "****" + phone.substring(phone.length() - 4);
+        return StrUtil.hide(phone, 3, phone.length() - 4);
     }
 
     public static UserVO ofAdmin(Long id, String username, String nickname, String avatar,

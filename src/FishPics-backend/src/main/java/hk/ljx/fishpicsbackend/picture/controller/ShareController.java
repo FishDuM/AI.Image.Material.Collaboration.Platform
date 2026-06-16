@@ -5,6 +5,7 @@ import hk.ljx.fishpicsbackend.common.context.LoginContext;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
+import hk.ljx.fishpicsbackend.common.utils.DownloadUtils;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.picture.dto.ShareCancelRequest;
 import hk.ljx.fishpicsbackend.picture.dto.ShareCreateRequest;
@@ -62,12 +63,12 @@ public class ShareController {
                         @RequestParam(required = false) Long pictureId,
                         HttpServletResponse response) throws Exception {
         try (ShareFileVO file = shareService.getPreviewFile(token, pictureId)) {
-            response.setContentType(resolveContentType(file.getContentType()));
+            response.setContentType(DownloadUtils.resolveContentType(file.getContentType()));
             response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
             if (file.getContentLength() != null && file.getContentLength() >= 0) {
                 response.setContentLengthLong(file.getContentLength());
             }
-            String safeName = defaultFileName(file.getPictureName());
+            String safeName = DownloadUtils.defaultFileName(file.getPictureName());
             response.setHeader(
                     HttpHeaders.CONTENT_DISPOSITION,
                     "inline; filename=\"" + safeName.replace("\"", "_") + "\"; "
@@ -90,7 +91,7 @@ public class ShareController {
             }
             response.setHeader(
                     HttpHeaders.CONTENT_DISPOSITION,
-                    "attachment; filename*=UTF-8''" + URLEncoder.encode(defaultFileName(file.getPictureName()), StandardCharsets.UTF_8)
+                    "attachment; filename*=UTF-8''" + URLEncoder.encode(DownloadUtils.defaultFileName(file.getPictureName()), StandardCharsets.UTF_8)
             );
             response.setHeader("X-Content-Type-Options", "nosniff");
             StreamUtils.copy(file.getInputStream(), response.getOutputStream());
@@ -106,21 +107,4 @@ public class ShareController {
         return Response.okMsg("已取消分享");
     }
 
-    private String resolveContentType(String contentType) {
-        if (contentType == null || contentType.isBlank()) {
-            return MediaType.APPLICATION_OCTET_STREAM_VALUE;
-        }
-        String lower = contentType.toLowerCase().trim();
-        if (lower.startsWith("image/")) {
-            return contentType;
-        }
-        return MediaType.APPLICATION_OCTET_STREAM_VALUE;
-    }
-
-    private String defaultFileName(String pictureName) {
-        if (pictureName == null || pictureName.isBlank()) {
-            return "image";
-        }
-        return pictureName;
-    }
 }

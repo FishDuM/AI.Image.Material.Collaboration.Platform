@@ -11,5 +11,5 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 public class AddSysMarquee implements Serializable {
-    List<String> pictureId;
+    List<String> pictureIds;
 }

@@ -24,16 +24,19 @@ import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.common.utils.JwtUtils;
 import hk.ljx.fishpicsbackend.common.utils.PasswordUtil;
 import hk.ljx.fishpicsbackend.common.utils.PermissionUtils;
+import hk.ljx.fishpicsbackend.common.utils.RedisAtomicOps;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.common.utils.XssSanitizer;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
+import hk.ljx.fishpicsbackend.mapper.SpaceTeamMemberMapper;
 import hk.ljx.fishpicsbackend.space.dto.CreateSpace;
+import hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember;
 import hk.ljx.fishpicsbackend.space.service.SpaceService;
 import hk.ljx.fishpicsbackend.user.dto.UserEditByAdminRequest;
 import hk.ljx.fishpicsbackend.user.dto.UserEditRequest;
 import hk.ljx.fishpicsbackend.user.dto.UserLoginRequest;
 import hk.ljx.fishpicsbackend.user.dto.UserQueryWrapper;
-import hk.ljx.fishpicsbackend.user.dto.UserRequestRequest;
+import hk.ljx.fishpicsbackend.user.dto.UserRegisterRequest;
 import hk.ljx.fishpicsbackend.user.entity.User;
 import hk.ljx.fishpicsbackend.user.service.UserService;
 import hk.ljx.fishpicsbackend.user.vo.UserVO;
@@ -45,7 +48,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.awt.Font;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
+import java.util.List;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -62,7 +67,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     private StringRedisTemplate stringRedisTemplate;
 
     @Resource
-    private hk.ljx.fishpicsbackend.common.utils.RedisAtomicOps redisAtomicOps;
+    private RedisAtomicOps redisAtomicOps;
 
     @Resource
     private SpaceService spaceService;
@@ -74,7 +79,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     private MultiLevelCacheManager cacheManager;
 
     @Resource
-    private hk.ljx.fishpicsbackend.mapper.SpaceTeamMemberMapper spaceTeamMemberMapper;
+    private SpaceTeamMemberMapper spaceTeamMemberMapper;
 
     @Override
     public String getCheckCode(String str, Integer len, Integer minute) {
@@ -90,12 +95,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Response<Boolean> userRegister(UserRequestRequest userRequestRequest) {
-        String username = userRequestRequest.getUsername();
-        String password = userRequestRequest.getPassword();
-        String checkPassword = userRequestRequest.getCheckPassword();
-        String checkCode = userRequestRequest.getCheckCode();
-        String captchaKey = userRequestRequest.getCaptchaKey();
+    public Response<Boolean> userRegister(UserRegisterRequest userRegisterRequest) {
+        String username = userRegisterRequest.getUsername();
+        String password = userRegisterRequest.getPassword();
+        String checkPassword = userRegisterRequest.getCheckPassword();
+        String checkCode = userRegisterRequest.getCheckCode();
+        String captchaKey = userRegisterRequest.getCaptchaKey();
 
         ExcUtils.throwIfTrue(StrUtil.hasBlank(checkCode, captchaKey), ExceptionCode.PARAMETER_ERROR, "验证码不能为空");
         ExcUtils.throwIfTrue(username == null || username.length() < 6 || username.length() > 11,
@@ -184,11 +189,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     private void cacheLoginContext(User user) {
         // 同时加载该用户的团队成员关系，注入 LoginContext.teams
-        java.util.List<hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember> teamMembers = java.util.Collections.emptyList();
+        List<SpaceTeamMember> teamMembers = Collections.emptyList();
         try {
             teamMembers = spaceTeamMemberMapper.selectList(
-                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember>()
-                            .eq(hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember::getUserId, user.getId()));
+                    new LambdaQueryWrapper<SpaceTeamMember>()
+                            .eq(SpaceTeamMember::getUserId, user.getId()));
         } catch (Exception e) {
             log.warn("[UserService] 加载用户团队成员关系失败: userId={}", user.getId(), e);
         }

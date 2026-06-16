@@ -1,6 +1,7 @@
 package hk.ljx.fishpicsbackend.common.utils;
 
 import cn.hutool.core.io.FileUtil;
+import cn.hutool.core.util.StrUtil;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import lombok.extern.slf4j.Slf4j;
@@ -123,6 +124,23 @@ public class DownloadUtils {
                 connection.disconnect();
             }
         }
+    }
+
+    /**
+     * 解析 Content-Type：空白时返回 application/octet-stream
+     */
+    public static String resolveContentType(String contentType) {
+        if (StrUtil.isBlank(contentType)) {
+            return "application/octet-stream";
+        }
+        return contentType;
+    }
+
+    /**
+     * 生成安全的下载文件名：空白时返回 "image"
+     */
+    public static String defaultFileName(String fileName) {
+        return StrUtil.blankToDefault(fileName, "image");
     }
 
     private static void copyWithLimit(InputStream in, OutputStream out, long maxSize) throws IOException {

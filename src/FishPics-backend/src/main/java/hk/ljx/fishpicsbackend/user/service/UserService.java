@@ -28,10 +28,10 @@ public interface UserService extends IService<User> {
     /**
      * 用户注册
      *
-     * @param userRequestRequest 用户注册请求
+     * @param userRegisterRequest 用户注册请求
      * @return 注册结果
      */
-    Response<Boolean> userRegister(UserRequestRequest userRequestRequest);
+    Response<Boolean> userRegister(UserRegisterRequest userRegisterRequest);
 
     /**
      * 用户登录

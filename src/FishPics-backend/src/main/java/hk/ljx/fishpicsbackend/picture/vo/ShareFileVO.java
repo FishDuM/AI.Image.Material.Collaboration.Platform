@@ -1,8 +1,11 @@
 package hk.ljx.fishpicsbackend.picture.vo;
 
+import lombok.Getter;
+
 import java.io.IOException;
 import java.io.InputStream;
 
+@Getter
 public class ShareFileVO implements AutoCloseable {
 
     private final String pictureName;
@@ -22,22 +25,6 @@ public class ShareFileVO implements AutoCloseable {
         this.contentLength = contentLength;
         this.inputStream = inputStream;
         this.closeable = closeable;
-    }
-
-    public String getPictureName() {
-        return pictureName;
-    }
-
-    public String getContentType() {
-        return contentType;
-    }
-
-    public Long getContentLength() {
-        return contentLength;
-    }
-
-    public InputStream getInputStream() {
-        return inputStream;
     }
 
     @Override

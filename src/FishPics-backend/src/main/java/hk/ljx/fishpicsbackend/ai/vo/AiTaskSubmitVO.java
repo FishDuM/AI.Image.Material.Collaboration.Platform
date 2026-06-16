@@ -17,4 +17,11 @@ public class AiTaskSubmitVO {
      * 任务状态
      */
     private String status;
+
+    public static AiTaskSubmitVO of(String taskId) {
+        AiTaskSubmitVO vo = new AiTaskSubmitVO();
+        vo.setTaskId(taskId);
+        vo.setStatus("PENDING");
+        return vo;
+    }
 }

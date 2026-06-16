@@ -1,13 +1,17 @@
 package hk.ljx.fishpicsbackend.collab;
 
 import cn.hutool.json.JSONUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import hk.ljx.fishpicsbackend.collab.model.CollabEvent;
+import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
 import hk.ljx.fishpicsbackend.common.utils.JwtUtils;
 import hk.ljx.fishpicsbackend.mapper.SpaceTeamMemberMapper;
+import hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember;
 import hk.ljx.fishpicsbackend.user.entity.User;
 import hk.ljx.fishpicsbackend.user.service.UserService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.*;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
@@ -41,7 +45,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
     private CollabEventPublisher eventPublisher;
 
     @Resource
-    private org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
+    private StringRedisTemplate stringRedisTemplate;
 
     private static final String ATTR_USER_ID = "userId";
     private static final String ATTR_SPACE_ID = "spaceId";
@@ -79,10 +83,10 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         }
 
         // 4. 验证团队成员资格（owner=1 或 member=2）
-        var memberQuery = new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember>()
-                .eq(hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember::getSpaceId, spaceId)
-                .eq(hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember::getUserId, userId)
-                .select(hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember::getRoleId);
+        var memberQuery = new LambdaQueryWrapper<SpaceTeamMember>()
+                .eq(SpaceTeamMember::getSpaceId, spaceId)
+                .eq(SpaceTeamMember::getUserId, userId)
+                .select(SpaceTeamMember::getRoleId);
         var member = teamMemberMapper.selectOne(memberQuery);
         if (member == null) {
             session.close(CloseStatus.POLICY_VIOLATION.withReason("非团队成员"));
@@ -102,7 +106,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         }
         // 校验 BANNED_USERS 集合（与 TokenRefreshInterceptor 一致）
         Boolean isBanned = stringRedisTemplate.opsForSet().isMember(
-                hk.ljx.fishpicsbackend.common.constants.RedisConstants.BANNED_USERS_KEY, userId.toString());
+                RedisConstants.BANNED_USERS_KEY, userId.toString());
         if (Boolean.TRUE.equals(isBanned)) {
             session.close(CloseStatus.POLICY_VIOLATION.withReason("账号已被封禁"));
             return;

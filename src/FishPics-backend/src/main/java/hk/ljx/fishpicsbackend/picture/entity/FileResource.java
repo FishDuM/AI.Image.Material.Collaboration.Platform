@@ -54,6 +54,5 @@ public class FileResource implements Serializable {
     @Version
     private Integer version;
 
-    @TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }

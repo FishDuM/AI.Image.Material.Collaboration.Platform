@@ -5,6 +5,7 @@ import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.common.annotation.AuditLog;
 import hk.ljx.fishpicsbackend.common.annotation.RequireAdmin;
+import hk.ljx.fishpicsbackend.common.annotation.RequireLogin;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
@@ -38,21 +39,22 @@ public class SpaceController {
      * @param createSpace 创建空间请求体
      * @return 创建成功返回true
      */
+    @RequireLogin
     @PostMapping("/create")
     @AuditLog(module = "空间管理", operation = "创建空间")
     public Response<Boolean> createSpace(@Valid @RequestBody CreateSpace createSpace) {
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(createSpace), ExceptionCode.PARAMETER_ERROR, "创建空间参数不能为空");
         User user = UserHolder.getUser();
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         return Response.ok(spaceService.createSpace(createSpace, user));
     }
 
     /**
      * 获取当前用户的空间列表
-     * 
+     *
      * @param type 空间类型（0-私人空间，1-团队空间）
      * @return 空间列表
      */
+    @RequireLogin
     @GetMapping("/list")
     public Response<List<SpaceVO>> listSpace(@RequestParam("type") Integer type) {
         ExcUtils.throwIfTrue(type == null, ExceptionCode.PARAMETER_ERROR, "空间类型不能为空");
@@ -61,10 +63,11 @@ public class SpaceController {
 
     /**
      * 获取单个空间详情
-     * 
+     *
      * @param id 空间ID
      * @return 空间详情
      */
+    @RequireLogin
     @GetMapping("/getSpace")
     public Response<SpaceVO> getSpace(@RequestParam("id") Long id) {
         ExcUtils.throwIfTrue(id == null, ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
@@ -73,10 +76,11 @@ public class SpaceController {
 
     /**
      * 更新空间信息
-     * 
+     *
      * @param updateSpace 更新请求体
      * @return 更新成功返回true
      */
+    @RequireLogin
     @PostMapping("/update")
     @AuditLog(module = "空间管理", operation = "更新空间")
     public Response<Boolean> updateSpace(@Valid @RequestBody UpdateSpace updateSpace) {
@@ -86,10 +90,11 @@ public class SpaceController {
 
     /**
      * 获取空间图片列表（分页）
-     * 
+     *
      * @param spacePictureList 查询请求体
      * @return 图片分页结果
      */
+    @RequireLogin
     @PostMapping("/pictureList")
     public Response<PicturePageVO> pictureList(@Valid @RequestBody SpacePictureList spacePictureList) {
         ExcUtils.throwIfTrue(spacePictureList == null, ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
@@ -126,12 +131,14 @@ public class SpaceController {
         return Response.ok(spaceService.adminSetStatus(request.getId(), request.getStatus()));
     }
 
+    @RequireLogin
     @GetMapping("/team/members")
     public Response<List<SpaceMemberVO>> teamMemberList(@RequestParam("spaceId") Long spaceId) {
         ExcUtils.throwIfTrue(spaceId == null, ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
         return Response.ok(spaceService.teamMemberList(spaceId));
     }
 
+    @RequireLogin
     @AuditLog(module = "团队管理", operation = "邀请成员")
     @PostMapping("/team/invite")
     public Response<Boolean> teamInvite(@Valid @RequestBody TeamInviteRequest request) {
@@ -140,6 +147,7 @@ public class SpaceController {
         return Response.ok(spaceService.teamInvite(request));
     }
 
+    @RequireLogin
     @AuditLog(module = "团队管理", operation = "移除成员")
     @PostMapping("/team/remove")
     public Response<Boolean> teamRemove(@Valid @RequestBody TeamRemoveRequest request) {
@@ -148,6 +156,7 @@ public class SpaceController {
         return Response.ok(spaceService.teamRemove(request));
     }
 
+    @RequireLogin
     @AuditLog(module = "团队管理", operation = "变更角色")
     @PostMapping("/team/changeRole")
     public Response<Boolean> teamChangeRole(@Valid @RequestBody TeamChangeRoleRequest request) {
@@ -159,6 +168,7 @@ public class SpaceController {
     /**
      * 获取当前用户可保存图片的空间列表（私人空间 + 有上传权限的团队空间）
      */
+    @RequireLogin
     @GetMapping("/saveable")
     public Response<List<SpaceVO>> saveableSpaces() {
         return Response.ok(spaceService.saveableSpaces());

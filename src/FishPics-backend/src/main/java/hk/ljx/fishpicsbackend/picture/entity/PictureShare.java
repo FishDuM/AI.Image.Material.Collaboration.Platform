@@ -52,6 +52,5 @@ public class PictureShare implements Serializable {
     /** 创建时间 */
     private Date createTime;
 
-    @TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }

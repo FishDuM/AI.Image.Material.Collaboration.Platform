@@ -8,11 +8,14 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.common.annotation.AuditLog;
 import hk.ljx.fishpicsbackend.common.annotation.RequireAdmin;
+import hk.ljx.fishpicsbackend.common.annotation.RequireLogin;
 import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
 import hk.ljx.fishpicsbackend.common.constants.UserConstants;
+import hk.ljx.fishpicsbackend.common.context.LoginContext;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.Response;
+import hk.ljx.fishpicsbackend.common.utils.JwtUtils;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
 import hk.ljx.fishpicsbackend.user.dto.*;
@@ -51,31 +54,31 @@ public class UserController {
     }
 
     @PostMapping("/register")
-    public Response<Boolean> userRegister(@Valid @RequestBody UserRequestRequest userRequestRequest) {
-        ExcUtils.throwIfTrue(userRequestRequest == null, "参数不能为空");
-        return userService.userRegister(userRequestRequest);
+    public Response<Boolean> userRegister(@Valid @RequestBody UserRegisterRequest userRegisterRequest) {
+        ExcUtils.throwIfTrue(userRegisterRequest == null, "参数不能为空");
+        return userService.userRegister(userRegisterRequest);
     }
 
     @GetMapping("/checkCode/register")
     public Response<CheckCodeVO> checkCodeRegister() {
-        String register = UUID.randomUUID().toString(true);
-        String redisKey = RedisConstants.getRegisterCodeKey(register);
-        String base64Image = userService.getCheckCode(redisKey, 5, 5);
-        return Response.ok(CheckCodeVO.builder()
-                .captchaKey(register)
-                .base64Image(UserConstants.getCheckCode(base64Image))
-                .build());
+        return Response.ok(doCheckCode("register"));
     }
 
     @GetMapping("/checkCode/login")
     public Response<CheckCodeVO> checkCodeLogin() {
-        String login = UUID.randomUUID().toString(true);
-        String redisKey = RedisConstants.getLoginCodeKey(login);
+        return Response.ok(doCheckCode("login"));
+    }
+
+    private CheckCodeVO doCheckCode(String type) {
+        String key = UUID.randomUUID().toString(true);
+        String redisKey = "register".equals(type)
+                ? RedisConstants.getRegisterCodeKey(key)
+                : RedisConstants.getLoginCodeKey(key);
         String base64Image = userService.getCheckCode(redisKey, 5, 5);
-        return Response.ok(CheckCodeVO.builder()
-                .captchaKey(login)
+        return CheckCodeVO.builder()
+                .captchaKey(key)
                 .base64Image(UserConstants.getCheckCode(base64Image))
-                .build());
+                .build();
     }
 
     @GetMapping("/myself")
@@ -85,15 +88,12 @@ public class UserController {
     }
 
     @Resource
-    private hk.ljx.fishpicsbackend.common.utils.JwtUtils jwtUtils;
+    private JwtUtils jwtUtils;
 
-    /**
-     * 获取当前登录用户信息（从 Redis 缓存的 LoginContext 中读取，不查库）
-     */
+    @RequireLogin
     @GetMapping("/getUser")
     public Response<UserVO> getUser() {
-        hk.ljx.fishpicsbackend.common.context.LoginContext ctx = UserHolder.getLoginContext();
-        ExcUtils.throwIfTrue(ctx == null || ctx.getUserId() == null, ExceptionCode.NOT_LOGIN);
+        LoginContext ctx = UserHolder.getLoginContext();
 
         // 权限列表 = 系统权限 + VIP 权限
         List<String> allPerms = new java.util.ArrayList<>(
@@ -164,10 +164,9 @@ public class UserController {
         return Response.ok(userService.getUserProfile(userId));
     }
 
+    @RequireLogin
     @GetMapping("/search")
     public Response<List<UserVO>> searchUsers(@RequestParam(required = false) String keyword) {
-        User user = UserHolder.getUser();
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         return Response.ok(userService.searchUsers(keyword));
     }
 

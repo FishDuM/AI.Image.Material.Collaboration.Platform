@@ -3,6 +3,7 @@ package hk.ljx.fishpicsbackend.common.aop;
 import cn.hutool.json.JSONUtil;
 import hk.ljx.fishpicsbackend.common.annotation.AuditLog;
 import hk.ljx.fishpicsbackend.common.entity.SysAuditLog;
+import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.utils.IpUtils;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.mapper.SysAuditLogMapper;
@@ -145,7 +146,7 @@ public class AuditLogAspect {
             auditLog.setResult(0);
             auditLog.setErrorMsg(e.getMessage());
             // 业务异常（BaseException）用 WARN，系统异常用 ERROR
-            if (e instanceof hk.ljx.fishpicsbackend.common.exception.BaseException) {
+            if (e instanceof BaseException) {
                 log.warn("审计方法业务异常: method={}, msg={}", auditLog.getUrl(), e.getMessage());
             } else {
                 log.error("审计方法执行异常: method={}", auditLog.getUrl(), e);

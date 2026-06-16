@@ -24,6 +24,7 @@ import hk.ljx.fishpicsbackend.common.utils.DistributedLockService;
 import hk.ljx.fishpicsbackend.common.utils.DownloadUtils;
 import hk.ljx.fishpicsbackend.common.utils.FileTypeUtils;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
+import hk.ljx.fishpicsbackend.common.utils.XssSanitizer;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.mapper.SpaceTeamMemberMapper;
 import static hk.ljx.fishpicsbackend.common.constants.SpaceConstants.*;
@@ -58,7 +59,18 @@ import java.util.stream.Collectors;
 
 import com.qcloud.cos.model.PartETag;
 import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
+import hk.ljx.fishpicsbackend.common.context.LoginContext;
 import hk.ljx.fishpicsbackend.common.dto.PageRequest;
+import hk.ljx.fishpicsbackend.common.utils.RedisAtomicOps;
+import hk.ljx.fishpicsbackend.mapper.PictureShareMapper;
+import hk.ljx.fishpicsbackend.mapper.PictureTagMapper;
+import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
+import hk.ljx.fishpicsbackend.picture.entity.PictureShare;
+import hk.ljx.fishpicsbackend.picture.entity.PictureTag;
+import hk.ljx.fishpicsbackend.picture.service.PicturePermissionUtil;
+import hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember;
+import hk.ljx.fishpicsbackend.space.vo.SpaceVO;
+import org.springframework.context.ApplicationContext;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.util.concurrent.TimeUnit;
@@ -80,7 +92,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     private PictureMapper pictureMapper;
 
     @Resource
-    private hk.ljx.fishpicsbackend.mapper.SpaceMapper spaceMapper;
+    private SpaceMapper spaceMapper;
 
     @Lazy
     @Resource
@@ -106,7 +118,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     private MultiLevelCacheManager cacheManager;
 
     @Resource
-    private hk.ljx.fishpicsbackend.mapper.PictureTagMapper pictureTagMapper;
+    private PictureTagMapper pictureTagMapper;
 
     @Resource
     private DistributedLockService distributedLockService;
@@ -115,14 +127,14 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     private CollabEventPublisher collabEventPublisher;
 
     @Resource
-    private hk.ljx.fishpicsbackend.common.utils.RedisAtomicOps redisAtomicOps;
+    private RedisAtomicOps redisAtomicOps;
 
     @Resource
-    private hk.ljx.fishpicsbackend.mapper.PictureShareMapper pictureShareMapper;
+    private PictureShareMapper pictureShareMapper;
 
     // 通过 ApplicationContext 获取代理，让 replacePictureFile 的锁包裹整个事务
     @Resource
-    private org.springframework.context.ApplicationContext applicationContext;
+    private ApplicationContext applicationContext;
 
     private PictureService getSelf() {
         return applicationContext.getBean(PictureService.class);
@@ -144,7 +156,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         User userLogin = UserHolder.getUser();
         ExcUtils.throwIfTrue(ObjUtil.isEmpty(userLogin), ExceptionCode.NOT_LOGIN);
         // 只有自己或管理员可以修改头像
-        hk.ljx.fishpicsbackend.common.context.LoginContext ctx = UserHolder.getLoginContext();
+        LoginContext ctx = UserHolder.getLoginContext();
         ExcUtils.throwIfTrue(!userLogin.getId().equals(id) && (ctx == null || !ctx.hasSystemPerm("system:user:manage")), "没有权限");
         // 文件类型校验（防止上传恶意文件作为头像）
         ExcUtils.throwIfTrue(FileTypeUtils.getValidFileType(file) == null, ExceptionCode.PARAMETER_ERROR, "不支持的文件类型");
@@ -211,108 +223,15 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         String validFileType = FileTypeUtils.getValidFileType(file);
         ExcUtils.throwIfTrue(validFileType == null, "上传文件格式不正确");
 
-        // ---- file_resource 去重 ----
+        // 计算 MD5
         String md5;
         try (InputStream is = file.getInputStream()) {
             md5 = cn.hutool.crypto.digest.DigestUtil.md5Hex(is);
         } catch (IOException e) {
             throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "计算文件MD5失败");
         }
-        long fileSize = file.getSize();
-        FileResource existingResource = fileResourceService.findByMd5AndSize(md5, fileSize);
 
-        PictureMessage pictureMessage;
-        FileResource resource;
-        String cosKey = null;
-        boolean isNewUpload = (existingResource == null);
-        if (existingResource != null) {
-            // 秒传：file_resource 已存在，直接复用，ref_count + 1
-            resource = fileResourceService.addResource(md5, fileSize, existingResource.getCosKey());
-            pictureMessage = cosService.getPictureMessage(existingResource.getCosKey());
-        } else {
-            // 新文件：上传 COS → 写 file_resource
-            cosKey = cosService.uploadPicture(file);
-            pictureMessage = cosService.getPictureMessage(cosKey);
-            resource = fileResourceService.addResource(md5, fileSize, cosKey);
-        }
-
-        Picture picture = new Picture();
-        BeanUtil.copyProperties(pictureMessage, picture);
-        picture.setUserId(userId);
-        picture.setResourceId(resource.getId());
-        // BeanUtil 可能无法将 String size 转为 Long，手动转换兜底
-        if (picture.getSize() == null && pictureMessage.getSize() != null) {
-            try {
-                picture.setSize(Long.parseLong(pictureMessage.getSize()));
-            } catch (NumberFormatException e) {
-                log.warn("图片大小解析失败: {}", pictureMessage.getSize());
-            }
-        }
-        ExcUtils.throwIfTrue(picture.getSize() == null, ExceptionCode.INTERNAL_SERVER_ERROR, "获取图片大小失败");
-
-        long size = picture.getSize();
-        Space space;
-        if (targetSpaceId != null) {
-            space = spaceService.getById(targetSpaceId);
-            ExcUtils.throwIfTrue(space == null, "目标空间不存在");
-        } else {
-            List<hk.ljx.fishpicsbackend.space.vo.SpaceVO> spaceList = spaceService.listSpace(0);
-            ExcUtils.throwIfTrue(spaceList == null || spaceList.isEmpty(), "私人空间不存在，请联系管理员");
-            space = spaceService.getById(spaceList.get(0).getId());
-        }
-        // 校验空间写权限
-        checkSpaceWritePermission(space, userId);
-
-        if (!atomicUpdateSpaceSize(space, size, true)) {
-            // 配额不足：如果是新上传的 COS 文件，需要清理（与 savePictureByUrl 逻辑一致）
-            if (isNewUpload && cosKey != null) {
-                try { cosService.deletePicture(cosKey); } catch (Exception ex) { log.warn("COS 回滚失败: {}", cosKey, ex); }
-            }
-            // 配额不足时,addResource 已 ref_count+1 需回滚
-            // (秒传场景下:ref_count 增但没 picture 引用,COS 永不清理)
-            if (resource != null) {
-                try {
-                    fileResourceService.decrementRefCount(resource.getId());
-                } catch (Exception ex) {
-                    log.warn("ref_count 回滚失败(可能 ref_count=0 已触发 COS 删,幂等可接受): resourceId={}", resource.getId(), ex);
-                }
-            }
-            throw new BaseException(ExceptionCode.PARAMETER_ERROR, "空间容量不足");
-        }
-        picture.setSpaceId(space.getId());
-        // 上传到空间直接通过，无需审核
-        picture.setStatus(1);
-        try {
-            ExcUtils.throwIfTrue(pictureMapper.insert(picture) != 1, "上传失败，数据库错误");
-        } catch (org.springframework.dao.DuplicateKeyException e) {
-            // 唯一索引兜底：查重没挡住（并发），回滚后返回已有
-            if (isNewUpload && cosKey != null) {
-                try { cosService.deletePicture(cosKey); } catch (Exception ex) { log.warn("COS 回滚失败: {}", cosKey, ex); }
-            }
-            try { atomicUpdateSpaceSize(space, -size, false); } catch (Exception ex) { log.warn("空间配额回滚失败: space={}, size={}", space.getId(), size, ex); }
-            if (resource != null) {
-                try { fileResourceService.decrementRefCount(resource.getId()); } catch (Exception ex) { log.warn("ref_count 回滚失败: resourceId={}", resource.getId(), ex); }
-            }
-            Picture existing = pictureMapper.selectOne(new LambdaQueryWrapper<Picture>()
-                    .eq(Picture::getResourceId, resource != null ? resource.getId() : 0)
-                    .eq(Picture::getUserId, userId)
-                    .eq(Picture::getSpaceId, space.getId())
-                    .last("LIMIT 1"));
-            if (existing != null) return existing;
-            throw new BaseException(ExceptionCode.PARAMETER_ERROR, "图片已存在");
-        } catch (Exception e) {
-            // DB insert 失败时，回滚 COS 和空间配额
-            if (isNewUpload && cosKey != null) {
-                try { cosService.deletePicture(cosKey); } catch (Exception ex) { log.warn("COS 回滚失败: {}", cosKey, ex); }
-            }
-            try { atomicUpdateSpaceSize(space, -size, false); } catch (Exception ex) { log.warn("空间配额回滚失败: space={}, size={}", space.getId(), size, ex); }
-            // 回滚引用计数(与 savePictureByUrl 逻辑一致)
-            if (resource != null) {
-                try { fileResourceService.decrementRefCount(resource.getId()); } catch (Exception ex) { log.warn("ref_count 回滚失败: resourceId={}", resource.getId(), ex); }
-            }
-            throw e;
-        }
-        return picture;
+        return doProcessUpload(() -> cosService.uploadPicture(file), file.getSize(), md5, userId, targetSpaceId);
     }
 
     /**
@@ -342,141 +261,132 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "读取临时文件失败");
             }
 
-            // 3. 计算 MD5，检查 file_resource 去重
+            // 3. 计算 MD5
             String md5 = cn.hutool.crypto.digest.DigestUtil.md5Hex(tempFile);
             long fileSize = tempFile.length();
-            FileResource existingResource = fileResourceService.findByMd5AndSize(md5, fileSize);
 
-            PictureMessage pictureMessage;
-            FileResource resource;
-            String key;
-            boolean isNewUpload;
-            if (existingResource != null) {
-                // 秒传：file_resource 已存在
-                resource = fileResourceService.addResource(md5, fileSize, existingResource.getCosKey());
-                pictureMessage = cosService.getPictureMessage(existingResource.getCosKey());
-                key = existingResource.getCosKey();
-                isNewUpload = false;
-            } else {
-                // 新文件：上传 COS
-                try (FileInputStream fis = new FileInputStream(tempFile)) {
-                    key = cosService.uploadPicture(fis, tempFile.length());
+            // 4. 走公共上传流程（内部处理去重/配额/写库）
+            return doProcessUpload(() -> {
+                try (FileInputStream fis2 = new FileInputStream(tempFile)) {
+                    return cosService.uploadPicture(fis2, tempFile.length());
                 } catch (IOException e) {
                     throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "读取临时文件失败");
                 }
-                pictureMessage = cosService.getPictureMessage(key);
-                resource = fileResourceService.addResource(md5, fileSize, key);
-                isNewUpload = true;
-            }
-
-            // 4. 获取 COS 图片信息
-            Picture picture = new Picture();
-            BeanUtil.copyProperties(pictureMessage, picture);
-            picture.setUserId(userId);
-            picture.setResourceId(resource.getId());
-            if (picture.getSize() == null && pictureMessage.getSize() != null) {
-                try {
-                    picture.setSize(Long.parseLong(pictureMessage.getSize()));
-                } catch (NumberFormatException e) {
-                    log.warn("图片大小解析失败: {}", pictureMessage.getSize());
-                }
-            }
-            ExcUtils.throwIfTrue(picture.getSize() == null, ExceptionCode.INTERNAL_SERVER_ERROR, "获取图片大小失败");
-
-            long size = picture.getSize();
-            Space space;
-            if (targetSpaceId != null) {
-                space = spaceService.getById(targetSpaceId);
-                ExcUtils.throwIfTrue(space == null, "目标空间不存在");
-            } else {
-                List<hk.ljx.fishpicsbackend.space.vo.SpaceVO> spaceList = spaceService.listSpace(0);
-                ExcUtils.throwIfTrue(spaceList == null || spaceList.isEmpty(), "私人空间不存在，请联系管理员");
-                space = spaceService.getById(spaceList.get(0).getId());
-            }
-            // 校验空间写权限
-            checkSpaceWritePermission(space, userId);
-
-            // 同一用户在同一个空间已经存过同一张图 → 直接返回已有的图片
-            if (resource != null) {
-                Long existingCount = pictureMapper.selectCount(new LambdaQueryWrapper<Picture>()
-                        .eq(Picture::getResourceId, resource.getId())
-                        .eq(Picture::getUserId, userId)
-                        .eq(Picture::getSpaceId, space.getId()));
-                if (existingCount > 0) {
-                    Picture existingPic = pictureMapper.selectOne(new LambdaQueryWrapper<Picture>()
-                            .eq(Picture::getResourceId, resource.getId())
-                            .eq(Picture::getUserId, userId)
-                            .eq(Picture::getSpaceId, space.getId())
-                            .last("LIMIT 1"));
-                    // 回滚 addResource 增加的 ref_count，因为没创建新图片
-                    fileResourceService.decrementRefCount(resource.getId());
-                    return existingPic;
-                }
-            }
-
-            // 5. 空间配额检查（使用原子操作防止竞态条件）
-            if (!atomicUpdateSpaceSize(space, size, true)) {
-                // 仅删除新上传的 COS 文件；去重资源的 COS 文件仍被其他图片引用，不可删除
-                if (isNewUpload) {
-                    try { cosService.deletePicture(key); } catch (Exception ex) { log.warn("COS 回滚失败: {}", key, ex); }
-                }
-                // 配额不足时,addResource 已 ref_count+1 需回滚
-                if (resource != null) {
-                    try {
-                        fileResourceService.decrementRefCount(resource.getId());
-                    } catch (Exception ex) {
-                        log.warn("savePictureByUrl ref_count 回滚失败(配额不足): resourceId={}", resource.getId(), ex);
-                    }
-                }
-                throw new BaseException(ExceptionCode.PARAMETER_ERROR, "空间容量不足");
-            }
-            picture.setSpaceId(space.getId());
-
-            // 上传到空间直接通过，无需审核
-            picture.setStatus(1);
-            try {
-                ExcUtils.throwIfTrue(pictureMapper.insert(picture) != 1, "上传失败，数据库错误");
-            } catch (org.springframework.dao.DuplicateKeyException e) {
-                // 唯一索引 uk_resource_user_space 兜底：
-                // 查重在前面没挡住（并发 TOCTOU），回滚后返回已有图片
-                atomicUpdateSpaceSize(space, -size, false);
-                if (isNewUpload) {
-                    try { cosService.deletePicture(key); } catch (Exception ex) { log.warn("COS 回滚失败: {}", key, ex); }
-                }
-                if (resource != null) {
-                    try { fileResourceService.decrementRefCount(resource.getId()); } catch (Exception ex) { log.warn("ref_count 回滚失败: resourceId={}", resource.getId(), ex); }
-                }
-                Picture existing = pictureMapper.selectOne(new LambdaQueryWrapper<Picture>()
-                        .eq(Picture::getResourceId, resource != null ? resource.getId() : 0)
-                        .eq(Picture::getUserId, userId)
-                        .eq(Picture::getSpaceId, space.getId())
-                        .last("LIMIT 1"));
-                if (existing != null) return existing;
-                throw new BaseException(ExceptionCode.PARAMETER_ERROR, "图片已存在");
-            } catch (Exception e) {
-                // DB 失败：回滚空间配额和 COS 文件
-                atomicUpdateSpaceSize(space, -size, false);
-                if (isNewUpload) {
-                    try { cosService.deletePicture(key); } catch (Exception ex) { log.warn("COS 回滚失败: {}", key, ex); }
-                }
-                // 秒传场景 addResource 已 ref_count+1，picture 插失败时也要 decrement
-                // 之前只有 COS 上传场景走 isNewUpload,秒传(ref 复用)时 ref_count 永远 +1 不会回滚,
-                // 导致 file_resource 引用计数虚增,COS 文件永远不清理
-                if (resource != null) {
-                    try {
-                        fileResourceService.decrementRefCount(resource.getId());
-                    } catch (Exception ex) {
-                        log.warn("savePictureByUrl ref_count 回滚失败(非阻塞): resourceId={}", resource.getId(), ex);
-                    }
-                }
-                throw e;
-            }
-            return picture;
+            }, fileSize, md5, userId, targetSpaceId);
 
         } finally {
-            // 6. 清理临时文件
+            // 5. 清理临时文件
             FileUtil.del(tempFile);
         }
+    }
+
+    /**
+     * 上传图片公共流程：file_resource 去重 → COS 上传 → 空间配额 → 写库
+     * uploadPicture 和 savePictureByUrl 共用此方法，仅 COS 上传步骤不同
+     *
+     * @param cosUploader COS 上传动作（延迟执行，仅新文件时调用）
+     */
+    private Picture doProcessUpload(java.util.function.Supplier<String> cosUploader, long fileSize, String md5,
+                                     Long userId, Long targetSpaceId) {
+        // ---- file_resource 去重 ----
+        FileResource existingResource = fileResourceService.findByMd5AndSize(md5, fileSize);
+
+        PictureMessage pictureMessage;
+        FileResource resource;
+        String cosKey = null;
+        boolean isNewUpload = (existingResource == null);
+        if (existingResource != null) {
+            // 秒传：file_resource 已存在，直接复用，ref_count + 1
+            resource = fileResourceService.addResource(md5, fileSize, existingResource.getCosKey());
+            pictureMessage = cosService.getPictureMessage(existingResource.getCosKey());
+        } else {
+            // 新文件：上传 COS → 写 file_resource
+            cosKey = cosUploader.get();
+            pictureMessage = cosService.getPictureMessage(cosKey);
+            resource = fileResourceService.addResource(md5, fileSize, cosKey);
+        }
+
+        Picture picture = new Picture();
+        BeanUtil.copyProperties(pictureMessage, picture);
+        picture.setUserId(userId);
+        picture.setResourceId(resource.getId());
+        // BeanUtil 可能无法将 String size 转为 Long，手动转换兜底
+        if (picture.getSize() == null && pictureMessage.getSize() != null) {
+            try {
+                picture.setSize(Long.parseLong(pictureMessage.getSize()));
+            } catch (NumberFormatException e) {
+                log.warn("图片大小解析失败: {}", pictureMessage.getSize());
+            }
+        }
+        ExcUtils.throwIfTrue(picture.getSize() == null, ExceptionCode.INTERNAL_SERVER_ERROR, "获取图片大小失败");
+
+        long size = picture.getSize();
+        Space space;
+        if (targetSpaceId != null) {
+            space = spaceService.getById(targetSpaceId);
+            ExcUtils.throwIfTrue(space == null, "目标空间不存在");
+        } else {
+            List<SpaceVO> spaceList = spaceService.listSpace(0);
+            ExcUtils.throwIfTrue(spaceList == null || spaceList.isEmpty(), "私人空间不存在，请联系管理员");
+            space = spaceService.getById(spaceList.get(0).getId());
+        }
+        // 校验空间写权限
+        checkSpaceWritePermission(space, userId);
+
+        // savePictureByUrl 专有：同一用户在同一空间已有同一张图 → 直接返回
+        if (existingResource != null) {
+            Picture existingPic = pictureMapper.selectOne(new LambdaQueryWrapper<Picture>()
+                    .eq(Picture::getResourceId, resource.getId())
+                    .eq(Picture::getUserId, userId)
+                    .eq(Picture::getSpaceId, space.getId())
+                    .last("LIMIT 1"));
+            if (existingPic != null) {
+                fileResourceService.decrementRefCount(resource.getId());
+                return existingPic;
+            }
+        }
+
+        // 空间配额检查（原子操作防竞态）
+        if (!atomicUpdateSpaceSize(space, size, true)) {
+            if (isNewUpload && cosKey != null) {
+                try { cosService.deletePicture(cosKey); } catch (Exception ex) { log.warn("COS 回滚失败: {}", cosKey, ex); }
+            }
+            if (resource != null) {
+                try { fileResourceService.decrementRefCount(resource.getId()); } catch (Exception ex) { log.warn("ref_count 回滚失败: resourceId={}", resource.getId(), ex); }
+            }
+            throw new BaseException(ExceptionCode.PARAMETER_ERROR, "空间容量不足");
+        }
+        picture.setSpaceId(space.getId());
+        picture.setStatus(1); // 上传到空间直接通过，无需审核
+        try {
+            ExcUtils.throwIfTrue(pictureMapper.insert(picture) != 1, "上传失败，数据库错误");
+        } catch (org.springframework.dao.DuplicateKeyException e) {
+            // 唯一索引兜底：并发 TOCTOU，回滚后返回已有
+            if (isNewUpload && cosKey != null) {
+                try { cosService.deletePicture(cosKey); } catch (Exception ex) { log.warn("COS 回滚失败: {}", cosKey, ex); }
+            }
+            try { atomicUpdateSpaceSize(space, -size, false); } catch (Exception ex) { log.warn("空间配额回滚失败: space={}, size={}", space.getId(), size, ex); }
+            if (resource != null) {
+                try { fileResourceService.decrementRefCount(resource.getId()); } catch (Exception ex) { log.warn("ref_count 回滚失败: resourceId={}", resource.getId(), ex); }
+            }
+            Picture existing = pictureMapper.selectOne(new LambdaQueryWrapper<Picture>()
+                    .eq(Picture::getResourceId, resource.getId())
+                    .eq(Picture::getUserId, userId)
+                    .eq(Picture::getSpaceId, space.getId())
+                    .last("LIMIT 1"));
+            if (existing != null) return existing;
+            throw new BaseException(ExceptionCode.PARAMETER_ERROR, "图片已存在");
+        } catch (Exception e) {
+            if (isNewUpload && cosKey != null) {
+                try { cosService.deletePicture(cosKey); } catch (Exception ex) { log.warn("COS 回滚失败: {}", cosKey, ex); }
+            }
+            try { atomicUpdateSpaceSize(space, -size, false); } catch (Exception ex) { log.warn("空间配额回滚失败: space={}, size={}", space.getId(), size, ex); }
+            if (resource != null) {
+                try { fileResourceService.decrementRefCount(resource.getId()); } catch (Exception ex) { log.warn("ref_count 回滚失败: resourceId={}", resource.getId(), ex); }
+            }
+            throw e;
+        }
+        return picture;
     }
 
     @Override
@@ -492,11 +402,11 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         if (StrUtil.isNotBlank(pictureQueryRequest.getTag())
                 && !"热门".equals(pictureQueryRequest.getTag())) {
             List<Long> pictureIdsWithTag = pictureTagMapper.selectList(
-                    new LambdaQueryWrapper<hk.ljx.fishpicsbackend.picture.entity.PictureTag>()
-                            .like(hk.ljx.fishpicsbackend.picture.entity.PictureTag::getTagName, pictureQueryRequest.getTag())
-                            .select(hk.ljx.fishpicsbackend.picture.entity.PictureTag::getPictureId))
+                    new LambdaQueryWrapper<PictureTag>()
+                            .like(PictureTag::getTagName, pictureQueryRequest.getTag())
+                            .select(PictureTag::getPictureId))
                     .stream()
-                    .map(hk.ljx.fishpicsbackend.picture.entity.PictureTag::getPictureId)
+                    .map(PictureTag::getPictureId)
                     .distinct()
                     .collect(Collectors.toList());
             if (pictureIdsWithTag.isEmpty()) {
@@ -591,7 +501,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         ExcUtils.throwIfTrue(CollUtil.isEmpty(pictureList), "图片不存在");
 
         // 按权限过滤出可删的子集
-        List<Long> deletableIds = hk.ljx.fishpicsbackend.picture.service.PicturePermissionUtil
+        List<Long> deletableIds = PicturePermissionUtil
                 .filterDeletableIds(pictureList, ids, spaceTeamMemberMapper);
         if (deletableIds.isEmpty()) {
                 // 已登录但无权删别人图 → FORBIDDEN
@@ -608,8 +518,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
         // 级联清理 picture_share 记录
         try {
-            int shareDelCount = pictureShareMapper.delete(new LambdaQueryWrapper<hk.ljx.fishpicsbackend.picture.entity.PictureShare>()
-                    .in(hk.ljx.fishpicsbackend.picture.entity.PictureShare::getPictureId, deletableIds));
+            int shareDelCount = pictureShareMapper.delete(new LambdaQueryWrapper<PictureShare>()
+                    .in(PictureShare::getPictureId, deletableIds));
             if (shareDelCount > 0) {
                 log.info("级联删除 picture_share: count={}", shareDelCount);
             }
@@ -619,8 +529,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
         // 级联清理 picture_tag 记录
         try {
-            int tagDelCount = pictureTagMapper.delete(new LambdaQueryWrapper<hk.ljx.fishpicsbackend.picture.entity.PictureTag>()
-                    .in(hk.ljx.fishpicsbackend.picture.entity.PictureTag::getPictureId, deletableIds));
+            int tagDelCount = pictureTagMapper.delete(new LambdaQueryWrapper<PictureTag>()
+                    .in(PictureTag::getPictureId, deletableIds));
             if (tagDelCount > 0) {
                 log.info("级联删除 picture_tag: count={}", tagDelCount);
             }
@@ -688,8 +598,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         Picture picture = pictureMapper.selectById(id);
         ExcUtils.throwIfTrue(picture == null || picture.getUserId() == null, ExceptionCode.NOT_FOUND, "图片不存在");
         // 统一走 PicturePermissionUtil
-        hk.ljx.fishpicsbackend.picture.service.PicturePermissionUtil.checkWrite(
-                picture, hk.ljx.fishpicsbackend.picture.service.PicturePermissionUtil.Op.EDIT_META,
+        PicturePermissionUtil.checkWrite(
+                picture, PicturePermissionUtil.Op.EDIT_META,
                 spaceTeamMemberMapper);
 
         // updatePicture 不允许改 url（URL 变更走 replace 接口）
@@ -699,8 +609,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         if (isSelected != null) {
             // 用户申请精选 → isSelected=2（待审核）
             // 只有图片所属空间的管理员或创建者可以申请精选
-            hk.ljx.fishpicsbackend.picture.service.PicturePermissionUtil.checkWrite(
-                    picture, hk.ljx.fishpicsbackend.picture.service.PicturePermissionUtil.Op.EDIT_META,
+            PicturePermissionUtil.checkWrite(
+                    picture, PicturePermissionUtil.Op.EDIT_META,
                     spaceTeamMemberMapper);
             if (isSelected == 1) {
                 ExcUtils.throwIfTrue(picture.getIsSelected() != null && picture.getIsSelected() == 1,
@@ -719,13 +629,13 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
         // pictureName / introduction 入库前清 HTML 标签
         if (ObjUtil.isNotEmpty(pictureName)) {
-            String cleanName = hk.ljx.fishpicsbackend.common.utils.XssSanitizer.clean(pictureName);
+            String cleanName = XssSanitizer.clean(pictureName);
             // 清洗后校验长度
             ExcUtils.throwIfTrue(cleanName.length() > 100, ExceptionCode.PARAMETER_ERROR, "图片名称过长(最多 100 字符)");
             picture.setPictureName(cleanName);
         }
         if (ObjUtil.isNotEmpty(introduction)) {
-            String cleanIntro = hk.ljx.fishpicsbackend.common.utils.XssSanitizer.cleanRelaxed(introduction);
+            String cleanIntro = XssSanitizer.cleanRelaxed(introduction);
             ExcUtils.throwIfTrue(cleanIntro.length() > 500, ExceptionCode.PARAMETER_ERROR, "图片描述过长(最多 500 字符)");
             picture.setIntroduction(cleanIntro);
         }
@@ -736,7 +646,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             Set<String> typeSet = new java.util.HashSet<>(typeList);
             // tags 也清理一遍
             List<String> safeTags = tags.stream()
-                    .map(hk.ljx.fishpicsbackend.common.utils.XssSanitizer::clean)
+                    .map(XssSanitizer::clean)
                     .filter(StrUtil::isNotBlank)
                     .collect(Collectors.toList());
             boolean result = safeTags.stream().anyMatch(tag -> !typeSet.contains(tag));
@@ -777,7 +687,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     @Transactional(rollbackFor = Exception.class)
     public PictureVO doReplacePictureFile(Long pictureId, MultipartFile file) {
         // 文件类型校验（与 uploadPicture 等一致）
-        ExcUtils.throwIfTrue(hk.ljx.fishpicsbackend.common.utils.FileTypeUtils.getValidFileType(file) == null,
+        ExcUtils.throwIfTrue(FileTypeUtils.getValidFileType(file) == null,
                 ExceptionCode.PARAMETER_ERROR, "不支持的文件类型");
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(user == null || user.getId() == null, ExceptionCode.UNAUTHORIZED, "用户未登录");
@@ -788,7 +698,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         // 拒绝编辑处于禁用/待审核状态的图片
         if (picture.getStatus() != null && !Integer.valueOf(1).equals(picture.getStatus())) {
             // 管理员可以强制替换
-            hk.ljx.fishpicsbackend.common.context.LoginContext ctxForStatus = UserHolder.getLoginContext();
+            LoginContext ctxForStatus = UserHolder.getLoginContext();
             boolean isAdminForStatus = ctxForStatus != null && ctxForStatus.hasSystemPerm("system:user:manage");
             if (!isAdminForStatus) {
                 throw new BaseException(ExceptionCode.FORBIDDEN, "图片当前状态不可编辑");
@@ -796,14 +706,14 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         }
 
         // 权限：图片所有者 / 管理员 / 团队成员
-        hk.ljx.fishpicsbackend.common.context.LoginContext ctx = UserHolder.getLoginContext();
+        LoginContext ctx = UserHolder.getLoginContext();
         boolean isOwner = picture.getUserId().equals(user.getId());
         boolean isAdmin = ctx != null && ctx.hasSystemPerm("system:user:manage");
         boolean isTeamMember = !isOwner && !isAdmin && spaceTeamMemberMapper.selectCount(
-                new LambdaQueryWrapper<hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember>()
-                        .eq(hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember::getSpaceId, picture.getSpaceId())
-                        .eq(hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember::getUserId, user.getId())
-                        .in(hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember::getRoleId, List.of(1, 2))
+                new LambdaQueryWrapper<SpaceTeamMember>()
+                        .eq(SpaceTeamMember::getSpaceId, picture.getSpaceId())
+                        .eq(SpaceTeamMember::getUserId, user.getId())
+                        .in(SpaceTeamMember::getRoleId, List.of(1, 2))
         ) > 0;
         ExcUtils.throwIfFalse(isOwner || isAdmin || isTeamMember,
                 // 已认证但不是 owner/team member → FORBIDDEN
@@ -958,8 +868,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         Picture picture = pictureMapper.selectById(id);
         ExcUtils.throwIfTrue(picture == null || picture.getUserId() == null, ExceptionCode.NOT_FOUND, "图片不存在");
         // 图片所有者、管理员、团队成员均可查看编辑信息（与 updatePicture 权限一致）
-        hk.ljx.fishpicsbackend.picture.service.PicturePermissionUtil.checkWrite(
-                picture, hk.ljx.fishpicsbackend.picture.service.PicturePermissionUtil.Op.EDIT_META,
+        PicturePermissionUtil.checkWrite(
+                picture, PicturePermissionUtil.Op.EDIT_META,
                 spaceTeamMemberMapper);
 
         List<String> tagList = loadTagsForPicture(picture.getId());
@@ -988,30 +898,30 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
     private List<String> loadTagsForPicture(Long pictureId) {
         return pictureTagMapper.selectList(
-                new LambdaQueryWrapper<hk.ljx.fishpicsbackend.picture.entity.PictureTag>()
-                        .eq(hk.ljx.fishpicsbackend.picture.entity.PictureTag::getPictureId, pictureId))
+                new LambdaQueryWrapper<PictureTag>()
+                        .eq(PictureTag::getPictureId, pictureId))
                 .stream()
-                .map(hk.ljx.fishpicsbackend.picture.entity.PictureTag::getTagName)
+                .map(PictureTag::getTagName)
                 .collect(Collectors.toList());
     }
 
     private Map<Long, List<String>> batchLoadTags(List<Long> pictureIds) {
         if (pictureIds == null || pictureIds.isEmpty()) return Collections.emptyMap();
         return pictureTagMapper.selectList(
-                new LambdaQueryWrapper<hk.ljx.fishpicsbackend.picture.entity.PictureTag>()
-                        .in(hk.ljx.fishpicsbackend.picture.entity.PictureTag::getPictureId, pictureIds))
+                new LambdaQueryWrapper<PictureTag>()
+                        .in(PictureTag::getPictureId, pictureIds))
                 .stream()
                 .collect(Collectors.groupingBy(
-                        hk.ljx.fishpicsbackend.picture.entity.PictureTag::getPictureId,
-                        Collectors.mapping(hk.ljx.fishpicsbackend.picture.entity.PictureTag::getTagName, Collectors.toList())));
+                        PictureTag::getPictureId,
+                        Collectors.mapping(PictureTag::getTagName, Collectors.toList())));
     }
 
     private void replacePictureTags(Long pictureId, List<String> newTags) {
         pictureTagMapper.delete(
-                new LambdaQueryWrapper<hk.ljx.fishpicsbackend.picture.entity.PictureTag>()
-                        .eq(hk.ljx.fishpicsbackend.picture.entity.PictureTag::getPictureId, pictureId));
+                new LambdaQueryWrapper<PictureTag>()
+                        .eq(PictureTag::getPictureId, pictureId));
         for (String tag : newTags) {
-            hk.ljx.fishpicsbackend.picture.entity.PictureTag pt = new hk.ljx.fishpicsbackend.picture.entity.PictureTag();
+            PictureTag pt = new PictureTag();
             pt.setPictureId(pictureId);
             pt.setTagName(tag);
             pictureTagMapper.insert(pt);
@@ -1332,7 +1242,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         picture.setSpaceId(space.getId());
         picture.setResourceId(resource.getId());
 
-        hk.ljx.fishpicsbackend.common.context.LoginContext ctx = UserHolder.getLoginContext();
+        LoginContext ctx = UserHolder.getLoginContext();
         if (ctx != null && ctx.hasSystemPerm("system:user:manage")) {
             picture.setStatus(1);
         } else {
@@ -1459,7 +1369,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             validateSpaceActive(space);
             return space;
         }
-        List<hk.ljx.fishpicsbackend.space.vo.SpaceVO> spaceList = spaceService.listSpace(0);
+        List<SpaceVO> spaceList = spaceService.listSpace(0);
         ExcUtils.throwIfTrue(spaceList == null || spaceList.isEmpty(), "私人空间不存在，请联系管理员");
         Space space = spaceService.getById(spaceList.get(0).getId());
         ExcUtils.throwIfTrue(space == null, "私人空间不存在");
@@ -1478,7 +1388,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             return;
         }
         // 管理员直接通过（role == 1）
-        hk.ljx.fishpicsbackend.common.context.LoginContext ctx = UserHolder.getLoginContext();
+        LoginContext ctx = UserHolder.getLoginContext();
         if (ctx != null && ctx.isAdmin()) {
             return;
         }
@@ -1490,10 +1400,10 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             throw new BaseException(ExceptionCode.FORBIDDEN, "无权访问该私人空间");
         }
         Long memberCount = spaceTeamMemberMapper.selectCount(
-                new LambdaQueryWrapper<hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember>()
-                        .eq(hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember::getSpaceId, space.getId())
-                        .eq(hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember::getUserId, userId)
-                        .in(hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember::getRoleId, List.of(1, 2))
+                new LambdaQueryWrapper<SpaceTeamMember>()
+                        .eq(SpaceTeamMember::getSpaceId, space.getId())
+                        .eq(SpaceTeamMember::getUserId, userId)
+                        .in(SpaceTeamMember::getRoleId, List.of(1, 2))
         );
         // 已认证但非团队成员 → FORBIDDEN
         ExcUtils.throwIfTrue(memberCount == null || memberCount <= 0, ExceptionCode.FORBIDDEN, "无权写入该团队空间");
@@ -1553,13 +1463,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
      * 格式化文件大小为可读字符串
      */
     private String formatSize(long bytes) {
-        if (bytes >= 1073741824L) {
-            return (bytes / 1073741824L) + "GB";
-        } else if (bytes >= 1048576L) {
-            return (bytes / 1048576L) + "MB";
-        } else {
-            return (bytes / 1024L) + "KB";
-        }
+        return cn.hutool.core.io.FileUtil.readableFileSize(bytes);
     }
 
     private void bindUploadOwner(String md5, Long userId) {

@@ -1,19 +1,12 @@
 package hk.ljx.fishpicsbackend.ai.dto;
 
+import hk.ljx.fishpicsbackend.common.dto.PageRequest;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 
 @Data
-public class AiTaskQueryDTO {
-
-    /**
-     * 当前页码，默认1
-     */
-    private Integer current = 1;
-
-    /**
-     * 每页条数，默认20
-     */
-    private Integer pageSize = 20;
+@EqualsAndHashCode(callSuper = true)
+public class AiTaskQueryDTO extends PageRequest {
 
     /**
      * 任务类型: 0=自动标注, 2=图片生成，不传则查全部

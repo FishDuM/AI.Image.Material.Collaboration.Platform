@@ -8,6 +8,7 @@ import cn.hutool.core.util.ObjUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.common.annotation.AuditLog;
 import hk.ljx.fishpicsbackend.common.annotation.RequireAdmin;
+import hk.ljx.fishpicsbackend.common.annotation.RequireLogin;
 import hk.ljx.fishpicsbackend.common.dto.PageRequest;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.user.entity.User;
@@ -39,12 +40,12 @@ public class PictureController {
     @Resource
     private AiService aiService;
 
+    @RequireLogin
     @PostMapping("/avatar")
     @AuditLog(module = "用户管理", operation = "修改头像")
     public Response<String> uploadAvatar(@RequestParam("file") MultipartFile file,
             @RequestParam(value = "id", required = false) Long targetUserId) {
         User currentUser = UserHolder.getUser();
-        ExcUtils.throwIfTrue(currentUser == null, ExceptionCode.NOT_LOGIN);
         ExcUtils.throwIfTrue(file.isEmpty(), "文件不能为空");
         ExcUtils.throwIfTrue(file.getSize() > 1024 * 1024 * 5, "文件大小不能超过5MB");
         Long actualTargetUserId = targetUserId != null ? targetUserId : currentUser.getId();
@@ -84,13 +85,10 @@ public class PictureController {
         return Response.ok(pictureService.getPictureList(pictureQueryRequest));
     }
 
-    /**
-     * 获取推荐图片列表（基于用户兴趣画像）
-     */
+    @RequireLogin
     @PostMapping("/recommend")
     public Response<IPage<PictureVO>> getRecommendPictures(@Valid @RequestBody PageRequest pageRequest) {
         User loginUser = UserHolder.getUser();
-        ExcUtils.throwIfTrue(loginUser == null, ExceptionCode.NOT_LOGIN, "请先登录");
         if (!aiService.isFeatureEnabled("recommendationEnabled")) {
             // 开关关闭：返回空分页
             return Response.ok(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(

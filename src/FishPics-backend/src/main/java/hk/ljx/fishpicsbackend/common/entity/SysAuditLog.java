@@ -53,6 +53,5 @@ public class SysAuditLog {
     @TableLogic
     private Integer isDelete = 0;
 
-    @TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }

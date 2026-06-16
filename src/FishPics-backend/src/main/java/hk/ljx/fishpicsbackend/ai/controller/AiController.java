@@ -23,7 +23,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -53,19 +52,13 @@ public class AiController {
         ExcUtils.throwIfTrue(!aiService.isFeatureEnabled("taggingEnabled"),
                 ExceptionCode.FORBIDDEN, "AI 标签功能已关闭");
         String taskId = aiService.submitTagTask(request.getId());
-        AiTaskSubmitVO vo = new AiTaskSubmitVO();
-        vo.setTaskId(taskId);
-        vo.setStatus("PENDING");
-        return Response.ok(vo);
+        return Response.ok(AiTaskSubmitVO.of(taskId));
     }
 
     @GetMapping("/tags/result/{taskId}")
     public Response<Task> getTagResult(@PathVariable String taskId) {
         Task task = aiService.getTagResult(taskId);
-        ExcUtils.throwIfTrue(task == null, ExceptionCode.NOT_FOUND, "任务不存在");
-        User user = UserHolder.getUser();
-        ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_LOGIN);
-        ExcUtils.throwIfTrue(!user.getId().equals(task.getUserId()), ExceptionCode.UNAUTHORIZED);
+        resolveTaskOwnership(task);
         return Response.ok(task);
     }
 
@@ -77,19 +70,13 @@ public class AiController {
         User user = UserHolder.getUser();
         ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_LOGIN);
         String taskId = aiService.submitDrawTask(drawPictureDTO, user.getId());
-        AiTaskSubmitVO vo = new AiTaskSubmitVO();
-        vo.setTaskId(taskId);
-        vo.setStatus("PENDING");
-        return Response.ok(vo);
+        return Response.ok(AiTaskSubmitVO.of(taskId));
     }
 
     @GetMapping("/draw/result/{taskId}")
     public Response<Task> getDrawResult(@PathVariable String taskId) {
         Task task = aiService.getDrawResult(taskId);
-        ExcUtils.throwIfTrue(task == null, ExceptionCode.NOT_FOUND, "任务不存在");
-        User user = UserHolder.getUser();
-        ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_LOGIN);
-        ExcUtils.throwIfTrue(!user.getId().equals(task.getUserId()), ExceptionCode.UNAUTHORIZED);
+        resolveTaskOwnership(task);
         return Response.ok(task);
     }
 
@@ -99,10 +86,7 @@ public class AiController {
     @GetMapping("/result-sse/{taskId}")
     public SseEmitter subscribeResult(@PathVariable String taskId) {
         Task task = aiService.getTaskByTaskId(taskId);
-        ExcUtils.throwIfTrue(task == null, ExceptionCode.NOT_FOUND, "任务不存在");
-        User user = UserHolder.getUser();
-        ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_LOGIN);
-        ExcUtils.throwIfTrue(!user.getId().equals(task.getUserId()), ExceptionCode.UNAUTHORIZED);
+        resolveTaskOwnership(task);
 
         // 任务已完成，直接返回
         if ("DONE".equals(task.getStatus())) {
@@ -138,10 +122,10 @@ public class AiController {
     public void downloadImage(@PathVariable String taskId, HttpServletResponse response) throws Exception {
         try (DownloadUtils.RemoteFileStream remoteFile =
                      DownloadUtils.openRemoteFile(aiService.getDownloadImageUrl(taskId), MAX_AI_DOWNLOAD_SIZE)) {
-            response.setContentType(resolveContentType(remoteFile.getContentType()));
+            response.setContentType(DownloadUtils.resolveContentType(remoteFile.getContentType()));
             response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
             response.setHeader(HttpHeaders.CONTENT_DISPOSITION,
-                    "attachment; filename=\"" + sanitizeFileName(remoteFile.getFileName()) + "\"");
+                    "attachment; filename=\"" + DownloadUtils.defaultFileName(remoteFile.getFileName()) + "\"");
             if (remoteFile.getContentLength() != null && remoteFile.getContentLength() >= 0) {
                 response.setContentLengthLong(remoteFile.getContentLength());
             }
@@ -178,21 +162,13 @@ public class AiController {
         return Response.ok(true);
     }
 
-    private String resolveContentType(String contentType) {
-        return (contentType == null || contentType.isBlank())
-                ? MediaType.APPLICATION_OCTET_STREAM_VALUE : contentType;
-    }
-
-    private String sanitizeFileName(String fileName) {
-        if (fileName == null || fileName.isBlank()) {
-            return "image";
-        }
-        return fileName
-                .replace("\\", "_")
-                .replace("\"", "_")
-                .replace("\r", "_")
-                .replace("\n", "_")
-                .replace("<", "_")
-                .replace(">", "_");
+    /**
+     * 校验任务存在性和所有权（getTagResult/getDrawResult/subscribeResult 共用）
+     */
+    private void resolveTaskOwnership(Task task) {
+        ExcUtils.throwIfTrue(task == null, ExceptionCode.NOT_FOUND, "任务不存在");
+        User user = UserHolder.getUser();
+        ExcUtils.throwIfTrue(user == null, ExceptionCode.NOT_LOGIN);
+        ExcUtils.throwIfTrue(!user.getId().equals(task.getUserId()), ExceptionCode.UNAUTHORIZED);
     }
 }

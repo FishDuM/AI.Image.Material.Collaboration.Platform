@@ -18,6 +18,7 @@ import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
 import hk.ljx.fishpicsbackend.picture.entity.Picture;
+import hk.ljx.fishpicsbackend.picture.entity.PictureShare;
 import hk.ljx.fishpicsbackend.picture.service.FileResourceService;
 import hk.ljx.fishpicsbackend.picture.service.PictureService;
 import hk.ljx.fishpicsbackend.picture.vo.PictureVO;
@@ -180,7 +181,6 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
     @Override
     public List<SpaceVO> listSpace(Integer type) {
         User user = UserHolder.getUser();
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         ExcUtils.throwIfTrue(type == null, ExceptionCode.PARAMETER_ERROR, "空间类型不能为空");
         Long userId = user.getId();
 
@@ -245,19 +245,10 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
 
         List<SpaceVO> voList = new ArrayList<>();
         for (Space space : spaceList) {
-            SpaceVO vo = new SpaceVO();
-            BeanUtil.copyProperties(space, vo);
-            vo.setPictureCount(pictureCountMap.getOrDefault(space.getId(), 0L));
-            User creator = userMap.get(space.getUserId());
-            if (creator != null) {
-                vo.setUserName(creator.getNickname());
-                vo.setUserAvatar(creator.getAvatar());
-            }
-            if (type == 1) {
-                List<SpaceTeamMember> teamMembers = membersBySpaceId.getOrDefault(space.getId(), Collections.emptyList());
-                vo.setTeamMembers(buildTeamMemberVOs(teamMembers, userMap, 10));
-            }
-            voList.add(vo);
+            List<SpaceTeamMember> teamMembers = type == 1
+                    ? membersBySpaceId.getOrDefault(space.getId(), Collections.emptyList())
+                    : null;
+            voList.add(buildSpaceVO(space, userMap, pictureCountMap, teamMembers, 10));
         }
         return voList;
     }
@@ -272,7 +263,6 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
     public SpaceVO getSpace(Long id) {
         ExcUtils.throwIfTrue(id == null, ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
         User user = UserHolder.getUser();
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         Long userId = user.getId();
 
         Space space = baseMapper.selectById(id);
@@ -289,9 +279,6 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         }
         ExcUtils.throwIfTrue(!isCreator && !isTeamMember, ExceptionCode.FORBIDDEN, "无权限访问该空间");
 
-        SpaceVO vo = new SpaceVO();
-        BeanUtil.copyProperties(space, vo);
-
         Set<Long> userIds = new HashSet<>();
         if (space.getUserId() != null)
             userIds.add(space.getUserId());
@@ -302,12 +289,6 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
                     .stream().collect(Collectors.toMap(User::getId, u -> u));
         }
 
-        User creator = userMap.get(space.getUserId());
-        if (creator != null) {
-            vo.setUserName(creator.getNickname());
-            vo.setUserAvatar(creator.getAvatar());
-        }
-
         List<Map<String, Object>> countResult = pictureService.listMaps(
                 new QueryWrapper<Picture>()
                         .select("COUNT(*) as cnt")
@@ -316,13 +297,11 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         if (!countResult.isEmpty() && countResult.get(0).get("cnt") != null) {
             picCount = ((Number) countResult.get(0).get("cnt")).longValue();
         }
-        vo.setPictureCount(picCount);
+        Map<Long, Long> pictureCountMap = Map.of(space.getId(), picCount);
 
-        if (Integer.valueOf(1).equals(space.getType()) && !teamMembers.isEmpty()) {
-            vo.setTeamMembers(buildTeamMemberVOs(teamMembers, userMap, 0));
-        }
-
-        return vo;
+        List<SpaceTeamMember> teamMembersForVO = Integer.valueOf(1).equals(space.getType()) && !teamMembers.isEmpty()
+                ? teamMembers : null;
+        return buildSpaceVO(space, userMap, pictureCountMap, teamMembersForVO, 0);
     }
 
     /**
@@ -340,7 +319,6 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(name), ExceptionCode.PARAMETER_ERROR, "空间名称不能为空");
 
         User user = UserHolder.getUser();
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         Long userId = user.getId();
         // 1. 查询空间是否存在
         Space space = baseMapper.selectById(id);
@@ -379,7 +357,6 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
 
         ExcUtils.throwIfTrue(spaceId == null, ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
         User user = UserHolder.getUser();
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         Long userId = user.getId();
         Space space = baseMapper.selectById(spaceId);
         // 不区分"不存在"和"无权访问",防枚举攻击
@@ -495,19 +472,9 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         }
         List<SpaceVO> voList = new ArrayList<>();
         for (Space space : spaceList) {
-            SpaceVO vo = new SpaceVO();
-            BeanUtil.copyProperties(space, vo);
-            vo.setPictureCount(pictureCountMap.getOrDefault(space.getId(), 0L));
-            User creator = userMap.get(space.getUserId());
-            if (creator != null) {
-                vo.setUserName(creator.getNickname());
-                vo.setUserAvatar(creator.getAvatar());
-            }
-            if (Integer.valueOf(1).equals(space.getType())) {
-                List<SpaceTeamMember> teamMembers = membersBySpaceId.getOrDefault(space.getId(), Collections.emptyList());
-                vo.setTeamMembers(buildTeamMemberVOs(teamMembers, userMap, 10));
-            }
-            voList.add(vo);
+            List<SpaceTeamMember> teamMembers = Integer.valueOf(1).equals(space.getType())
+                    ? membersBySpaceId.getOrDefault(space.getId(), Collections.emptyList()) : null;
+            voList.add(buildSpaceVO(space, userMap, pictureCountMap, teamMembers, 10));
         }
         Page<SpaceVO> voPage = new Page<>(spaceQueryWrapper.getCurrent(), spaceQueryWrapper.getPageSize(), spacePage.getTotal());
         voPage.setRecords(voList);
@@ -585,8 +552,8 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
             int shareDeleted = 0;
             for (Picture pic : pictures) {
                 shareDeleted += pictureShareMapper.delete(
-                        new LambdaQueryWrapper<hk.ljx.fishpicsbackend.picture.entity.PictureShare>()
-                                .eq(hk.ljx.fishpicsbackend.picture.entity.PictureShare::getPictureId, pic.getId()));
+                        new LambdaQueryWrapper<PictureShare>()
+                                .eq(PictureShare::getPictureId, pic.getId()));
             }
             log.info("[SpaceService] adminDelete 级联删 picture_share: spaceId={}, count={}", id, shareDeleted);
         } catch (Exception e) {
@@ -632,7 +599,6 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
     public List<SpaceMemberVO> teamMemberList(Long spaceId) {
         ExcUtils.throwIfTrue(spaceId == null, ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
         User user = UserHolder.getUser();
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
 
         Space space = baseMapper.selectById(spaceId);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
@@ -682,7 +648,6 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         ExcUtils.throwIfTrue(spaceId == null || userId == null || roleId == null, ExceptionCode.PARAMETER_ERROR, "参数不能为空");
 
         User operator = UserHolder.getUser();
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(operator), ExceptionCode.NOT_LOGIN);
 
         Space space = baseMapper.selectById(spaceId);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
@@ -733,7 +698,6 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         ExcUtils.throwIfTrue(spaceId == null || userId == null, ExceptionCode.PARAMETER_ERROR, "参数不能为空");
 
         User operator = UserHolder.getUser();
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(operator), ExceptionCode.NOT_LOGIN);
 
         Space space = baseMapper.selectById(spaceId);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
@@ -790,7 +754,6 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         ExcUtils.throwIfTrue(spaceId == null || userId == null || roleId == null, ExceptionCode.PARAMETER_ERROR, "参数不能为空");
 
         User operator = UserHolder.getUser();
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(operator), ExceptionCode.NOT_LOGIN);
 
         Space space = baseMapper.selectById(spaceId);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
@@ -839,7 +802,6 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
     @Override
     public List<SpaceVO> saveableSpaces() {
         User user = UserHolder.getUser();
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user), ExceptionCode.NOT_LOGIN);
         Long userId = user.getId();
 
         List<SpaceVO> result = new ArrayList<>();
@@ -910,6 +872,32 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
 
     private void validateSpaceActive(Space space) {
         Space.validateActive(space);
+    }
+
+    /**
+     * 构建 SpaceVO（消除 listSpace/getSpace/adminList 三处重复的 VO 填充逻辑）
+     *
+     * @param space           空间实体
+     * @param userMap         userId → User 映射
+     * @param pictureCountMap spaceId → 图片数量映射
+     * @param teamMembers     团队成员列表，null 表示不设置团队成员
+     * @param maxMembers      团队成员最大返回数，0 表示不限
+     */
+    private SpaceVO buildSpaceVO(Space space, Map<Long, User> userMap,
+                                  Map<Long, Long> pictureCountMap,
+                                  List<SpaceTeamMember> teamMembers, int maxMembers) {
+        SpaceVO vo = new SpaceVO();
+        BeanUtil.copyProperties(space, vo);
+        vo.setPictureCount(pictureCountMap.getOrDefault(space.getId(), 0L));
+        User creator = userMap.get(space.getUserId());
+        if (creator != null) {
+            vo.setUserName(creator.getNickname());
+            vo.setUserAvatar(creator.getAvatar());
+        }
+        if (teamMembers != null && !teamMembers.isEmpty()) {
+            vo.setTeamMembers(buildTeamMemberVOs(teamMembers, userMap, maxMembers));
+        }
+        return vo;
     }
 
     /**

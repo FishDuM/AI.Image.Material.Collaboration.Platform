@@ -11,7 +11,7 @@ import java.io.Serializable;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-public class UserRequestRequest implements Serializable {
+public class UserRegisterRequest implements Serializable {
 
     private String username;
 
