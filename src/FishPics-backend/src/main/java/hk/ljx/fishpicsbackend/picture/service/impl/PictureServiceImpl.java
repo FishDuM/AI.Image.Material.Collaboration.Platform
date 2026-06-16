@@ -30,7 +30,7 @@ import hk.ljx.fishpicsbackend.mapper.SpaceTeamMemberMapper;
 import static hk.ljx.fishpicsbackend.common.constants.SpaceConstants.*;
 import hk.ljx.fishpicsbackend.picture.dto.AdminPictureListDTO;
 import hk.ljx.fishpicsbackend.picture.dto.CheckUploadRequest;
-import hk.ljx.fishpicsbackend.picture.dto.DeleteByIdList;
+import hk.ljx.fishpicsbackend.picture.dto.DeleteByIdListRequest;
 import hk.ljx.fishpicsbackend.picture.dto.MergeChunksRequest;
 import hk.ljx.fishpicsbackend.picture.dto.PictureMessage;
 import hk.ljx.fishpicsbackend.picture.dto.PictureQueryRequest;
@@ -71,9 +71,13 @@ import hk.ljx.fishpicsbackend.picture.service.PicturePermissionUtil;
 import hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember;
 import hk.ljx.fishpicsbackend.space.vo.SpaceVO;
 import org.springframework.context.ApplicationContext;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 /**
  * @author 30574
@@ -144,6 +148,17 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
     private static final int MAX_CHUNK_COUNT = 6000;
 
+    /** 头像文件大小限制 5MB */
+    private static final long MAX_AVATAR_SIZE = 5 * 1024 * 1024;
+    /** 直传文件大小限制 100MB */
+    private static final long DIRECT_UPLOAD_LIMIT = 100L * 1024 * 1024;
+    /** 图片名称最大长度 */
+    private static final int MAX_PICTURE_NAME_LENGTH = 100;
+    /** 图片简介最大长度 */
+    private static final int MAX_PICTURE_INTRO_LENGTH = 500;
+    /** 图片标签最大数量 */
+    private static final int MAX_PICTURE_TAG_COUNT = 10;
+
     private void refreshUserSessionState(User user) {
         userService.refreshUserInfoCache(user);
         // 头像变更需要额外清除权限上下文缓存，强制下游重新加载
@@ -161,7 +176,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         // 文件类型校验（防止上传恶意文件作为头像）
         ExcUtils.throwIfTrue(FileTypeUtils.getValidFileType(file) == null, ExceptionCode.PARAMETER_ERROR, "不支持的文件类型");
         // 文件大小校验（5MB）
-        ExcUtils.throwIfTrue(file.getSize() > 5 * 1024 * 1024, ExceptionCode.PARAMETER_ERROR, "头像大小不能超过5MB");
+        ExcUtils.throwIfTrue(file.getSize() > MAX_AVATAR_SIZE, ExceptionCode.PARAMETER_ERROR, "头像大小不能超过5MB");
         User user;
         if (id != null && !id.equals(userLogin.getId())) {
             user = userService.getById(id);
@@ -215,7 +230,6 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 "上传图片大小不能超过" + formatSize(maxSize));
 
         // 大文件强制走分片上传（100MB 阈值）
-        final long DIRECT_UPLOAD_LIMIT = 100L * 1024 * 1024;
         ExcUtils.throwIfTrue(file.getSize() > DIRECT_UPLOAD_LIMIT,
                 "文件超过 100MB,请使用分片上传(前端应自动走 chunked 路径)");
 
@@ -286,7 +300,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
      *
      * @param cosUploader COS 上传动作（延迟执行，仅新文件时调用）
      */
-    private Picture doProcessUpload(java.util.function.Supplier<String> cosUploader, long fileSize, String md5,
+    private Picture doProcessUpload(Supplier<String> cosUploader, long fileSize, String md5,
                                      Long userId, Long targetSpaceId) {
         // ---- file_resource 去重 ----
         FileResource existingResource = fileResourceService.findByMd5AndSize(md5, fileSize);
@@ -360,7 +374,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         picture.setStatus(1); // 上传到空间直接通过，无需审核
         try {
             ExcUtils.throwIfTrue(pictureMapper.insert(picture) != 1, "上传失败，数据库错误");
-        } catch (org.springframework.dao.DuplicateKeyException e) {
+        } catch (DuplicateKeyException e) {
             // 唯一索引兜底：并发 TOCTOU，回滚后返回已有
             if (isNewUpload && cosKey != null) {
                 try { cosService.deletePicture(cosKey); } catch (Exception ex) { log.warn("COS 回滚失败: {}", cosKey, ex); }
@@ -471,13 +485,18 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         ExcUtils.throwIfTrue(pictureId == null, "图片id不能为空");
         Picture picture = pictureMapper.selectById(pictureId);
         ExcUtils.throwIfTrue(picture == null, "图片不存在");
+        // 状态审核：status=0 禁用，status=1 启用
+        if (status != null) {
+            picture.setStatus(status);
+        }
         // 精选审核：selected=1 通过精选，selected=0 拒绝精选
         if (selected != null) {
             ExcUtils.throwIfTrue((selected != 0 && selected != 1), "精选值无效");
-            picture.setIsSelected(selected);
-            // 拒绝精选时把申请状态清掉
+            // 拒绝精选时把申请状态清掉（先判断旧值再赋值，避免死代码）
             if (selected == 0 && Integer.valueOf(2).equals(picture.getIsSelected())) {
                 picture.setIsSelected(0);
+            } else {
+                picture.setIsSelected(selected);
             }
         }
         ExcUtils.throwIfTrue(pictureMapper.updateById(picture) != 1, "审核更新失败");
@@ -490,7 +509,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public String deletePicture(DeleteByIdList deleteByIdList) {
+    public String deletePicture(DeleteByIdListRequest deleteByIdList) {
         List<Long> ids = deleteByIdList.getIds();
         ExcUtils.throwIfTrue(CollUtil.isEmpty(ids), "图片id不能为空");
         User user = UserHolder.getUser();
@@ -539,7 +558,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         }
 
         // 扣减空间已用大小
-        Map<Long, Long> spaceSizeMap = new java.util.HashMap<>();
+        Map<Long, Long> spaceSizeMap = new HashMap<>();
         pictureList.forEach(picture -> {
             if (picture.getSpaceId() != null && picture.getSize() != null) {
                 spaceSizeMap.merge(picture.getSpaceId(), picture.getSize(), Long::sum);
@@ -556,7 +575,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         });
 
         // file_resource 引用计数递减，ref_count 归零时删除 COS 文件（在事务提交后执行）
-        List<String> legacyCosUrls = new java.util.ArrayList<>();
+        List<String> legacyCosUrls = new ArrayList<>();
         for (Picture picture : pictureList) {
             if (picture.getResourceId() != null) {
                 try {
@@ -572,8 +591,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             }
         }
         if (!legacyCosUrls.isEmpty()) {
-            org.springframework.transaction.support.TransactionSynchronizationManager
-                    .registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
+            TransactionSynchronizationManager
+                    .registerSynchronization(new TransactionSynchronization() {
                         @Override
                         public void afterCommit() {
                             for (String url : legacyCosUrls) {
@@ -631,19 +650,19 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         if (ObjUtil.isNotEmpty(pictureName)) {
             String cleanName = XssSanitizer.clean(pictureName);
             // 清洗后校验长度
-            ExcUtils.throwIfTrue(cleanName.length() > 100, ExceptionCode.PARAMETER_ERROR, "图片名称过长(最多 100 字符)");
+            ExcUtils.throwIfTrue(cleanName.length() > MAX_PICTURE_NAME_LENGTH, ExceptionCode.PARAMETER_ERROR, "图片名称过长(最多 100 字符)");
             picture.setPictureName(cleanName);
         }
         if (ObjUtil.isNotEmpty(introduction)) {
             String cleanIntro = XssSanitizer.cleanRelaxed(introduction);
-            ExcUtils.throwIfTrue(cleanIntro.length() > 500, ExceptionCode.PARAMETER_ERROR, "图片描述过长(最多 500 字符)");
+            ExcUtils.throwIfTrue(cleanIntro.length() > MAX_PICTURE_INTRO_LENGTH, ExceptionCode.PARAMETER_ERROR, "图片描述过长(最多 500 字符)");
             picture.setIntroduction(cleanIntro);
         }
         if (ObjUtil.isNotEmpty(tags)) {
             // tags 数量上限 10
-            ExcUtils.throwIfTrue(tags.size() > 10, ExceptionCode.PARAMETER_ERROR, "标签数量不能超过 10 个");
+            ExcUtils.throwIfTrue(tags.size() > MAX_PICTURE_TAG_COUNT, ExceptionCode.PARAMETER_ERROR, "标签数量不能超过 10 个");
             List<String> typeList = picSystemService.getTypeList();
-            Set<String> typeSet = new java.util.HashSet<>(typeList);
+            Set<String> typeSet = new HashSet<>(typeList);
             // tags 也清理一遍
             List<String> safeTags = tags.stream()
                     .map(XssSanitizer::clean)
@@ -821,8 +840,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             final Long finalUserId = user.getId();
             final String finalNickname = user.getNickname();
             try {
-                org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
-                    new org.springframework.transaction.support.TransactionSynchronization() {
+                TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
                         @Override
                         public void afterCommit() {
                             try {
@@ -966,7 +985,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                         .eq(Picture::getUserId, user.getId())
                         .eq(Picture::getSpaceId, existingSpace.getId())
                         .last("LIMIT 1"));
-                Map<String, Object> result = new java.util.LinkedHashMap<>();
+                Map<String, Object> result = new LinkedHashMap<>();
                 result.put("status", "duplicate");
                 result.put("picture", PictureVO.ofUpload(existingPic.getId(), existingPic.getUrl()));
                 return result;
@@ -979,7 +998,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             Picture picture = createPictureFromResource(resource, user.getId(), request.getTargetSpaceId());
             PictureVO vo = PictureVO.ofUpload(picture.getId(), picture.getUrl());
 
-            Map<String, Object> result = new java.util.LinkedHashMap<>();
+            Map<String, Object> result = new LinkedHashMap<>();
             result.put("status", "duplicate");
             result.put("picture", vo);
             return result;
@@ -1004,7 +1023,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                         RedisConstants.FILE_UPLOAD_TTL, TimeUnit.HOURS);
             }
 
-            Map<String, Object> result = new java.util.LinkedHashMap<>();
+            Map<String, Object> result = new LinkedHashMap<>();
             result.put("status", "resume");
             result.put("uploadedChunks", uploadedChunks != null ?
                     uploadedChunks.stream().map(Integer::parseInt).sorted().toList() : List.of());
@@ -1021,7 +1040,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         stringRedisTemplate.opsForValue().set(cosKeyKey, cosKey,
                 RedisConstants.FILE_UPLOAD_TTL, TimeUnit.HOURS);
         stringRedisTemplate.delete(RedisConstants.getFileMergeResultKey(request.getMd5()));
-        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        Map<String, Object> result = new LinkedHashMap<>();
         result.put("status", "new");
         result.put("cosKey", cosKey);
         refreshUploadSessionTtl(request.getMd5(), user.getId());
@@ -1057,7 +1076,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             String existingEtag = existingEtagObj != null ? existingEtagObj.toString() : "";
             refreshUploadSessionTtl(md5, user.getId());
 
-            Map<String, Object> result = new java.util.LinkedHashMap<>();
+            Map<String, Object> result = new LinkedHashMap<>();
             result.put("etag", existingEtag);
             result.put("chunkIndex", chunkIndex);
             return result;
@@ -1114,7 +1133,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         stringRedisTemplate.expire(chunkSizeKey, RedisConstants.FILE_UPLOAD_TTL, TimeUnit.HOURS);
         refreshUploadSessionTtl(md5, user.getId());
 
-        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        Map<String, Object> result = new LinkedHashMap<>();
         result.put("etag", etag);
         result.put("chunkIndex", chunkIndex);
         return result;
@@ -1270,8 +1289,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         // 9. COS 合并移到事务提交后执行（避免回滚时 COS 文件成为孤儿）
         //    合并完成后获取图片元数据（宽高），更新 picture 记录
         final Long pictureId = picture.getId();
-        org.springframework.transaction.support.TransactionSynchronizationManager
-                .registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
+        TransactionSynchronizationManager
+                .registerSynchronization(new TransactionSynchronization() {
                     @Override
                     public void afterCommit() {
                         boolean mergeOk = tryCompleteMultipartUpload(finalCosKey, finalUploadId, finalPartETags,

@@ -14,10 +14,13 @@ import lombok.extern.slf4j.Slf4j;
 
 import hk.ljx.fishpicsbackend.task.consumer.TaskConsumer;
 import hk.ljx.fishpicsbackend.task.handler.TaskHandler;
+import hk.ljx.fishpicsbackend.task.message.TaskMessage;
 import hk.ljx.fishpicsbackend.common.entity.SysAuditLog;
+import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.mapper.SysAuditLogMapper;
 import cn.hutool.json.JSONUtil;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @Configuration
@@ -96,13 +99,13 @@ public class RocketMQConfig {
         consumer.registerMessageListener((MessageListenerConcurrently) (msgs, context) -> {
             for (var msg : msgs) {
                 try {
-                    String body = new String(msg.getBody(), java.nio.charset.StandardCharsets.UTF_8);
-                    listener.onMessage(new hk.ljx.fishpicsbackend.task.message.TaskMessage(body));
+                    String body = new String(msg.getBody(), StandardCharsets.UTF_8);
+                    listener.onMessage(new TaskMessage(body));
                 } catch (Exception e) {
                     // 区分系统级异常和业务异常
                     // 业务异常(BaseException)已在 TaskConsumer 内标记 FAILED，无需重试
                     // 系统级异常应重试
-                    if (e instanceof hk.ljx.fishpicsbackend.common.exception.BaseException) {
+                    if (e instanceof BaseException) {
                         log.error("consume business error, msgId={}, will not retry", msg.getMsgId(), e);
                         return ConsumeConcurrentlyStatus.CONSUME_SUCCESS;
                     }
@@ -143,7 +146,7 @@ public class RocketMQConfig {
         consumer.registerMessageListener((MessageListenerConcurrently) (msgs, context) -> {
             for (var msg : msgs) {
                 try {
-                    String body = new String(msg.getBody(), java.nio.charset.StandardCharsets.UTF_8);
+                    String body = new String(msg.getBody(), StandardCharsets.UTF_8);
                     SysAuditLog auditLog = JSONUtil.toBean(body, SysAuditLog.class);
                     sysAuditLogMapper.insert(auditLog);
                     log.debug("审计日志异步写入成功: operation={}", auditLog.getOperation());
@@ -153,7 +156,7 @@ public class RocketMQConfig {
                     if (reconsumeTimes >= 3) {
                         // 已达上限,直接成功消费(让消息进死信队列,不再阻塞消费线程)
                         log.error("审计日志毒消息放弃, msgId={}, body={}", msg.getMsgId(),
-                                new String(msg.getBody(), java.nio.charset.StandardCharsets.UTF_8));
+                                new String(msg.getBody(), StandardCharsets.UTF_8));
                         continue;
                     }
                     return ConsumeConcurrentlyStatus.RECONSUME_LATER;

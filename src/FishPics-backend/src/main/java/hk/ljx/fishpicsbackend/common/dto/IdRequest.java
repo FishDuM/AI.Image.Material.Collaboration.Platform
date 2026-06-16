@@ -1,5 +1,6 @@
 package hk.ljx.fishpicsbackend.common.dto;
 
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 /**
@@ -11,5 +12,6 @@ public class IdRequest {
     /**
      * 业务ID
      */
+    @NotNull(message = "ID不能为空")
     private Long id;
 }

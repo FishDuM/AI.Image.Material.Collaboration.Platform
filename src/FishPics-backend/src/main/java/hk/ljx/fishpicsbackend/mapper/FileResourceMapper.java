@@ -3,7 +3,6 @@ package hk.ljx.fishpicsbackend.mapper;
 import com.baomidou.mybatisplus.annotation.InterceptorIgnore;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import hk.ljx.fishpicsbackend.picture.entity.FileResource;
-import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Delete;
@@ -12,7 +11,6 @@ import org.apache.ibatis.annotations.Update;
 /**
  * 物理文件去重表 Mapper
  */
-@Mapper
 public interface FileResourceMapper extends BaseMapper<FileResource> {
 
     /**

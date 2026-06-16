@@ -1,5 +1,6 @@
 package hk.ljx.fishpicsbackend.user.dto;
 
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -13,6 +14,7 @@ public class UserEditRequest {
     /**
      * 用户ID
      */
+    @NotNull(message = "用户ID不能为空")
     private Long id;
 
     /**

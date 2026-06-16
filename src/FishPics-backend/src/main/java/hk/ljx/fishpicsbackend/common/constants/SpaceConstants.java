@@ -13,6 +13,7 @@ public interface SpaceConstants {
     Long SVIP_STORAGE_SIZE    = 107374182400L;    // SVIP 100GB
 
     // ==================== 团队空间存储配额（每个空间独立） ====================
+    // 与私人空间配额相同，有意重复以保持独立可调
     Long TEAM_DEFAULT_STORAGE_SIZE = 536870912L;       // 普通 512MB
     Long TEAM_VIP_STORAGE_SIZE     = 53687091200L;     // VIP 50GB
     Long TEAM_SVIP_STORAGE_SIZE    = 107374182400L;    // SVIP 100GB

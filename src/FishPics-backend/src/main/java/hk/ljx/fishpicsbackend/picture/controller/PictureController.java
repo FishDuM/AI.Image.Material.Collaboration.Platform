@@ -16,7 +16,7 @@ import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.picture.dto.AdminPictureListDTO;
 import hk.ljx.fishpicsbackend.picture.dto.CheckUploadRequest;
-import hk.ljx.fishpicsbackend.picture.dto.DeleteByIdList;
+import hk.ljx.fishpicsbackend.picture.dto.DeleteByIdListRequest;
 import hk.ljx.fishpicsbackend.picture.dto.MergeChunksRequest;
 import hk.ljx.fishpicsbackend.picture.dto.PictureQueryRequest;
 import hk.ljx.fishpicsbackend.picture.dto.PictureUpdateRequest;
@@ -41,8 +41,8 @@ public class PictureController {
     private AiService aiService;
 
     @RequireLogin
-    @PostMapping("/avatar")
     @AuditLog(module = "用户管理", operation = "修改头像")
+    @PostMapping("/avatar")
     public Response<String> uploadAvatar(@RequestParam("file") MultipartFile file,
             @RequestParam(value = "id", required = false) Long targetUserId) {
         User currentUser = UserHolder.getUser();
@@ -60,8 +60,9 @@ public class PictureController {
      * @param targetSpaceId 目标空间ID，为null时默认上传至私人空间
      * @return 图片基本信息(id/url)
      */
-    @PostMapping("/upload")
+    @RequireLogin
     @AuditLog(module = "图片管理", operation = "上传图片")
+    @PostMapping("/upload")
     public Response<PictureVO> uploadPicture(@RequestParam("file") MultipartFile file,
             @RequestParam(value = "targetSpaceId", required = false) Long targetSpaceId) {
         ExcUtils.throwIfTrue(file.isEmpty(), "文件不能为空");
@@ -98,15 +99,17 @@ public class PictureController {
         return Response.ok(pictureService.getRecommendPictures(pageRequest, loginUser.getId()));
     }
 
-    @PostMapping("/delete")
+    @RequireLogin
     @AuditLog(module = "图片管理", operation = "删除图片")
-    public Response<String> deletePicture(@Valid @RequestBody DeleteByIdList deleteByIdList) {
+    @PostMapping("/delete")
+    public Response<String> deletePicture(@Valid @RequestBody DeleteByIdListRequest deleteByIdList) {
         ExcUtils.throwIfTrue(ObjUtil.isEmpty(deleteByIdList), "id不能为空");
         return Response.okMsg(pictureService.deletePicture(deleteByIdList));
     }
 
-    @PutMapping("/update")
+    @RequireLogin
     @AuditLog(module = "图片管理", operation = "编辑图片信息")
+    @PutMapping("/update")
     public Response<Boolean> updatePicture(@Valid @RequestBody PictureUpdateRequest request) {
         pictureService.updatePicture(request);
         return Response.ok(true);
@@ -115,6 +118,7 @@ public class PictureController {
     /**
      * 协同编辑：替换图片文件（前端发送变换后的图片 blob，后端上传 COS + 更新记录）
      */
+    @RequireLogin
     @PostMapping("/replace")
     public Response<PictureVO> replacePictureFile(@RequestParam("file") MultipartFile file,
                                                 @RequestParam("pictureId") Long pictureId) {
@@ -135,8 +139,8 @@ public class PictureController {
     }
 
     @RequireAdmin
-    @PostMapping("/admin/review")
     @AuditLog(module = "图片管理", operation = "图片审核")
+    @PostMapping("/admin/review")
     public Response<Boolean> reviewPicture(@Valid @RequestBody ReviewPictureDTO dto) {
         pictureService.reviewPicture(dto.getPictureId(), dto.getStatus(), dto.getSelected());
         return Response.ok(true);
@@ -148,14 +152,16 @@ public class PictureController {
      * 秒传校验
      * 检查文件是否已存在（MD5+size），支持秒传和断点续传
      */
+    @RequireLogin
     @PostMapping("/check")
-    public Response<?> checkUpload(@Valid @RequestBody CheckUploadRequest request) {
+    public Response<Object> checkUpload(@Valid @RequestBody CheckUploadRequest request) {
         return Response.ok(pictureService.checkUpload(request));
     }
 
     /**
      * 分片上传
      */
+    @RequireLogin
     @PostMapping("/upload-chunk")
     public Response<?> uploadChunk(
             @RequestParam("file") MultipartFile file,

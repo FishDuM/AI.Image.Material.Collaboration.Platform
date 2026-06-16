@@ -7,7 +7,9 @@ import hk.ljx.fishpicsbackend.user.entity.User;
  * 用户上下文持有器
  * 存储登录上下文（用户 + 权限）到 ThreadLocal
  */
-public class UserHolder {
+public final class UserHolder {
+
+    private UserHolder() {}
 
     private static final ThreadLocal<LoginContext> CONTEXT_HOLDER = new ThreadLocal<>();
 

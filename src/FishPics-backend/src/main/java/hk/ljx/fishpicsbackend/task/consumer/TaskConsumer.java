@@ -3,7 +3,6 @@ package hk.ljx.fishpicsbackend.task.consumer;
 import com.alibaba.dashscope.exception.ApiException;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
-import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.task.entity.Task;
 import hk.ljx.fishpicsbackend.task.handler.TaskHandler;
 import hk.ljx.fishpicsbackend.mapper.TaskMapper;
@@ -159,8 +158,14 @@ public class TaskConsumer {
             log.error("task failed: taskId={}, bizType={}", task.getTaskId(), task.getBizType(), e);
 
             // DashScope 审核类错误使用友好提示，其他错误用原始消息
-            String errorMsg = e instanceof ApiException ae
-                    ? ExcUtils.translateDashScopeError(ae) : null;
+            String errorMsg = null;
+            if (e instanceof ApiException ae) {
+                String msg = ae.getMessage();
+                if (msg != null) {
+                    if (msg.contains("DataInspectionFailed")) errorMsg = "生成的图片内容不合规";
+                    else if (msg.contains("IPInfringementSuspect")) errorMsg = "输入提示词涉嫌侵权";
+                }
+            }
             if (errorMsg == null) {
                 errorMsg = e.getMessage();
             }

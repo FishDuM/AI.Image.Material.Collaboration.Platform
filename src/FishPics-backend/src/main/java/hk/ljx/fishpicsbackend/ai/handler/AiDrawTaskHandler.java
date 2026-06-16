@@ -32,7 +32,7 @@ public class AiDrawTaskHandler implements TaskHandler {
 
     @Resource
     @Qualifier("aiTaskExecutor")
-    private java.util.concurrent.Executor aiTaskExecutor;
+    private Executor aiTaskExecutor;
 
     @Resource
     private DashScopeConnectionProperties dashScopeConnectionProperties;

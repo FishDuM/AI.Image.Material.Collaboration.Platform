@@ -32,7 +32,7 @@ public class AiTaskVO {
     /**
      * 业务关联ID（图片ID等）
      */
-    private String pictureId;
+    private Long pictureId;
 
     private Date createTime;
 

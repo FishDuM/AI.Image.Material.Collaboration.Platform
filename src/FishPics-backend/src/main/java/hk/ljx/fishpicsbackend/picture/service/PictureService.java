@@ -6,7 +6,7 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import hk.ljx.fishpicsbackend.common.dto.PageRequest;
 import hk.ljx.fishpicsbackend.picture.dto.AdminPictureListDTO;
 import hk.ljx.fishpicsbackend.picture.dto.CheckUploadRequest;
-import hk.ljx.fishpicsbackend.picture.dto.DeleteByIdList;
+import hk.ljx.fishpicsbackend.picture.dto.DeleteByIdListRequest;
 import hk.ljx.fishpicsbackend.picture.dto.MergeChunksRequest;
 import hk.ljx.fishpicsbackend.picture.dto.PictureQueryRequest;
 import hk.ljx.fishpicsbackend.picture.dto.PictureUpdateRequest;
@@ -76,7 +76,7 @@ public interface PictureService extends IService<Picture> {
      * @param deleteByIdList 图片id list
      * @return 返回的 message
      */
-    String deletePicture(DeleteByIdList deleteByIdList);
+    String deletePicture(DeleteByIdListRequest deleteByIdList);
 
     /**
      * 批量编辑图片信息

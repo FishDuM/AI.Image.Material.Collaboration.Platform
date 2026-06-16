@@ -3,7 +3,6 @@ package hk.ljx.fishpicsbackend.user.dto;
 import hk.ljx.fishpicsbackend.common.dto.PageRequest;
 import lombok.*;
 
-import java.io.Serializable;
 import java.util.Date;
 
 @Data
@@ -11,7 +10,7 @@ import java.util.Date;
 @NoArgsConstructor
 @Builder
 @EqualsAndHashCode(callSuper = true)
-public class UserQueryWrapper extends PageRequest implements Serializable {
+public class UserQueryWrapper extends PageRequest {
 
     /**
      * 用户ID

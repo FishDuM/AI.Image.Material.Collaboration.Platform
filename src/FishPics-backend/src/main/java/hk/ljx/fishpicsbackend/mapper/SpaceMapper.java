@@ -16,7 +16,7 @@ public interface SpaceMapper extends BaseMapper<Space> {
      * @return affectedRows: 1=成功,0=配额不足
      */
     @Update("UPDATE space SET size = size + #{delta} " +
-            "WHERE id = #{spaceId} AND size + #{delta} <= storage_size")
+            "WHERE id = #{spaceId} AND (storage_size IS NULL OR size + #{delta} <= storage_size)")
     int conditionalIncrementSize(@Param("spaceId") Long spaceId,
                                 @Param("delta") long delta);
 }

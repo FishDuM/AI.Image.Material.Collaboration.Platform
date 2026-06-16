@@ -3,8 +3,12 @@ package hk.ljx.fishpicsbackend.ai.handler;
 import cn.hutool.json.JSONUtil;
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import hk.ljx.fishpicsbackend.ai.vo.AiPictureMessage;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
+import hk.ljx.fishpicsbackend.common.utils.XssSanitizer;
+import hk.ljx.fishpicsbackend.mapper.PictureTagMapper;
+import hk.ljx.fishpicsbackend.picture.entity.PictureTag;
 import hk.ljx.fishpicsbackend.task.entity.Task;
 import hk.ljx.fishpicsbackend.task.handler.TaskHandler;
 import hk.ljx.fishpicsbackend.picture.entity.Picture;
@@ -22,7 +26,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.MimeTypeUtils;
 
 import java.net.URI;
+import java.util.List;
 import java.util.concurrent.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -38,11 +44,11 @@ public class AiTagTaskHandler implements TaskHandler {
     private PictureService pictureService;
 
     @Resource
-    private hk.ljx.fishpicsbackend.mapper.PictureTagMapper pictureTagMapper;
+    private PictureTagMapper pictureTagMapper;
 
     @Resource
     @Qualifier("aiTaskExecutor")
-    private java.util.concurrent.Executor aiTaskExecutor;
+    private Executor aiTaskExecutor;
 
     private static final String TAG_PROMPT = "你需要生成一个图片名称，长度不超过6个汉字。你需要生成一个图片描述，长度不超过100个汉字。你可以根据标签：'人物、动物、植物、美食、风景、建筑、物品、服饰、数码、家居、插画、二次元、实拍、文档、表情包'来描述图片的内容，最多选择不超过3个，最少也要有1个。";
 
@@ -165,15 +171,15 @@ public class AiTagTaskHandler implements TaskHandler {
         if (aiResult.getTags() != null && !aiResult.getTags().isEmpty()) {
             // 只有图片尚无标签时才写入 AI 标签
             Long existingTagCount = pictureTagMapper.selectCount(
-                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<hk.ljx.fishpicsbackend.picture.entity.PictureTag>()
-                            .eq(hk.ljx.fishpicsbackend.picture.entity.PictureTag::getPictureId, pictureId));
+                    new LambdaQueryWrapper<PictureTag>()
+                            .eq(PictureTag::getPictureId, pictureId));
             if (existingTagCount == 0) {
-                java.util.List<String> safeTags = aiResult.getTags().stream()
-                        .map(hk.ljx.fishpicsbackend.common.utils.XssSanitizer::clean)
+                List<String> safeTags = aiResult.getTags().stream()
+                        .map(XssSanitizer::clean)
                         .filter(cn.hutool.core.util.StrUtil::isNotBlank)
-                        .collect(java.util.stream.Collectors.toList());
+                        .collect(Collectors.toList());
                 for (String tag : safeTags) {
-                    hk.ljx.fishpicsbackend.picture.entity.PictureTag pt = new hk.ljx.fishpicsbackend.picture.entity.PictureTag();
+                    PictureTag pt = new PictureTag();
                     pt.setPictureId(pictureId);
                     pt.setTagName(tag);
                     pictureTagMapper.insert(pt);
@@ -182,14 +188,14 @@ public class AiTagTaskHandler implements TaskHandler {
         }
         if (aiResult.getPictureName() != null && !aiResult.getPictureName().isBlank()
                 && (picture.getPictureName() == null || picture.getPictureName().isBlank())) {
-            String cleanName = hk.ljx.fishpicsbackend.common.utils.XssSanitizer.clean(aiResult.getPictureName());
+            String cleanName = XssSanitizer.clean(aiResult.getPictureName());
             // AI 生成的名称可能超过 100 字符，截断保底
             if (cleanName.length() > 100) cleanName = cleanName.substring(0, 100);
             picture.setPictureName(cleanName);
         }
         if (aiResult.getIntroduction() != null && !aiResult.getIntroduction().isBlank()
                 && (picture.getIntroduction() == null || picture.getIntroduction().isBlank())) {
-            String cleanIntro = hk.ljx.fishpicsbackend.common.utils.XssSanitizer.cleanRelaxed(aiResult.getIntroduction());
+            String cleanIntro = XssSanitizer.cleanRelaxed(aiResult.getIntroduction());
             if (cleanIntro.length() > 500) cleanIntro = cleanIntro.substring(0, 500);
             picture.setIntroduction(cleanIntro);
         }

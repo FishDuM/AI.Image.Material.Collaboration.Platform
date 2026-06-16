@@ -1,7 +1,6 @@
 package hk.ljx.fishpicsbackend.space.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -30,7 +29,7 @@ public class SpaceTeamMember implements Serializable {
     private Long userId;
 
     /**
-     * 关联 role.id（仅允许 2/3/4）
+     * 关联 role.id（仅允许 1=所有者, 2=成员）
      */
     private Integer roleId;
 

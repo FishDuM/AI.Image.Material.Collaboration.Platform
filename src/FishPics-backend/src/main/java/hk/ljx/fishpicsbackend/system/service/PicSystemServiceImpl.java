@@ -15,14 +15,16 @@ import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.mapper.PicSystemMapper;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.picture.entity.Picture;
-import hk.ljx.fishpicsbackend.system.dto.AddSysMarquee;
-import hk.ljx.fishpicsbackend.system.dto.AddSysPicType;
+import hk.ljx.fishpicsbackend.system.dto.AddSysMarqueeRequest;
+import hk.ljx.fishpicsbackend.system.dto.AddSysPicTypeRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.annotation.Resource;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static hk.ljx.fishpicsbackend.common.constants.SysConstants.MARQUESS_KEY;
@@ -90,7 +92,7 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void addTypeList(AddSysPicType addSysPicType) {
+    public void addTypeList(AddSysPicTypeRequest addSysPicType) {
         ExcUtils.throwIfTrue(addSysPicType.getValue() == null || addSysPicType.getValue().isEmpty(), ExceptionCode.PARAMETER_ERROR, "标签不能为空");
         // 管理员输入的标签值过 XSS 清理后再入库
         List<String> sanitized = addSysPicType.getValue().stream()
@@ -135,7 +137,7 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
     }
 
     @Override
-    public void addMarquee(AddSysMarquee addSysMarquee) {
+    public void addMarquee(AddSysMarqueeRequest addSysMarquee) {
         ExcUtils.throwIfTrue(addSysMarquee.getPictureIds() == null || addSysMarquee.getPictureIds().isEmpty(), ExceptionCode.PARAMETER_ERROR, "图片id不能为空");
 
         List<Long> idList;
@@ -147,8 +149,8 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
             throw new BaseException(ExceptionCode.PARAMETER_ERROR, "图片ID必须为数字");
         }
         List<Picture> pictures = pictureMapper.selectList(new LambdaQueryWrapper<Picture>().in(Picture::getId, idList));
-        java.util.Set<Long> requestedIds = new java.util.HashSet<>(idList);
-        java.util.Set<Long> foundIds = pictures.stream().map(Picture::getId).collect(Collectors.toSet());
+        Set<Long> requestedIds = new HashSet<>(idList);
+        Set<Long> foundIds = pictures.stream().map(Picture::getId).collect(Collectors.toSet());
         ExcUtils.throwIfTrue(!requestedIds.equals(foundIds), ExceptionCode.NOT_FOUND, "部分图片不存在，请检查所有图片ID");
 
         List<String> marqueeUrls = pictures.stream().map(Picture::getUrl).collect(Collectors.toList());

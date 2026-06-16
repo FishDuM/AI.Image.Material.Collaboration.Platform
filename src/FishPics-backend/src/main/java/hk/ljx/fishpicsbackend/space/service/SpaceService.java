@@ -22,7 +22,7 @@ public interface SpaceService extends IService<Space> {
      * @param user 当前登录用户
      * @return 创建成功返回true
      */
-    Boolean createSpace(CreateSpace createSpace, User user);
+    Boolean createSpace(CreateSpaceRequest createSpace, User user);
 
     /**
      * 获取当前用户的空间列表
@@ -43,14 +43,14 @@ public interface SpaceService extends IService<Space> {
      * @param updateSpace 更新请求参数
      * @return 更新成功返回true
      */
-    Boolean updateSpace(UpdateSpace updateSpace);
+    Boolean updateSpace(UpdateSpaceRequest updateSpace);
 
     /**
      * 获取空间图片列表（分页）
      * @param spacePictureList 查询参数
      * @return 图片分页结果
      */
-    PicturePageVO pictureList(SpacePictureList spacePictureList);
+    PicturePageVO pictureList(SpacePictureListRequest spacePictureList);
 
     /**
      * 管理员分页查看所有空间

@@ -1,6 +1,7 @@
 package hk.ljx.fishpicsbackend.picture.vo;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -77,11 +78,13 @@ public class PictureVO {
     /**
      * 是否公开：0=不公开 1=公开
      */
+    @JsonProperty("isPrivate")
     private Integer isPrivate;
 
     /**
      * 是否精选：0=普通 1=精选
      */
+    @JsonProperty("isSelected")
     private Integer isSelected;
 
     /**

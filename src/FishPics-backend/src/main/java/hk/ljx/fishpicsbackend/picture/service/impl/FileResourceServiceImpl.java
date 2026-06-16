@@ -2,6 +2,8 @@ package hk.ljx.fishpicsbackend.picture.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import hk.ljx.fishpicsbackend.common.exception.BaseException;
+import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.utils.CosService;
 import hk.ljx.fishpicsbackend.mapper.FileResourceMapper;
 import hk.ljx.fishpicsbackend.picture.entity.FileResource;
@@ -10,6 +12,8 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * 物理文件去重表 Service 实现
@@ -42,8 +46,8 @@ public class FileResourceServiceImpl extends ServiceImpl<FileResourceMapper, Fil
             baseMapper.upsertByMd5Size(md5, size, cosKey);
             resource = findByMd5AndSize(md5, size);
             if (resource == null) {
-                throw new hk.ljx.fishpicsbackend.common.exception.BaseException(
-                        hk.ljx.fishpicsbackend.common.exception.ExceptionCode.INTERNAL_SERVER_ERROR,
+                throw new BaseException(
+                        ExceptionCode.INTERNAL_SERVER_ERROR,
                         "文件资源创建失败，请重试");
             }
         }
@@ -81,8 +85,8 @@ public class FileResourceServiceImpl extends ServiceImpl<FileResourceMapper, Fil
         if (deleted > 0) {
             // 引用归零，记录已删除，在事务提交后清理 COS 文件
             final String cosKey = resource.getCosKey();
-            org.springframework.transaction.support.TransactionSynchronizationManager
-                    .registerSynchronization(new org.springframework.transaction.support.TransactionSynchronization() {
+            TransactionSynchronizationManager
+                    .registerSynchronization(new TransactionSynchronization() {
                         @Override
                         public void afterCommit() {
                             try {

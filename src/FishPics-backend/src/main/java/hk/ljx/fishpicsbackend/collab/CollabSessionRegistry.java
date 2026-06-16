@@ -170,12 +170,12 @@ public class CollabSessionRegistry {
 
     /**
      * 释放图片编辑锁（仅锁持有者可释放）
+     * 使用 ConcurrentHashMap.remove(key, value) 原子条件删除，避免 get+remove 之间的竞态
      */
     public boolean unlockPicture(Long pictureId, Long userId) {
         LockInfo lock = pictureLocks.get(pictureId);
         if (lock != null && lock.getUserId().equals(userId)) {
-            pictureLocks.remove(pictureId);
-            return true;
+            return pictureLocks.remove(pictureId, lock);
         }
         return false;
     }

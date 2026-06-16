@@ -20,7 +20,9 @@ import java.net.Proxy;
 import java.net.URI;
 
 @Slf4j
-public class DownloadUtils {
+public final class DownloadUtils {
+
+    private DownloadUtils() {}
 
     private static final int CONNECT_TIMEOUT_MS = 10_000;
     private static final int READ_TIMEOUT_MS = 120_000;

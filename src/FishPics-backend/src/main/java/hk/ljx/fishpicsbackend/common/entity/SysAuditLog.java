@@ -2,14 +2,15 @@ package hk.ljx.fishpicsbackend.common.entity;
 
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
-import java.time.LocalDateTime;
+import java.io.Serializable;
+import java.util.Date;
 
 /**
  * 系统审计日志实体
  */
 @Data
 @TableName("sys_audit_log")
-public class SysAuditLog {
+public class SysAuditLog implements Serializable {
 
     @TableId(type = IdType.AUTO)
     private Long id;
@@ -48,7 +49,7 @@ public class SysAuditLog {
     private String ip;
 
     // 操作时间
-    private LocalDateTime createTime;
+    private Date createTime;
 
     @TableLogic
     private Integer isDelete = 0;

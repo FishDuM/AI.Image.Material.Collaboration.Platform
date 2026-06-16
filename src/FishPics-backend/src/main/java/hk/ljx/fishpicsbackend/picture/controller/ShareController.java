@@ -1,9 +1,8 @@
 package hk.ljx.fishpicsbackend.picture.controller;
 
 import hk.ljx.fishpicsbackend.common.annotation.AuditLog;
+import hk.ljx.fishpicsbackend.common.annotation.RequireLogin;
 import hk.ljx.fishpicsbackend.common.context.LoginContext;
-import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
-import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.common.utils.DownloadUtils;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
@@ -36,11 +35,11 @@ public class ShareController {
     @Resource
     private ShareService shareService;
 
+    @RequireLogin
     @AuditLog(module = "图片分享", operation = "创建分享")
     @PostMapping("/create")
     public Response<String> createShare(@Valid @RequestBody ShareCreateRequest request) {
         LoginContext ctx = UserHolder.getLoginContext();
-        ExcUtils.throwIfTrue(ctx == null || ctx.getUserId() == null, ExceptionCode.NOT_LOGIN);
         int expireDays = request.getExpireDays() == null ? 1 : request.getExpireDays();
         int allowDownload = request.getAllowDownload() == null ? 1 : request.getAllowDownload();
         String shareToken = shareService.createShare(
@@ -98,11 +97,11 @@ public class ShareController {
         }
     }
 
+    @RequireLogin
     @AuditLog(module = "图片分享", operation = "取消分享")
     @PostMapping("/cancel")
-    public Response<?> cancelShare(@Valid @RequestBody ShareCancelRequest request) {
+    public Response<Boolean> cancelShare(@Valid @RequestBody ShareCancelRequest request) {
         LoginContext ctx = UserHolder.getLoginContext();
-        ExcUtils.throwIfTrue(ctx == null || ctx.getUserId() == null, ExceptionCode.NOT_LOGIN);
         shareService.cancelShare(request.getShareId(), ctx.getUserId());
         return Response.okMsg("已取消分享");
     }

@@ -29,7 +29,7 @@ import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.common.utils.XssSanitizer;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
 import hk.ljx.fishpicsbackend.mapper.SpaceTeamMemberMapper;
-import hk.ljx.fishpicsbackend.space.dto.CreateSpace;
+import hk.ljx.fishpicsbackend.space.dto.CreateSpaceRequest;
 import hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember;
 import hk.ljx.fishpicsbackend.space.service.SpaceService;
 import hk.ljx.fishpicsbackend.user.dto.UserEditByAdminRequest;
@@ -51,7 +51,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
-import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -62,6 +61,13 @@ import static hk.ljx.fishpicsbackend.common.constants.UserConstants.DEFAULT_NICK
 @Service
 @Slf4j
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
+
+    private static final int USERNAME_MIN_LENGTH = 6;
+    private static final int USERNAME_MAX_LENGTH = 11;
+    private static final int PASSWORD_MIN_LENGTH = 8;
+    private static final int PASSWORD_MAX_LENGTH = 32;
+    /** 默认头像URL */
+    private static final String DEFAULT_AVATAR_URL = "https://avatars.githubusercontent.com/u/179127403?v=4";
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
@@ -103,10 +109,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         String captchaKey = userRegisterRequest.getCaptchaKey();
 
         ExcUtils.throwIfTrue(StrUtil.hasBlank(checkCode, captchaKey), ExceptionCode.PARAMETER_ERROR, "验证码不能为空");
-        ExcUtils.throwIfTrue(username == null || username.length() < 6 || username.length() > 11,
+        ExcUtils.throwIfTrue(username == null || username.length() < USERNAME_MIN_LENGTH || username.length() > USERNAME_MAX_LENGTH,
                 ExceptionCode.PARAMETER_ERROR, "账号长度必须为 6-11 位");
-        ExcUtils.throwIfTrue(password == null || password.length() < 8 || password.length() > 20,
-                ExceptionCode.PARAMETER_ERROR, "密码长度必须为 8-20 位");
+        ExcUtils.throwIfTrue(password == null || password.length() < PASSWORD_MIN_LENGTH || password.length() > PASSWORD_MAX_LENGTH,
+                ExceptionCode.PARAMETER_ERROR, "密码长度必须为 8-32 位");
         ExcUtils.throwIfTrue(!StrUtil.equals(password, checkPassword), ExceptionCode.PARAMETER_ERROR, "两次密码不一致");
 
         String captchaRedisKey = RedisConstants.getRegisterCodeKey(captchaKey);
@@ -123,7 +129,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setPassword(PasswordUtil.encode(password));
         // nickname 入库前清 HTML 标签
         user.setNickname(XssSanitizer.clean(DEFAULT_NICK_NAME + RandomUtil.randomString(6)));
-        user.setAvatar("https://avatars.githubusercontent.com/u/179127403?v=4");
+        user.setAvatar(DEFAULT_AVATAR_URL);
 
         int inserted;
         try {
@@ -136,7 +142,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         ExcUtils.throwIfTrue(inserted != 1, ExceptionCode.DATABASE_ERROR, "注册失败");
 
         Boolean spaceCreated = spaceService.createSpace(
-                new CreateSpace(user.getNickname() + "的私人空间", "你的专属私密存储空间", 0),
+                new CreateSpaceRequest(user.getNickname() + "的私人空间", "你的专属私密存储空间", 0),
                 user
         );
         ExcUtils.throwIfTrue(!Boolean.TRUE.equals(spaceCreated), ExceptionCode.DATABASE_ERROR, "创建私人空间失败");
@@ -348,7 +354,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (passwordChanged) {
             // 同时校验密码强度
             String pwd = userEditByAdminRequest.getPassword();
-            ExcUtils.throwIfTrue(pwd.length() < 8 || pwd.length() > 32,
+            ExcUtils.throwIfTrue(pwd.length() < PASSWORD_MIN_LENGTH || pwd.length() > PASSWORD_MAX_LENGTH,
                     ExceptionCode.PARAMETER_ERROR, "密码长度必须为 8-32 位");
             userEditByAdminRequest.setPassword(PasswordUtil.encode(pwd));
         }
@@ -450,20 +456,20 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
         String nickname = userEditRequest.getNickname();
         if (nickname != null) {
-            ExcUtils.throwIfTrue(nickname.length() < 6 || nickname.length() > 11,
+            ExcUtils.throwIfTrue(nickname.length() < USERNAME_MIN_LENGTH || nickname.length() > USERNAME_MAX_LENGTH,
                     ExceptionCode.PARAMETER_ERROR, "昵称长度必须为 6-11 位");
         }
 
         String username = userEditRequest.getUsername();
         if (username != null) {
-            ExcUtils.throwIfTrue(username.length() <= 5 || username.length() >= 12,
+            ExcUtils.throwIfTrue(username.length() < USERNAME_MIN_LENGTH || username.length() > USERNAME_MAX_LENGTH,
                     ExceptionCode.PARAMETER_ERROR, "账号长度必须为 6-11 位");
         }
 
         String password = userEditRequest.getPassword();
         if (password != null) {
-            ExcUtils.throwIfTrue(password.length() <= 7 || password.length() >= 21,
-                    ExceptionCode.PARAMETER_ERROR, "密码长度必须为 8-20 位");
+            ExcUtils.throwIfTrue(password.length() < PASSWORD_MIN_LENGTH || password.length() > PASSWORD_MAX_LENGTH,
+                    ExceptionCode.PARAMETER_ERROR, "密码长度必须为 8-32 位");
         }
 
         User user = getById(id);
@@ -473,7 +479,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (StrUtil.isNotBlank(userEditRequest.getNickname())) {
             userEditRequest.setNickname(XssSanitizer.clean(userEditRequest.getNickname()));
             // nickname 清洗后（可能清空）再校验长度
-            ExcUtils.throwIfTrue(userEditRequest.getNickname().length() < 6 || userEditRequest.getNickname().length() > 11,
+            ExcUtils.throwIfTrue(userEditRequest.getNickname().length() < USERNAME_MIN_LENGTH || userEditRequest.getNickname().length() > USERNAME_MAX_LENGTH,
                     ExceptionCode.PARAMETER_ERROR, "昵称长度必须为 6-11 位");
         }
         if (StrUtil.isNotBlank(userEditRequest.getUsername())) {
@@ -481,7 +487,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }
         // 清洗后长度可能变化(被清空),重新校验
         if (StrUtil.isNotBlank(userEditRequest.getUsername())) {
-            ExcUtils.throwIfTrue(userEditRequest.getUsername().length() <= 5 || userEditRequest.getUsername().length() >= 12,
+            ExcUtils.throwIfTrue(userEditRequest.getUsername().length() < USERNAME_MIN_LENGTH || userEditRequest.getUsername().length() > USERNAME_MAX_LENGTH,
                     ExceptionCode.PARAMETER_ERROR, "账号长度必须为 6-11 位");
             Long dupCount = baseMapper.selectCount(new LambdaQueryWrapper<User>()
                     .eq(User::getUsername, userEditRequest.getUsername())
@@ -502,7 +508,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             ExcUtils.throwIfTrue(StrUtil.isBlank(originalPassword), ExceptionCode.PARAMETER_ERROR, "请输入原始密码");
             ExcUtils.throwIfTrue(!PasswordUtil.matches(originalPassword, oldHashedPassword),
                     ExceptionCode.PARAMETER_ERROR, "原始密码错误");
-            ExcUtils.throwIfTrue(password.length() < 8 || password.length() > 32,
+            ExcUtils.throwIfTrue(password.length() < PASSWORD_MIN_LENGTH || password.length() > PASSWORD_MAX_LENGTH,
                     ExceptionCode.PARAMETER_ERROR, "密码长度必须为 8-32 位");
             user.setPassword(PasswordUtil.encode(password));
         }

@@ -23,6 +23,7 @@ import hk.ljx.fishpicsbackend.user.entity.User;
 import hk.ljx.fishpicsbackend.user.service.UserService;
 import hk.ljx.fishpicsbackend.user.vo.*;
 
+import java.util.ArrayList;
 import java.util.List;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
@@ -49,13 +50,11 @@ public class UserController {
     @PostMapping("/login")
     @AuditLog(module = "用户管理", operation = "用户登录")
     public Response<UserVO> userLogin(@Valid @RequestBody UserLoginRequest userLoginRequest) {
-        ExcUtils.throwIfTrue(userLoginRequest == null, ExceptionCode.PARAMETER_ERROR, "参数错误");
         return userService.userLogin(userLoginRequest);
     }
 
     @PostMapping("/register")
     public Response<Boolean> userRegister(@Valid @RequestBody UserRegisterRequest userRegisterRequest) {
-        ExcUtils.throwIfTrue(userRegisterRequest == null, "参数不能为空");
         return userService.userRegister(userRegisterRequest);
     }
 
@@ -81,6 +80,7 @@ public class UserController {
                 .build();
     }
 
+    @RequireLogin
     @GetMapping("/myself")
     public Response<UserVO> getMyself() {
         UserVO userVO = userService.getMyselfMessage();
@@ -96,8 +96,8 @@ public class UserController {
         LoginContext ctx = UserHolder.getLoginContext();
 
         // 权限列表 = 系统权限 + VIP 权限
-        List<String> allPerms = new java.util.ArrayList<>(
-                ctx.getSystemPerms() != null ? ctx.getSystemPerms() : java.util.List.of());
+        List<String> allPerms = new ArrayList<>(
+                ctx.getSystemPerms() != null ? ctx.getSystemPerms() : List.of());
         if (ctx.getVipPerms() != null) {
             allPerms.addAll(ctx.getVipPerms());
         }
@@ -115,10 +115,10 @@ public class UserController {
         return Response.ok(userVO);
     }
 
+    @RequireLogin
     @PostMapping("/editUser")
     public Response<Boolean> editMyself(@Valid @RequestBody UserEditRequest userEditRequest,
                                         HttpServletRequest request, HttpServletResponse response) {
-        ExcUtils.throwIfTrue(ObjectUtil.isNull(userEditRequest), ExceptionCode.PARAMETER_ERROR);
         // 修复:在 controller 捕获当前 JWT(在拦截器清理 LoginContext 之前仍可读 header),
         // 改完密码后只黑名单当前 token 而非踢所有 token;同时下发新 token 让前端无感续期
         String authHeader = request.getHeader("Authorization");
@@ -137,8 +137,9 @@ public class UserController {
         return Response.ok(result);
     }
 
-    @PostMapping("/logout")
+    @RequireLogin
     @AuditLog(module = "用户管理", operation = "用户登出")
+    @PostMapping("/logout")
     public Response<?> logout(HttpServletRequest request) {
         // 1. 将 JWT 加入黑名单
         String authHeader = request.getHeader("Authorization");
@@ -175,7 +176,6 @@ public class UserController {
     @PostMapping("/admin/getUser")
     public Response<UserVO> adminGetUser(@Valid @RequestBody UserIdRequest userIdRequest) {
         Long userId = userIdRequest.getUserId();
-        ExcUtils.throwIfTrue(ObjectUtil.isNull(userId), ExceptionCode.PARAMETER_ERROR);
         User user = userMapper.selectById(userId);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user) || user.getId() == null, ExceptionCode.NOT_FOUND, "用户不存在");
 
@@ -210,7 +210,6 @@ public class UserController {
     @PostMapping("/admin/setStatus")
     @AuditLog(module = "用户管理", operation = "用户状态变更")
     public Response<Boolean> setStatus(@Valid @RequestBody UserIdRequest userIdRequest) {
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(userIdRequest), ExceptionCode.PARAMETER_ERROR);
         Long userId = userIdRequest.getUserId();
         return Response.ok(userService.setStatus(userId));
     }

@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Aspect
 @Component
-public class AdminInterceptor {
+public class AdminCheckAspect {
 
     /**
      * 拦截 @RequireAdmin 注解

@@ -1,7 +1,6 @@
 package hk.ljx.fishpicsbackend.system.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import java.io.Serializable;
@@ -21,12 +20,12 @@ public class PicSystem implements Serializable {
     private Long id;
 
     /**
-     * 
+     * 配置键名
      */
     private String syskey;
 
     /**
-     * 
+     * 配置值（JSON格式）
      */
     private String sysvalue;
 

@@ -35,6 +35,5 @@ public class PictureTag implements Serializable {
      */
     private Date createTime;
 
-    @com.baomidou.mybatisplus.annotation.TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }

@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -43,7 +45,7 @@ public class UserEditByAdminRequest {
     /**
      * 用户角色ID列表
      */
-    private java.util.List<Long> roleIds;
+    private List<Long> roleIds;
 
     /**
      * 用户等级：0-普通，1-VIP，2-SVIP

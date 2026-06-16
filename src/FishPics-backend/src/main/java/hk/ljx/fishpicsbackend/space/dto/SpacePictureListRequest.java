@@ -15,7 +15,7 @@ import java.io.Serializable;
 @EqualsAndHashCode(callSuper = true)
 @AllArgsConstructor
 @NoArgsConstructor
-public class SpacePictureList extends PageRequest implements Serializable {
+public class SpacePictureListRequest extends PageRequest implements Serializable {
 
     // 空间ID，必填
     private Long spaceId;

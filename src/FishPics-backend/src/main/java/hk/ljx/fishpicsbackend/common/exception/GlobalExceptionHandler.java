@@ -49,7 +49,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<Response<?>> handleDashScopeError(ApiException e) {
         log.error("DashScope API exception", e);
-        String friendly = ExcUtils.translateDashScopeError(e);
+        String msg = e.getMessage();
+        String friendly = null;
+        if (msg != null) {
+            if (msg.contains("DataInspectionFailed")) friendly = "生成的图片内容不合规";
+            else if (msg.contains("IPInfringementSuspect")) friendly = "输入提示词涉嫌侵权";
+        }
         if (friendly != null) {
             return wrapRaw(Response.fail(new BaseException(ExceptionCode.AI_DRAW_ERROR, friendly)));
         }

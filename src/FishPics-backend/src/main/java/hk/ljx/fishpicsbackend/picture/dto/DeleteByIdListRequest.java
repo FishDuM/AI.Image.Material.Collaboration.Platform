@@ -11,7 +11,7 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class DeleteByIdList implements Serializable {
+public class DeleteByIdListRequest implements Serializable {
     @Size(max = 100, message = "单次最多删除100条")
     private List<Long> ids;
 }

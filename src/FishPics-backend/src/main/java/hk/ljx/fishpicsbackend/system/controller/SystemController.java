@@ -6,8 +6,8 @@ import hk.ljx.fishpicsbackend.common.annotation.AuditLog;
 import hk.ljx.fishpicsbackend.common.annotation.RequireAdmin;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
-import hk.ljx.fishpicsbackend.system.dto.AddSysMarquee;
-import hk.ljx.fishpicsbackend.system.dto.AddSysPicType;
+import hk.ljx.fishpicsbackend.system.dto.AddSysMarqueeRequest;
+import hk.ljx.fishpicsbackend.system.dto.AddSysPicTypeRequest;
 import hk.ljx.fishpicsbackend.system.dto.DeleteMarqueeRequest;
 import hk.ljx.fishpicsbackend.system.dto.DeleteTypeRequest;
 import jakarta.annotation.Resource;
@@ -26,7 +26,7 @@ public class SystemController {
     private PicSystemService picSystemService;
 
     @GetMapping("/list")
-    public Response<List<String>> list() {
+    public Response<List<String>> listPicTypes() {
         List<String> list = picSystemService.getTypeList();
         return Response.ok(list);
     }
@@ -34,8 +34,7 @@ public class SystemController {
     @AuditLog(module = "系统配置", operation = "添加图片标签")
     @RequireAdmin
     @PostMapping("/addList")
-    public Response<Boolean> addList(@Valid @RequestBody AddSysPicType addSysPicType) {
-        ExcUtils.throwIfTrue(addSysPicType == null, ExceptionCode.PARAMETER_ERROR, "type不能为空");
+    public Response<Boolean> addList(@Valid @RequestBody AddSysPicTypeRequest addSysPicType) {
         picSystemService.addTypeList(addSysPicType);
         return Response.ok(true);
     }
@@ -50,7 +49,7 @@ public class SystemController {
     }
 
     @GetMapping("/marquee")
-    public Response<List<String>> marquee() {
+    public Response<List<String>> listMarquees() {
         List<String> urls = picSystemService.getMarquess();
         return Response.ok(urls);
     }
@@ -58,8 +57,7 @@ public class SystemController {
     @AuditLog(module = "系统配置", operation = "添加跑马灯")
     @RequireAdmin
     @PostMapping("/addMarquee")
-    public Response<Boolean> addMarquee(@Valid @RequestBody AddSysMarquee addSysMarquee) {
-        ExcUtils.throwIfTrue(addSysMarquee == null, ExceptionCode.PARAMETER_ERROR, "url不能为空");
+    public Response<Boolean> addMarquee(@Valid @RequestBody AddSysMarqueeRequest addSysMarquee) {
         picSystemService.addMarquee(addSysMarquee);
         return Response.ok(true);
     }

@@ -1,7 +1,6 @@
 package hk.ljx.fishpicsbackend.space.controller;
 
 import hk.ljx.fishpicsbackend.common.response.Response;
-import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.common.annotation.AuditLog;
 import hk.ljx.fishpicsbackend.common.annotation.RequireAdmin;
@@ -40,10 +39,9 @@ public class SpaceController {
      * @return 创建成功返回true
      */
     @RequireLogin
-    @PostMapping("/create")
     @AuditLog(module = "空间管理", operation = "创建空间")
-    public Response<Boolean> createSpace(@Valid @RequestBody CreateSpace createSpace) {
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(createSpace), ExceptionCode.PARAMETER_ERROR, "创建空间参数不能为空");
+    @PostMapping("/create")
+    public Response<Boolean> createSpace(@Valid @RequestBody CreateSpaceRequest createSpace) {
         User user = UserHolder.getUser();
         return Response.ok(spaceService.createSpace(createSpace, user));
     }
@@ -81,10 +79,9 @@ public class SpaceController {
      * @return 更新成功返回true
      */
     @RequireLogin
-    @PostMapping("/update")
     @AuditLog(module = "空间管理", operation = "更新空间")
-    public Response<Boolean> updateSpace(@Valid @RequestBody UpdateSpace updateSpace) {
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(updateSpace), ExceptionCode.PARAMETER_ERROR, "更新空间参数不能为空");
+    @PostMapping("/update")
+    public Response<Boolean> updateSpace(@Valid @RequestBody UpdateSpaceRequest updateSpace) {
         return Response.ok(spaceService.updateSpace(updateSpace));
     }
 
@@ -96,12 +93,12 @@ public class SpaceController {
      */
     @RequireLogin
     @PostMapping("/pictureList")
-    public Response<PicturePageVO> pictureList(@Valid @RequestBody SpacePictureList spacePictureList) {
-        ExcUtils.throwIfTrue(spacePictureList == null, ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
+    public Response<PicturePageVO> pictureList(@Valid @RequestBody SpacePictureListRequest spacePictureList) {
         return Response.ok(spaceService.pictureList(spacePictureList));
     }
 
     @RequireAdmin
+    @AuditLog(module = "空间管理", operation = "查询空间列表")
     @PostMapping("/admin/list")
     public Response<IPage<SpaceVO>> adminList(@Valid @RequestBody SpaceQueryWrapper wrapper) {
         return Response.ok(spaceService.adminList(wrapper));
@@ -111,7 +108,6 @@ public class SpaceController {
     @PostMapping("/admin/update")
     @AuditLog(module = "空间管理", operation = "更新空间")
     public Response<Boolean> adminUpdate(@Valid @RequestBody SpaceAdminUpdateRequest request) {
-        ExcUtils.throwIfTrue(ObjectUtil.isNull(request), ExceptionCode.PARAMETER_ERROR);
         return Response.ok(spaceService.adminUpdate(request));
     }
 
@@ -119,7 +115,6 @@ public class SpaceController {
     @PostMapping("/admin/delete")
     @AuditLog(module = "空间管理", operation = "删除空间")
     public Response<Boolean> adminDelete(@Valid @RequestBody SpaceDeleteRequest request) {
-        ExcUtils.throwIfTrue(request.getId() == null, ExceptionCode.PARAMETER_ERROR);
         return Response.ok(spaceService.adminDelete(request.getId()));
     }
 
@@ -127,7 +122,6 @@ public class SpaceController {
     @PostMapping("/admin/setStatus")
     @AuditLog(module = "空间管理", operation = "空间状态变更")
     public Response<Boolean> adminSetStatus(@Valid @RequestBody SpaceSetStatusRequest request) {
-        ExcUtils.throwIfTrue(request.getId() == null || request.getStatus() == null, ExceptionCode.PARAMETER_ERROR);
         return Response.ok(spaceService.adminSetStatus(request.getId(), request.getStatus()));
     }
 
@@ -142,8 +136,6 @@ public class SpaceController {
     @AuditLog(module = "团队管理", operation = "邀请成员")
     @PostMapping("/team/invite")
     public Response<Boolean> teamInvite(@Valid @RequestBody TeamInviteRequest request) {
-        ExcUtils.throwIfTrue(request.getSpaceId() == null || request.getUserId() == null || request.getRoleId() == null,
-                ExceptionCode.PARAMETER_ERROR, "参数不能为空");
         return Response.ok(spaceService.teamInvite(request));
     }
 
@@ -151,8 +143,6 @@ public class SpaceController {
     @AuditLog(module = "团队管理", operation = "移除成员")
     @PostMapping("/team/remove")
     public Response<Boolean> teamRemove(@Valid @RequestBody TeamRemoveRequest request) {
-        ExcUtils.throwIfTrue(request.getSpaceId() == null || request.getUserId() == null,
-                ExceptionCode.PARAMETER_ERROR, "参数不能为空");
         return Response.ok(spaceService.teamRemove(request));
     }
 
@@ -160,8 +150,6 @@ public class SpaceController {
     @AuditLog(module = "团队管理", operation = "变更角色")
     @PostMapping("/team/changeRole")
     public Response<Boolean> teamChangeRole(@Valid @RequestBody TeamChangeRoleRequest request) {
-        ExcUtils.throwIfTrue(request.getSpaceId() == null || request.getUserId() == null || request.getRoleId() == null,
-                ExceptionCode.PARAMETER_ERROR, "参数不能为空");
         return Response.ok(spaceService.teamChangeRole(request));
     }
 

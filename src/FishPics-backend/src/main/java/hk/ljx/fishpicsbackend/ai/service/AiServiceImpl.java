@@ -26,7 +26,9 @@ import hk.ljx.fishpicsbackend.picture.service.PictureService;
 import hk.ljx.fishpicsbackend.user.entity.User;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 
@@ -67,7 +69,7 @@ public class AiServiceImpl implements AiService {
     private RateLimiter rateLimiter;
 
     @Resource
-    private org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
+    private StringRedisTemplate stringRedisTemplate;
 
     @Resource
     private PicSystemMapper picSystemMapper;
@@ -275,7 +277,7 @@ public class AiServiceImpl implements AiService {
             vo.setId(task.getId());
             vo.setUserId(task.getUserId());
             vo.setSubType(task.getBizType());
-            vo.setPictureId(task.getBizId());
+            vo.setPictureId(task.getBizId() != null ? Long.parseLong(task.getBizId()) : null);
             vo.setCreateTime(task.getCreateTime());
             vo.setErrorMsg(task.getErrorMsg());
             vo.setType(switch (task.getBizType()) {
@@ -328,6 +330,7 @@ public class AiServiceImpl implements AiService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Boolean updateAdminConfig(AiConfigDTO configDTO) {
         configLock.lock();
         try {

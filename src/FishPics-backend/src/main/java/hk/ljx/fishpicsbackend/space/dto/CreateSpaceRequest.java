@@ -1,5 +1,6 @@
 package hk.ljx.fishpicsbackend.space.dto;
 
+import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -11,9 +12,10 @@ import lombok.NoArgsConstructor;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class CreateSpace {
+public class CreateSpaceRequest {
 
     // 空间名称，不能为空，最大20字符
+    @NotBlank(message = "空间名称不能为空")
     private String name;
 
     // 空间介绍，最大200字符

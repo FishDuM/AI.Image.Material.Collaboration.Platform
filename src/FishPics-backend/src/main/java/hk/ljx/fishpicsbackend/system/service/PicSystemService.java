@@ -1,8 +1,8 @@
 package hk.ljx.fishpicsbackend.system.service;
 import hk.ljx.fishpicsbackend.system.entity.PicSystem;
 
-import hk.ljx.fishpicsbackend.system.dto.AddSysMarquee;
-import hk.ljx.fishpicsbackend.system.dto.AddSysPicType;
+import hk.ljx.fishpicsbackend.system.dto.AddSysMarqueeRequest;
+import hk.ljx.fishpicsbackend.system.dto.AddSysPicTypeRequest;
 import com.baomidou.mybatisplus.extension.service.IService;
 
 import java.util.List;
@@ -24,7 +24,7 @@ public interface PicSystemService extends IService<PicSystem> {
      * 添加帖子标签
      * @param addSysPicType 标签
      */
-    void addTypeList(AddSysPicType addSysPicType);
+    void addTypeList(AddSysPicTypeRequest addSysPicType);
 
     /**
      * 删除帖子标签
@@ -42,7 +42,7 @@ public interface PicSystemService extends IService<PicSystem> {
      * 添加跑马灯图片
      * @param addSysMarquee 图片 id
      */
-    void addMarquee(AddSysMarquee addSysMarquee);
+    void addMarquee(AddSysMarqueeRequest addSysMarquee);
 
     /**
      * 删除跑马灯图片

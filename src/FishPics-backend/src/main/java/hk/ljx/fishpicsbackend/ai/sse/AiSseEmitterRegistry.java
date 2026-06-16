@@ -26,20 +26,21 @@ public class AiSseEmitterRegistry {
      */
     public SseEmitter register(String taskId) {
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT);
-        emitter.onCompletion(() -> emitters.remove(taskId));
+        // 条件删除：只删除自己注册的 emitter 实例，避免 onTimeout→onCompletion 重入误删新连接
+        emitter.onCompletion(() -> emitters.remove(taskId, emitter));
         emitter.onTimeout(() -> {
-            emitters.remove(taskId);
+            emitters.remove(taskId, emitter);
             try {
                 emitter.send(SseEmitter.event()
                         .name("result")
                         .data(Map.of("taskId", taskId, "status", "FAILED",
                                 "errorMsg", "等待超时，请重试")));
-                emitter.complete();
+                // 不调用 emitter.complete()，避免触发 onCompletion 回调导致重入误删
             } catch (Exception ignored) {}
             log.debug("[SSE] emitter timeout: taskId={}", taskId);
         });
         emitter.onError(e -> {
-            emitters.remove(taskId);
+            emitters.remove(taskId, emitter);
             log.debug("[SSE] emitter error: taskId={}, msg={}", taskId, e.getMessage());
         });
         emitters.put(taskId, emitter);

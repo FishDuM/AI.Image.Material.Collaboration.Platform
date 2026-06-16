@@ -6,8 +6,6 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
-import java.io.Serializable;
-
 /**
  * 空间查询条件包装器（继承PageRequest，支持分页排序）
  * 非空字段才会加入查询条件（等值匹配）
@@ -16,7 +14,7 @@ import java.io.Serializable;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class SpaceQueryWrapper extends PageRequest implements Serializable {
+public class SpaceQueryWrapper extends PageRequest {
 
     // 空间ID
     private Long id;

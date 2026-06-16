@@ -6,7 +6,9 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.InputStream;
 import java.util.Set;
 
-public class FileTypeUtils {
+public final class FileTypeUtils {
+
+    private FileTypeUtils() {}
 
     private static final Set<String> ALLOWED_TYPES = Set.of(
             "jpg", "jpeg", "png", "bmp", "webp", "tiff", "gif",

@@ -12,7 +12,10 @@ import org.redisson.api.RedissonClient;
 import org.redisson.api.listener.MessageListener;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
+import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -72,7 +75,7 @@ public class MultiLevelCache<V> {
                            String cacheName,
                            long l2TtlMinutes,
                            Class<V> valueType,
-                           org.redisson.api.RedissonClient redisson) {
+                           RedissonClient redisson) {
         this.caffeineCache = caffeineCache;
         this.redis = redis;
         this.cacheName = cacheName;
@@ -91,7 +94,7 @@ public class MultiLevelCache<V> {
             try {
                 RTopic topic = redissonClient.getTopic(INVALIDATE_CHANNEL);
                 // Redisson 的 addListener 接受类型化的 Listener
-                topic.addListener(java.io.Serializable.class, (MessageListener<java.io.Serializable>) (channel, msg) -> {
+                topic.addListener(Serializable.class, (MessageListener<Serializable>) (channel, msg) -> {
                     try {
                         // msg 可能是 String、byte[] 等
                         String body = msg == null ? "" : msg.toString();
@@ -212,19 +215,19 @@ public class MultiLevelCache<V> {
      */
     public static class InvalidateListenerRegistry {
         private static final InvalidateListenerRegistry INSTANCE = new InvalidateListenerRegistry();
-        private final Map<String, java.util.List<Cache<String, ?>>> localCaches = new ConcurrentHashMap<>();
+        private final Map<String, List<Cache<String, ?>>> localCaches = new ConcurrentHashMap<>();
 
         public static InvalidateListenerRegistry getInstance() { return INSTANCE; }
 
         public void register(String cacheName, Cache<String, ?> cache) {
-            localCaches.computeIfAbsent(cacheName, k -> new java.util.ArrayList<>()).add(cache);
+            localCaches.computeIfAbsent(cacheName, k -> new ArrayList<>()).add(cache);
         }
 
         public void invalidateLocal(String cacheName, String key) {
-            java.util.List<Cache<String, ?>> caches = localCaches.get(cacheName);
+            List<Cache<String, ?>> caches = localCaches.get(cacheName);
             if (caches != null) {
                 for (Cache<String, ?> c : caches) {
-                    try { c.invalidate(key); } catch (Exception ignored) {}
+                    try { c.invalidate(key); } catch (Exception e) { log.debug("[CacheInvalidate] 本地失效失败, cacheName={}, key={}", cacheName, key, e); }
                 }
             }
         }

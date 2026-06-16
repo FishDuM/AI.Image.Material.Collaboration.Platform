@@ -24,9 +24,12 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import jakarta.annotation.Resource;
+import jakarta.annotation.PreDestroy;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
+import java.util.Date;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * 审计日志AOP切面（异步写入，通过 RocketMQ 解耦）
@@ -42,14 +45,14 @@ public class AuditLogAspect {
     @Resource(name = "auditLogProducer")
     private DefaultMQProducer auditLogProducer;
 
-    @Pointcut("@annotation(hk.ljx.fishpicsbackend.common.annotation.AuditLog)")
+    @Pointcut("@annotation(AuditLog)")
     public void auditLogPointcut() {}
 
     @Around("auditLogPointcut()")
     public Object around(ProceedingJoinPoint joinPoint) throws Throwable {
         SysAuditLog auditLog = new SysAuditLog();
         // 提前记录请求时间，反映真实请求时间点
-        auditLog.setCreateTime(LocalDateTime.now());
+        auditLog.setCreateTime(new Date());
 
         try {
             // 获取注解信息
@@ -161,12 +164,18 @@ public class AuditLogAspect {
      * 异步发送审计日志到 RocketMQ
      * 用独立线程池异步执行，MQ 挂了就降级成 DB 写
      */
-    private final java.util.concurrent.ExecutorService auditLogExecutor =
-            java.util.concurrent.Executors.newFixedThreadPool(2, r -> {
+    private final ExecutorService auditLogExecutor =
+            Executors.newFixedThreadPool(2, r -> {
                 Thread t = new Thread(r, "audit-log-fallback");
                 t.setDaemon(true);
                 return t;
             });
+
+    @PreDestroy
+    public void destroy() {
+        auditLogExecutor.shutdown();
+        log.info("[AuditLogAspect] 审计日志线程池已关闭");
+    }
 
     private void sendAuditLogAsync(SysAuditLog auditLog) {
         auditLogExecutor.execute(() -> {

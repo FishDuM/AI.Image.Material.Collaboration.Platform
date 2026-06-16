@@ -165,9 +165,17 @@ public class CollabEventHandler implements com.lmax.disruptor.EventHandler<Colla
         if (!requests.isEmpty()) {
             var next = requests.iterator().next();
             sessionRegistry.removeEditRequest(pictureId, next.getUserId());
-            sessionRegistry.tryLockPicture(pictureId, next.getUserId(), next.getNickname(), event.getSpaceId());
-            broadcastTransfer(event.getSpaceId(), pictureId, userId, next.getUserId(), next.getNickname());
-            log.info("[CollabDisruptor] 转让编辑权(排队): picture={}, from={}, to={}", pictureId, userId, next.getUserId());
+            boolean locked = sessionRegistry.tryLockPicture(pictureId, next.getUserId(), next.getNickname(), event.getSpaceId());
+            if (locked) {
+                broadcastTransfer(event.getSpaceId(), pictureId, userId, next.getUserId(), next.getNickname());
+                log.info("[CollabDisruptor] 转让编辑权(排队): picture={}, from={}, to={}", pictureId, userId, next.getUserId());
+            } else {
+                // 锁转移失败，广播解锁
+                String unlockMsg = cn.hutool.json.JSONUtil.toJsonStr(Map.of(
+                        "type", "unlock", "pictureId", pictureId, "userId", userId));
+                sessionRegistry.broadcastAll(event.getSpaceId(), unlockMsg);
+                log.warn("[CollabDisruptor] 转让编辑权失败(排队): picture={}, target={}", pictureId, next.getUserId());
+            }
             return;
         }
 
@@ -180,9 +188,17 @@ public class CollabEventHandler implements com.lmax.disruptor.EventHandler<Colla
         if (nextUser != null) {
             Long toUserId = nextUser.getKey();
             String toNickname = nextUser.getValue().getNickname() != null ? nextUser.getValue().getNickname() : "";
-            sessionRegistry.tryLockPicture(pictureId, toUserId, toNickname, event.getSpaceId());
-            broadcastTransfer(event.getSpaceId(), pictureId, userId, toUserId, toNickname);
-            log.info("[CollabDisruptor] 转让编辑权(在线): picture={}, from={}, to={}", pictureId, userId, toUserId);
+            boolean locked = sessionRegistry.tryLockPicture(pictureId, toUserId, toNickname, event.getSpaceId());
+            if (locked) {
+                broadcastTransfer(event.getSpaceId(), pictureId, userId, toUserId, toNickname);
+                log.info("[CollabDisruptor] 转让编辑权(在线): picture={}, from={}, to={}", pictureId, userId, toUserId);
+            } else {
+                // 锁转移失败，广播解锁
+                String unlockMsg = cn.hutool.json.JSONUtil.toJsonStr(Map.of(
+                        "type", "unlock", "pictureId", pictureId, "userId", userId));
+                sessionRegistry.broadcastAll(event.getSpaceId(), unlockMsg);
+                log.warn("[CollabDisruptor] 转让编辑权失败(在线): picture={}, target={}", pictureId, toUserId);
+            }
         } else {
             // 无其他人在线，释放锁
             String unlockMsg = cn.hutool.json.JSONUtil.toJsonStr(Map.of(
