@@ -36,6 +36,15 @@ public enum PictureSizeEnum {
         return SQUARE;
     }
 
+    public static boolean isValidCode(String code) {
+        for (PictureSizeEnum value : values()) {
+            if (value.getCode().equals(code)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * 根据 code 获取 "宽*高" 格式的尺寸字符串
      */

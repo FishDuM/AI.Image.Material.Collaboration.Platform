@@ -13,6 +13,8 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -54,6 +56,10 @@ public class TaskProcessor {
             CompletableFuture.runAsync(() -> process(taskId), taskExecutor)
                     .exceptionally(e -> {
                         log.error("task processor crashed: taskId={}", taskId, e);
+                        if (e instanceof RejectedExecutionException
+                                || e.getCause() instanceof RejectedExecutionException) {
+                            markFailedByTaskId(taskId, "任务调度线程池繁忙，请稍后重试");
+                        }
                         return null;
                     });
         } catch (RejectedExecutionException e) {
@@ -101,7 +107,7 @@ public class TaskProcessor {
         }
 
         long elapsed = task.getUpdateTime() != null
-                ? System.currentTimeMillis() - task.getUpdateTime().getTime()
+                ? ChronoUnit.MILLIS.between(task.getUpdateTime(), LocalDateTime.now())
                 : Long.MAX_VALUE;
         if (elapsed < STUCK_PROCESSING_MS) {
             log.debug("task is processing, skipping: taskId={}, elapsed={}ms", taskId, elapsed);
@@ -113,7 +119,7 @@ public class TaskProcessor {
                         .eq(Task::getTaskId, taskId)
                         .eq(Task::getStatus, "PROCESSING")
                         .apply("update_time < DATE_SUB(NOW(), INTERVAL 5 MINUTE)")
-                        .set(Task::getUpdateTime, new java.util.Date()));
+                        .set(Task::getUpdateTime, LocalDateTime.now()));
         if (reclaimed == 0) {
             log.warn("task re-claim failed, skipping: taskId={}", taskId);
             return false;

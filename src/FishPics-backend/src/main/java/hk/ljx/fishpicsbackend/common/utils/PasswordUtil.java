@@ -8,6 +8,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 public final class PasswordUtil {
 
     private static final BCryptPasswordEncoder ENCODER = new BCryptPasswordEncoder(10);
+    private static final String DUMMY_HASH = "$2a$10$7EqJtq98hPqEX7fNZaFWoOhiIM9k4u7pBaT9jLUNkoJwq8QZ4Q9X2";
 
     private PasswordUtil() {}
 
@@ -30,5 +31,14 @@ public final class PasswordUtil {
             return false;
         }
         return ENCODER.matches(rawPassword, hashedPassword);
+    }
+
+    public static boolean matchesWithDummyOnInvalidHash(String rawPassword, String hashedPassword) {
+        if (rawPassword == null) {
+            return false;
+        }
+        boolean validHash = hashedPassword != null && hashedPassword.startsWith("$2");
+        boolean matched = ENCODER.matches(rawPassword, validHash ? hashedPassword : DUMMY_HASH);
+        return validHash && matched;
     }
 }

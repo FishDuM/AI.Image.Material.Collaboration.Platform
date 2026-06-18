@@ -34,7 +34,7 @@ CREATE TABLE user (
 ) COMMENT '用户表';
 
 INSERT INTO user (username, password, nickname, level, role, status) VALUES
-('admin', '$2b$10$6owdZSQbVSKuiA4BL7tC/Oii2g4hlrs3U88e.FX41NK1s/kQeERge', '系统管理员', 0, 1, 1);
+('admin123', '$2b$10$6owdZSQbVSKuiA4BL7tC/Oii2g4hlrs3U88e.FX41NK1s/kQeERge', '系统管理员', 0, 1, 1);
 
 -- 3. 空间表
 CREATE TABLE space (

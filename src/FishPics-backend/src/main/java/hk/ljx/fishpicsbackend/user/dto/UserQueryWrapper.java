@@ -3,7 +3,7 @@ package hk.ljx.fishpicsbackend.user.dto;
 import hk.ljx.fishpicsbackend.common.dto.PageRequest;
 import lombok.*;
 
-import java.util.Date;
+import java.time.LocalDateTime;
 
 @Data
 @AllArgsConstructor
@@ -45,6 +45,6 @@ public class UserQueryWrapper extends PageRequest {
     /**
      * 创建时间
      */
-    private Date createTime;
+    private LocalDateTime createTime;
 
 }

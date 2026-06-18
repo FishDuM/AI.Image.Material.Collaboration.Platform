@@ -7,7 +7,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.Date;
+import java.time.LocalDateTime;
 import java.util.List;
 
 // 列表/详情/上传/管理端复用，@JsonInclude(NON_NULL) 控制返回字段
@@ -39,8 +39,8 @@ public class PictureVO {
 
     private Long spaceId;
     private Long userId;
-    private Date createTime;
-    private Date updateTime;
+    private LocalDateTime createTime;
+    private LocalDateTime updateTime;
 
     // ---- 工厂方法 ----
 
@@ -75,7 +75,7 @@ public class PictureVO {
 
     // 管理端，带完整信息
     public static PictureVO ofAdmin(Long id, String url, String width, String height,
-                                     Long size, Integer status, Date createTime,
+                                     Long size, Integer status, LocalDateTime createTime,
                                      Long userId, Integer isPrivate, Integer isSelected,
                                      List<String> tags) {
         return PictureVO.builder()

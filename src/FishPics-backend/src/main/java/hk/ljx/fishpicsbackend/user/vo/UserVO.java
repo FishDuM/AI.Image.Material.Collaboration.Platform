@@ -8,7 +8,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
-import java.util.Date;
+import java.time.LocalDateTime;
 import java.util.List;
 
 // 登录/资料/搜索/管理端复用，@JsonInclude(NON_NULL) 按场景区分返回字段
@@ -35,7 +35,7 @@ public class UserVO implements Serializable {
     private Integer roleId;
     private List<String> permissions;
     private String token;
-    private Date createTime;
+    private LocalDateTime createTime;
     private List<Long> roleIds;
 
     // 隐私设置
@@ -64,7 +64,7 @@ public class UserVO implements Serializable {
     // 个人资料页
     public static UserVO ofInfo(Long id, String username, String nickname, String avatar,
                                  String email, String phone, Integer level, Integer roleId, String role,
-                                 Date createTime, Integer isPrivateFollows,
+                                 LocalDateTime createTime, Integer isPrivateFollows,
                                  Integer isPrivatePostCollect, Integer isPrivateLikes,
                                  Integer isPrivateFans) {
         return UserVO.builder()
@@ -87,7 +87,7 @@ public class UserVO implements Serializable {
 
     // 公开主页（别人看到的）
     public static UserVO ofPublicProfile(Long id, String username, String nickname,
-                                          String avatar, Integer level, Date createTime) {
+                                          String avatar, Integer level, LocalDateTime createTime) {
         return UserVO.builder()
                 .id(id)
                 .username(username)
@@ -101,7 +101,7 @@ public class UserVO implements Serializable {
     // 管理端，带脱敏
     public static UserVO ofAdmin(Long id, String username, String nickname, String avatar,
                                   String email, String phone, Integer status, Integer level,
-                                  Integer roleId, Date createTime, List<Long> roleIds) {
+                                  Integer roleId, LocalDateTime createTime, List<Long> roleIds) {
         return UserVO.builder()
                 .id(id)
                 .username(username)

@@ -2,7 +2,7 @@ package hk.ljx.fishpicsbackend.ai.vo;
 
 import lombok.Data;
 
-import java.util.Date;
+import java.time.LocalDateTime;
 
 @Data
 public class AiTaskVO {
@@ -15,6 +15,6 @@ public class AiTaskVO {
     // 0=处理中, 1=成功, 2=失败
     private Integer status;
     private Long pictureId;
-    private Date createTime;
+    private LocalDateTime createTime;
     private String errorMsg;
 }

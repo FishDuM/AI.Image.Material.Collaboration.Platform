@@ -1,5 +1,5 @@
 import { createContext, useState, useEffect, useCallback, useRef } from 'react'
-import { getUserInfo, getUserInfoAsync, saveUserInfo, saveToken, getToken, clearAuth } from '../utils/storage'
+import { getUserInfo, saveUserInfo, saveToken, getToken, clearAuth } from '../utils/storage'
 import { resetAuthFailureCounter } from '../api'
 import { getUser, logout as logoutApi } from '../api'
 
@@ -14,17 +14,8 @@ export function AuthProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(() => !!getToken())
   const [authLoading, setAuthLoading] = useState(() => !!getToken())
 
-  // 加密模式下 getUserInfo() 同步返回 null，用异步版本补读一次
-  useEffect(() => {
-    if (!userInfo && isAuthenticated) {
-      getUserInfoAsync().then(cached => {
-        if (cached) setUserInfo(cached)
-      })
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
   const tokenSnapshotRef = useRef(null)
-  const __pendingSaveRef = useRef(null)
+  const pendingSaveRef = useRef(null)
 
   useEffect(() => {
     const handleAuthExpired = () => {
@@ -53,7 +44,6 @@ export function AuthProvider({ children }) {
         setAuthLoading(false)
         return
       }
-      // 记录本次验证开始时的 token，用于 catch 中判断是否被新登录覆盖
       tokenSnapshotRef.current = token
 
       setAuthLoading(true)
@@ -90,7 +80,6 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
-  // 定期刷新权限（每5分钟）
   useEffect(() => {
     if (!isAuthenticated) return
 
@@ -145,24 +134,22 @@ export function AuthProvider({ children }) {
     setAuthLoading(false)
   }, [])
 
-  // 将持久化副作用移出 setUserInfo updater，避免 StrictMode 重复执行
   useEffect(() => {
-    if (__pendingSaveRef.current !== null) {
-      const pending = __pendingSaveRef.current
-      __pendingSaveRef.current = null
+    if (pendingSaveRef.current !== null) {
+      const pending = pendingSaveRef.current
+      pendingSaveRef.current = null
       saveUserInfo(pending)
       if (pending.token) {
         saveToken(pending.token)
       }
     }
-  })
+  }, [userInfo])
 
   const updateUserInfo = useCallback((updater) => {
     setUserInfo(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater
       if (next) {
-        // 存入 ref，由上面的 useEffect 在 commit 后统一持久化
-        __pendingSaveRef.current = next
+        pendingSaveRef.current = next
       }
       return next
     })

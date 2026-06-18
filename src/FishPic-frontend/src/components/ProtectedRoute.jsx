@@ -2,6 +2,7 @@ import { useContext, useEffect, useRef } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { Spin, message } from 'antd'
 import { AuthContext } from '../context/AuthContext'
+import { useIsMobile } from '../hooks/useIsMobile'
 
 /**
  * 路由守卫组件
@@ -10,6 +11,7 @@ import { AuthContext } from '../context/AuthContext'
 function ProtectedRoute({ children, requireAdmin = false, permission }) {
   const auth = useContext(AuthContext)
   const location = useLocation()
+  const isMobile = useIsMobile()
   const hasPrompted = useRef(false)
 
   useEffect(() => {
@@ -33,13 +35,17 @@ function ProtectedRoute({ children, requireAdmin = false, permission }) {
   }
 
   if (!auth || !auth.isAuthenticated) {
-    return <Navigate to="/" replace state={{ from: location }} />
+    const redirect = `${location.pathname}${location.search || ''}`
+    if (isMobile) {
+      return <Navigate to={`/mobile/login?redirect=${encodeURIComponent(redirect)}`} replace />
+    }
+    return <Navigate to="/" replace state={{ showLogin: true, from: location }} />
   }
 
   if (requireAdmin) {
     const perms = auth.userInfo?.permissions || []
     if (!perms.includes('system:user:manage')) {
-      return <Navigate to="/" replace />
+      return <Navigate to="/404" replace />
     }
   }
 
@@ -49,7 +55,7 @@ function ProtectedRoute({ children, requireAdmin = false, permission }) {
     const required = Array.isArray(permission) ? permission : [permission]
     const hasPermission = required.some(p => perms.includes(p))
     if (!hasPermission) {
-      return <Navigate to="/" replace />
+      return <Navigate to="/404" replace />
     }
   }
 

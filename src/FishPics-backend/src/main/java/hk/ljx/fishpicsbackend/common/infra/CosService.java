@@ -9,7 +9,7 @@ import com.qcloud.cos.model.*;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
-import hk.ljx.fishpicsbackend.picture.dto.PictureMessage;
+import hk.ljx.fishpicsbackend.picture.dto.PictureMetadata;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -149,9 +149,9 @@ public class CosService {
             String configuredUrl = (this.url != null && !this.url.isBlank()) ? this.url : null;
             String expectedHost1 = bucket + ".cos." + region + ".myqcloud.com";
             // 解析 configuredUrl 的 host，与入参 host 做 equals 校验
-            boolean hostValid = host == null
-                    || host.equalsIgnoreCase(expectedHost1)
-                    || (configuredUrl != null && host.equalsIgnoreCase(parseHost(configuredUrl)));
+            boolean hostValid = host != null
+                    && (host.equalsIgnoreCase(expectedHost1)
+                    || (configuredUrl != null && host.equalsIgnoreCase(parseHost(configuredUrl))));
             ExcUtils.throwIfTrue(!hostValid, ExceptionCode.FORBIDDEN,
                     "URL 域名与当前 COS 配置不匹配");
             String key = uri.getPath();
@@ -173,8 +173,8 @@ public class CosService {
      * 优先使用 imageInfo 查询参数（不下载完整图片）获取精确元数据；
      * 如果失败（文件不存在、格式不支持等），降级为仅获取文件大小
      */
-    public PictureMessage getPictureMessage(String key) {
-        PictureMessage pictureMessage = new PictureMessage();
+    public PictureMetadata getPictureMetadata(String key) {
+        PictureMetadata metadata = new PictureMetadata();
 
         try {
             // 优先使用 imageInfo 查询参数，只返回 JSON 元数据，不下载完整图片
@@ -189,9 +189,9 @@ public class CosService {
                 String imageInfoJson = IoUtil.readUtf8(inputStream);
                 log.info("图片信息 JSON：{}", imageInfoJson);
                 Map<String, Object> imageInfo = JSONUtil.parseObj(imageInfoJson);
-                pictureMessage.setWidth(String.valueOf(imageInfo.get("width")));
-                pictureMessage.setHeight(String.valueOf(imageInfo.get("height")));
-                pictureMessage.setSize(String.valueOf(imageInfo.get("size")));
+                metadata.setWidth(String.valueOf(imageInfo.get("width")));
+                metadata.setHeight(String.valueOf(imageInfo.get("height")));
+                metadata.setSize(String.valueOf(imageInfo.get("size")));
             }
         } catch (BaseException e) {
             throw e;
@@ -199,11 +199,11 @@ public class CosService {
             // 降级：仅获取文件大小（不下载文件内容）
             log.warn("获取图片元数据失败，降级为仅获取文件大小: key={}", key, e);
             try {
-                ObjectMetadata metadata = cosClient.getObjectMetadata(bucket, key);
-                if (metadata == null) {
+                ObjectMetadata objectMetadata = cosClient.getObjectMetadata(bucket, key);
+                if (objectMetadata == null) {
                     throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "COS 文件不存在: " + key);
                 }
-                pictureMessage.setSize(String.valueOf(metadata.getContentLength()));
+                metadata.setSize(String.valueOf(objectMetadata.getContentLength()));
             } catch (BaseException be) {
                 throw be;
             } catch (Exception ex) {
@@ -215,9 +215,9 @@ public class CosService {
         String[] parts = key.split("/");
         String fileName = parts[parts.length - 1];
         String[] nameParts = fileName.split("\\.");
-        pictureMessage.setUrl(this.getImageUrl(key));
-        pictureMessage.setPictureName(nameParts[0]);
-        return pictureMessage;
+        metadata.setUrl(this.getImageUrl(key));
+        metadata.setPictureName(nameParts[0]);
+        return metadata;
     }
 
     // ==================== 预签名 URL ====================

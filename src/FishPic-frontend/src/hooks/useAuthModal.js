@@ -2,52 +2,27 @@ import { useState, useContext, useCallback } from 'react'
 import { App as AntApp } from 'antd'
 import { AuthContext } from '../context/AuthContext.jsx'
 import { getLoginCheckCode, login, getRegisterCheckCode, register } from '../api'
+import { useCaptcha } from './useCaptcha'
 
 export function useAuthModal(onLoginSuccess) {
   const { message } = AntApp.useApp()
   const auth = useContext(AuthContext)
-  const authLogin = auth?.login
+  const authLogin = auth.login
 
   const [loginVisible, setLoginVisible] = useState(false)
   const [registerVisible, setRegisterVisible] = useState(false)
   const [loginLoading, setLoginLoading] = useState(false)
   const [registerLoading, setRegisterLoading] = useState(false)
-  const [loginCheckCodeUrl, setLoginCheckCodeUrl] = useState('')
-  const [loginKey, setLoginKey] = useState('')
-  const [registerCheckCodeUrl, setRegisterCheckCodeUrl] = useState('')
-  const [registerKey, setRegisterKey] = useState('')
+  const loginCaptcha = useCaptcha(getLoginCheckCode)
+  const registerCaptcha = useCaptcha(getRegisterCheckCode)
 
   const fetchLoginCheckCode = useCallback(async () => {
-    try {
-      const response = await getLoginCheckCode()
-      const data = response?.data ?? response
-      const inner = data?.data ?? data
-      if (inner?.captchaKey && inner?.base64Image) {
-        setLoginKey(inner.captchaKey)
-        setLoginCheckCodeUrl(inner.base64Image)
-      } else {
-        message.error('获取验证码失败')
-      }
-    } catch {
-      message.error('获取验证码失败')
-    }
-  }, [message])
+    await loginCaptcha.refreshCaptcha()
+  }, [loginCaptcha])
 
   const fetchRegisterCheckCode = useCallback(async () => {
-    try {
-      const response = await getRegisterCheckCode()
-      const data = response?.data ?? response
-      const inner = data?.data ?? data
-      if (inner?.captchaKey && inner?.base64Image) {
-        setRegisterKey(inner.captchaKey)
-        setRegisterCheckCodeUrl(inner.base64Image)
-      } else {
-        message.error('获取验证码失败')
-      }
-    } catch {
-      message.error('获取验证码失败')
-    }
-  }, [message])
+    await registerCaptcha.refreshCaptcha()
+  }, [registerCaptcha])
 
   const openLogin = useCallback(() => {
     setRegisterVisible(false)
@@ -63,27 +38,25 @@ export function useAuthModal(onLoginSuccess) {
 
   const closeLogin = useCallback(() => {
     setLoginVisible(false)
-    setLoginCheckCodeUrl('')
-    setLoginKey('')
-  }, [])
+    loginCaptcha.clearCaptcha()
+  }, [loginCaptcha])
 
   const closeRegister = useCallback(() => {
     setRegisterVisible(false)
-    setRegisterCheckCodeUrl('')
-    setRegisterKey('')
-  }, [])
+    registerCaptcha.clearCaptcha()
+  }, [registerCaptcha])
 
   const handleLoginSubmit = useCallback(async (values, loginForm) => {
     setLoginLoading(true)
     try {
-      if (!loginKey) {
+      if (!loginCaptcha.captchaKey) {
         message.error('验证码已过期，请刷新验证码')
         fetchLoginCheckCode()
         loginForm?.setFieldValue('checkCode', '')
         setLoginLoading(false)
         return
       }
-      const result = await login({ ...values, captchaKey: loginKey })
+      const result = await login({ ...values, captchaKey: loginCaptcha.captchaKey })
       authLogin(result)
       message.success('登录成功')
       loginForm?.resetFields()
@@ -95,12 +68,12 @@ export function useAuthModal(onLoginSuccess) {
     } finally {
       setLoginLoading(false)
     }
-  }, [loginKey, authLogin, message, closeLogin, onLoginSuccess])
+  }, [loginCaptcha.captchaKey, authLogin, message, closeLogin, onLoginSuccess, fetchLoginCheckCode])
 
   const handleRegisterSubmit = useCallback(async (values, registerForm) => {
     setRegisterLoading(true)
     try {
-      if (!registerKey) {
+      if (!registerCaptcha.captchaKey) {
         message.error('验证码已过期，请刷新验证码')
         registerForm?.setFieldValue('checkCode', '')
         setRegisterLoading(false)
@@ -111,7 +84,7 @@ export function useAuthModal(onLoginSuccess) {
         password: values.password,
         checkPassword: values.checkPassword,
         checkCode: values.checkCode,
-        captchaKey: registerKey,
+        captchaKey: registerCaptcha.captchaKey,
       })
       message.success('注册成功，请登录')
       registerForm?.resetFields()
@@ -123,7 +96,7 @@ export function useAuthModal(onLoginSuccess) {
     } finally {
       setRegisterLoading(false)
     }
-  }, [registerKey, message, closeRegister, openLogin])
+  }, [registerCaptcha.captchaKey, message, closeRegister, openLogin])
 
   const refreshLoginCode = useCallback((loginForm) => {
     fetchLoginCheckCode()
@@ -140,8 +113,8 @@ export function useAuthModal(onLoginSuccess) {
     registerVisible,
     loginLoading,
     registerLoading,
-    loginCheckCodeUrl,
-    registerCheckCodeUrl,
+    loginCheckCodeUrl: loginCaptcha.captchaImage,
+    registerCheckCodeUrl: registerCaptcha.captchaImage,
     openLogin,
     openRegister,
     closeLogin,
@@ -150,7 +123,5 @@ export function useAuthModal(onLoginSuccess) {
     handleRegisterSubmit,
     refreshLoginCode,
     refreshRegisterCode,
-    switchToRegister: openRegister,
-    switchToLogin: openLogin,
   }
 }

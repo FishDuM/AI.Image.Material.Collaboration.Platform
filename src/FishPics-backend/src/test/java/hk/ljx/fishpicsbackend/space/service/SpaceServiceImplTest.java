@@ -2,6 +2,7 @@ package hk.ljx.fishpicsbackend.space.service;
 
 import cn.hutool.core.util.ReflectUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import hk.ljx.fishpicsbackend.space.component.SpaceAdminManager;
 import hk.ljx.fishpicsbackend.space.dto.SpaceQueryWrapper;
 import hk.ljx.fishpicsbackend.space.entity.Space;
 import org.junit.jupiter.api.DisplayName;
@@ -18,13 +19,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SpaceServiceImplTest {
 
-    private final SpaceServiceImpl spaceService = new SpaceServiceImpl();
+    private final SpaceAdminManager spaceAdminManager = new SpaceAdminManager();
 
     @SuppressWarnings("unchecked")
     private QueryWrapper<Space> invokeGetSpaceQueryWrapper(SpaceQueryWrapper request) {
-        Method method = ReflectUtil.getMethod(SpaceServiceImpl.class, "getSpaceQueryWrapper", SpaceQueryWrapper.class);
+        Method method = ReflectUtil.getMethod(SpaceAdminManager.class, "buildQueryWrapper", SpaceQueryWrapper.class);
         assertNotNull(method);
-        return (QueryWrapper<Space>) ReflectUtil.invoke(spaceService, method, request);
+        return (QueryWrapper<Space>) ReflectUtil.invoke(spaceAdminManager, method, request);
     }
 
     @Test

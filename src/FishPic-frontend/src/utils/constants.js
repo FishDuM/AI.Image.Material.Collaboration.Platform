@@ -62,3 +62,21 @@ export const formatTime = (timeString) => {
   if (diffSeconds > 0) return `${diffSeconds}秒前`
   return '刚刚'
 }
+
+// 空间类型映射
+export const SPACE_TYPE_MAP = { 0: '私人空间', 1: '团队空间' }
+export const SPACE_TYPE_COLOR = { 0: 'blue', 1: 'green' }
+
+// 等级标签映射（简化版，用于表格 Tag 展示）
+export const LEVEL_TAG_MAP = { 0: '普通', 1: 'VIP', 2: 'SVIP' }
+export const LEVEL_TAG_COLOR = { 0: 'default', 1: 'gold', 2: 'red' }
+
+// 管理员角色标签（优先级高于等级）
+export const ADMIN_ROLE_TAG = { color: 'red', text: '管理员' }
+
+// 图表主题色
+export const CHART_COLORS = {
+  primary: ['#1890ff', '#69c0ff'],
+  success: ['#52c41a', '#95de64'],
+  error: '#ff4d4f',
+}

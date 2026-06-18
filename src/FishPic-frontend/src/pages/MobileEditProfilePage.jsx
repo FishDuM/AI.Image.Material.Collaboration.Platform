@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 import { getUserMyself, editUser, uploadAvatar, markPasswordChange } from '../api'
 import { AuthContext } from '../context/AuthContext'
 import MobilePageWrapper from '../components/MobilePageWrapper'
+import { emailRules, newPasswordRules, nicknameRules, originalPasswordRules, phoneRules } from '../utils/formRules'
 import './MobileLoginRegister.css'
 
 export default function MobileEditProfilePage() {
@@ -145,7 +146,7 @@ export default function MobileEditProfilePage() {
           <Form.Item
             label="昵称"
             name="nickname"
-            rules={[{ required: true, message: '请输入昵称' }]}
+            rules={nicknameRules}
           >
             <Input
               prefix={<UserOutlined />}
@@ -176,11 +177,7 @@ export default function MobileEditProfilePage() {
               <div className="mobile-password-section-fields">
                 <Form.Item
                   name="password"
-                  rules={[
-                    { required: true, message: '请输入新密码' },
-                    { min: 8, message: '密码长度不能小于 8 个字符' },
-                    { max: 20, message: '密码长度不能大于 20 个字符' },
-                  ]}
+                  rules={newPasswordRules}
                 >
                   <Input.Password
                     prefix={<LockOutlined />}
@@ -190,7 +187,7 @@ export default function MobileEditProfilePage() {
                 </Form.Item>
                 <Form.Item
                   name="originalPassword"
-                  rules={[{ required: true, message: '请输入原始密码' }]}
+                  rules={originalPasswordRules}
                 >
                   <Input.Password
                     prefix={<EyeOutlined />}
@@ -205,7 +202,7 @@ export default function MobileEditProfilePage() {
           <Form.Item
             label="邮箱"
             name="email"
-            rules={[{ type: 'email', message: '请输入正确的邮箱' }]}
+            rules={emailRules}
           >
             <Input
               prefix={<MailOutlined />}
@@ -214,7 +211,7 @@ export default function MobileEditProfilePage() {
             />
           </Form.Item>
 
-          <Form.Item label="手机号" name="phone">
+          <Form.Item label="手机号" name="phone" rules={phoneRules}>
             <Input
               prefix={<PhoneOutlined />}
               placeholder="请输入手机号"

@@ -1,9 +1,8 @@
-import { useEffect, useState, useContext } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { App as AntApp, Table, Button, Input, Select, Space, Tag, Typography, Card } from 'antd'
 import { ReloadOutlined } from '@ant-design/icons'
-import { AuthContext } from '../context/AuthContext.jsx'
-import api from '../api'
+import { getAuditLogs } from '../api'
+import { useAdminGuard } from '../hooks/useAdminGuard'
 import './AuditLogManagement.css'
 
 const { Title } = Typography
@@ -27,8 +26,7 @@ const OPERATION_OPTIONS = [
 
 function AuditLogManagement() {
   const { message } = AntApp.useApp()
-  const navigate = useNavigate()
-  const { userInfo, authLoading } = useContext(AuthContext)
+  const { userInfo } = useAdminGuard('system:log:manage')
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState([])
   const [total, setTotal] = useState(0)
@@ -40,15 +38,7 @@ function AuditLogManagement() {
   const [filterResult, setFilterResult] = useState(undefined)
 
   useEffect(() => {
-    if (authLoading) return
-    if (!userInfo || !userInfo?.permissions?.includes('system:log:manage')) {
-      message.error('无权访问，正在跳转...')
-      setTimeout(() => navigate('/404', { replace: true }), 500)
-    }
-  }, [userInfo, authLoading, navigate, message])
-
-  useEffect(() => {
-    if (!userInfo?.permissions?.includes('system:log:manage')) return
+    if (!userInfo) return
     let ignore = false
     const fetchData = async () => {
       setLoading(true)
@@ -57,7 +47,7 @@ function AuditLogManagement() {
         if (searchUsernameApplied) params.username = searchUsernameApplied
         if (filterOperation) params.operation = filterOperation
         if (filterResult !== undefined) params.result = filterResult
-        const result = await api.post('/system/audit-log/list', params)
+        const result = await getAuditLogs(params)
         if (!ignore) {
           setData(result?.records || [])
           setTotal(result?.total || 0)
@@ -95,7 +85,7 @@ function AuditLogManagement() {
     return new Date(t).toLocaleString('zh-CN')
   }
 
-  if (!userInfo || !userInfo?.permissions?.includes('system:log:manage')) {
+  if (!userInfo) {
     return (
       <main className="audit-log-container">
         <div style={{ textAlign: 'center', padding: '100px 0' }}>

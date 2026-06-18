@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { Spin, Result, Button, Typography, Tag } from 'antd'
 import { DownloadOutlined, ClockCircleOutlined, PictureOutlined } from '@ant-design/icons'
 import { getShareInfo } from '../api'
+import { isCanceledError } from '../utils/error'
 import './SharePage.css'
 
 const { Text } = Typography
@@ -31,7 +32,7 @@ function SharePage() {
       })
       .catch((err) => {
         if (abortController.signal.aborted) return
-        if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return
+        if (isCanceledError(err)) return
         setError(err.message || '分享链接无效或已过期')
       })
       .finally(() => {

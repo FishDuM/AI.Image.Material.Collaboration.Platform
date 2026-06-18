@@ -1,14 +1,16 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+﻿import { useState, useEffect, useCallback, useRef, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { App as AntApp, Card, Typography, Button, Input, Select, Space, Row, Col, Image, Tooltip } from 'antd'
 import {
   RobotOutlined,
   SendOutlined, SyncOutlined, ExperimentOutlined, ClearOutlined, CloseCircleOutlined,
   RedoOutlined, SaveOutlined, TeamOutlined, DownloadOutlined,
+  CrownOutlined,
 } from '@ant-design/icons'
 import { submitAiDraw, savePictureByUrl, downloadAiImage } from '../api'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { useAiSse } from '../hooks/useAiSse'
+import { AuthContext } from '../context/AuthContext'
 import SaveToSpaceModal from '../components/shared/SaveToSpaceModal'
 import './AIImageTools.css'
 
@@ -16,16 +18,16 @@ const { Title, Text } = Typography
 const { TextArea } = Input
 
 const DRAW_STYLE_OPTIONS = [
-  { value: 'auto', label: '自动' },
   { value: 'photography', label: '摄影' },
-  { value: 'portrait', label: '人像/肖像' },
-  { value: '3d cartoon', label: '3D卡通' },
   { value: 'anime', label: '动漫' },
   { value: 'oil painting', label: '油画' },
-  { value: 'watercolor', label: '水彩画' },
-  { value: 'sketch', label: '速写/素描' },
-  { value: 'chinese painting', label: '中国画/国画' },
-  { value: 'flat illustration', label: '扁平化插画' },
+  { value: 'watercolor', label: '水彩' },
+  { value: 'sketch', label: '素描' },
+  { value: '3d', label: '3D' },
+  { value: 'pixel art', label: '像素' },
+  { value: 'flat illustration', label: '扁平' },
+  { value: 'chinese painting', label: '中国风' },
+  { value: 'cyberpunk', label: '赛博朋克' },
 ]
 
 const DRAW_SIZE_OPTIONS = [
@@ -40,16 +42,20 @@ function AIImageTools() {
   const { message } = AntApp.useApp()
   const navigate = useNavigate()
   const isMobile = useIsMobile()
+  const { userInfo } = useContext(AuthContext)
   const [saveModalOpen, setSaveModalOpen] = useState(false)
+
+  const userLevel = userInfo?.level ?? 0
+  const isVip = userLevel >= 1
 
   const [genPrompt, setGenPrompt] = useState('')
   const [genNegative, setGenNegative] = useState('')
   const [genSize, setGenSize] = useState('1:1')
-  const [genStyle, setGenStyle] = useState('auto')
+  const [genStyle, setGenStyle] = useState('photography')
   const [genResults, setGenResults] = useState(null)
 
-  // 异步生成状态
-  const [genState, setGenState] = useState('idle') // idle | generating | done | failed
+  // async generation state: idle | generating | done | failed
+  const [genState, setGenState] = useState('idle')
   const [genError, setGenError] = useState('')
   const [currentTaskId, setCurrentTaskId] = useState(null)
   const genStateRef = useRef('idle')
@@ -60,12 +66,10 @@ function AIImageTools() {
     genStateRef.current = s
   }, [])
 
-  // SSE 推送（替代轮询）
   const { result: sseResult, error: sseError } = useAiSse(
     genState === 'generating' ? currentTaskId : null
   )
 
-  // 处理 SSE 推送结果
   useEffect(() => {
     if (sseResult) {
       setGenStateAndRef('done')
@@ -84,7 +88,6 @@ function AIImageTools() {
     }
   }, [sseError, genState, message, setGenStateAndRef])
 
-  // 恢复中断的任务（导航离开再返回时）
   useEffect(() => {
     const savedTaskId = sessionStorage.getItem('ai_pending_task')
     if (savedTaskId && genState === 'idle') {
@@ -148,7 +151,7 @@ function AIImageTools() {
   const handleClear = () => {
     setGenPrompt('')
     setGenNegative('')
-    setGenStyle('auto')
+    setGenStyle('photography')
     setGenSize('1:1')
     genParamsRef.current = null
   }
@@ -256,8 +259,36 @@ function AIImageTools() {
     return (
       <div className="ai-result-placeholder">
         <ExperimentOutlined className="ai-result-icon" />
-        <Text type="secondary">输入描述并点击生成按钮，AI 将为你创作图片</Text>
+        <Text type="secondary">输入描述并点击生成，AI 将为你创作图片</Text>
       </div>
+    )
+  }
+
+  // 普通用户：显示升级引导
+  if (!isVip) {
+    return (
+      <main className="ai-tools-container">
+        <div className="ai-tools-header">
+          <Title level={2}>
+            <RobotOutlined style={{ marginRight: 8 }} />
+            AI 创作工具
+          </Title>
+        </div>
+        <Card variant="borderless" className="ai-tool-card" style={{ textAlign: 'center', padding: '60px 24px' }}>
+          <CrownOutlined style={{ fontSize: 48, color: '#faad14', marginBottom: 16 }} />
+          <Title level={3}>升级 VIP 解锁 AI 创作</Title>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>
+            AI 生图和 AI 标注功能仅对 VIP 及以上用户开放
+          </p>
+          <Space orientation="vertical" size="small" style={{ marginBottom: 24 }}>
+            <p><strong>VIP：</strong>AI 生图 50次/月 · AI 标注 1000次/月</p>
+            <p><strong>SVIP：</strong>AI 生图 200次/月 · AI 标注 5000次/月</p>
+          </Space>
+          <Button type="primary" size="large" onClick={() => navigate('/profile')}>
+            查看会员权益
+          </Button>
+        </Card>
+      </main>
     )
   }
 
@@ -279,7 +310,7 @@ function AIImageTools() {
                 <TextArea
                   value={genPrompt}
                   onChange={(e) => setGenPrompt(e.target.value)}
-                  placeholder="描述你想要的画面，例如：一只可爱的橘猫坐在窗台上，窗外是樱花树，阳光明媚"
+                  placeholder="描述你想要的画面，例如：一只可爱的橘猫坐在窗台上，窗外是樱花树，阳光明亮"
                   rows={4}
                   maxLength={500}
                   showCount
@@ -291,7 +322,7 @@ function AIImageTools() {
                 <TextArea
                   value={genNegative}
                   onChange={(e) => setGenNegative(e.target.value)}
-                  placeholder="不希望出现的内容，例如：模糊, 低质量, 扭曲"
+                  placeholder="不希望出现的内容，例如：模糊、低质量、扭曲"
                   rows={2}
                   maxLength={200}
                   showCount

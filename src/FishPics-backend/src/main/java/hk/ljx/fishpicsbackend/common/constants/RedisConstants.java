@@ -72,7 +72,7 @@ public interface RedisConstants {
         return FILE_COS_KEY + userId + ":" + md5;
     }
 
-    static String getFileMergeResultKey(String md5) {
-        return FILE_MERGE_RESULT_KEY + md5;
+    static String getFileMergeResultKey(Long userId, String md5) {
+        return FILE_MERGE_RESULT_KEY + userId + ":" + md5;
     }
 }

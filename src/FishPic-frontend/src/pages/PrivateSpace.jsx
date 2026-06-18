@@ -1,19 +1,22 @@
 import { useState, useEffect, useCallback, useMemo, useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { App as AntApp, Typography, Button, Modal, Form, Input, Select, Masonry, Image as AntImage, Spin, Empty, Popconfirm, Progress, Popover } from 'antd'
-import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowUpOutlined, EditOutlined, CloudUploadOutlined, DatabaseOutlined, HddOutlined, UploadOutlined, ApartmentOutlined, ShareAltOutlined, StarOutlined } from '@ant-design/icons'
+import { App as AntApp, Typography, Button, Modal, Form, Input, Masonry, Image as AntImage, Spin, Empty, Popconfirm } from 'antd'
+import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowUpOutlined, EditOutlined, CloudUploadOutlined, ShareAltOutlined, StarOutlined } from '@ant-design/icons'
 import { updateSpace, listSpace, createShare, updatePicture } from '../api'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { useSystemTypes } from '../hooks/useRequestUtils'
 import { AuthContext } from '../context/AuthContext'
-import { PAGE_SIZE, LEVEL_MAP, storageStrokeColor, formatStorage } from '../utils/constants'
+import { PAGE_SIZE, formatStorage } from '../utils/constants'
 import { getThumbnailUrl } from '../utils/image'
-import { logError } from '../utils/logger'
-import { useSpacePictures } from './PrivateSpace/useSpacePictures'
+import { spaceNameRules } from '../utils/formRules'
+import { isCanceledError } from '../utils/error'
+import { usePictureFetch, useBatchSelection, usePictureEditUpload } from '../hooks/useSpacePictures'
 import ImageUploadModal from '../components/shared/ImageUploadModal'
 import ImageEditorModal from '../components/shared/ImageEditorModal'
 import PictureEditModal from '../components/shared/PictureEditModal'
 import UpgradeModal from '../components/shared/UpgradeModal'
+import SharePictureModal from '../components/shared/SharePictureModal'
+import StorageUsagePopover from '../components/shared/StorageUsagePopover'
 import './PrivateSpace.css'
 
 const { Title } = Typography
@@ -81,7 +84,7 @@ function PrivateSpace() {
   useEffect(() => {
     fetchSystemTypes().then(result => {
       if (Array.isArray(result)) setSystemTags(result)
-    }).catch((error) => { logError('fetchSystemTypes', error) })
+    }).catch((error) => { console.error('[fetchSystemTypes]', error) })
   }, [])
 
   const fetchSpaces = useCallback(async () => {
@@ -90,50 +93,28 @@ function PrivateSpace() {
       const list = Array.isArray(result) ? result : []
       setSpaces(list)
     } catch (error) {
-      logError('fetchSpaces', error)
+      console.error('[fetchSpaces]', error)
       setSpaces([])
     }
   }, [])
 
   const {
-    pictures,
-    pictureLoading,
-    searchKeyword,
-    setSearchKeyword,
-    hasMore,
-    loadingMore,
-    batchMode,
-    selectedIds,
-    setSelectedIds,
-    setBatchMode,
-    showEditPicture,
-    setShowEditPicture,
-    editPictureLoading,
-    editPictureForm,
-    showUploadModal,
-    setShowUploadModal,
-    showImageEditor,
-    setShowImageEditor,
-    masonryItems,
-    handleSearch,
-    handleSearchReset,
-    toggleBatchMode,
-    toggleSelect,
-    handleBatchDelete,
-    handleEditPictureOpen,
-    handleUploadSuccess,
-    handleEditPictureSubmit,
-    handleAiTag,
-    refreshPictures,
-  } = useSpacePictures({
-    spaces,
-    pageSize: PAGE_SIZE,
-    refreshSpaces: fetchSpaces,
-    message,
-    modal,
-    navigate,
-    isMobile,
-  })
+    pictures, pictureLoading, searchKeyword, setSearchKeyword,
+    hasMore, loadingMore, handleSearch, handleSearchReset, refreshPictures,
+  } = usePictureFetch({ spaces, pageSize: PAGE_SIZE, refreshSpaces: fetchSpaces, message })
+
+  const {
+    batchMode, selectedIds, setSelectedIds, setBatchMode,
+    toggleBatchMode, toggleSelect, handleBatchDelete,
+  } = useBatchSelection({ pictures, spaces, searchKeyword, refreshPictures, refreshSpaces: fetchSpaces, message })
+
+  const {
+    showEditPicture, setShowEditPicture, editPictureLoading, editPictureForm,
+    showUploadModal, setShowUploadModal, showImageEditor, setShowImageEditor,
+    handleEditPictureOpen, handleUploadSuccess, handleEditPictureSubmit, handleAiTag,
+  } = usePictureEditUpload({ selectedIds, pictures, spaces, searchKeyword, refreshPictures, refreshSpaces: fetchSpaces, message, modal, navigate, isMobile, Form })
+
+  const masonryItems = useMemo(() => pictures.map(pic => ({ key: `pic-${pic.id}`, data: pic })), [pictures])
 
   useEffect(() => {
     const init = async () => { await fetchSpaces() }
@@ -169,7 +150,7 @@ function PrivateSpace() {
       editForm.resetFields()
       fetchSpaces()
     } catch (error) {
-      if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
+      if (isCanceledError(error)) return
       message.error(error.message || '修改失败')
     } finally {
       setUpdateLoading(false)
@@ -189,64 +170,7 @@ function PrivateSpace() {
         </div>
         {spaceInfo && (
           <div className="private-space-header-right">
-            <Popover
-              content={
-                <div className={`storage-card ${LEVEL_MAP[spaceInfo.level]?.cardClass || ''}`}>
-                  <div className="storage-card-header">
-                    <DatabaseOutlined className="storage-card-header-icon" />
-                    <span className="storage-card-header-text">空间详情</span>
-                  </div>
-                  <div className="storage-card-grid">
-                    <div className="storage-card-item">
-                      <ApartmentOutlined className="storage-card-item-icon" />
-                      <div className="storage-card-item-content">
-                        <span className="storage-card-item-label">等级</span>
-                        <span className={`storage-card-item-value ${LEVEL_MAP[spaceInfo.level]?.className || ''}`}>{LEVEL_MAP[spaceInfo.level]?.label || '-'}</span>
-                      </div>
-                    </div>
-                    <div className="storage-card-item">
-                      <HddOutlined className="storage-card-item-icon" />
-                      <div className="storage-card-item-content">
-                        <span className="storage-card-item-label">已用</span>
-                        <span className="storage-card-item-value">{spaceInfo.usedText}</span>
-                      </div>
-                    </div>
-                    <div className="storage-card-item">
-                      <DatabaseOutlined className="storage-card-item-icon" />
-                      <div className="storage-card-item-content">
-                        <span className="storage-card-item-label">总容量</span>
-                        <span className="storage-card-item-value">{spaceInfo.totalText}</span>
-                      </div>
-                    </div>
-                    <div className="storage-card-item">
-                      <UploadOutlined className="storage-card-item-icon" />
-                      <div className="storage-card-item-content">
-                        <span className="storage-card-item-label">占用率</span>
-                        <span className="storage-card-item-value">{spaceInfo.percent}%</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              }
-              trigger="hover"
-              placement="bottom"
-            >
-              <Progress
-                type="circle"
-                percent={spaceInfo.percent}
-                strokeColor={storageStrokeColor}
-                size={72}
-                className="storage-progress"
-                format={() => (
-                  <div className="level-center">
-                    {LEVEL_MAP[spaceInfo.level] && (
-                      <span className={`level-text ${LEVEL_MAP[spaceInfo.level].className}`}>{LEVEL_MAP[spaceInfo.level].label}</span>
-                    )}
-                    <span className="level-percent">{spaceInfo.percent}%</span>
-                  </div>
-                )}
-              />
-            </Popover>
+            <StorageUsagePopover spaceInfo={spaceInfo} />
             <Button onClick={handleEditOpen}>
               修改空间
             </Button>
@@ -438,10 +362,7 @@ function PrivateSpace() {
           <Form.Item
             name="name"
             label="空间名称"
-            rules={[
-              { required: true, message: '请输入空间名称' },
-              { max: 20, message: '空间名称不超过 20 个字符' },
-            ]}
+            rules={spaceNameRules}
           >
             <Input placeholder="请输入空间名称" maxLength={20} />
           </Form.Item>
@@ -498,43 +419,15 @@ function PrivateSpace() {
         onClose={() => setShowImageEditor(false)}
       />
 
-      <Modal
-        title="分享图片"
+      <SharePictureModal
         open={showShare}
-        onCancel={() => { setShowShare(false); shareForm.resetFields(); setShareLink('') }}
-        footer={null}
-        width={420}
-      >
-        {!shareLink ? (
-          <Form form={shareForm} layout="vertical" onFinish={handleCreateShare} initialValues={{ expireDays: 1, allowDownload: true }} style={{ marginTop: 16 }}>
-            <Form.Item name="expireDays" label="有效期">
-              <Select options={[
-                { value: 1, label: '1 天' },
-                { value: 3, label: '3 天' },
-                { value: 7, label: '7 天' },
-              ]} />
-            </Form.Item>
-            <Form.Item name="allowDownload" label="权限">
-              <Select options={[
-                { value: true, label: '允许下载' },
-                { value: false, label: '仅预览' },
-              ]} />
-            </Form.Item>
-            <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
-              <Button onClick={() => { setShowShare(false); shareForm.resetFields() }} style={{ marginRight: 8 }}>取消</Button>
-              <Button type="primary" htmlType="submit" loading={shareLoading}>生成链接</Button>
-            </Form.Item>
-          </Form>
-        ) : (
-          <div style={{ marginTop: 16 }}>
-            <Input.TextArea value={shareLink} readOnly autoSize style={{ marginBottom: 12 }} />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <Button onClick={() => { setShowShare(false); setShareLink('') }}>关闭</Button>
-              <Button type="primary" onClick={handleCopyShareLink}>复制链接</Button>
-            </div>
-          </div>
-        )}
-      </Modal>
+        form={shareForm}
+        loading={shareLoading}
+        shareLink={shareLink}
+        onCreate={handleCreateShare}
+        onCopy={handleCopyShareLink}
+        onClose={() => { setShowShare(false); shareForm.resetFields(); setShareLink('') }}
+      />
     </main>
   )
 }

@@ -3,7 +3,7 @@ package hk.ljx.fishpicsbackend.common.entity;
 import com.baomidou.mybatisplus.annotation.*;
 import lombok.Data;
 import java.io.Serializable;
-import java.util.Date;
+import java.time.LocalDateTime;
 
 /**
  * 系统审计日志实体
@@ -49,7 +49,7 @@ public class SysAuditLog implements Serializable {
     private String ip;
 
     // 操作时间
-    private Date createTime;
+    private LocalDateTime createTime;
 
     @TableLogic
     private Integer isDelete = 0;

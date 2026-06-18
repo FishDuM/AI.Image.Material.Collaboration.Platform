@@ -1,23 +1,17 @@
-import { useEffect, useState, useContext } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { App as AntApp, Table, Button, Modal, Form, Input, InputNumber, Select, Switch, Popconfirm, Space, Tag, Typography, Card } from 'antd'
 import { EditOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons'
 import { adminListSpace, adminUpdateSpace, adminDeleteSpace, adminSetSpaceStatus } from '../api'
-import { AuthContext } from '../context/AuthContext'
-import { formatStorage } from '../utils/constants'
+import { formatStorage, SPACE_TYPE_MAP, SPACE_TYPE_COLOR, LEVEL_TAG_MAP, LEVEL_TAG_COLOR } from '../utils/constants'
+import { spaceNameRules } from '../utils/formRules'
+import { useAdminGuard } from '../hooks/useAdminGuard'
 import './SpaceManagement.css'
 
 const { Title } = Typography
 
-const TYPE_MAP = { 0: '私人空间', 1: '团队空间' }
-const TYPE_COLOR = { 0: 'blue', 1: 'green' }
-const LEVEL_MAP = { 0: '普通', 1: 'VIP', 2: 'SVIP' }
-const LEVEL_COLOR = { 0: 'default', 1: 'gold', 2: 'red' }
-
 function SpaceManagement() {
   const { message } = AntApp.useApp()
-  const navigate = useNavigate()
-  const { userInfo, authLoading } = useContext(AuthContext)
+  const { userInfo } = useAdminGuard('system:team:manage')
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState([])
   const [total, setTotal] = useState(0)
@@ -33,15 +27,7 @@ function SpaceManagement() {
   const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
-    if (authLoading) return
-    if (!userInfo || !userInfo?.permissions?.includes('system:team:manage')) {
-      message.error('无权访问，正在跳转...')
-      setTimeout(() => navigate('/404', { replace: true }), 500)
-    }
-  }, [userInfo, authLoading, navigate, message])
-
-  useEffect(() => {
-    if (!userInfo?.permissions?.includes('system:team:manage')) return
+    if (!userInfo) return
     let ignore = false
     const fetchData = async () => {
       setLoading(true)
@@ -127,7 +113,7 @@ function SpaceManagement() {
     }
   }
 
-  if (!userInfo || !userInfo?.permissions?.includes('system:team:manage')) {
+  if (!userInfo) {
     return (
       <main className="space-management-container">
         <div style={{ textAlign: 'center', padding: '100px 0' }}>
@@ -142,7 +128,7 @@ function SpaceManagement() {
     { title: '空间名称', dataIndex: 'name', key: 'name', ellipsis: true },
     {
       title: '类型', dataIndex: 'type', key: 'type', width: 110,
-      render: (t) => <Tag color={TYPE_COLOR[t]}>{TYPE_MAP[t] || t}</Tag>,
+      render: (t) => <Tag color={SPACE_TYPE_COLOR[t]}>{SPACE_TYPE_MAP[t] || t}</Tag>,
     },
     { title: '创建者', dataIndex: 'userName', key: 'userName', width: 120 },
     {
@@ -151,7 +137,7 @@ function SpaceManagement() {
     },
     {
       title: '等级', dataIndex: 'level', key: 'level', width: 80,
-      render: (l) => <Tag color={LEVEL_COLOR[l]}>{LEVEL_MAP[l] || l}</Tag>,
+      render: (l) => <Tag color={LEVEL_TAG_COLOR[l]}>{LEVEL_TAG_MAP[l] || l}</Tag>,
     },
     {
       title: '状态', dataIndex: 'status', key: 'status', width: 80,
@@ -248,7 +234,7 @@ function SpaceManagement() {
         destroyOnHidden
       >
         <Form form={editForm} layout="vertical">
-          <Form.Item name="name" label="空间名称" rules={[{ required: true, message: '请输入空间名称' }]}>
+          <Form.Item name="name" label="空间名称" rules={spaceNameRules}>
             <Input />
           </Form.Item>
           <Form.Item name="introduction" label="空间介绍">

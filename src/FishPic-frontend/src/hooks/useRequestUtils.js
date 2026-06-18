@@ -26,66 +26,42 @@ export function useFetchWithCleanup() {
   return { createSignal, abort }
 }
 
-const systemTypesCache = {
-  data: null,
-  timestamp: 0,
-  ttl: 5 * 60 * 1000,
+function useTtlCache(fetcher, cacheKey, ttlMs = 5 * 60 * 1000) {
+  const cacheRef = useRef({ data: null, timestamp: 0 })
+
+  const fetch = useCallback(async () => {
+    const now = Date.now()
+    const cache = cacheRef.current
+    if (cache.data && (now - cache.timestamp) < ttlMs) {
+      return cache.data
+    }
+    try {
+      const result = await fetcher()
+      cache.data = result
+      cache.timestamp = now
+      return result
+    } catch {
+      if (cache.data) {
+        cache.timestamp = now
+        return cache.data
+      }
+      throw new Error(`获取${cacheKey}失败`)
+    }
+  }, [fetcher, cacheKey, ttlMs])
+
+  const invalidate = useCallback(() => {
+    cacheRef.current = { data: null, timestamp: 0 }
+  }, [])
+
+  return { fetch, invalidate }
 }
 
 export function useSystemTypes() {
-  const fetchSystemTypes = useCallback(async () => {
-    const now = Date.now()
-    if (systemTypesCache.data && (now - systemTypesCache.timestamp) < systemTypesCache.ttl) {
-      return systemTypesCache.data
-    }
-    try {
-      const result = await getSystemTypes()
-      systemTypesCache.data = result
-      systemTypesCache.timestamp = now
-      return result
-    } catch {
-      if (systemTypesCache.data) {
-        systemTypesCache.timestamp = now
-        return systemTypesCache.data
-      }
-      throw new Error('获取分类列表失败')
-    }
-  }, [])
-
-  const invalidateCache = useCallback(() => {
-    systemTypesCache.data = null
-    systemTypesCache.timestamp = 0
-  }, [])
-
-  return { fetchSystemTypes, invalidateCache }
-}
-
-const marqueeCache = {
-  data: null,
-  timestamp: 0,
-  ttl: 5 * 60 * 1000,
+  const { fetch, invalidate } = useTtlCache(getSystemTypes, '分类列表')
+  return { fetchSystemTypes: fetch, invalidateCache: invalidate }
 }
 
 export function useMarquee() {
-  const fetchMarquee = useCallback(async () => {
-    const now = Date.now()
-    if (marqueeCache.data && (now - marqueeCache.timestamp) < marqueeCache.ttl) {
-      return marqueeCache.data
-    }
-    try {
-      const result = await getMarquee()
-      marqueeCache.data = result
-      marqueeCache.timestamp = now
-      return result
-    } catch {
-      if (marqueeCache.data) {
-        marqueeCache.timestamp = now
-        return marqueeCache.data
-      }
-      throw new Error('获取轮播图失败')
-    }
-  }, [])
-
-  return { fetchMarquee }
+  const { fetch } = useTtlCache(getMarquee, '轮播图')
+  return { fetchMarquee: fetch }
 }
-

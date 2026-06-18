@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class PictureMessage {
+public class PictureMetadata {
 
     /**
      * 图片名称

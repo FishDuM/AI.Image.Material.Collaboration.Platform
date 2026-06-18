@@ -1,8 +1,8 @@
 import { useCallback, useState } from 'react'
 import { getSaveableSpaces, savePictureByUrl } from '../api'
+import { SPACE_TYPE_MAP, SPACE_TYPE_COLOR } from '../utils/constants'
 
-export const SPACE_TYPE_MAP = { 0: '私人空间', 1: '团队空间' }
-export const SPACE_TYPE_COLOR = { 0: 'blue', 1: 'green' }
+export { SPACE_TYPE_MAP, SPACE_TYPE_COLOR }
 
 export function useSaveToSpace({ imageUrl, message, onSaved }) {
   const [activeTab, setActiveTab] = useState('private')

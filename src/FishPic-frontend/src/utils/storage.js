@@ -1,63 +1,27 @@
 const USER_KEY = 'fishpics_user_info'
+const LEGACY_TOKEN_KEY = 'fishpics_auth_token'
 const TOKEN_KEY = 'fishpics_auth_token'
-const ENC_KEY_STORAGE = 'fishpics_enc_key'
+const LEGACY_ENC_KEY_STORAGE = 'fishpics_enc_key'
 
-// 只落安全字段,防止敏感 PII 进 localStorage
 const SAFE_USER_FIELDS = ['id', 'username', 'nickname', 'avatar', 'level', 'roleId', 'permissions']
+
+let cachedUserInfo = null
+let cachedAt = 0
+
 function pickSafeUser(userInfo) {
   if (!userInfo || typeof userInfo !== 'object') return null
   const safe = {}
-  for (const k of SAFE_USER_FIELDS) {
-    if (userInfo[k] !== undefined) safe[k] = userInfo[k]
+  for (const key of SAFE_USER_FIELDS) {
+    if (userInfo[key] !== undefined) safe[key] = userInfo[key]
   }
   return safe
 }
 
-// localStorage 加密(obfuscation,挡部分爬虫/插件读取)
-async function getOrCreateEncKey() {
+function readJson(storage, key) {
+  const raw = storage.getItem(key)
+  if (!raw) return null
   try {
-    const existing = sessionStorage.getItem(ENC_KEY_STORAGE)
-    if (existing) {
-      const raw = Uint8Array.from(atob(existing), c => c.charCodeAt(0))
-      return crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt'])
-    }
-  } catch { /* fall through to create */ }
-  try {
-    const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt'])
-    const raw = new Uint8Array(await crypto.subtle.exportKey('raw', key))
-    sessionStorage.setItem(ENC_KEY_STORAGE, btoa(String.fromCharCode(...raw)))
-    return key
-  } catch {
-    return null // 极旧浏览器:fallback 到明文
-  }
-}
-
-function bytesToB64(bytes) {
-  return btoa(String.fromCharCode(...new Uint8Array(bytes)))
-}
-function b64ToBytes(b64) {
-  return Uint8Array.from(atob(b64), c => c.charCodeAt(0))
-}
-
-async function encryptJson(obj) {
-  const key = await getOrCreateEncKey()
-  if (!key) return null
-  const iv = crypto.getRandomValues(new Uint8Array(12))
-  const plaintext = new TextEncoder().encode(JSON.stringify(obj))
-  const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext)
-  return JSON.stringify({ iv: bytesToB64(iv), ct: bytesToB64(cipher) })
-}
-
-async function decryptJson(payload) {
-  if (!payload) return null
-  try {
-    const parsed = JSON.parse(payload)
-    const key = await getOrCreateEncKey()
-    if (!key) return null
-    const iv = b64ToBytes(parsed.iv)
-    const ct = b64ToBytes(parsed.ct)
-    const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct)
-    return JSON.parse(new TextDecoder().decode(plaintext))
+    return JSON.parse(raw)
   } catch {
     return null
   }
@@ -66,62 +30,35 @@ async function decryptJson(payload) {
 export const saveUserInfo = (userInfo) => {
   try {
     const safe = pickSafeUser(userInfo)
-    if (safe) {
-      _cachedUserInfo = safe
-      _cachedAt = Date.now()
-      try {
-        localStorage.setItem(USER_KEY, JSON.stringify(safe))
-      } catch { /* ignore storage quota failures */ }
-      // 异步加密覆盖明文
-      encryptJson(safe).then(encrypted => {
-        if (encrypted) {
-          localStorage.setItem(USER_KEY, encrypted)
-        }
-      })
-    }
+    if (!safe) return
+    cachedUserInfo = safe
+    cachedAt = Date.now()
+    sessionStorage.setItem(USER_KEY, JSON.stringify(safe))
+    localStorage.removeItem(USER_KEY)
+    sessionStorage.removeItem(LEGACY_ENC_KEY_STORAGE)
   } catch (error) {
     console.error('保存用户信息失败', error)
   }
 }
 
-let _cachedUserInfo = null
-let _cachedAt = 0
-
 export const getUserInfo = () => {
   try {
-    if (_cachedUserInfo && Date.now() - _cachedAt < 60000) {
-      return _cachedUserInfo
+    if (cachedUserInfo && Date.now() - cachedAt < 60000) {
+      return cachedUserInfo
     }
-    const data = localStorage.getItem(USER_KEY)
-    if (!data) return null
-    // 兼容旧数据(明文 JSON)
-    if (data.startsWith('{') && data.includes('"id"')) {
-      return JSON.parse(data)
-    }
-    decryptJson(data).then(dec => {
-      if (dec) {
-        _cachedUserInfo = dec
-        _cachedAt = Date.now()
-      }
-    })
-    return _cachedUserInfo
-  } catch (error) {
-    console.error('读取用户信息失败', error)
-    return null
-  }
-}
 
-/**
- * 异步获取用户信息(解密)— 用于在 AuthContext 启动时调用
- */
-export const getUserInfoAsync = async () => {
-  try {
-    const data = localStorage.getItem(USER_KEY)
-    if (!data) return null
-    if (data.startsWith('{') && data.includes('"id"')) {
-      return JSON.parse(data) // 旧格式
+    let userInfo = readJson(sessionStorage, USER_KEY)
+    if (!userInfo) {
+      userInfo = readJson(localStorage, USER_KEY)
+      if (userInfo) {
+        sessionStorage.setItem(USER_KEY, JSON.stringify(userInfo))
+        localStorage.removeItem(USER_KEY)
+      }
     }
-    return await decryptJson(data)
+
+    cachedUserInfo = pickSafeUser(userInfo)
+    cachedAt = cachedUserInfo ? Date.now() : 0
+    return cachedUserInfo
   } catch (error) {
     console.error('读取用户信息失败', error)
     return null
@@ -130,7 +67,11 @@ export const getUserInfoAsync = async () => {
 
 export const removeUserInfo = () => {
   try {
+    cachedUserInfo = null
+    cachedAt = 0
+    sessionStorage.removeItem(USER_KEY)
     localStorage.removeItem(USER_KEY)
+    sessionStorage.removeItem(LEGACY_ENC_KEY_STORAGE)
   } catch (error) {
     console.error('清除用户信息失败', error)
   }
@@ -139,7 +80,7 @@ export const removeUserInfo = () => {
 export const saveToken = (token) => {
   try {
     sessionStorage.setItem(TOKEN_KEY, token)
-    localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(LEGACY_TOKEN_KEY)
   } catch (error) {
     console.error('保存Token失败', error)
   }
@@ -157,7 +98,7 @@ export const getToken = () => {
 export const removeToken = () => {
   try {
     sessionStorage.removeItem(TOKEN_KEY)
-    localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(LEGACY_TOKEN_KEY)
   } catch (error) {
     console.error('清除Token失败', error)
   }
@@ -166,5 +107,4 @@ export const removeToken = () => {
 export const clearAuth = () => {
   removeUserInfo()
   removeToken()
-  try { sessionStorage.removeItem(ENC_KEY_STORAGE) } catch { /* ignore storage failures */ }
 }

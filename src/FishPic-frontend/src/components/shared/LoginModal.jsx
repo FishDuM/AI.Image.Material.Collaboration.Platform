@@ -1,8 +1,10 @@
 import { Form, Input, Button, Card, Checkbox, Modal } from 'antd'
 import { UserOutlined, LockOutlined, ScanOutlined } from '@ant-design/icons'
 import { useState } from 'react'
+import { captchaRules, confirmPasswordRules, passwordRules, usernameRules } from '../../utils/formRules'
+import { PLACEHOLDER_QR } from '../../utils/fallbacks'
 
-const QR_PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQwIiBoZWlnaHQ9IjI0MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnPjxyZWN0IHdpZHRoPSIyNDAiIGhlaWdodD0iMjQwIiBmaWxsPSIjZmZmIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJhcmlhbCIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPumrpumdouWKoe+8jOaWr+e9kee7nOi0pe+8gDwvdGV4dD48L3N2Zz4='
+const QR_PLACEHOLDER = PLACEHOLDER_QR
 
 function LoginPanel({ form, loading, checkCodeUrl, onSubmit, onRefreshCode, onSwitchToRegister }) {
   const [codeRefreshing, setCodeRefreshing] = useState(false)
@@ -16,14 +18,14 @@ function LoginPanel({ form, loading, checkCodeUrl, onSubmit, onRefreshCode, onSw
     <div className="form-container">
       <h2 className="form-title">账号登录</h2>
       <Form form={form} name="login" onFinish={onSubmit} autoComplete="off" size="large" requiredMark={false} layout="vertical">
-        <Form.Item name="username" rules={[{ required: true, message: '请输入账号' }, { min: 6, message: '账号至少 6 个字符' }, { max: 30, message: '账号最多 30 个字符' }]}>
+        <Form.Item name="username" rules={usernameRules}>
           <Input prefix={<UserOutlined className="input-icon" />} placeholder="请输入账号" className="xhs-input" />
         </Form.Item>
-        <Form.Item name="password" rules={[{ required: true, message: '请输入密码' }, { min: 8, message: '密码至少 8 个字符' }]}>
+        <Form.Item name="password" rules={passwordRules}>
           <Input.Password prefix={<LockOutlined className="input-icon" />} placeholder="请输入密码" className="xhs-input" />
         </Form.Item>
         <div className="check-code-row xhs">
-          <Form.Item name="checkCode" noStyle rules={[{ required: true, message: '请输入验证码' }, { len: 5, message: '请输入5位验证码' }]}>
+          <Form.Item name="checkCode" noStyle rules={captchaRules}>
             <Input prefix={<LockOutlined className="input-icon" />} placeholder="请输入验证码" className="xhs-input check-code-input" maxLength={5} />
           </Form.Item>
           <Button className="get-code-btn" onClick={handleRefreshCode} type="link" loading={codeRefreshing} disabled={codeRefreshing}>
@@ -60,25 +62,17 @@ function RegisterPanel({ form, loading, checkCodeUrl, onSubmit, onRefreshCode, o
     <div className="form-container">
       <h2 className="form-title">账号注册</h2>
       <Form form={form} name="register" onFinish={handleSubmit} autoComplete="off" size="large" requiredMark={false} layout="vertical">
-        <Form.Item name="username" rules={[{ required: true, message: '请输入账号' }, { min: 6, message: '账号至少 6 个字符' }, { max: 30, message: '账号最多 30 个字符' }]}>
+        <Form.Item name="username" rules={usernameRules}>
           <Input prefix={<UserOutlined className="input-icon" />} placeholder="请输入账号" className="xhs-input" />
         </Form.Item>
-        <Form.Item name="password" rules={[{ required: true, message: '请输入密码' }, { min: 8, message: '密码至少 8 个字符' }]}>
+        <Form.Item name="password" rules={passwordRules}>
           <Input.Password prefix={<LockOutlined className="input-icon" />} placeholder="请输入密码" className="xhs-input" />
         </Form.Item>
-        <Form.Item name="checkPassword" dependencies={['password']} rules={[
-          { required: true, message: '请再次输入密码' },
-          ({ getFieldValue }) => ({
-            validator(_, value) {
-              if (!value || getFieldValue('password') === value) return Promise.resolve()
-              return Promise.reject(new Error('两次输入的密码不一致'))
-            },
-          }),
-        ]}>
+        <Form.Item name="checkPassword" dependencies={['password']} rules={confirmPasswordRules}>
           <Input.Password prefix={<LockOutlined className="input-icon" />} placeholder="请再次输入密码" className="xhs-input" autoComplete="new-password" />
         </Form.Item>
         <div className="check-code-row xhs">
-          <Form.Item name="checkCode" noStyle rules={[{ required: true, message: '请输入验证码' }, { len: 5, message: '请输入5位验证码' }]}>
+          <Form.Item name="checkCode" noStyle rules={captchaRules}>
             <Input prefix={<LockOutlined className="input-icon" />} placeholder="请输入验证码" className="xhs-input check-code-input" maxLength={5} />
           </Form.Item>
           <Button className="get-code-btn" onClick={handleRefreshCode} type="link" loading={codeRefreshing} disabled={codeRefreshing}>

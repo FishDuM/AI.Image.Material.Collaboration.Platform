@@ -57,7 +57,7 @@ public class LoginContext implements Serializable {
     private Integer role;
 
     /**
-     * 是否是管理员（role == 1）
+     * 是否是管理员（Role.ADMIN）
      */
     private Boolean isAdmin;
 
@@ -108,7 +108,7 @@ public class LoginContext implements Serializable {
     }
 
     /**
-     * 判断是否为管理员（role == 1）
+     * 判断是否为管理员（Role.ADMIN）
      */
     public boolean isAdmin() {
         return Boolean.TRUE.equals(isAdmin);

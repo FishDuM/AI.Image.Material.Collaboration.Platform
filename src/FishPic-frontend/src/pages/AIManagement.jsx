@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Table, Card, Typography, Button, Tag, Space, Select, Tabs, Statistic, Row, Col, Switch, message as antMsg } from 'antd'
 import { ReloadOutlined, RobotOutlined, CheckCircleOutlined, CloseCircleOutlined, SyncOutlined, BarChartOutlined, SettingOutlined, UnorderedListOutlined } from '@ant-design/icons'
 import { getAiTasks, getAiStats, getAiConfig, updateAiConfig } from '../api'
+import { CHART_COLORS } from '../utils/constants'
 import { AuthContext } from '../context/AuthContext.jsx'
 import { PAGINATION_LOCALE } from '../utils/constants'
 import './AIManagement.css'
@@ -228,17 +229,17 @@ function AIManagement() {
             </Col>
             <Col xs={12} sm={6}>
               <Card size="small">
-                <Statistic title="成功" value={stats?.successTasks || 0} styles={{ value: { color: '#52c41a' } }} prefix={<CheckCircleOutlined />} />
+                <Statistic title="成功" value={stats?.successTasks || 0} styles={{ value: { color: CHART_COLORS.success[0] } }} prefix={<CheckCircleOutlined />} />
               </Card>
             </Col>
             <Col xs={12} sm={6}>
               <Card size="small">
-                <Statistic title="失败" value={stats?.failedTasks || 0} styles={{ value: { color: '#ff4d4f' } }} prefix={<CloseCircleOutlined />} />
+                <Statistic title="失败" value={stats?.failedTasks || 0} styles={{ value: { color: CHART_COLORS.error } }} prefix={<CloseCircleOutlined />} />
               </Card>
             </Col>
             <Col xs={12} sm={6}>
               <Card size="small">
-                <Statistic title="处理中" value={stats?.processingTasks || 0} styles={{ value: { color: '#1890ff' } }} prefix={<SyncOutlined spin />} />
+                <Statistic title="处理中" value={stats?.processingTasks || 0} styles={{ value: { color: CHART_COLORS.primary[0] } }} prefix={<SyncOutlined spin />} />
               </Card>
             </Col>
           </Row>

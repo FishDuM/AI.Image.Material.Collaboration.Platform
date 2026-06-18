@@ -23,7 +23,6 @@ function SpacePickerModal({ open, onClose, onConfirm, currentImageCount, existin
   const [teamSpaceImagePage, setTeamSpaceImagePage] = useState(1)
   const [teamSpaceImageLoading, setTeamSpaceImageLoading] = useState(false)
   const [teamSpaceView, setTeamSpaceView] = useState('list')
-  // 标记当前请求是否已过期，防止快速切换团队空间时旧请求覆盖新数据
   const fetchSeqRef = useRef(0)
 
   useEffect(() => {
@@ -118,8 +117,56 @@ function SpacePickerModal({ open, onClose, onConfirm, currentImageCount, existin
     onConfirm(selectedItems)
     setSelectedItems([])
     setPage(1)
+    setTeamSpaceImagePage(1)
     onClose()
   }, [selectedItems, onConfirm, msg, onClose])
+
+  const renderImageGrid = (items, onToggle, spinning) => (
+    <Spin spinning={spinning} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+      <div className="space-image-grid">
+        {items.map((img) => {
+          const orderIndex = selectedIds.indexOf(img.id)
+          const isSelected = orderIndex !== -1
+          const isInCarousel = img.flag === false
+          return (
+            <div
+              key={img.id}
+              className={`space-image-item${isSelected ? ' space-image-selected' : ''}${isInCarousel ? ' space-image-in-carousel' : ''}`}
+              onClick={() => onToggle(img)}
+            >
+              <img src={img.url} alt={img.pictureName || '图片'} className="space-image-thumb" />
+              <div className="space-image-check">
+                {isSelected ? (
+                  <span className="space-order-badge">{orderIndex + 1}</span>
+                ) : isInCarousel ? (
+                  <span className="space-order-exists">已有</span>
+                ) : (
+                  <span className="space-order-empty" />
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </Spin>
+  )
+
+  const renderImageFooter = (current, itemTotal, onPageChange) => (
+    <div className="space-image-footer space-picker-footer">
+      <Pagination
+        current={current}
+        total={itemTotal}
+        pageSize={20}
+        size="small"
+        showSizeChanger={false}
+        showTotal={(t) => `共 ${t} 张`}
+        onChange={onPageChange}
+      />
+      <span className="space-picker-limit-hint">
+        {currentImageCount > 0 || selectedIds.length > 0 ? `已选 ${currentImageCount + selectedIds.length} 张，还可选 ${Math.max(0, 15 - currentImageCount - selectedIds.length)} 张` : `最多可选 15 张`}
+      </span>
+    </div>
+  )
 
   const fetchTeamSpaces = useCallback(async () => {
     setTeamSpacesLoading(true)
@@ -185,33 +232,6 @@ function SpacePickerModal({ open, onClose, onConfirm, currentImageCount, existin
     setSelectedItems([])
   }, [])
 
-  const handleTeamSpaceImageToggle = useCallback((img) => {
-    if (selectedItems.find(it => it.id === img.id)) {
-      setSelectedItems(prev => prev.filter(it => it.id !== img.id))
-      return
-    }
-    if (img.flag === false) {
-      msg.warning('该图片已添加，请勿重复选择')
-      return
-    }
-    if (currentImageCount + selectedItems.length >= 15) {
-      msg.warning(`最多只能选择15张图片（已选择${currentImageCount}张）`)
-      return
-    }
-    setSelectedItems(prev => [...prev, img])
-  }, [currentImageCount, selectedItems, msg])
-
-  const handleTeamSpaceConfirm = useCallback(() => {
-    if (selectedItems.length === 0) {
-      msg.warning('请先选择图片')
-      return
-    }
-    onConfirm(selectedItems)
-    setSelectedItems([])
-    setTeamSpaceImagePage(1)
-    onClose()
-  }, [selectedItems, onConfirm, msg, onClose])
-
   const handleTabChange = (key) => {
     setActiveTab(key)
     setSelectedItems([])
@@ -241,7 +261,7 @@ function SpacePickerModal({ open, onClose, onConfirm, currentImageCount, existin
           type="primary"
           icon={<CheckOutlined />}
           disabled={selectedIds.length === 0}
-          onClick={activeTab === 'team' ? handleTeamSpaceConfirm : handleConfirm}
+          onClick={handleConfirm}
         >
           确认选择 ({selectedIds.length})
         </Button>,
@@ -261,50 +281,11 @@ function SpacePickerModal({ open, onClose, onConfirm, currentImageCount, existin
                   <Empty description="暂无私人空间" style={{ padding: '60px 0' }} />
                 ) : (
                   <>
-                    <Spin spinning={loading} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
-                      <div className="space-image-grid">
-                        {images.map((img) => {
-                          const orderIndex = selectedIds.indexOf(img.id)
-                          const isSelected = orderIndex !== -1
-                          const isInCarousel = img.flag === false
-                          return (
-                            <div
-                              key={img.id}
-                              className={`space-image-item${isSelected ? ' space-image-selected' : ''}${isInCarousel ? ' space-image-in-carousel' : ''}`}
-                              onClick={() => toggleImage(img)}
-                            >
-                              <img src={img.url} alt={img.pictureName || '图片'} className="space-image-thumb" />
-                              <div className="space-image-check">
-                                {isSelected ? (
-                                  <span className="space-order-badge">{orderIndex + 1}</span>
-                                ) : isInCarousel ? (
-                                  <span className="space-order-exists">已有</span>
-                                ) : (
-                                  <span className="space-order-empty" />
-                                )}
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                      {images.length === 0 && !loading && (
-                        <Empty description="暂无图片" style={{ padding: '40px 0' }} />
-                      )}
-                    </Spin>
-                    <div className="space-image-footer space-picker-footer">
-                      <Pagination
-                        current={page}
-                        total={total}
-                        pageSize={20}
-                        size="small"
-                        showSizeChanger={false}
-                        showTotal={(t) => `共 ${t} 张`}
-                        onChange={(p) => setPage(p)}
-                      />
-                      <span className="space-picker-limit-hint">
-                        {currentImageCount > 0 || selectedIds.length > 0 ? `已选 ${currentImageCount + selectedIds.length} 张，还可选 ${Math.max(0, 15 - currentImageCount - selectedIds.length)} 张` : `最多可选 15 张`}
-                      </span>
-                    </div>
+                    {renderImageGrid(images, toggleImage, loading)}
+                    {images.length === 0 && !loading && (
+                      <Empty description="暂无图片" style={{ padding: '40px 0' }} />
+                    )}
+                    {renderImageFooter(page, total, setPage)}
                   </>
                 )}
               </div>
@@ -355,50 +336,11 @@ function SpacePickerModal({ open, onClose, onConfirm, currentImageCount, existin
                         <Empty description="请选择一个团队空间" style={{ padding: '60px 0' }} />
                       ) : (
                         <>
-                          <Spin spinning={teamSpaceImageLoading} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
-                            <div className="space-image-grid">
-                              {teamSpaceImages.map((img) => {
-                                const orderIndex = selectedIds.indexOf(img.id)
-                                const isSelected = orderIndex !== -1
-                                const isInCarousel = img.flag === false
-                                return (
-                                  <div
-                                    key={img.id}
-                                    className={`space-image-item${isSelected ? ' space-image-selected' : ''}${isInCarousel ? ' space-image-in-carousel' : ''}`}
-                                    onClick={() => handleTeamSpaceImageToggle(img)}
-                                  >
-                                    <img src={img.url} alt={img.pictureName || '图片'} className="space-image-thumb" />
-                                    <div className="space-image-check">
-                                      {isSelected ? (
-                                        <span className="space-order-badge">{orderIndex + 1}</span>
-                                      ) : isInCarousel ? (
-                                        <span className="space-order-exists">已有</span>
-                                      ) : (
-                                        <span className="space-order-empty" />
-                                      )}
-                                    </div>
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          </Spin>
+                          {renderImageGrid(teamSpaceImages, toggleImage, teamSpaceImageLoading)}
                           {teamSpaceImages.length === 0 && !teamSpaceImageLoading && (
                             <Empty description="暂无图片" style={{ padding: '40px 0' }} />
                           )}
-                          <div className="space-image-footer space-picker-footer">
-                            <Pagination
-                              current={teamSpaceImagePage}
-                              total={teamSpaceImageTotal}
-                              pageSize={20}
-                              size="small"
-                              showSizeChanger={false}
-                              showTotal={(t) => `共 ${t} 张`}
-                              onChange={(p) => setTeamSpaceImagePage(p)}
-                            />
-                            <span className="space-picker-limit-hint">
-                              {currentImageCount > 0 || selectedIds.length > 0 ? `已选 ${currentImageCount + selectedIds.length} 张，还可选 ${Math.max(0, 15 - currentImageCount - selectedIds.length)} 张` : `最多可选 15 张`}
-                            </span>
-                          </div>
+                          {renderImageFooter(teamSpaceImagePage, teamSpaceImageTotal, setTeamSpaceImagePage)}
                         </>
                       )}
                     </>

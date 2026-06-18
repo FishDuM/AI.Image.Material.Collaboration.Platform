@@ -7,7 +7,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
 import java.io.Serializable;
-import java.util.Date;
+import java.time.LocalDateTime;
 
 /**
  * 图片分享表
@@ -34,7 +34,7 @@ public class PictureShare implements Serializable {
     private String shareTokenHash;
 
     /** 过期时间 */
-    private Date expireTime;
+    private LocalDateTime expireTime;
 
     /** 是否允许下载 0=仅预览 1=允许 */
     private Integer allowDownload;
@@ -50,7 +50,7 @@ public class PictureShare implements Serializable {
     private Integer viewCount;
 
     /** 创建时间 */
-    private Date createTime;
+    private LocalDateTime createTime;
 
     private static final long serialVersionUID = 1L;
 }

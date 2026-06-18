@@ -10,6 +10,7 @@ import hk.ljx.fishpicsbackend.picture.dto.ShareCancelRequest;
 import hk.ljx.fishpicsbackend.picture.dto.ShareCreateRequest;
 import hk.ljx.fishpicsbackend.picture.service.ShareService;
 import hk.ljx.fishpicsbackend.picture.vo.ShareFileVO;
+import hk.ljx.fishpicsbackend.picture.vo.ShareInfoVO;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
@@ -26,7 +27,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/share")
@@ -53,7 +53,7 @@ public class ShareController {
     }
 
     @GetMapping("/info/{token}")
-    public Response<Map<String, Object>> getShareInfo(@PathVariable String token) {
+    public Response<ShareInfoVO> getShareInfo(@PathVariable String token) {
         return Response.ok(shareService.getShareInfo(token));
     }
 

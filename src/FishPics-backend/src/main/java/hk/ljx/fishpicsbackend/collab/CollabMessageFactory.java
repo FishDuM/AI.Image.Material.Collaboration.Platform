@@ -13,34 +13,44 @@ public final class CollabMessageFactory {
     private CollabMessageFactory() {
     }
 
-    public static String transform(Long pictureId,
+    public record Crop(Integer x, Integer y, Integer w, Integer h) {
+    }
+
+    public record TransformMessage(Long pictureId,
                                    Double scale,
                                    Integer rotation,
                                    Long userId,
                                    String nickname,
-                                   Integer cropX,
-                                   Integer cropY,
-                                   Integer cropW,
-                                   Integer cropH) {
+                                   Crop crop) {
+    }
+
+    public record UserMessage(Long userId, String nickname, String avatar) {
+    }
+
+    public record PictureUserMessage(Long pictureId, Long userId, String nickname) {
+    }
+
+    public static String transform(TransformMessage message) {
         var json = new JSONObject();
         json.set("type", "transform");
-        json.set("pictureId", pictureId);
-        json.set("scale", scale);
-        json.set("rotation", rotation);
-        json.set("userId", userId);
-        json.set("nickname", blankIfNull(nickname));
-        if (cropX != null) {
-            json.set("crop", Map.of("x", cropX, "y", cropY, "w", cropW, "h", cropH));
+        json.set("pictureId", message.pictureId());
+        json.set("scale", message.scale());
+        json.set("rotation", message.rotation());
+        json.set("userId", message.userId());
+        json.set("nickname", blankIfNull(message.nickname()));
+        if (message.crop() != null) {
+            Crop crop = message.crop();
+            json.set("crop", Map.of("x", crop.x(), "y", crop.y(), "w", crop.w(), "h", crop.h()));
         }
         return json.toString();
     }
 
-    public static String join(Long userId, String nickname, String avatar) {
+    public static String join(UserMessage message) {
         return JSONUtil.toJsonStr(Map.of(
                 "type", "join",
-                "userId", userId,
-                "nickname", blankIfNull(nickname),
-                "avatar", blankIfNull(avatar)
+                "userId", message.userId(),
+                "nickname", blankIfNull(message.nickname()),
+                "avatar", blankIfNull(message.avatar())
         ));
     }
 
@@ -65,12 +75,12 @@ public final class CollabMessageFactory {
         ));
     }
 
-    public static String lock(Long pictureId, Long userId, String nickname) {
+    public static String lock(PictureUserMessage message) {
         return JSONUtil.toJsonStr(Map.of(
                 "type", "lock",
-                "pictureId", pictureId,
-                "userId", userId,
-                "nickname", blankIfNull(nickname)
+                "pictureId", message.pictureId(),
+                "userId", message.userId(),
+                "nickname", blankIfNull(message.nickname())
         ));
     }
 
@@ -91,12 +101,14 @@ public final class CollabMessageFactory {
         ));
     }
 
-    public static String fileReplaced(Long pictureId, Long userId, String nickname) {
+    public static String fileReplaced(PictureUserMessage message) {
+        String nickname = blankIfNull(message.nickname());
         return JSONUtil.toJsonStr(Map.of(
                 "type", "file-replaced",
-                "pictureId", pictureId,
-                "userId", userId,
-                "nickname", blankIfNull(nickname)
+                "pictureId", message.pictureId(),
+                "userId", message.userId(),
+                "nickname", nickname,
+                "fromNickname", nickname
         ));
     }
 

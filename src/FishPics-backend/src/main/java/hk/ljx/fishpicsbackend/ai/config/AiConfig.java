@@ -1,6 +1,7 @@
 package hk.ljx.fishpicsbackend.ai.config;
 
 import com.alibaba.dashscope.aigc.multimodalconversation.MultiModalConversation;
+import com.alibaba.dashscope.utils.Constants;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -28,7 +29,7 @@ public class AiConfig {
         // 确保 AI 调用超时后 HTTP 连接也能释放
         // DashScope SDK 当前版本可能不暴露 timeout setter，用反射调用避免编译失败
         try {
-            Class<?> constantsClass = com.alibaba.dashscope.utils.Constants.class;
+            Class<?> constantsClass = Constants.class;
             try {
                 constantsClass.getMethod("setHttpConnectTimeout", int.class)
                         .invoke(null, HTTP_CONNECT_TIMEOUT_MS);

@@ -4,7 +4,9 @@ import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import cn.hutool.core.util.StrUtil;
 import jakarta.annotation.PostConstruct;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -48,6 +50,7 @@ public class JwtUtils {
      * JWT 黑名单 Redis Key 前缀（使用共享常量，避免重复定义）
      */
     private static final String JWT_BLACKLIST_PREFIX = RedisConstants.JWT_BLACKLIST_KEY;
+    public static final String ISSUED_AT_MS_CLAIM = "iatMs";
 
     /**
      * 缓存的签名密钥（避免重复创建）
@@ -94,6 +97,7 @@ public class JwtUtils {
                 .id(jti)
                 .subject(String.valueOf(userId))
                 .claim("userId", userId)
+                .claim(ISSUED_AT_MS_CLAIM, now.getTime())
                 .issuedAt(now)
                 .expiration(expireAt)
                 .signWith(getSecretKey())
@@ -284,5 +288,19 @@ public class JwtUtils {
             return true; // 无法提取 jti，视为无效
         }
         return Boolean.TRUE.equals(stringRedisTemplate.hasKey(JWT_BLACKLIST_PREFIX + jti));
+    }
+
+    /**
+     * 从请求头提取 JWT（去除 "Bearer " 前缀）
+     *
+     * @param request HTTP 请求
+     * @return JWT 字符串，无有效 Authorization header 返回 null
+     */
+    public static String extractJwt(HttpServletRequest request) {
+        String authHeader = request.getHeader("Authorization");
+        if (StrUtil.isBlank(authHeader)) {
+            return null;
+        }
+        return authHeader.startsWith("Bearer ") ? authHeader.substring(7) : authHeader;
     }
 }

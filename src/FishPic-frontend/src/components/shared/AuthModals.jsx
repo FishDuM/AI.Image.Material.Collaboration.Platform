@@ -11,7 +11,7 @@ function AuthModals({ authModal, loginForm, registerForm, showAgreement }) {
         checkCodeUrl={authModal.loginCheckCodeUrl}
         onSubmit={(values) => authModal.handleLoginSubmit(values, loginForm)}
         onRefreshCode={() => authModal.refreshLoginCode(loginForm)}
-        onSwitchToRegister={authModal.switchToRegister}
+        onSwitchToRegister={authModal.openRegister}
       />
 
       <RegisterModal
@@ -22,7 +22,7 @@ function AuthModals({ authModal, loginForm, registerForm, showAgreement }) {
         checkCodeUrl={authModal.registerCheckCodeUrl}
         onSubmit={(values) => authModal.handleRegisterSubmit(values, registerForm)}
         onRefreshCode={() => authModal.refreshRegisterCode(registerForm)}
-        onSwitchToLogin={authModal.switchToLogin}
+        onSwitchToLogin={authModal.openLogin}
         showAgreement={showAgreement}
       />
     </>

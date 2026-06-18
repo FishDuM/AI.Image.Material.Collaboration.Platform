@@ -21,7 +21,7 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import jakarta.annotation.Resource;
 import java.lang.reflect.Method;
-import java.util.Date;
+import java.time.LocalDateTime;
 
 /**
  * 审计日志 AOP 切面，异步写入数据库。
@@ -41,7 +41,7 @@ public class AuditLogAspect {
     public Object around(ProceedingJoinPoint joinPoint) throws Throwable {
         SysAuditLog auditLog = new SysAuditLog();
         // 提前记录请求时间，反映真实请求时间点
-        auditLog.setCreateTime(new Date());
+        auditLog.setCreateTime(LocalDateTime.now());
 
         try {
             // 获取注解信息

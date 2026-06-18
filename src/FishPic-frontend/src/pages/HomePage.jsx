@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Carousel, Masonry, Image as AntImage, Spin, Form } from 'antd'
 import { getPictureList, getRecommendPictures } from '../api'
+import { isCanceledError } from '../utils/error'
+import { FALLBACK_BANNER, FALLBACK_THUMB } from '../utils/fallbacks'
 import { useAuthModal } from '../hooks/useAuthModal.js'
 import { useFetchWithCleanup, useSystemTypes, useMarquee } from '../hooks/useRequestUtils'
 import { PAGE_SIZE } from '../utils/constants'
@@ -40,7 +42,10 @@ function HomePage() {
   const { fetchMarquee } = useMarquee()
 
   const authModal = useAuthModal(() => {
-    const from = location.state?.from?.pathname || '/'
+    const fromLocation = location.state?.from
+    const from = fromLocation
+      ? `${fromLocation.pathname || '/'}${fromLocation.search || ''}`
+      : '/'
     navigate(from, { replace: true })
   })
 
@@ -102,7 +107,7 @@ function HomePage() {
         setHasMore(false)
       }
     } catch (err) {
-      if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return
+      if (isCanceledError(err)) return
       if (requestId !== requestIdRef.current) return
       setHasMore(false)
     }
@@ -213,7 +218,7 @@ function HomePage() {
                       {!imgLoaded[idx] && <div className="carousel-skeleton" />}
                       <img src={marqueeImages[idx]} alt={`轮播图 ${idx + 1}`} className="carousel-image coverflow-image" style={{ opacity: imgLoaded[idx] ? 1 : 0 }}
                         onLoad={() => setImgLoaded(prev => ({ ...prev, [idx]: true }))}
-                        onError={(e) => { e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwMCIgaGVpZ2h0PSI1MDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjEyMDAiIGhlaWdodD0iNTAwIiBmaWxsPSIjMWYxZjFmIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJhcmlhbCIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzZiNmI2YiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPua2ieWPiuWfuuinpuWNoOe6qTwvdGV4dD48L3N2Zz4='; setImgLoaded(prev => ({ ...prev, [idx]: true })) }}
+                        onError={(e) => { e.target.src = FALLBACK_BANNER; setImgLoaded(prev => ({ ...prev, [idx]: true })) }}
                       />
                     </div>
                   )
@@ -226,7 +231,7 @@ function HomePage() {
                     {!imgLoaded[index] && <div className="carousel-skeleton" />}
                     <img src={url} alt={`轮播图 ${index + 1}`} className="carousel-image" style={{ opacity: imgLoaded[index] ? 1 : 0 }}
                       onLoad={() => setImgLoaded(prev => ({ ...prev, [index]: true }))}
-                      onError={(e) => { e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwMCIgaGVpZ2h0PSI1MDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjEyMDAiIGhlaWdodD0iNTAwIiBmaWxsPSIjMWYxZjFmIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJhcmlhbCIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzZiNmI2YiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPua2ieWPiuWfuuinpuWNoOe6qTwvdGV4dD48L3N2Zz4='; setImgLoaded(prev => ({ ...prev, [index]: true })) }}
+                      onError={(e) => { e.target.src = FALLBACK_BANNER; setImgLoaded(prev => ({ ...prev, [index]: true })) }}
                     />
                   </div>
                 ))}
@@ -272,7 +277,7 @@ function HomePage() {
       <div className="home-masonry-section">
         {masonryItems.length > 0 && (
           <Masonry columns={{ xs: 2, sm: 3, md: 4, lg: 5 }} gutter={[12, 12]} fresh items={masonryItems} itemRender={(item) => (
-            <div className="home-masonry-item"><AntImage src={getThumbnailUrl(item.data.url, 400)} alt={item.data.pictureName || '图片'} className="home-masonry-image" preview={{ src: item.data.url }} fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzJhMmEyYSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iYXJpYWwiIGZvbnQtc2l6ZT0iMTQiIGZpbGw9IiM2NjYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj7lm77niYfliqDovb3lpLHotKU8L3RleHQ+PC9zdmc+" /></div>
+            <div className="home-masonry-item"><AntImage src={getThumbnailUrl(item.data.url, 400)} alt={item.data.pictureName || '图片'} className="home-masonry-image" preview={{ src: item.data.url }} fallback={FALLBACK_THUMB} /></div>
           )} />
         )}
         {hasMore && <div ref={loadMoreRef} className="home-load-more" />}

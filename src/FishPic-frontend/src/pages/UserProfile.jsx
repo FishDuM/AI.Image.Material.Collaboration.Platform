@@ -20,15 +20,16 @@ import {
   LockOutlined,
   MailOutlined,
   PhoneOutlined,
-  PlusOutlined,
   UserOutlined,
-  LoadingOutlined,
 } from '@ant-design/icons'
-import { editUser, getUser, getUserMyself, getUserProfile, uploadAvatar, markPasswordChange } from '../api'
+import { editUser, getUser, getUserMyself, getUserProfile, markPasswordChange } from '../api'
 import { AuthContext } from '../context/AuthContext'
 import { useIsMobile } from '../hooks/useIsMobile'
-import { getBase64, beforeUpload } from '../utils/upload'
+import { useAvatarUpload } from '../hooks/useAvatarUpload'
+import { beforeUpload } from '../utils/upload'
 import { copyToClipboard } from '../utils/clipboard'
+import { isCanceledError } from '../utils/error'
+import { emailRules, newPasswordRules, nicknameRules, originalPasswordRules, phoneRules, usernameRules } from '../utils/formRules'
 import './UserProfile.css'
 
 function UserProfile() {
@@ -47,9 +48,23 @@ function UserProfile() {
   const [editModalVisible, setEditModalVisible] = useState(false)
   const [editModalLoading, setEditModalLoading] = useState(false)
   const [editForm] = Form.useForm()
-  const [uploadingAvatar, setUploadingAvatar] = useState(false)
-  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(null)
   const [showPasswordSection, setShowPasswordSection] = useState(false)
+
+  const refreshUserInfo = async () => {
+    try {
+      const data = isOwnProfile ? await getUser() : await getUserProfile(profileUserId)
+      setUserData((prev) => ({ ...prev, ...data }))
+      if (isOwnProfile && userInfo) {
+        const updatedUserInfo = { ...userInfo, ...data }
+        updateUserInfo(updatedUserInfo)
+      }
+    } catch (error) {
+      if (isCanceledError(error)) return
+      message.error(error.message || '刷新用户信息失败')
+    }
+  }
+
+  const { previewUrl: avatarPreviewUrl, handleChange: handleAvatarChange, handleUpload: handleAvatarUpload, reset: resetAvatar, uploadButton } = useAvatarUpload({ userId: userData?.id, onSuccess: refreshUserInfo })
 
   const fetchUserInfo = async (signal) => {
     try {
@@ -64,22 +79,8 @@ function UserProfile() {
       }
     } catch (error) {
       if (signal?.aborted) return
-      if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
+      if (isCanceledError(error)) return
       message.error(error.message || '获取个人信息失败')
-    }
-  }
-
-  const refreshUserInfo = async () => {
-    try {
-      const data = isOwnProfile ? await getUser() : await getUserProfile(profileUserId)
-      setUserData((prev) => ({ ...prev, ...data }))
-      if (isOwnProfile && userInfo) {
-        const updatedUserInfo = { ...userInfo, ...data }
-        updateUserInfo(updatedUserInfo)
-      }
-    } catch (error) {
-      if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
-      message.error(error.message || '刷新用户信息失败')
     }
   }
 
@@ -95,37 +96,6 @@ function UserProfile() {
     })
     return () => controller.abort()
   }, [profileUserId, isAuthenticated, isOwnProfile, navigate])
-
-  useEffect(() => {
-    if (!editModalVisible) return
-    const modifiedElements = []
-    const timer = setTimeout(() => {
-      const header = document.querySelector('.edit-profile-modal-header')
-      if (!header) return
-      let el = header
-      while (el && el !== document.body) {
-        const style = window.getComputedStyle(el)
-        if (style.display === 'flex' || style.display === 'inline-flex') {
-          el.style.alignItems = 'flex-start'
-          el.style.justifyContent = 'flex-start'
-          modifiedElements.push(el)
-        }
-        if (el.classList && el.classList.contains('ant-modal')) {
-          el.style.top = '0'
-          modifiedElements.push(el)
-        }
-        el = el.parentElement
-      }
-    }, 100)
-    return () => {
-      clearTimeout(timer)
-      modifiedElements.forEach(el => {
-        el.style.alignItems = ''
-        el.style.justifyContent = ''
-        el.style.top = ''
-      })
-    }
-  }, [editModalVisible])
 
   const formatDate = (date) => {
     if (!date) return '未知'
@@ -212,52 +182,8 @@ function UserProfile() {
   const handleEditModalCancel = () => {
     editForm.resetFields()
     setEditModalVisible(false)
-    setAvatarPreviewUrl(null)
+    resetAvatar()
     setShowPasswordSection(false)
-  }
-
-  const handleAvatarChange = async (info) => {
-    if (info.file.status === 'uploading') {
-      setUploadingAvatar(true)
-      return
-    }
-    if (info.file.status === 'done') {
-      await getBase64(info.file.originFileObj).then((url) => {
-        setUploadingAvatar(false)
-        setAvatarPreviewUrl(url)
-      })
-      await refreshUserInfo()
-      message.success('头像上传成功')
-    }
-    if (info.file.status === 'error') {
-      setUploadingAvatar(false)
-      message.error('头像上传失败')
-    }
-  }
-
-  const uploadButton = (
-    <button style={{ border: 0, background: 'none' }} type="button">
-      {uploadingAvatar ? <LoadingOutlined /> : <PlusOutlined />}
-      <div style={{ marginTop: 8 }}>上传</div>
-    </button>
-  )
-
-  const handleAvatarUpload = async (options) => {
-    const { file, onSuccess, onError } = options
-    setUploadingAvatar(true)
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('id', userData.id)
-      const result = await uploadAvatar(formData)
-      if (onSuccess) {
-        onSuccess(result)
-      }
-    } catch (error) {
-      if (onError) {
-        onError(error)
-      }
-    }
   }
 
   const renderProfileHeader = () => {
@@ -381,11 +307,7 @@ function UserProfile() {
             <Form.Item
               label="账号"
               name="username"
-              rules={[
-                { required: true, message: '请输入账号' },
-                { min: 6, message: '账号长度不能小于 6 个字符' },
-                { max: 11, message: '账号长度不能大于 11 个字符' },
-              ]}
+              rules={usernameRules}
             >
               <Input prefix={<UserOutlined />} placeholder="请输入账号" />
             </Form.Item>
@@ -411,16 +333,12 @@ function UserProfile() {
                 <div className="password-section-fields">
                   <Form.Item
                     name="password"
-                    rules={[
-                      { required: true, message: '请输入新密码' },
-                      { min: 8, message: '密码长度不能小于 8 个字符' },
-                      { max: 20, message: '密码长度不能大于 20 个字符' },
-                    ]}
+                    rules={newPasswordRules}
                   >
                     <Input.Password prefix={<LockOutlined />} placeholder="请输入新密码" />
                   </Form.Item>
                   <Form.Item name="originalPassword"
-                    rules={[{ required: true, message: '请输入原始密码' }]}
+                    rules={originalPasswordRules}
                   >
                     <Input.Password prefix={<EyeOutlined />} placeholder="请输入原始密码" />
                   </Form.Item>
@@ -428,15 +346,15 @@ function UserProfile() {
               )}
             </div>
 
-            <Form.Item label="昵称" name="nickname" rules={[{ required: true, message: '请输入昵称' }]}>
+            <Form.Item label="昵称" name="nickname" rules={nicknameRules}>
               <Input placeholder="请输入昵称" />
             </Form.Item>
 
-            <Form.Item label="邮箱" name="email" rules={[{ type: 'email', message: '请输入有效的邮箱地址' }]}>
+            <Form.Item label="邮箱" name="email" rules={emailRules}>
               <Input prefix={<MailOutlined />} placeholder="请输入邮箱" />
             </Form.Item>
 
-            <Form.Item label="手机号" name="phone" rules={[{ pattern: /^1[3-9]\d{9}$/, message: '请输入有效的手机号' }]}>
+            <Form.Item label="手机号" name="phone" rules={phoneRules}>
               <Input prefix={<PhoneOutlined />} placeholder="请输入手机号" />
             </Form.Item>
           </Form>

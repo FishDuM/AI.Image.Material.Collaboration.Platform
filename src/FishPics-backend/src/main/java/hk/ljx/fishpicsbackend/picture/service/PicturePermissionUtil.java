@@ -4,10 +4,13 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import hk.ljx.fishpicsbackend.common.context.LoginContext;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
+import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
+import hk.ljx.fishpicsbackend.common.utils.LoginContextHelper;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.picture.entity.Picture;
 import hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember;
+import hk.ljx.fishpicsbackend.space.enums.TeamMemberRole;
 import hk.ljx.fishpicsbackend.user.entity.User;
 
 import java.util.HashSet;
@@ -20,14 +23,14 @@ public final class PicturePermissionUtil {
 
     private PicturePermissionUtil() {}
 
-    public enum Op { READ, EDIT_META, REPLACE_FILE, DELETE }
-
-    public static void checkWrite(Picture picture, Op op,
+    public static void checkWrite(Picture picture, String opDesc,
                                   BaseMapper<SpaceTeamMember> teamMemberMapper) {
-        User current = UserHolder.getUser();
-        if (current == null) {
-            throw new BaseException(ExceptionCode.NOT_LOGIN);
-        }
+        checkWrite(picture, opDesc, false, teamMemberMapper);
+    }
+
+    public static void checkWrite(Picture picture, String opDesc, boolean ownerOnly,
+                                  BaseMapper<SpaceTeamMember> teamMemberMapper) {
+        User current = LoginContextHelper.requireUser();
 
         LoginContext ctx = UserHolder.getLoginContext();
         boolean isAdmin = ctx != null && ctx.hasSystemPerm("system:user:manage");
@@ -44,20 +47,27 @@ public final class PicturePermissionUtil {
                     new LambdaQueryWrapper<SpaceTeamMember>()
                             .eq(SpaceTeamMember::getSpaceId, picture.getSpaceId())
                             .eq(SpaceTeamMember::getUserId, current.getId()));
-            if (member != null && Integer.valueOf(1).equals(member.getRoleId())) {
+            if (canTeamMemberWrite(member, ownerOnly)) {
                 return;
             }
         }
 
-        throw new BaseException(ExceptionCode.FORBIDDEN, "没有权限" + opDesc(op) + "这张图片");
+        throw new BaseException(ExceptionCode.FORBIDDEN, "没有权限" + opDesc + "这张图片");
+    }
+
+    private static boolean canTeamMemberWrite(SpaceTeamMember member, boolean ownerOnly) {
+        if (member == null || member.getRoleId() == null) {
+            return false;
+        }
+        if (ownerOnly) {
+            return TeamMemberRole.isOwner(member.getRoleId());
+        }
+        return TeamMemberRole.isWritable(member.getRoleId());
     }
 
     public static List<Long> filterDeletableIds(List<Picture> pictures, List<Long> requestedIds,
                                                BaseMapper<SpaceTeamMember> teamMemberMapper) {
-        User current = UserHolder.getUser();
-        if (current == null) {
-            throw new BaseException(ExceptionCode.NOT_LOGIN);
-        }
+        User current = LoginContextHelper.requireUser();
 
         LoginContext ctx = UserHolder.getLoginContext();
         boolean isAdmin = ctx != null && ctx.hasSystemPerm("system:user:manage");
@@ -80,7 +90,7 @@ public final class PicturePermissionUtil {
                             new LambdaQueryWrapper<SpaceTeamMember>()
                                     .in(SpaceTeamMember::getSpaceId, spaceIds)
                                     .eq(SpaceTeamMember::getUserId, current.getId())
-                                    .eq(SpaceTeamMember::getRoleId, 1))
+                                    .eq(SpaceTeamMember::getRoleId, TeamMemberRole.OWNER.code()))
                     .stream()
                     .map(SpaceTeamMember::getSpaceId)
                     .filter(Objects::nonNull)
@@ -97,14 +107,5 @@ public final class PicturePermissionUtil {
         return requestedIds.stream()
                 .filter(allowedIds::contains)
                 .collect(Collectors.toList());
-    }
-
-    private static String opDesc(Op op) {
-        return switch (op) {
-            case READ -> "查看";
-            case EDIT_META -> "编辑";
-            case REPLACE_FILE -> "替换";
-            case DELETE -> "删除";
-        };
     }
 }

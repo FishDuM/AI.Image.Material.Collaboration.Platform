@@ -6,7 +6,6 @@ import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import lombok.extern.slf4j.Slf4j;
 
-import javax.net.ssl.HttpsURLConnection;
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -211,12 +210,8 @@ public final class DownloadUtils {
         // TLS SNI会在ClientHello里传IP而非域名，CDN/服务器不知道用哪个证书→握手失败。
         // DNS rebinding的TOCTOU窗口极小，对下载AI图片这个场景可以接受。
         URI uri = URI.create(urlStr);
-        String host = uri.getHost();
         HttpURLConnection conn = (HttpURLConnection) uri.toURL().openConnection(Proxy.NO_PROXY);
-        if (conn instanceof HttpsURLConnection httpsConn && isIpLiteral(host)) {
-            httpsConn.setHostnameVerifier((hostname, session) -> true);
-        }
-        configureConnection(conn, host);
+        configureConnection(conn, uri.getHost());
         return conn;
     }
 

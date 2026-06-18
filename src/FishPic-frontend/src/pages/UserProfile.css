@@ -633,3 +633,12 @@
 [data-theme="dark"] .post-cover {
   opacity: 0.9;
 }
+
+/* 修复编辑弹窗默认垂直居中导致的布局问题 */
+.edit-profile-modal .ant-modal {
+  top: 0 !important;
+}
+.edit-profile-modal .ant-modal-content {
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+}

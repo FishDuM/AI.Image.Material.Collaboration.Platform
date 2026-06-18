@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback, useRef, useContext } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { App as AntApp, Table, Tag, Space, Button, Card, Typography, Avatar, Input, Row, Col, Form, Select, Modal, Upload } from 'antd'
-import { EditOutlined, SearchOutlined, ReloadOutlined, LockOutlined, UnlockOutlined, PlusOutlined, LoadingOutlined } from '@ant-design/icons'
-import { AuthContext } from '../context/AuthContext.jsx'
-import api, { getAdminUser } from '../api'
-import { getBase64, beforeUpload } from '../utils/upload'
+import { EditOutlined, SearchOutlined, ReloadOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons'
+import { adminEditUser, adminListUsers, adminSetUserStatus, getAdminUser } from '../api'
+import { beforeUpload } from '../utils/upload'
 import { PAGINATION_LOCALE } from '../utils/constants'
+import { emailRules, optionalPasswordRules, phoneRules, usernameRules } from '../utils/formRules'
+import { useAdminGuard } from '../hooks/useAdminGuard'
+import { useAvatarUpload } from '../hooks/useAvatarUpload'
 import './UserManagement.css'
 
 const { Title } = Typography
@@ -35,23 +36,19 @@ function formatDateTime(value) {
   })
 }
 
+import { LEVEL_TAG_MAP, LEVEL_TAG_COLOR, ADMIN_ROLE_TAG } from '../utils/constants'
+
 function renderLevelTag(level, roleId) {
   if (roleId === 1) {
-    return <Tag color="red">管理员</Tag>
+    return <Tag color={ADMIN_ROLE_TAG.color}>{ADMIN_ROLE_TAG.text}</Tag>
   }
-  if (level === 2) {
-    return <Tag color="purple">SVIP</Tag>
-  }
-  if (level === 1) {
-    return <Tag color="gold">VIP</Tag>
-  }
-  return <Tag color="default">普通用户</Tag>
+  const lvl = level ?? 0
+  return <Tag color={LEVEL_TAG_COLOR[lvl] || 'default'}>{LEVEL_TAG_MAP[lvl] || '普通'}</Tag>
 }
 
 function UserManagement() {
   const { message, modal } = AntApp.useApp()
-  const navigate = useNavigate()
-  const { userInfo } = useContext(AuthContext)
+  const { userInfo } = useAdminGuard('system:user:manage')
   const [loading, setLoading] = useState(false)
   const [users, setUsers] = useState([])
   const [pagination, setPagination] = useState({
@@ -66,13 +63,15 @@ function UserManagement() {
   const [editingUser, setEditingUser] = useState(null)
   const [avatarVisible, setAvatarVisible] = useState(false)
   const [previewAvatar, setPreviewAvatar] = useState(null)
-  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(null)
-  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+
+  const { previewUrl: avatarPreviewUrl, handleChange: handleAvatarChange, handleUpload: handleAvatarUpload, reset: resetAvatar, uploadButton } = useAvatarUpload({
+    userId: editingUser?.id,
+  })
 
   const fetchUserList = useCallback(async (current, pageSize, params = {}) => {
     setLoading(true)
     try {
-      const result = await api.post('/user/admin/userList', {
+      const result = await adminListUsers({
         current,
         pageSize,
         ...params,
@@ -94,16 +93,10 @@ function UserManagement() {
   }, [message])
 
   useEffect(() => {
-    if (!userInfo?.permissions?.includes('system:user:manage')) {
-      message.error('无权访问')
-      navigate('/', { replace: true })
-      return
-    }
-
-    if (hasFetchedRef.current) return
+    if (!userInfo || hasFetchedRef.current) return
     hasFetchedRef.current = true
     fetchUserList(1, 20)
-  }, [fetchUserList, message, navigate, userInfo])
+  }, [fetchUserList, userInfo])
 
   useEffect(() => {
     if (!isModalOpen || !editingUser) return
@@ -132,7 +125,7 @@ function UserManagement() {
       content: '确定要切换该用户的启用状态吗？',
       onOk: async () => {
         try {
-          await api.post('/user/admin/setStatus', { userId })
+          await adminSetUserStatus(userId)
           message.success('操作成功')
           fetchUserList(pagination.current, pagination.pageSize)
         } catch (error) {
@@ -173,7 +166,7 @@ function UserManagement() {
 
   const handleEditSubmit = async (values) => {
     try {
-      await api.post('/user/admin/editUser', {
+      await adminEditUser({
         id: editingUser.id,
         username: values.username,
         password: values.password || null,
@@ -196,47 +189,7 @@ function UserManagement() {
     editForm.resetFields()
     setIsModalOpen(false)
     setEditingUser(null)
-    setAvatarPreviewUrl(null)
-    setUploadingAvatar(false)
-  }
-
-  const handleAvatarChange = async (info) => {
-    if (info.file.status === 'uploading') {
-      setUploadingAvatar(true)
-      return
-    }
-    if (info.file.status === 'done') {
-      await getBase64(info.file.originFileObj).then((url) => {
-        setUploadingAvatar(false)
-        setAvatarPreviewUrl(url)
-      })
-      if (info.file.response) {
-        setAvatarPreviewUrl(info.file.response)
-      }
-      message.success('头像上传成功')
-    }
-    if (info.file.status === 'error') {
-      setUploadingAvatar(false)
-      message.error('头像上传失败')
-    }
-  }
-
-  const handleAvatarUpload = async (options) => {
-    const { file, onSuccess, onError } = options
-    setUploadingAvatar(true)
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('id', editingUser.id)
-
-      const result = await api.post('/picture/avatar', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-
-      onSuccess?.(result)
-    } catch (error) {
-      onError?.(error)
-    }
+    resetAvatar()
   }
 
   const columns = [
@@ -343,14 +296,7 @@ function UserManagement() {
     },
   ]
 
-  const uploadButton = (
-    <button style={{ border: 0, background: 'none' }} type="button">
-      {uploadingAvatar ? <LoadingOutlined /> : <PlusOutlined />}
-      <div style={{ marginTop: 8 }}>上传</div>
-    </button>
-  )
-
-  if (!userInfo?.permissions?.includes('system:user:manage')) {
+  if (!userInfo) {
     return (
       <main className="user-management-container">
         <div style={{ textAlign: 'center', padding: '100px 0' }}>
@@ -503,10 +449,7 @@ function UserManagement() {
               <Form.Item
                 name="username"
                 label="账号"
-                rules={[
-                  { required: true, message: '请输入账号' },
-                  { min: 6, message: '账号至少 6 个字符' },
-                ]}
+                rules={usernameRules}
               >
                 <Input placeholder="请输入账号" disabled />
               </Form.Item>
@@ -515,9 +458,7 @@ function UserManagement() {
               <Form.Item
                 name="password"
                 label="密码"
-                rules={[
-                  { min: 6, message: '密码至少 6 个字符' },
-                ]}
+                rules={optionalPasswordRules}
               >
                 <Input.Password placeholder="不修改密码可留空" />
               </Form.Item>
@@ -531,9 +472,7 @@ function UserManagement() {
               <Form.Item
                 name="email"
                 label="邮箱"
-                rules={[
-                  { type: 'email', message: '请输入有效邮箱地址' },
-                ]}
+                rules={emailRules}
               >
                 <Input placeholder="请输入邮箱" />
               </Form.Item>
@@ -542,9 +481,7 @@ function UserManagement() {
               <Form.Item
                 name="phone"
                 label="手机号"
-                rules={[
-                  { pattern: /^1[3-9]\d{9}$/, message: '请输入有效手机号' },
-                ]}
+                rules={phoneRules}
               >
                 <Input placeholder="请输入手机号" />
               </Form.Item>

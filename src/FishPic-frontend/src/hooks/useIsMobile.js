@@ -6,9 +6,21 @@ export function useIsMobile() {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= MOBILE_BREAKPOINT)
 
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT)
+    let timer = null
+    const handleResize = () => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        setIsMobile(prev => {
+          const next = window.innerWidth <= MOBILE_BREAKPOINT
+          return prev === next ? prev : next
+        })
+      }, 120)
+    }
     window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
+    return () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('resize', handleResize)
+    }
   }, [])
 
   return isMobile

@@ -10,7 +10,9 @@ import hk.ljx.fishpicsbackend.picture.dto.DeleteByIdListRequest;
 import hk.ljx.fishpicsbackend.picture.dto.MergeChunksRequest;
 import hk.ljx.fishpicsbackend.picture.dto.PictureQueryRequest;
 import hk.ljx.fishpicsbackend.picture.dto.PictureUpdateRequest;
+import hk.ljx.fishpicsbackend.picture.vo.CheckUploadVO;
 import hk.ljx.fishpicsbackend.picture.vo.PictureVO;
+import hk.ljx.fishpicsbackend.picture.vo.UploadChunkVO;
 import org.springframework.web.multipart.MultipartFile;
 
 public interface PictureService extends IService<Picture> {
@@ -40,16 +42,12 @@ public interface PictureService extends IService<Picture> {
 
     PictureVO replacePictureFile(Long pictureId, MultipartFile file, boolean requireCollabLock);
 
-    PictureVO doReplacePictureFile(Long pictureId, MultipartFile file);
-
-    PictureVO doReplacePictureFile(Long pictureId, MultipartFile file, boolean requireCollabLock);
-
     IPage<PictureVO> getRecommendPictures(PageRequest pageRequest, Long userId);
 
     // 秒传校验
-    Object checkUpload(CheckUploadRequest request);
+    CheckUploadVO checkUpload(CheckUploadRequest request);
 
-    Object uploadChunk(MultipartFile file, String md5, Integer chunkIndex);
+    UploadChunkVO uploadChunk(MultipartFile file, String md5, Integer chunkIndex);
 
     PictureVO mergeChunks(MergeChunksRequest request);
 }

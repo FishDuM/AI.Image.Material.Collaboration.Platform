@@ -10,7 +10,7 @@ import hk.ljx.fishpicsbackend.common.annotation.AuditLog;
 import hk.ljx.fishpicsbackend.common.annotation.RequireAdmin;
 import hk.ljx.fishpicsbackend.common.annotation.RequireLogin;
 import hk.ljx.fishpicsbackend.common.dto.PageRequest;
-import hk.ljx.fishpicsbackend.common.utils.UserHolder;
+import hk.ljx.fishpicsbackend.common.utils.LoginContextHelper;
 import hk.ljx.fishpicsbackend.user.entity.User;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
@@ -22,7 +22,9 @@ import hk.ljx.fishpicsbackend.picture.dto.PictureQueryRequest;
 import hk.ljx.fishpicsbackend.picture.dto.PictureUpdateRequest;
 import hk.ljx.fishpicsbackend.picture.dto.ReviewPictureDTO;
 import hk.ljx.fishpicsbackend.picture.dto.SavePictureByUrlRequest;
+import hk.ljx.fishpicsbackend.picture.vo.CheckUploadVO;
 import hk.ljx.fishpicsbackend.picture.vo.PictureVO;
+import hk.ljx.fishpicsbackend.picture.vo.UploadChunkVO;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
@@ -40,12 +42,15 @@ public class PictureController {
     @Resource
     private AiService aiService;
 
+    private static final long MAX_UPLOAD_SIZE = 100L * 1024 * 1024;
+    private static final String MD5_PATTERN = "^[a-fA-F0-9]{32}$";
+
     @RequireLogin
     @AuditLog(module = "用户管理", operation = "修改头像")
     @PostMapping("/avatar")
     public Response<String> uploadAvatar(@RequestParam("file") MultipartFile file,
             @RequestParam(value = "id", required = false) Long targetUserId) {
-        User currentUser = UserHolder.getUser();
+        User currentUser = LoginContextHelper.requireUser();
         ExcUtils.throwIfTrue(file.isEmpty(), "文件不能为空");
         ExcUtils.throwIfTrue(file.getSize() > 1024 * 1024 * 5, "文件大小不能超过5MB");
         Long actualTargetUserId = targetUserId != null ? targetUserId : currentUser.getId();
@@ -66,6 +71,7 @@ public class PictureController {
     public Response<PictureVO> uploadPicture(@RequestParam("file") MultipartFile file,
             @RequestParam(value = "targetSpaceId", required = false) Long targetSpaceId) {
         ExcUtils.throwIfTrue(file.isEmpty(), "文件不能为空");
+        ExcUtils.throwIfTrue(file.getSize() > MAX_UPLOAD_SIZE, ExceptionCode.PARAMETER_ERROR, "文件大小不能超过100MB");
         Picture picture = pictureService.uploadPicture(file, targetSpaceId);
         PictureVO pictureVO = PictureVO.ofUpload(picture.getId(), picture.getUrl());
         return Response.ok(pictureVO);
@@ -90,7 +96,7 @@ public class PictureController {
     @RequireLogin
     @PostMapping("/recommend")
     public Response<IPage<PictureVO>> getRecommendPictures(@Valid @RequestBody PageRequest pageRequest) {
-        User loginUser = UserHolder.getUser();
+        User loginUser = LoginContextHelper.requireUser();
         if (!aiService.isFeatureEnabled("recommendationEnabled")) {
             // 开关关闭：返回空分页
             return Response.ok(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(
@@ -129,6 +135,7 @@ public class PictureController {
         return Response.ok(result);
     }
 
+    @RequireLogin
     @GetMapping("/pictureEditMessage")
     public Response<PictureVO> getPictureEditMessage(@RequestParam Long id) {
         return Response.ok(pictureService.getPictureEditMessage(id));
@@ -156,7 +163,7 @@ public class PictureController {
      */
     @RequireLogin
     @PostMapping("/check")
-    public Response<Object> checkUpload(@Valid @RequestBody CheckUploadRequest request) {
+    public Response<CheckUploadVO> checkUpload(@Valid @RequestBody CheckUploadRequest request) {
         return Response.ok(pictureService.checkUpload(request));
     }
 
@@ -165,16 +172,18 @@ public class PictureController {
      */
     @RequireLogin
     @PostMapping("/upload-chunk")
-    public Response<?> uploadChunk(
+    public Response<UploadChunkVO> uploadChunk(
             @RequestParam("file") MultipartFile file,
             @RequestParam("md5") String md5,
             @RequestParam("chunkIndex") Integer chunkIndex) {
+        ExcUtils.throwIfTrue(md5 == null || !md5.matches(MD5_PATTERN), ExceptionCode.PARAMETER_ERROR, "MD5格式不正确");
         return Response.ok(pictureService.uploadChunk(file, md5, chunkIndex));
     }
 
     /**
      * 合并分片
      */
+    @RequireLogin
     @PostMapping("/merge")
     public Response<PictureVO> mergeChunks(@Valid @RequestBody MergeChunksRequest request) {
         return Response.ok(pictureService.mergeChunks(request));

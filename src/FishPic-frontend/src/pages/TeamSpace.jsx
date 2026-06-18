@@ -6,6 +6,8 @@ import { createSpace, updateSpace, listSpace } from '../api'
 import { ThemeContext } from '../context/ThemeContext'
 import { useFetchWithCleanup } from '../hooks/useRequestUtils'
 import { LEVEL_MAP, formatStorage } from '../utils/constants'
+import { isCanceledError } from '../utils/error'
+import { spaceNameRules, teamNameRules } from '../utils/formRules'
 import './TeamSpace.css'
 
 const { Title, Text } = Typography
@@ -35,7 +37,7 @@ function TeamSpace() {
       setSpaces(list)
       setShowCreate(list.length === 0)
     } catch (err) {
-      if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return
+      if (isCanceledError(err)) return
       setSpaces([])
       setShowCreate(true)
     } finally {
@@ -59,7 +61,7 @@ function TeamSpace() {
       form.resetFields()
       fetchSpaces()
     } catch (error) {
-      if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
+      if (isCanceledError(error)) return
       message.error(error.message || '创建失败')
     } finally {
       setCreateLoading(false)
@@ -100,7 +102,7 @@ function TeamSpace() {
       editForm.resetFields()
       fetchSpaces()
     } catch (error) {
-      if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED') return
+      if (isCanceledError(error)) return
       message.error(error.message || '修改失败')
     } finally {
       setUpdateLoading(false)
@@ -261,7 +263,7 @@ function TeamSpace() {
           <Form.Item
             name="name"
             label="空间名称"
-            rules={[{ required: true, message: '请输入空间名称' }, { max: 20, message: '不超过20个字符' }]}
+            rules={spaceNameRules}
           >
             <Input placeholder="请输入空间名称" maxLength={20} />
           </Form.Item>
@@ -292,7 +294,7 @@ function TeamSpace() {
           <Form.Item
             name="name"
             label="团队名称"
-            rules={[{ required: true, message: '请输入团队名称' }, { max: 20, message: '不超过20个字符' }]}
+            rules={teamNameRules}
           >
             <Input placeholder="请输入团队名称" maxLength={20} />
           </Form.Item>

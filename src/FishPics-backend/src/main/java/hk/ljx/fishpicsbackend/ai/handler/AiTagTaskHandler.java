@@ -36,6 +36,10 @@ public class AiTagTaskHandler implements TaskHandler {
 
     /** AI 标签识别超时时间（秒） */
     private static final int AI_TIMEOUT_SECONDS = 120;
+    private static final int MAX_AI_NAME_LENGTH = 6;
+    private static final int MAX_AI_INTRO_LENGTH = 100;
+    private static final int MAX_AI_TAG_COUNT = 3;
+    private static final int MAX_AI_TAG_LENGTH = 20;
 
     @Resource
     private ChatModel chatModel;
@@ -176,7 +180,10 @@ public class AiTagTaskHandler implements TaskHandler {
             if (existingTagCount == 0) {
                 List<String> safeTags = aiResult.getTags().stream()
                         .map(XssSanitizer::clean)
+                        .map(tag -> truncate(tag, MAX_AI_TAG_LENGTH))
                         .filter(cn.hutool.core.util.StrUtil::isNotBlank)
+                        .distinct()
+                        .limit(MAX_AI_TAG_COUNT)
                         .collect(Collectors.toList());
                 for (String tag : safeTags) {
                     PictureTag pt = new PictureTag();
@@ -190,15 +197,22 @@ public class AiTagTaskHandler implements TaskHandler {
                 && (picture.getPictureName() == null || picture.getPictureName().isBlank())) {
             String cleanName = XssSanitizer.clean(aiResult.getPictureName());
             // AI 生成的名称可能超过 100 字符，截断保底
-            if (cleanName.length() > 100) cleanName = cleanName.substring(0, 100);
+            cleanName = truncate(cleanName, MAX_AI_NAME_LENGTH);
             picture.setPictureName(cleanName);
         }
         if (aiResult.getIntroduction() != null && !aiResult.getIntroduction().isBlank()
                 && (picture.getIntroduction() == null || picture.getIntroduction().isBlank())) {
             String cleanIntro = XssSanitizer.cleanRelaxed(aiResult.getIntroduction());
-            if (cleanIntro.length() > 500) cleanIntro = cleanIntro.substring(0, 500);
+            cleanIntro = truncate(cleanIntro, MAX_AI_INTRO_LENGTH);
             picture.setIntroduction(cleanIntro);
         }
         pictureService.updateById(picture);
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength);
     }
 }

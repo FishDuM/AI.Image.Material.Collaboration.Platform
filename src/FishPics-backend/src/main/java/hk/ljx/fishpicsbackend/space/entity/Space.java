@@ -11,6 +11,8 @@ import java.io.Serializable;
 
 import lombok.Data;
 
+import static hk.ljx.fishpicsbackend.common.constants.SpaceConstants.SPACE_STATUS_ENABLED;
+
 /**
  * 空间表
  * @TableName space
@@ -40,7 +42,7 @@ public class Space implements Serializable {
     private Long userId;
 
     /**
-     * 空间的存储大小(KB)：512MB-5G-10G
+     * 空间的存储大小(bytes)
      */
     private Long storageSize;
 
@@ -77,6 +79,7 @@ public class Space implements Serializable {
      */
     public static void validateActive(Space space) {
         ExcUtils.throwIfTrue(space == null, ExceptionCode.PARAMETER_ERROR, "空间不存在");
-        ExcUtils.throwIfTrue(!Integer.valueOf(1).equals(space.getStatus()), ExceptionCode.FORBIDDEN, "空间已被禁用");
+        ExcUtils.throwIfTrue(!ExcUtils.eq(space.getStatus(), SPACE_STATUS_ENABLED),
+                ExceptionCode.FORBIDDEN, "空间已被禁用");
     }
 }

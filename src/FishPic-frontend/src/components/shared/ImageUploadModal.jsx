@@ -6,7 +6,6 @@ import { uploadPictureWithChunks } from '../../utils/upload'
 import {
   BROWSER_RENDERABLE_TYPES,
   formatMaxUploadSize,
-  getMaxUploadSize,
   validateImageUpload,
 } from '../../utils/uploadConstraints'
 import CropperEditor from './CropperEditor'
@@ -37,7 +36,6 @@ export default function ImageUploadModal({ open, onClose, onSuccess, spaceId }) 
   const [uploadStatus, setUploadStatus] = useState('')
   const cropperRef = useRef(null)
   const objectUrlRef = useRef('')
-  const maxSize = getMaxUploadSize()
   const maxSizeText = formatMaxUploadSize()
 
   const resetState = useCallback(() => {

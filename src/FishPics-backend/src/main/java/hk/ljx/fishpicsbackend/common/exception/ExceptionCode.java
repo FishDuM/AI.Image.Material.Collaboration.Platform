@@ -28,10 +28,6 @@ public enum ExceptionCode {
         this.message = message;
     }
 
-    /**
-     * 把业务 code 映射到 HTTP 状态
-     * 4xxxx → 400, 500xx → 500, 其他 → 200
-     */
     public static HttpStatus toHttpStatus(int code) {
         if (code == 1) {
             return HttpStatus.OK;

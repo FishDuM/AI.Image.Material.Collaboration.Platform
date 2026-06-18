@@ -1,5 +1,4 @@
-import { useEffect, useState, useContext, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState, useRef } from 'react'
 import { App as AntApp, Typography, Card, Row, Col, Statistic, Spin } from 'antd'
 import {
   UserOutlined,
@@ -8,31 +7,26 @@ import {
   RiseOutlined,
 } from '@ant-design/icons'
 import ReactECharts from 'echarts-for-react'
-import { AuthContext } from '../context/AuthContext.jsx'
-import api from '../api'
+import { getSystemStats } from '../api'
+import { useAdminGuard } from '../hooks/useAdminGuard'
+import { CHART_COLORS } from '../utils/constants'
 import './AdminDashboard.css'
 
 const { Title } = Typography
 
 function AdminDashboard() {
   const { message } = AntApp.useApp()
-  const navigate = useNavigate()
-  const { userInfo } = useContext(AuthContext)
+  const { userInfo } = useAdminGuard('system:log:manage')
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState(null)
   const hasFetchedRef = useRef(false)
 
   useEffect(() => {
-    if (hasFetchedRef.current) return
-    if (!userInfo || !userInfo?.permissions?.includes('system:log:manage')) {
-      message.error('无权访问，正在跳转...')
-      setTimeout(() => navigate('/404', { replace: true }), 500)
-      return
-    }
+    if (hasFetchedRef.current || !userInfo) return
     const fetchStats = async () => {
       setLoading(true)
       try {
-        const result = await api.get('/system/stats')
+        const result = await getSystemStats()
         setStats(result)
         hasFetchedRef.current = true
       } catch (err) {
@@ -42,9 +36,9 @@ function AdminDashboard() {
       }
     }
     fetchStats()
-  }, [userInfo, navigate, message])
+  }, [userInfo, message])
 
-  if (!userInfo || !userInfo?.permissions?.includes('system:log:manage')) {
+  if (!userInfo) {
     return (
       <main className="dashboard-container">
         <div style={{ textAlign: 'center', padding: '100px 0' }}>
@@ -79,8 +73,8 @@ function AdminDashboard() {
         color: {
           type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
           colorStops: [
-            { offset: 0, color: '#1890ff' },
-            { offset: 1, color: '#69c0ff' },
+            { offset: 0, color: CHART_COLORS.primary[0] },
+            { offset: 1, color: CHART_COLORS.primary[1] },
           ],
         },
       },
@@ -112,8 +106,8 @@ function AdminDashboard() {
         color: {
           type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
           colorStops: [
-            { offset: 0, color: '#52c41a' },
-            { offset: 1, color: '#95de64' },
+            { offset: 0, color: CHART_COLORS.success[0] },
+            { offset: 1, color: CHART_COLORS.success[1] },
           ],
         },
       },
@@ -146,12 +140,12 @@ function AdminDashboard() {
           </Col>
           <Col xs={24} sm={12} md={8} lg={6}>
             <Card variant="borderless" className="stat-card stat-card-today">
-              <Statistic title="今日新增用户" value={stats?.todayNewUsers || 0} prefix={<RiseOutlined />} valueStyle={{ color: '#52c41a' }} />
+              <Statistic title="今日新增用户" value={stats?.todayNewUsers || 0} prefix={<RiseOutlined />} valueStyle={{ color: CHART_COLORS.success[0] }} />
             </Card>
           </Col>
           <Col xs={24} sm={12} md={8} lg={6}>
             <Card variant="borderless" className="stat-card stat-card-today">
-              <Statistic title="今日新增图片" value={stats?.todayNewPictures || 0} prefix={<RiseOutlined />} valueStyle={{ color: '#52c41a' }} />
+              <Statistic title="今日新增图片" value={stats?.todayNewPictures || 0} prefix={<RiseOutlined />} valueStyle={{ color: CHART_COLORS.success[0] }} />
             </Card>
           </Col>
         </Row>

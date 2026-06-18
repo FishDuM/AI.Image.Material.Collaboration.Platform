@@ -17,7 +17,7 @@ import hk.ljx.fishpicsbackend.common.dto.IdRequest;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.utils.DownloadUtils;
-import hk.ljx.fishpicsbackend.common.utils.UserHolder;
+import hk.ljx.fishpicsbackend.common.utils.LoginContextHelper;
 import hk.ljx.fishpicsbackend.task.entity.Task;
 import hk.ljx.fishpicsbackend.user.entity.User;
 import jakarta.annotation.Resource;
@@ -70,7 +70,7 @@ public class AiController {
     public Response<AiTaskSubmitVO> submitDrawTask(@Valid @RequestBody AiDrawPictureDTO drawPictureDTO) {
         ExcUtils.throwIfTrue(!aiService.isFeatureEnabled("generationEnabled"),
                 ExceptionCode.FORBIDDEN, "AI 生图功能已关闭");
-        User user = UserHolder.getUser();
+        User user = LoginContextHelper.requireUser();
         String taskId = aiService.submitDrawTask(drawPictureDTO, user.getId());
         return Response.ok(AiTaskSubmitVO.of(taskId));
     }
@@ -176,7 +176,7 @@ public class AiController {
      */
     private void resolveTaskOwnership(Task task) {
         ExcUtils.throwIfTrue(task == null, ExceptionCode.NOT_FOUND, "任务不存在");
-        User user = UserHolder.getUser();
+        User user = LoginContextHelper.requireUser();
         ExcUtils.throwIfTrue(!user.getId().equals(task.getUserId()), ExceptionCode.UNAUTHORIZED);
     }
 }

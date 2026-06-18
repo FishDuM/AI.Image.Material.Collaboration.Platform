@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback, useContext } from 'react'
+import { useState, useEffect, useContext } from 'react'
 import { Form, Input, Button, App } from 'antd'
 import { UserOutlined, LockOutlined, SafetyCertificateOutlined } from '@ant-design/icons'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { getLoginCheckCode, login } from '../api'
 import { AuthContext } from '../context/AuthContext'
 import MobilePageWrapper from '../components/MobilePageWrapper'
+import { useCaptcha } from '../hooks/useCaptcha'
+import { captchaRules, passwordRules, usernameRules } from '../utils/formRules'
 import './MobileLoginRegister.css'
 
 export default function MobileLoginPage() {
@@ -14,29 +16,14 @@ export default function MobileLoginPage() {
   const [form] = Form.useForm()
   const { login: authLogin } = useContext(AuthContext)
   const [loading, setLoading] = useState(false)
-  const [captchaImage, setCaptchaImage] = useState('')
-  const [captchaKey, setCaptchaKey] = useState('')
-
-  const fetchCaptcha = useCallback(async () => {
-    try {
-      const response = await getLoginCheckCode()
-      const data = response?.data ?? response
-      const inner = data?.data ?? data
-      if (inner?.captchaKey && inner?.base64Image) {
-        setCaptchaKey(inner.captchaKey)
-        setCaptchaImage(inner.base64Image)
-      }
-    } catch {
-      void 0
-    }
-  }, [])
+  const { captchaImage, captchaKey, refreshCaptcha } = useCaptcha(getLoginCheckCode)
 
   useEffect(() => {
-    fetchCaptcha()
-  }, [fetchCaptcha])
+    refreshCaptcha()
+  }, [refreshCaptcha])
 
   const handleRefreshCaptcha = () => {
-    fetchCaptcha()
+    refreshCaptcha()
     form.setFieldValue('checkCode', '')
   }
 
@@ -82,19 +69,13 @@ export default function MobileLoginPage() {
         <Form form={form} layout="vertical" onFinish={handleFinish} autoComplete="off" className="mobile-auth-form">
           <Form.Item
             name="username"
-            rules={[
-              { required: true, message: '请输入账号' },
-              { min: 6, message: '账号至少 6 个字符' },
-            ]}
+            rules={usernameRules}
           >
             <Input prefix={<UserOutlined />} placeholder="请输入账号" size="large" />
           </Form.Item>
           <Form.Item
             name="password"
-            rules={[
-              { required: true, message: '请输入密码' },
-              { min: 8, message: '密码至少 8 个字符' },
-            ]}
+            rules={passwordRules}
           >
               <Input.Password prefix={<LockOutlined/>} placeholder="请输入密码" size="large"
                               autoComplete="current-password"/>
@@ -102,7 +83,7 @@ export default function MobileLoginPage() {
           <div className="mobile-captcha-row">
             <Form.Item
               name="checkCode"
-              rules={[{ required: true, message: '请输入验证码' }]}
+              rules={captchaRules}
               style={{ flex: 1, marginBottom: 0 }}
             >
               <Input prefix={<SafetyCertificateOutlined />} placeholder="请输入验证码" size="large" maxLength={5} />

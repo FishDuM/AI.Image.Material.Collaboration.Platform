@@ -1,9 +1,9 @@
 package hk.ljx.fishpicsbackend.picture.service;
 
 import java.util.List;
-import java.util.Map;
 
 import hk.ljx.fishpicsbackend.picture.vo.ShareFileVO;
+import hk.ljx.fishpicsbackend.picture.vo.ShareInfoVO;
 
 public interface ShareService {
 
@@ -25,7 +25,7 @@ public interface ShareService {
      * @param shareToken 分享令牌
      * @return {pictures: [...], expireTime, allowDownload}
      */
-    Map<String, Object> getShareInfo(String shareToken);
+    ShareInfoVO getShareInfo(String shareToken);
 
     /**
      * 预览分享中的某张图片

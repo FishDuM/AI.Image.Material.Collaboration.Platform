@@ -1,29 +1,28 @@
 import { useState, useEffect, useCallback, useContext, useMemo, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { App as AntApp, Typography, Button, Modal, Form, Input, Select, Pagination, Masonry, Image as AntImage, Spin, Empty, Popconfirm, Progress, Popover, Avatar, Tooltip, Tag, List, Alert } from 'antd'
+import { App as AntApp, Typography, Button, Modal, Form, Input, Select, Pagination, Masonry, Image as AntImage, Spin, Empty, Popconfirm, Avatar, Tooltip, Tag, List, Alert } from 'antd'
 import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowLeftOutlined, TeamOutlined, UserOutlined, EditOutlined, CloudUploadOutlined, ArrowUpOutlined, UserAddOutlined, SettingOutlined, ShareAltOutlined, SwapOutlined, StarOutlined } from '@ant-design/icons'
-import { getSpace, updateSpace, spaceListPicture, deletePicture, updatePicture, getPictureEditMessage, submitAiTag, searchUsers, getTeamMembers, teamInvite, teamRemove, teamChangeRole, createShare } from '../api'
+import { getSpace, updateSpace, updatePicture, searchUsers, getTeamMembers, teamInvite, teamRemove, teamChangeRole, createShare } from '../api'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { useSystemTypes } from '../hooks/useRequestUtils'
 import { ThemeContext } from '../context/ThemeContext'
 import { AuthContext } from '../context/AuthContext'
-import { PAGINATION_LOCALE, PAGE_SIZE, LEVEL_MAP, DEFAULT_LEVEL, storageStrokeColor, formatStorage } from '../utils/constants'
+import { PAGINATION_LOCALE, PAGE_SIZE, LEVEL_MAP, DEFAULT_LEVEL, formatStorage } from '../utils/constants'
 import { getThumbnailUrl } from '../utils/image'
+import { spaceNameRules } from '../utils/formRules'
+import { TEAM_ROLE_LABELS, TEAM_ROLE_OPTIONS } from '../utils/teamRoles'
+import { usePictureFetch, useBatchSelection, usePictureEditUpload } from '../hooks/useSpacePictures'
 import ImageUploadModal from '../components/shared/ImageUploadModal'
 import ImageEditorModal from '../components/shared/ImageEditorModal'
 import PictureEditModal from '../components/shared/PictureEditModal'
 import CollaborativeCanvas from '../components/shared/CollaborativeCanvas'
 import UpgradeModal from '../components/shared/UpgradeModal'
+import SharePictureModal from '../components/shared/SharePictureModal'
+import StorageUsagePopover from '../components/shared/StorageUsagePopover'
 import './TeamSpaceDetail.css'
 import './PrivateSpace.css'
 
 const { Title } = Typography
-
-const TEAM_ROLES = [
-  { value: 1, label: '所有者' },
-  { value: 2, label: '成员' },
-]
-const ROLE_MAP = { 1: '所有者', 2: '成员' }
 
 function TeamSpaceDetail() {
   const { id } = useParams()
@@ -38,20 +37,6 @@ function TeamSpaceDetail() {
   const [spaceInfo, setSpaceInfo] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  const [pictures, setPictures] = useState([])
-  const [picturePage, setPicturePage] = useState(1)
-  const [pictureTotal, setPictureTotal] = useState(0)
-  const [pictureLoading, setPictureLoading] = useState(false)
-  const [searchKeyword, setSearchKeyword] = useState('')
-  const activeSearchRef = useRef('')
-
-  const [batchMode, setBatchMode] = useState(false)
-  const [selectedIds, setSelectedIds] = useState([])
-  const [showEditPicture, setShowEditPicture] = useState(false)
-  const [editPictureLoading, setEditPictureLoading] = useState(false)
-  const [editPictureForm] = Form.useForm()
-  const [showUploadModal, setShowUploadModal] = useState(false)
-  const [showImageEditor, setShowImageEditor] = useState(false)
   const [showCollabCanvas, setShowCollabCanvas] = useState(false)
 
   const [showEdit, setShowEdit] = useState(false)
@@ -73,7 +58,6 @@ function TeamSpaceDetail() {
   const [inviting, setInviting] = useState(false)
   const searchTimerRef = useRef(null)
 
-  // 切换 space 时旧请求完成后 setState 可能把 A space 数据塞到 B space
   const currentSpaceIdRef = useRef(null)
   useEffect(() => {
     currentSpaceIdRef.current = id
@@ -104,25 +88,63 @@ function TeamSpaceDetail() {
     }
   }, [id, message, navigate])
 
-  const fetchPictures = useCallback(async (spaceId, page, keyword) => {
-    setPictureLoading(true)
-    setPicturePage(page)
-    try {
-      const params = { spaceId, current: page, pageSize: PAGE_SIZE }
-      if (keyword && keyword.trim()) params.keyword = keyword.trim()
-      const result = await spaceListPicture(params)
-      if (currentSpaceIdRef.current !== id) return
-      const list = Array.isArray(result?.records) ? result.records : []
-      const total = typeof result?.total === 'number' ? result.total : list.length
-      setPictures(list)
-      setPictureTotal(total)
-    } catch {
-      if (currentSpaceIdRef.current !== id) return
-      setPictures([])
-    } finally {
-      if (currentSpaceIdRef.current === id) setPictureLoading(false)
-    }
-  }, [id])
+  const {
+    pictures,
+    pictureLoading,
+    picturePage,
+    pictureTotal,
+    searchKeyword,
+    setSearchKeyword,
+    handleSearch,
+    handleSearchReset,
+    refreshPictures,
+  } = usePictureFetch({ spaceId: spaceInfo?.id, pageSize: PAGE_SIZE, pagination: true })
+
+  const {
+    batchMode,
+    selectedIds,
+    setSelectedIds,
+    setBatchMode,
+    toggleBatchMode,
+    toggleSelect,
+    handleBatchDelete,
+  } = useBatchSelection({
+    spaceId: spaceInfo?.id,
+    searchKeyword,
+    refreshPictures,
+    refreshSpaces: fetchSpace,
+    message,
+  })
+
+  const {
+    showEditPicture,
+    setShowEditPicture,
+    editPictureLoading,
+    editPictureForm,
+    showUploadModal,
+    setShowUploadModal,
+    showImageEditor,
+    setShowImageEditor,
+    handleEditPictureOpen,
+    handleUploadSuccess,
+    handleEditPictureSubmit,
+    handleAiTag,
+  } = usePictureEditUpload({
+    selectedIds,
+    setSelectedIds,
+    setBatchMode,
+    pictures,
+    spaceId: spaceInfo?.id,
+    picturePage,
+    searchKeyword,
+    refreshPictures,
+    refreshSpaces: fetchSpace,
+    message,
+    modal,
+    navigate,
+    isMobile,
+    Form,
+  })
 
   useEffect(() => {
     fetchSystemTypes().then(result => {
@@ -141,125 +163,12 @@ function TeamSpaceDetail() {
     fetchSpace()
   }, [fetchSpace])
 
-  useEffect(() => {
-    if (spaceInfo?.id) {
-      fetchPictures(spaceInfo.id, 1)
-    }
-  }, [spaceInfo?.id, fetchPictures])
-
   const handlePageChange = useCallback((page) => {
     setSelectedIds([])
     setBatchMode(false)
-    if (spaceInfo?.id) fetchPictures(spaceInfo.id, page, activeSearchRef.current)
-  }, [spaceInfo?.id, fetchPictures])
+    if (spaceInfo?.id) refreshPictures(spaceInfo.id, page, searchKeyword)
+  }, [spaceInfo?.id, refreshPictures, searchKeyword, setSelectedIds, setBatchMode])
 
-  const handleSearch = useCallback(() => {
-    activeSearchRef.current = searchKeyword
-    if (spaceInfo?.id) fetchPictures(spaceInfo.id, 1, searchKeyword)
-  }, [spaceInfo?.id, fetchPictures, searchKeyword])
-
-  const handleSearchReset = useCallback(() => {
-    setSearchKeyword('')
-    activeSearchRef.current = ''
-    if (spaceInfo?.id) fetchPictures(spaceInfo.id, 1, '')
-  }, [spaceInfo?.id, fetchPictures])
-
-  const toggleBatchMode = useCallback(() => {
-    setBatchMode((prev) => {
-      if (prev) setSelectedIds([])
-      return !prev
-    })
-  }, [])
-
-  const toggleSelect = useCallback((pictureId) => {
-    setSelectedIds((prev) =>
-      prev.includes(pictureId) ? prev.filter((pid) => pid !== pictureId) : [...prev, pictureId]
-    )
-  }, [])
-
-  const handleBatchDelete = useCallback(async () => {
-    if (selectedIds.length === 0) {
-      message.warning('请先选择要删除的图片')
-      return
-    }
-    try {
-      const res = await deletePicture(selectedIds)
-      message.success(res?.message || '删除成功')
-      setSelectedIds([])
-      setBatchMode(false)
-      if (spaceInfo?.id) fetchPictures(spaceInfo.id, 1, searchKeyword)
-      fetchSpace()
-    } catch (error) {
-      message.error(error.message || '批量删除失败')
-    }
-  }, [selectedIds, spaceInfo?.id, fetchPictures, searchKeyword, fetchSpace, message])
-
-  const handleEditPictureOpen = () => {
-    if (selectedIds.length === 0) {
-      message.warning('请先选择图片')
-      return
-    }
-    if (selectedIds.length > 1) {
-      message.warning('一次只能编辑一张图片')
-      return
-    }
-    if (isMobile) {
-      const pic = pictures.find(p => p.id === selectedIds[0])
-      navigate('/mobile/picture/edit', {
-        state: {
-          pictureId: selectedIds[0],
-          pictureUrl: pic?.url,
-          pictureName: pic?.pictureName,
-          introduction: pic?.introduction,
-        }
-      })
-      return
-    }
-    editPictureForm.resetFields()
-    setShowEditPicture(true)
-    getPictureEditMessage(selectedIds[0]).then(result => {
-      if (result) {
-        editPictureForm.setFieldsValue({
-          pictureName: result.pictureName || '',
-          introduction: result.introduction || '',
-          tags: Array.isArray(result.tags) ? result.tags : [],
-        })
-      }
-    }).catch((error) => {
-      message.error(error.message || '加载图片信息失败')
-    })
-  }
-
-  const handleUploadSuccess = useCallback(() => {
-    setShowUploadModal(false)
-    if (spaceInfo?.id) {
-      fetchPictures(spaceInfo.id, 1, searchKeyword)
-      fetchSpace()
-    }
-  }, [spaceInfo?.id, fetchPictures, searchKeyword, fetchSpace])
-
-  const handleEditPictureSubmit = async (values) => {
-    setEditPictureLoading(true)
-    try {
-      await updatePicture({
-        id: selectedIds[0],
-        pictureName: values.pictureName || undefined,
-        introduction: values.introduction || undefined,
-        tags: values.tags || undefined,
-      })
-      message.success('编辑成功')
-      setShowEditPicture(false)
-      editPictureForm.resetFields()
-      setSelectedIds([])
-      setBatchMode(false)
-      if (spaceInfo?.id) fetchPictures(spaceInfo.id, picturePage, searchKeyword)
-      fetchSpace()
-    } catch (error) {
-      message.error(error.message || '编辑失败')
-    } finally {
-      setEditPictureLoading(false)
-    }
-  }
 
   const handleEditOpen = () => {
     if (spaceInfo) {
@@ -457,53 +366,7 @@ function TeamSpaceDetail() {
           </div>
         </div>
         <div className="tsd-header-right">
-          <Popover
-            content={
-              <div className={`storage-card ${levelInfo.cardClass}`}>
-                <div className="storage-card-title">空间详情</div>
-                <div className="storage-card-row">
-                  <span className="storage-card-label">空间等级</span>
-                  <span className={`storage-card-value ${levelInfo.className}`}>{levelInfo.label}</span>
-                </div>
-                <div className="storage-card-row">
-                  <span className="storage-card-label">占用比例</span>
-                  <span className="storage-card-value">{spaceInfo.percent}%</span>
-                </div>
-                <div className="storage-card-row">
-                  <span className="storage-card-label">已占用空间</span>
-                  <span className="storage-card-value">{spaceInfo.usedText}</span>
-                </div>
-                <div className="storage-card-row">
-                  <span className="storage-card-label">总空间</span>
-                  <span className="storage-card-value">{spaceInfo.totalText}</span>
-                </div>
-                <div className="storage-card-row">
-                  <span className="storage-card-label">图片数量</span>
-                  <span className="storage-card-value">{spaceInfo.pictureCount ?? 0}</span>
-                </div>
-                <div className="storage-card-row">
-                  <span className="storage-card-label">创建人</span>
-                  <span className="storage-card-value">{spaceInfo.userName || '未知'}</span>
-                </div>
-              </div>
-            }
-            trigger="hover"
-            placement="bottom"
-          >
-            <Progress
-              type="circle"
-              percent={spaceInfo.percent}
-              strokeColor={storageStrokeColor}
-              size={72}
-              className="storage-progress"
-              format={() => (
-                <div className="level-center">
-                  <span className={`level-text ${levelInfo.className}`}>{levelInfo.label}</span>
-                  <span className="level-percent">{spaceInfo.percent}%</span>
-                </div>
-              )}
-            />
-          </Popover>
+          <StorageUsagePopover spaceInfo={spaceInfo} levelInfo={levelInfo} variant="team" />
           <Button onClick={handleEditOpen}>修改空间</Button>
           {hasMemberManagePerm && (
             <Button icon={<SettingOutlined />} onClick={handleOpenTeamManage}>管理成员</Button>
@@ -605,7 +468,7 @@ function TeamSpaceDetail() {
                     message.success('精选申请已提交')
                     setSelectedIds([])
                     setBatchMode(false)
-                    fetchPictures(spaceInfo.id, 1, searchKeyword)
+                    refreshPictures(spaceInfo.id, 1, searchKeyword)
                   } catch (err) {
                     message.error(err.message || '申请失败')
                   }
@@ -669,7 +532,7 @@ function TeamSpaceDetail() {
           <Form.Item
             name="name"
             label="空间名称"
-            rules={[{ required: true, message: '请输入空间名称' }, { max: 20, message: '空间名称不超过 20 个字符' }]}
+            rules={spaceNameRules}
           >
             <Input placeholder="请输入空间名称" maxLength={20} />
           </Form.Item>
@@ -702,19 +565,7 @@ function TeamSpaceDetail() {
         loading={editPictureLoading}
         canUseAi={userInfo?.level === 1 || userInfo?.level === 2}
         onSubmit={handleEditPictureSubmit}
-        onAiTag={async () => {
-          try {
-            await submitAiTag(selectedIds[0])
-            setShowEditPicture(false)
-            modal.info({
-              title: 'AI正在执行',
-              content: 'AI正在后台识别图片信息，完成后将自动填充，请稍后重新打开编辑查看',
-              okText: '知道了',
-            })
-          } catch (e) {
-            message.error(e.message || 'AI识别提交失败')
-          }
-        }}
+        onAiTag={handleAiTag}
         onEditImage={() => setShowImageEditor(true)}
         onCancel={() => { setShowEditPicture(false); editPictureForm.resetFields() }}
       />
@@ -750,43 +601,15 @@ function TeamSpaceDetail() {
         )
       })()}
 
-      <Modal
-        title="分享图片"
+      <SharePictureModal
         open={showShare}
-        onCancel={() => { setShowShare(false); shareForm.resetFields(); setShareLink('') }}
-        footer={null}
-        width={420}
-      >
-        {!shareLink ? (
-          <Form form={shareForm} layout="vertical" onFinish={handleCreateShare} initialValues={{ expireDays: 1, allowDownload: true }} style={{ marginTop: 16 }}>
-            <Form.Item name="expireDays" label="有效期">
-              <Select options={[
-                { value: 1, label: '1 天' },
-                { value: 3, label: '3 天' },
-                { value: 7, label: '7 天' },
-              ]} />
-            </Form.Item>
-            <Form.Item name="allowDownload" label="权限">
-              <Select options={[
-                { value: true, label: '允许下载' },
-                { value: false, label: '仅预览' },
-              ]} />
-            </Form.Item>
-            <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
-              <Button onClick={() => { setShowShare(false); shareForm.resetFields() }} style={{ marginRight: 8 }}>取消</Button>
-              <Button type="primary" htmlType="submit" loading={shareLoading}>生成链接</Button>
-            </Form.Item>
-          </Form>
-        ) : (
-          <div style={{ marginTop: 16 }}>
-            <Input.TextArea value={shareLink} readOnly autoSize style={{ marginBottom: 12 }} />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <Button onClick={() => { setShowShare(false); setShareLink('') }}>关闭</Button>
-              <Button type="primary" onClick={handleCopyShareLink}>复制链接</Button>
-            </div>
-          </div>
-        )}
-      </Modal>
+        form={shareForm}
+        loading={shareLoading}
+        shareLink={shareLink}
+        onCreate={handleCreateShare}
+        onCopy={handleCopyShareLink}
+        onClose={() => { setShowShare(false); shareForm.resetFields(); setShareLink('') }}
+      />
 
       <Modal
         title="团队成员管理"
@@ -814,7 +637,7 @@ function TeamSpaceDetail() {
                         size="small"
                         value={item.roleId}
                         onChange={(val) => handleChangeRole(item.id, val)}
-                        options={TEAM_ROLES}
+                        options={TEAM_ROLE_OPTIONS}
                         style={{ width: 120 }}
                       />,
                       <Popconfirm
@@ -837,7 +660,7 @@ function TeamSpaceDetail() {
               <List.Item.Meta
                 avatar={<Avatar src={item.avatar} icon={<UserOutlined />} />}
                 title={item.nickname}
-                description={ROLE_MAP[item.roleId] || '未知角色'}
+                description={TEAM_ROLE_LABELS[item.roleId] || '未知角色'}
               />
             </List.Item>
           )}
@@ -872,7 +695,7 @@ function TeamSpaceDetail() {
               />
             </Form.Item>
             <Form.Item name="roleId" label="分配角色" rules={[{ required: true, message: '请选择角色' }]}>
-              <Select placeholder="请选择角色" options={TEAM_ROLES} />
+              <Select placeholder="请选择角色" options={TEAM_ROLE_OPTIONS} />
             </Form.Item>
             <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
               <Button onClick={() => { setInviteModalOpen(false); inviteForm.resetFields(); setSearchResults([]) }} style={{ marginRight: 8 }}>取消</Button>

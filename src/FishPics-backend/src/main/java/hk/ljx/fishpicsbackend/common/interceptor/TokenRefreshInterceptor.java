@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import hk.ljx.fishpicsbackend.common.cache.RedisCacheManager;
 import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
 import hk.ljx.fishpicsbackend.common.context.LoginContext;
+import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.common.infra.JwtUtils;
@@ -80,7 +81,7 @@ public class TokenRefreshInterceptor implements HandlerInterceptor {
             return false;
         }
 
-        if (!Integer.valueOf(1).equals(loginContext.getStatus())) {
+        if (!ExcUtils.eq(loginContext.getStatus(), 1)) {
             writeUnauthorized(response, "账号已被禁用");
             return false;
         }
@@ -141,12 +142,6 @@ public class TokenRefreshInterceptor implements HandlerInterceptor {
 
         String newToken = jwtUtils.sign(userId);
         response.setHeader(NEW_TOKEN_HEADER, newToken);
-        try {
-            jwtUtils.addToBlacklist(jwt);
-        } catch (Exception e) {
-            log.warn("[TokenRefresh] add old token to blacklist failed, it will expire naturally: userId={}, err={}",
-                    userId, e.getMessage());
-        }
     }
 
     private LoginContext loadLoginContext(Long userId) {
@@ -209,12 +204,27 @@ public class TokenRefreshInterceptor implements HandlerInterceptor {
 
         try {
             long invalidBefore = Long.parseLong(invalidBeforeValue);
-            return claims.getIssuedAt().getTime() <= invalidBefore;
+            return getIssuedAtMillis(claims) <= invalidBefore;
         } catch (NumberFormatException e) {
             log.error("USER_TOKEN_INVALID_BEFORE value is broken, reject token: userId={}, value={}",
                     userId, invalidBeforeValue);
             return true;
         }
+    }
+
+    private long getIssuedAtMillis(Claims claims) {
+        Object issuedAtMs = claims.get(JwtUtils.ISSUED_AT_MS_CLAIM);
+        if (issuedAtMs instanceof Number number) {
+            return number.longValue();
+        }
+        if (issuedAtMs instanceof String text) {
+            try {
+                return Long.parseLong(text);
+            } catch (NumberFormatException ignored) {
+                return claims.getIssuedAt().getTime();
+            }
+        }
+        return claims.getIssuedAt().getTime();
     }
 
     private void writeUnauthorized(HttpServletResponse response, String message) throws Exception {

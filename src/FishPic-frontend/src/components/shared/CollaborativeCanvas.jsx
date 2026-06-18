@@ -13,6 +13,9 @@ import { getToken } from '../../utils/storage'
 import CropperEditor from './CropperEditor'
 import './CollaborativeCanvas.css'
 
+const sameId = (left, right) => String(left) === String(right)
+const hasId = (value) => value !== null && value !== undefined && value !== ''
+
 /**
  * 协同编辑画布组件
  */
@@ -46,8 +49,8 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
   const pendingLockRef = useRef(false)
   const wasMyLockRef = useRef(false)
 
-  const isMyLock = lockedBy != null && lockedBy == myUserId
-  const isOtherLock = lockedBy != null && lockedBy != myUserId
+  const isMyLock = lockedBy != null && hasId(myUserId) && sameId(lockedBy, myUserId)
+  const isOtherLock = lockedBy != null && (!hasId(myUserId) || !sameId(lockedBy, myUserId))
   const isEditable = isMyLock
   const isMyLockRef = useRef(false)
   useEffect(() => { isMyLockRef.current = isMyLock }, [isMyLock])
@@ -77,27 +80,27 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
   const handleMessage = useCallback((data) => {
     switch (data.type) {
       case 'transform':
-        if (data.pictureId == pictureId) {
+        if (sameId(data.pictureId, pictureId)) {
           setScale(data.scale)
           setRotation(data.rotation)
           setCropData(data.crop || null)
         }
         break
       case 'lock':
-        if (data.pictureId == pictureId) {
+        if (sameId(data.pictureId, pictureId)) {
           setLockedBy(data.userId)
           setLockedNickname(data.nickname || '')
           pendingLockRef.current = false
-          if (myUserIdRef.current && data.userId != myUserIdRef.current) {
+          if (hasId(myUserIdRef.current) && !sameId(data.userId, myUserIdRef.current)) {
             message.info(`${data.nickname || '用户'} 开始编辑`)
           }
-          if (myUserIdRef.current && data.userId == myUserIdRef.current) {
+          if (hasId(myUserIdRef.current) && sameId(data.userId, myUserIdRef.current)) {
             wasMyLockRef.current = true
           }
         }
         break
       case 'lock-denied':
-        if (data.pictureId == pictureId) {
+        if (sameId(data.pictureId, pictureId)) {
           setLockedBy(data.userId)
           setLockedNickname(data.nickname || '')
           pendingLockRef.current = false
@@ -106,7 +109,7 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
         }
         break
       case 'unlock':
-        if (data.pictureId == pictureId) {
+        if (sameId(data.pictureId, pictureId)) {
           setLockedBy(null); setLockedNickname('')
           wasMyLockRef.current = false
         }
@@ -114,21 +117,21 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
       case 'presence':
         setOnlineUsers(data.users || [])
         if (data.users) {
-          const me = data.users.find(u => u.userId == myUserIdRef.current)
+          const me = data.users.find(u => sameId(u.userId, myUserIdRef.current))
           if (me) myNicknameRef.current = me.nickname || ''
         }
         break
       case 'join':
         setOnlineUsers(prev => {
-          if (prev.some(u => u.userId === data.userId)) return prev
+          if (prev.some(u => sameId(u.userId, data.userId))) return prev
           return [...prev, data]
         })
         break
       case 'leave':
-        setOnlineUsers(prev => prev.filter(u => u.userId !== data.userId))
+        setOnlineUsers(prev => prev.filter(u => !sameId(u.userId, data.userId)))
         break
       case 'file-replaced':
-        if (data.pictureId == pictureId) {
+        if (sameId(data.pictureId, pictureId)) {
           setScale(1); setRotation(0); setCropData(null)
           setHistory([])
           setReloadTick(prev => prev + 1)

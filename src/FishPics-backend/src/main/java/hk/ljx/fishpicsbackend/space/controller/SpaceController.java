@@ -7,8 +7,7 @@ import hk.ljx.fishpicsbackend.common.annotation.RequireAdmin;
 import hk.ljx.fishpicsbackend.common.annotation.RequireLogin;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
-import hk.ljx.fishpicsbackend.common.utils.UserHolder;
-import com.baomidou.mybatisplus.core.metadata.IPage;
+import hk.ljx.fishpicsbackend.common.utils.LoginContextHelper;
 import hk.ljx.fishpicsbackend.picture.vo.PictureVO;
 import hk.ljx.fishpicsbackend.space.dto.*;
 import hk.ljx.fishpicsbackend.space.service.SpaceService;
@@ -43,7 +42,7 @@ public class SpaceController {
     @AuditLog(module = "空间管理", operation = "创建空间")
     @PostMapping("/create")
     public Response<Boolean> createSpace(@Valid @RequestBody CreateSpaceRequest createSpace) {
-        User user = UserHolder.getUser();
+        User user = LoginContextHelper.requireUser();
         return Response.ok(spaceService.createSpace(createSpace, user));
     }
 

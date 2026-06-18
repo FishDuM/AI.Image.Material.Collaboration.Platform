@@ -3,11 +3,18 @@ package hk.ljx.fishpicsbackend.collab;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import hk.ljx.fishpicsbackend.collab.CollabMessageFactory.Crop;
+import hk.ljx.fishpicsbackend.collab.CollabMessageFactory.PictureUserMessage;
+import hk.ljx.fishpicsbackend.collab.CollabMessageFactory.TransformMessage;
+import hk.ljx.fishpicsbackend.collab.CollabMessageFactory.UserMessage;
 import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
+import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.infra.JwtUtils;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
+import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
 import hk.ljx.fishpicsbackend.mapper.SpaceTeamMemberMapper;
 import hk.ljx.fishpicsbackend.picture.entity.Picture;
+import hk.ljx.fishpicsbackend.space.entity.Space;
 import hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember;
 import hk.ljx.fishpicsbackend.user.entity.User;
 import hk.ljx.fishpicsbackend.user.service.UserService;
@@ -19,6 +26,7 @@ import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.Map;
 
@@ -42,74 +50,31 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
     private SpaceTeamMemberMapper teamMemberMapper;
 
     @Resource
+    private SpaceMapper spaceMapper;
+
+    @Resource
     private PictureMapper pictureMapper;
 
     @Resource
     private CollabSessionRegistry sessionRegistry;
 
     @Resource
-    private CollabCoordinator collabCoordinator;
-
-    @Resource
-    private CollabLockCoordinator lockCoordinator;
-
-    @Resource
     private StringRedisTemplate stringRedisTemplate;
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
-        String token = getParam(session, "token");
-        String spaceIdStr = getParam(session, "spaceId");
+        SessionContext context = resolveSessionContext(session);
+        if (context == null) return;
 
-        if (token == null || spaceIdStr == null) {
-            session.close(CloseStatus.POLICY_VIOLATION.withReason("missing params"));
-            return;
-        }
+        session.getAttributes().put(ATTR_USER_ID, context.userId());
+        session.getAttributes().put(ATTR_SPACE_ID, context.spaceId());
+        session.getAttributes().put(ATTR_NICKNAME, context.nickname());
+        session.getAttributes().put(ATTR_AVATAR, context.avatar());
 
-        Long userId = jwtUtils.getUserId(token);
-        if (userId == null || jwtUtils.isBlacklisted(token)) {
-            session.close(CloseStatus.POLICY_VIOLATION.withReason("auth failed"));
-            return;
-        }
+        sessionRegistry.addSession(context.spaceId(), context.userId(), session, context.nickname(), context.avatar());
+        handleJoin(context.spaceId(), context.userId(), context.nickname(), context.avatar());
 
-        Long spaceId = parseLong(spaceIdStr);
-        if (spaceId == null) {
-            session.close(CloseStatus.POLICY_VIOLATION.withReason("invalid spaceId"));
-            return;
-        }
-
-        if (!isTeamMember(spaceId, userId)) {
-            session.close(CloseStatus.POLICY_VIOLATION.withReason("not team member"));
-            return;
-        }
-
-        User user = userService.getById(userId);
-        if (user == null) {
-            session.close(CloseStatus.POLICY_VIOLATION.withReason("user not found"));
-            return;
-        }
-        if (user.getStatus() == null || !Integer.valueOf(1).equals(user.getStatus())) {
-            session.close(CloseStatus.POLICY_VIOLATION.withReason("user disabled"));
-            return;
-        }
-        Boolean isBanned = stringRedisTemplate.opsForSet().isMember(
-                RedisConstants.BANNED_USERS_KEY, userId.toString());
-        if (Boolean.TRUE.equals(isBanned)) {
-            session.close(CloseStatus.POLICY_VIOLATION.withReason("user banned"));
-            return;
-        }
-
-        String nickname = user.getNickname() != null ? user.getNickname() : "";
-        String avatar = user.getAvatar() != null ? user.getAvatar() : "";
-        session.getAttributes().put(ATTR_USER_ID, userId);
-        session.getAttributes().put(ATTR_SPACE_ID, spaceId);
-        session.getAttributes().put(ATTR_NICKNAME, nickname);
-        session.getAttributes().put(ATTR_AVATAR, avatar);
-
-        sessionRegistry.addSession(spaceId, userId, session, nickname, avatar);
-        collabCoordinator.handleJoin(spaceId, userId, nickname, avatar);
-
-        log.info("[CollabWS] connected: space={}, user={}", spaceId, userId);
+        log.info("[CollabWS] connected: space={}, user={}", context.spaceId(), context.userId());
     }
 
     @Override
@@ -147,7 +112,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         Long userId = getAttr(session, ATTR_USER_ID);
         Long spaceId = getAttr(session, ATTR_SPACE_ID);
         if (userId != null && spaceId != null) {
-            lockCoordinator.handleDisconnect(spaceId, userId, session.getId());
+            handleDisconnect(spaceId, userId, session.getId());
         } else {
             log.info("[CollabWS] disconnected without attrs, status={}", status);
         }
@@ -160,66 +125,108 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
 
     private void handleTransform(WebSocketSession session, JSONObject data, Long spaceId, Long userId) {
         Long pictureId = getLong(data, "pictureId");
-        if (!isPictureInSpace(pictureId, spaceId)) return;
-        if (!isLockHolder(pictureId, spaceId, userId)) {
+        if (!isEditLockHolder(pictureId, spaceId, userId)) {
             log.warn("[CollabWS] rejected transform without edit lock: space={}, picture={}, user={}",
                     spaceId, pictureId, userId);
             return;
         }
 
-        Integer cropX = null;
-        Integer cropY = null;
-        Integer cropW = null;
-        Integer cropH = null;
-        Object cropObj = data.get("crop");
-        if (cropObj instanceof Map<?, ?> crop) {
-            cropX = parseInteger(crop.get("x"));
-            cropY = parseInteger(crop.get("y"));
-            cropW = parseInteger(crop.get("w"));
-            cropH = parseInteger(crop.get("h"));
-        }
+        Double scale = getDouble(data, "scale");
+        Integer rotation = getInteger(data, "rotation");
+        if (scale == null || rotation == null) return;
 
-        collabCoordinator.handleTransform(
-                spaceId,
-                pictureId,
-                userId,
-                getAttrStr(session, ATTR_NICKNAME),
-                getDouble(data, "scale"),
-                getInteger(data, "rotation"),
-                cropX,
-                cropY,
-                cropW,
-                cropH);
+        Crop crop = parseCrop(data.get("crop"));
+        if (data.get("crop") != null && crop == null) return;
+
+        var transform = new TransformMessage(
+                pictureId, scale, rotation, userId, getAttrStr(session, ATTR_NICKNAME), crop);
+        String outgoing = CollabMessageFactory.transform(transform);
+        sessionRegistry.updatePictureState(spaceId, pictureId, outgoing);
+        sessionRegistry.broadcastAll(spaceId, outgoing);
+
+        log.info("[Collab] transform broadcast: space={}, picture={}, online={}",
+                spaceId, pictureId, sessionRegistry.getOnlineUserIds(spaceId).size());
     }
 
     private void handleLock(WebSocketSession session, JSONObject data, Long spaceId, Long userId) {
         Long pictureId = getLong(data, "pictureId");
         if (!isPictureInSpace(pictureId, spaceId)) return;
 
-        lockCoordinator.handleLock(spaceId, pictureId, userId, getAttrStr(session, ATTR_NICKNAME));
+        String nickname = getAttrStr(session, ATTR_NICKNAME);
+        boolean acquired = sessionRegistry.tryAcquireEditLock(spaceId, pictureId, userId, nickname);
+        if (acquired) {
+            sessionRegistry.broadcastAll(spaceId,
+                    CollabMessageFactory.lock(new PictureUserMessage(pictureId, userId, nickname)));
+            log.info("[Collab] lock acquired: space={}, picture={}, user={}", spaceId, pictureId, userId);
+            return;
+        }
+
+        var lock = sessionRegistry.getSpaceLock(spaceId);
+        sessionRegistry.sendToUser(spaceId, userId, CollabMessageFactory.lockDenied(pictureId, lock));
+        log.info("[Collab] lock denied: space={}, picture={}, user={}", spaceId, pictureId, userId);
     }
 
     private void handleUnlock(JSONObject data, Long spaceId, Long userId) {
         Long pictureId = getLong(data, "pictureId");
-        if (!isPictureInSpace(pictureId, spaceId)) return;
 
-        lockCoordinator.handleUnlock(spaceId, pictureId, userId);
+        boolean released = sessionRegistry.releaseEditLock(spaceId, pictureId, userId);
+        if (released) {
+            broadcastUnlockAndClearState(spaceId, pictureId, userId);
+            log.info("[Collab] lock released: space={}, picture={}, user={}", spaceId, pictureId, userId);
+        }
+    }
+
+    private void handleJoin(Long spaceId, Long userId, String nickname, String avatar) {
+        sessionRegistry.broadcast(spaceId, userId,
+                CollabMessageFactory.join(new UserMessage(userId, nickname, avatar)));
+        sessionRegistry.sendToUser(spaceId, userId,
+                CollabMessageFactory.presence(sessionRegistry.getSpaceSessions(spaceId)));
+        sendCurrentState(spaceId, userId);
+    }
+
+    private void handleDisconnect(Long spaceId, Long userId, String sessionId) {
+        sessionRegistry.removeSession(spaceId, userId, sessionId);
+
+        Long pictureId = sessionRegistry.clearLockByUserInSpace(userId, spaceId);
+        if (pictureId != null) {
+            broadcastUnlockAndClearState(spaceId, pictureId, userId);
+            log.info("[Collab] disconnected user lock released: space={}, picture={}", spaceId, pictureId);
+        }
+
+        sessionRegistry.broadcast(spaceId, userId, CollabMessageFactory.leave(userId));
+        log.info("[Collab] user disconnect handled: space={}, user={}", spaceId, userId);
     }
 
     private void handleResync(Long spaceId, Long userId) {
-        sessionRegistry.getAllPictureLocks().forEach((pictureId, lock) -> {
-            if (!spaceId.equals(lock.getSpaceId())) return;
+        sendCurrentState(spaceId, userId);
+        log.info("[CollabWS] resync: space={}, user={}", spaceId, userId);
+    }
+
+    private void sendCurrentState(Long spaceId, Long userId) {
+        var lock = sessionRegistry.getSpaceLock(spaceId);
+        if (lock != null) {
             sessionRegistry.sendToUser(spaceId, userId,
-                    CollabMessageFactory.lock(pictureId, lock.getUserId(), lock.getNickname()));
-        });
+                    CollabMessageFactory.lock(new PictureUserMessage(
+                            lock.getPictureId(), lock.getUserId(), lock.getNickname())));
+        }
         for (String stateJson : sessionRegistry.getSpacePictureStates(spaceId)) {
             sessionRegistry.sendToUser(spaceId, userId, stateJson);
         }
-        log.info("[CollabWS] resync: space={}, user={}, lockCount={}",
-                spaceId, userId, sessionRegistry.getAllPictureLocks().size());
     }
 
-    private boolean isTeamMember(Long spaceId, Long userId) {
+    private void broadcastUnlockAndClearState(Long spaceId, Long pictureId, Long userId) {
+        sessionRegistry.broadcastAll(spaceId, CollabMessageFactory.unlock(pictureId, userId));
+        sessionRegistry.clearPictureState(spaceId, pictureId);
+    }
+
+    private boolean canAccessSpace(Long spaceId, Long userId) {
+        Space space = spaceMapper.selectById(spaceId);
+        if (space == null || !ExcUtils.eq(space.getStatus(), 1)) {
+            return false;
+        }
+        if (userId.equals(space.getUserId())) {
+            return true;
+        }
         var memberQuery = new LambdaQueryWrapper<SpaceTeamMember>()
                 .eq(SpaceTeamMember::getSpaceId, spaceId)
                 .eq(SpaceTeamMember::getUserId, userId)
@@ -227,10 +234,59 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         return teamMemberMapper.selectOne(memberQuery) != null;
     }
 
+    private SessionContext resolveSessionContext(WebSocketSession session) throws Exception {
+        String token = getParam(session, "token");
+        String spaceIdStr = getParam(session, "spaceId");
+        if (token == null || spaceIdStr == null) {
+            session.close(CloseStatus.POLICY_VIOLATION.withReason("missing params"));
+            return null;
+        }
+
+        Long userId = jwtUtils.getUserId(token);
+        if (userId == null || jwtUtils.isBlacklisted(token)) {
+            session.close(CloseStatus.POLICY_VIOLATION.withReason("auth failed"));
+            return null;
+        }
+
+        Long spaceId = parseLong(spaceIdStr);
+        if (spaceId == null) {
+            session.close(CloseStatus.POLICY_VIOLATION.withReason("invalid spaceId"));
+            return null;
+        }
+
+        if (!canAccessSpace(spaceId, userId)) {
+            session.close(CloseStatus.POLICY_VIOLATION.withReason("no space access"));
+            return null;
+        }
+
+        User user = userService.getById(userId);
+        if (user == null) {
+            session.close(CloseStatus.POLICY_VIOLATION.withReason("user not found"));
+            return null;
+        }
+        if (user.getStatus() == null || !ExcUtils.eq(user.getStatus(), 1)) {
+            session.close(CloseStatus.POLICY_VIOLATION.withReason("user disabled"));
+            return null;
+        }
+        Boolean isBanned = stringRedisTemplate.opsForSet().isMember(
+                RedisConstants.BANNED_USERS_KEY, userId.toString());
+        if (Boolean.TRUE.equals(isBanned)) {
+            session.close(CloseStatus.POLICY_VIOLATION.withReason("user banned"));
+            return null;
+        }
+
+        String nickname = user.getNickname() != null ? user.getNickname() : "";
+        String avatar = user.getAvatar() != null ? user.getAvatar() : "";
+        return new SessionContext(spaceId, userId, nickname, avatar);
+    }
+
+    private record SessionContext(Long spaceId, Long userId, String nickname, String avatar) {
+    }
+
     private String getParam(WebSocketSession session, String name) {
         var uri = session.getUri();
         if (uri == null) return null;
-        return org.springframework.web.util.UriComponentsBuilder.fromUri(uri)
+        return UriComponentsBuilder.fromUri(uri)
                 .build()
                 .getQueryParams()
                 .getFirst(name);
@@ -253,8 +309,8 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         return picture != null && spaceId.equals(picture.getSpaceId());
     }
 
-    private boolean isLockHolder(Long pictureId, Long spaceId, Long userId) {
-        return sessionRegistry.isLockHolder(spaceId, pictureId, userId);
+    private boolean isEditLockHolder(Long pictureId, Long spaceId, Long userId) {
+        return sessionRegistry.isEditLockHolder(spaceId, pictureId, userId);
     }
 
     private Long getLong(JSONObject data, String key) {
@@ -263,11 +319,28 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
 
     private Double getDouble(JSONObject data, String key) {
         Object value = data.get(key);
-        return value == null ? null : Double.parseDouble(value.toString());
+        if (value == null) return null;
+        try {
+            return Double.parseDouble(value.toString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private Integer getInteger(JSONObject data, String key) {
         return parseInteger(data.get(key));
+    }
+
+    private Crop parseCrop(Object value) {
+        if (value == null) return null;
+        if (!(value instanceof Map<?, ?> crop)) return null;
+
+        Integer x = parseInteger(crop.get("x"));
+        Integer y = parseInteger(crop.get("y"));
+        Integer w = parseInteger(crop.get("w"));
+        Integer h = parseInteger(crop.get("h"));
+        if (x == null || y == null || w == null || h == null) return null;
+        return new Crop(x, y, w, h);
     }
 
     private Long parseLong(Object value) {
@@ -281,6 +354,10 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
 
     private Integer parseInteger(Object value) {
         if (value == null) return null;
-        return Integer.parseInt(value.toString());
+        try {
+            return Integer.parseInt(value.toString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

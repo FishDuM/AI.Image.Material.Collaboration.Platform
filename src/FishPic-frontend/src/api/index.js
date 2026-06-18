@@ -10,7 +10,7 @@ const api = axios.create({
   },
 })
 
-// 删除 dedup 死代码后保留空函数保持 .use() 签名不变
+export const API_BASE_URL = api.defaults.baseURL || ''
 
 api.interceptors.request.use(
   (config) => {
@@ -28,6 +28,10 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => {
     if (!response || !response.config) return response
+    const newToken = response.headers['x-new-token']
+    if (newToken) {
+      saveToken(newToken)
+    }
     if (response.config.responseType === 'blob') {
       return response.data
     }
@@ -39,25 +43,19 @@ api.interceptors.response.use(
     if (!responseData || typeof responseData.code === 'undefined') {
       return Promise.reject(new Error('响应格式异常'))
     }
-    // JWT 自动续签：检查响应头中的新 Token
-    const newToken = response.headers['x-new-token']
-    if (newToken) {
-      saveToken(newToken)
-    }
     if (responseData.code !== 1) {
       if (responseData.code === 40005) {
         handleAuthExpired()
       }
       const businessError = new Error(responseData.message || '请求失败')
       businessError.code = responseData.code
-      businessError.business = true
       businessError.data = responseData
       return Promise.reject(businessError)
     }
     return responseData.data ?? responseData
   },
   (error) => {
-    if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED' || axios.isCancel(error)) {
+    if (axios.isCancel(error)) {
       return Promise.reject(error)
     }
     if (error.response?.status === 401) {
@@ -67,14 +65,12 @@ api.interceptors.response.use(
   }
 )
 
-// 401 收敛策略:连续 N 次 401 才触发跳转,登录后 grace period 内不清理
 let consecutiveAuthFailures = 0
 const AUTH_FAIL_THRESHOLD = 3
 let authExpiredHandling = false
 let lastPasswordChangeAt = 0
 const POST_CHANGE_GRACE_MS = 5000
 
-// 注册全局方法,供改密成功后调用
 export function markPasswordChange() {
   lastPasswordChangeAt = Date.now()
 }
@@ -105,7 +101,6 @@ function handleAuthExpired() {
   setTimeout(() => { authExpiredHandling = false }, 5000)
 }
 
-// 登录成功/状态确认成功后,重置 401 失败计数
 export function resetAuthFailureCounter() {
   consecutiveAuthFailures = 0
   authExpiredHandling = false
@@ -132,6 +127,9 @@ export const getUser = (config = {}) => api.get('/user/getUser', config)
 export const getUserProfile = (userId, config = {}) => api.get('/user/profile', { params: { userId }, ...config })
 
 export const getAdminUser = (userId, config = {}) => api.post('/user/admin/getUser', { userId }, config)
+export const adminListUsers = (data) => api.post('/user/admin/userList', data)
+export const adminSetUserStatus = (userId) => api.post('/user/admin/setStatus', { userId })
+export const adminEditUser = (data) => api.post('/user/admin/editUser', data)
 
 export const editUser = (data) => api.post('/user/editUser', data)
 
@@ -146,6 +144,10 @@ export const uploadAvatar = (formData, onProgress) => api.post('/picture/avatar'
 })
 
 export const getMarquee = () => api.get('/system/marquee')
+export const addMarquee = (pictureIds) => api.post('/system/addMarquee', { pictureId: pictureIds })
+export const addSystemType = (tag) => api.post('/system/addList', { value: [tag] })
+export const deleteSystemType = (tag) => api.post('/system/deleteType', { value: tag })
+export const deleteMarquee = (url) => api.post('/system/deleteMarquee', { url })
 
 export const getPictureList = (current = 1, pageSize = 20, config = {}, tag = '') => {
   const data = { current, pageSize }
@@ -202,7 +204,6 @@ export const getRecommendPictures = (data, config = {}) => api.post('/picture/re
 
 export const getSystemTypes = () => api.get('/system/list')
 
-// AI 相关 API
 export const submitAiTag = (id) => api.post('/ai/tags', { id })
 export const getAiTasks = (data) => api.post('/ai/admin/tasks', data)
 export const getAiStats = () => api.get('/ai/admin/stats')
@@ -234,16 +235,8 @@ export const uploadPicture = (file, targetSpaceId) => {
   })
 }
 
-// 分片上传 API
-
-/**
- * 秒传校验
- */
 export const checkUpload = (data) => api.post('/picture/check', data)
 
-/**
- * 分片上传
- */
 export const uploadChunk = (formData, md5, chunkIndex) => {
   const fd = new FormData()
   fd.append('file', formData.get ? formData.get('file') : formData)
@@ -255,12 +248,7 @@ export const uploadChunk = (formData, md5, chunkIndex) => {
   })
 }
 
-/**
- * 合并分片
- */
 export const mergeChunks = (data) => api.post('/picture/merge', data)
-
-// 分享 API
 
 export const createShare = (data) => api.post('/share/create', data)
 

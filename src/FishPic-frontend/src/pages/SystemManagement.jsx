@@ -1,20 +1,24 @@
-import { useState, useEffect, useCallback, useContext } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect, useCallback } from 'react'
 import { App as AntApp, Card, Typography, Tag, Input, Button, Space, Spin, Empty, Popconfirm, Modal, Image, Checkbox, Pagination } from 'antd'
 import { PlusOutlined, ReloadOutlined, TagOutlined, PictureOutlined, DeleteOutlined, EyeOutlined } from '@ant-design/icons'
-import { AuthContext } from '../context/AuthContext.jsx'
-import api, { getAdminPictureList, getMarquee } from '../api'
+import {
+  addMarquee,
+  addSystemType,
+  deleteMarquee,
+  deleteSystemType,
+  getAdminPictureList,
+  getMarquee,
+} from '../api'
 import { useSystemTypes } from '../hooks/useRequestUtils'
-import { logError } from '../utils/logger'
 import { PAGINATION_LOCALE } from '../utils/constants'
+import { useAdminGuard } from '../hooks/useAdminGuard'
 import './SystemManagement.css'
 
 const { Title } = Typography
 
 function SystemManagement() {
   const { message: antMessage } = AntApp.useApp()
-  const navigate = useNavigate()
-  const { userInfo } = useContext(AuthContext)
+  const { userInfo } = useAdminGuard('system:config')
   const { fetchSystemTypes } = useSystemTypes()
   const [loading, setLoading] = useState(false)
   const [typeList, setTypeList] = useState([])
@@ -28,16 +32,6 @@ function SystemManagement() {
   const [pickerLoading, setPickerLoading] = useState(false)
   const [pickerPagination, setPickerPagination] = useState({ current: 1, total: 0 })
   const [pickerSelectedIds, setPickerSelectedIds] = useState([])
-
-  useEffect(() => {
-    if (!userInfo || !userInfo?.permissions?.includes('system:config')) {
-      antMessage.error('无权访问，正在跳转到 404 页面...')
-      setTimeout(() => {
-        navigate('/404', { replace: true })
-      }, 500)
-      return
-    }
-  }, [navigate, userInfo, antMessage])
 
   const fetchTypeList = useCallback(async () => {
     setLoading(true)
@@ -69,7 +63,7 @@ function SystemManagement() {
         setMarqueeUrls(result)
       }
     } catch (error) {
-      logError('fetchMarquee', error)
+      console.error('[fetchMarquee]', error)
       setMarqueeUrls([])
     } finally {
       setMarqueeLoading(false)
@@ -121,7 +115,7 @@ function SystemManagement() {
     }
     setMarqueeAdding(true)
     try {
-      await api.post('/system/addMarquee', { pictureId: pickerSelectedIds })
+      await addMarquee(pickerSelectedIds)
       antMessage.success(`成功添加 ${pickerSelectedIds.length} 张轮播图图片`)
       setPickerVisible(false)
       fetchMarquee()
@@ -144,7 +138,7 @@ function SystemManagement() {
     }
     setAdding(true)
     try {
-      await api.post('/system/addList', { value: [tag] })
+      await addSystemType(tag)
       antMessage.success(`标签「${tag}」添加成功`)
       setNewTag('')
       fetchTypeList()
@@ -157,7 +151,7 @@ function SystemManagement() {
 
   const handleDeleteTag = async (tag) => {
     try {
-      await api.post('/system/deleteType', { value: tag })
+      await deleteSystemType(tag)
       antMessage.success(`标签「${tag}」已删除`)
       fetchTypeList()
     } catch (err) {
@@ -167,7 +161,7 @@ function SystemManagement() {
 
   const handleDeleteMarquee = async (url) => {
     try {
-      await api.post('/system/deleteMarquee', { url })
+      await deleteMarquee(url)
       antMessage.success('跑马灯图片已删除')
       fetchMarquee()
     } catch (err) {
