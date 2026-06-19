@@ -127,9 +127,6 @@ public final class DownloadUtils {
         }
     }
 
-    /**
-     * 解析 Content-Type：空白时返回 application/octet-stream
-     */
     public static String resolveContentType(String contentType) {
         if (StrUtil.isBlank(contentType)) {
             return "application/octet-stream";
@@ -137,11 +134,37 @@ public final class DownloadUtils {
         return contentType;
     }
 
-    /**
-     * 生成安全的下载文件名：空白时返回 "image"
-     */
+    // 空白返回 "image"，没扩展名时根据 Content-Type 追加
+    public static String defaultFileName(String fileName, String contentType) {
+        String name = StrUtil.blankToDefault(fileName, "image");
+        // 已有扩展名则直接返回
+        if (name.contains(".")) {
+            return name;
+        }
+        // 根据 Content-Type 追加扩展名
+        String ext = extensionFromContentType(contentType);
+        return ext != null ? name + ext : name;
+    }
+
     public static String defaultFileName(String fileName) {
-        return StrUtil.blankToDefault(fileName, "image");
+        return defaultFileName(fileName, null);
+    }
+
+    private static String extensionFromContentType(String contentType) {
+        if (contentType == null) {
+            return null;
+        }
+        return switch (contentType.toLowerCase()) {
+            case "image/png" -> ".png";
+            case "image/jpeg", "image/jpg" -> ".jpg";
+            case "image/gif" -> ".gif";
+            case "image/webp" -> ".webp";
+            case "image/svg+xml" -> ".svg";
+            case "image/bmp" -> ".bmp";
+            case "image/tiff" -> ".tiff";
+            case "image/avif" -> ".avif";
+            default -> null;
+        };
     }
 
     private static void copyWithLimit(InputStream in, OutputStream out, long maxSize) throws IOException {
@@ -215,45 +238,9 @@ public final class DownloadUtils {
         return conn;
     }
 
-    /**
-     * 判断 host 字符串是否是 IP 字面量(IPv4 或 IPv6)
-     * - IPv4: 纯数字+点,且能解析为 InetAddress
-     * - IPv6: 含冒号或被方括号包裹
-     * - 域名: 字母/数字/连字符/点,且能解析但不全是数字点
-     */
-    private static boolean isIpLiteral(String host) {
-        if (host == null || host.isBlank()) {
-            return false;
-        }
-        // 去除 IPv6 方括号
-        String h = host;
-        if (h.startsWith("[") && h.endsWith("]")) {
-            h = h.substring(1, h.length() - 1);
-        }
-        if (h.contains(":")) {
-            return true; // IPv6
-        }
-        // 用 InetAddress 兜底判断:能解析且不是 host 形式
-        try {
-            // 如果全是数字+点,就是 IPv4;否则可能是域名
-            // 这里用 InetAddress.getByName,但其对域名也会返回(走 DNS 解析)
-            // 简单判定:含字母就是域名
-            for (int i = 0; i < h.length(); i++) {
-                char c = h.charAt(i);
-                if (!Character.isDigit(c) && c != '.') {
-                    return false;
-                }
-            }
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
     private static boolean isRedirect(int code) {
         return code == 301 || code == 302 || code == 303 || code == 307 || code == 308;
     }
-
 
     private static InetAddress validateUrl(String urlStr) {
         try {
@@ -302,9 +289,7 @@ public final class DownloadUtils {
         }
     }
 
-    /**
-     * 云厂商 metadata 内网 IP 黑名单
-     */
+    // 云厂商 metadata 内网 IP
     private static boolean isCloudMetadataIp(String ip) {
         if (ip == null) return false;
         if (ip.equals("169.254.169.254")) return true;            // AWS / Azure / GCP / 华为云 / 腾讯云

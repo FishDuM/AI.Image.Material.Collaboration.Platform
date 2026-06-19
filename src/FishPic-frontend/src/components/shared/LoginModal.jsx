@@ -4,8 +4,6 @@ import { useState } from 'react'
 import { captchaRules, confirmPasswordRules, passwordRules, usernameRules } from '../../utils/formRules'
 import { PLACEHOLDER_QR } from '../../utils/fallbacks'
 
-const QR_PLACEHOLDER = PLACEHOLDER_QR
-
 function LoginPanel({ form, loading, checkCodeUrl, onSubmit, onRefreshCode, onSwitchToRegister }) {
   const [codeRefreshing, setCodeRefreshing] = useState(false)
 
@@ -106,12 +104,12 @@ function LeftPanel({ hint }) {
         <Card className="qr-code-card" variant="borderless">
           <div className="qr-code-wrapper">
             <div className="qr-code-bg">
-              <img src="/qrcode.jpg" alt="二维码" className="qr-placeholder" onError={(e) => { e.target.src = QR_PLACEHOLDER }} />
+              <img src="/qrcode.jpg" alt="二维码" className="qr-placeholder" onError={(e) => { e.target.src = PLACEHOLDER_QR }} />
             </div>
           </div>
           <div className="scan-status">
             <ScanOutlined className="scan-icon" />
-            <span>暂未实现该功能，敬请期待</span>
+            <span>扫码关注我公众号</span>
           </div>
         </Card>
       </div>
@@ -128,7 +126,7 @@ function LeftPanel({ hint }) {
 
 export function LoginModal({ open, onCancel, loginForm, loading, checkCodeUrl, onSubmit, onRefreshCode, onSwitchToRegister }) {
   return (
-    <Modal open={open} onCancel={onCancel} footer={null} centered className="xhs-modal" destroyOnHidden width={800}>
+    <Modal open={open} onCancel={onCancel} footer={null} centered className="xhs-modal" width={800}>
       <div className="xhs-modal-content">
         <LeftPanel hint="登录后推荐更懂你的笔记" />
         <div className="xhs-right-panel">
@@ -148,7 +146,7 @@ export function LoginModal({ open, onCancel, loginForm, loading, checkCodeUrl, o
 
 export function RegisterModal({ open, onCancel, registerForm, loading, checkCodeUrl, onSubmit, onRefreshCode, onSwitchToLogin, showAgreement }) {
   return (
-    <Modal open={open} onCancel={onCancel} footer={null} centered className="xhs-modal" destroyOnHidden width={800}>
+    <Modal open={open} onCancel={onCancel} footer={null} centered className="xhs-modal" width={800}>
       <div className="xhs-modal-content">
         <LeftPanel hint="加入我们，开始创作" />
         <div className="xhs-right-panel">

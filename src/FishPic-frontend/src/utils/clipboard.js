@@ -1,6 +1,3 @@
-/**
- * 复制文本到剪贴板，兼容旧浏览器
- */
 export const copyToClipboard = async (text) => {
   try {
     await navigator.clipboard.writeText(text)

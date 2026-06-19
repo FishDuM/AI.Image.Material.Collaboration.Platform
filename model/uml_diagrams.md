@@ -22,7 +22,7 @@
 | **访客** | 未登录用户 | 验证码、注册、登录、浏览公开图片、查看分享链接 |
 | **登录用户** | 已认证用户（level 0-2） | 资料维护、图片上传编辑、空间管理、分享、搜索、AI 标注 / 文生图、图片推荐 |
 | **管理员** | 管理员（role=1） | 全部用户功能 + 用户 / 图片 / 空间 / 系统 / AI 管理、审计日志、数据统计 |
-| **外部系统** | 第三方服务 | DashScope（AI：qwen3.5-plus / qwen-image-2.0）、腾讯云 COS（存储）、Redis（缓存/锁/会话） |
+| **外部系统** | 第三方服务 | DashScope（AI：视觉理解 / 文生图大模型）、腾讯云 COS（存储）、Redis（缓存/锁/会话） |
 
 ### 用例图
 
@@ -76,7 +76,7 @@ flowchart LR
 | 上传图片 | 已登录，有空间 | 选择文件 → 计算 MD5 → 上传（普通 / 分片 / URL 保存）→ 等待审核 | 创建 picture 记录 |
 | 编辑图片 | 已登录，有图片 | 修改元数据（名称/标签/分类/描述）→ 在线裁剪 → 替换文件 | 更新 picture 记录 |
 | 空间管理 | 已登录 | 创建空间 → 管理图片 → 邀请成员（团队空间，四级角色） | 空间和成员数据更新 |
-| 分享图片 | 已登录，有图片 | 选择图片（支持多图）→ 配置有效期/查看次数/下载权限 → 生成链接 | 创建 share 记录 |
+| 分享图片 | 已登录，有图片 | 选择图片（支持多图，团队 Owner 可选空间内任意图片）→ 配置有效期/查看次数/下载权限 → 生成链接 | 创建 share 记录 |
 | AI 标注 | 已登录，有配额 | 选择图片 → 提交标注任务 → SSE 等待结果 | 创建 task，标签写入 picture |
 | AI 文生图 | 已登录，有配额 | 输入文本描述 → 选择比例/风格 → 提交生成任务 → SSE 等待结果 | 创建 task，生成新图片 |
 | 图片推荐 | 已登录，功能开启 | 浏览推荐图片列表 | 无 |
@@ -474,10 +474,10 @@ erDiagram
 
 | 方法 | 路径 | 认证 | 说明 |
 |------|------|------|------|
-| POST | `/share/create` | @RequireLogin | 创建分享链接（支持多图） |
+| POST | `/share/create` | @RequireLogin | 创建分享链接（支持多图，团队 Owner 可分享空间内任意图片） |
 | GET | `/share/info/{token}` | 无 | 获取分享信息 |
-| GET | `/share/preview/{token}` | 无 | 预览分享图片（流式，Content-Type: image/*） |
-| GET | `/share/download/{token}` | 无 | 下载分享图片 |
+| GET | `/share/preview/{token}` | 无 | 预览分享图片（支持 `size` 参数获取缩略图，Content-Type: image/*） |
+| GET | `/share/download/{token}` | 无 | 下载分享图片（文件名自动追加扩展名） |
 | POST | `/share/cancel` | @RequireLogin | 取消分享 |
 
 ### 空间模块 — SpaceController
@@ -659,7 +659,7 @@ sequenceDiagram
     T->>DB: UPDATE task SET status='PROCESSING'<br/>WHERE id=? AND status='PENDING' (CAS)
     alt CAS 成功
         T->>H: AiTagTaskHandler.execute()
-        H->>AI: 调用 qwen3.5-plus 视觉理解
+        H->>AI: 调用视觉理解大模型
         AI-->>H: {tags: [...], description: "..."}
         H->>DB: UPDATE task SET status='DONE', result=?
         T->>SSE: 推送结果
@@ -739,23 +739,24 @@ sequenceDiagram
     participant COS as COS
 
     U->>S: POST /share/create<br/>{pictureIds, expireDays, allowDownload, maxViewCount}
+    S->>S: 校验权限（图片所有者 或 团队空间 Owner）
     S->>DB: INSERT picture_share (UUID token, SHA-256 hash)
     S->>DB: INSERT picture_share_item (关联图片, sort_order)
     S-->>U: {shareUrl} (仅此一次返回明文 token)
 
     V->>S: GET /share/info/{token}
     S->>DB: 查询分享 (SHA-256 哈希匹配 + 校验过期 + 查看次数)
-    S-->>V: ShareInfoVO
+    S-->>V: ShareInfoVO (含 previewUrl + downloadUrl)
 
-    V->>S: GET /share/preview/{token}
+    V->>S: GET /share/preview/{token}?size=400
     S->>DB: 校验分享有效性
-    S->>COS: 获取图片
-    S-->>V: image/* 流 (Content-Type 强制 image/*)
+    S->>COS: 获取缩略图 (URL 拼接 imageMogr2/thumbnail/400x400)
+    S-->>V: image/* 流 (Content-Type: image/*)
 
     V->>S: GET /share/download/{token}
     S->>DB: 校验 allowDownload
-    S->>COS: 获取图片
-    S-->>V: image/* 附件 (Content-Disposition: attachment)
+    S->>COS: 获取原图
+    S-->>V: image/* 附件 (Content-Disposition: attachment, 文件名自动追加扩展名)
 ```
 
 ---
@@ -781,8 +782,11 @@ sequenceDiagram
 |------|------|
 | `file_resource.ref_count >= 0` | 引用计数不能为负（CHECK 约束） |
 | 私人空间唯一 | 每个用户有且仅有一个私人空间（type=0，uk_user_type 约束） |
+| 分享权限 | 只能分享自己的图片或所在团队空间 Owner 身份的图片 |
 | 分享免登录 | `/share/preview/*` 和 `/share/download/*` 无需认证 |
 | 分享防 XSS | 仅返回 `image/*` Content-Type |
+| 分享缩略图 | 预览接口支持 `size` 参数，通过 COS imageMogr2 实时生成缩略图 |
+| 分享下载扩展名 | 下载文件名无扩展名时根据 Content-Type 自动追加 |
 | 审计日志脱敏 | 自动过滤 `password`、`token`、`apiKey`、`secret` 等字段 |
 | 图片审核 | 上传后默认 status=2（待审核），管理员审批后 status=0 |
 | 乐观锁 | `space`、`file_resource`、`picture` 表使用 version 字段防并发写入 |

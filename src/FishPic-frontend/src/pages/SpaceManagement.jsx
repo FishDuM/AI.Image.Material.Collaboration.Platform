@@ -231,7 +231,6 @@ function SpaceManagement() {
         confirmLoading={submitting}
         okText="保存"
         cancelText="取消"
-        destroyOnHidden
       >
         <Form form={editForm} layout="vertical">
           <Form.Item name="name" label="空间名称" rules={spaceNameRules}>

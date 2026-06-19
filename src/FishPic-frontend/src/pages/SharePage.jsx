@@ -4,6 +4,7 @@ import { Spin, Result, Button, Typography, Tag } from 'antd'
 import { DownloadOutlined, ClockCircleOutlined, PictureOutlined } from '@ant-design/icons'
 import { getShareInfo } from '../api'
 import { isCanceledError } from '../utils/error'
+import { downloadFile } from '../utils/file'
 import './SharePage.css'
 
 const { Text } = Typography
@@ -66,16 +67,6 @@ function SharePage() {
     )
   }
 
-  const handleDownload = (url, name) => {
-    if (!url) return
-    const link = document.createElement('a')
-    link.href = url
-    link.download = name || 'image'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
-
   const expireDate = shareData.expireTime ? new Date(shareData.expireTime).toLocaleString('zh-CN') : ''
   const pictures = shareData.pictures || []
   const isMulti = pictures.length > 1
@@ -106,7 +97,7 @@ function SharePage() {
                 <div key={pic.pictureId} className="share-page-grid-item">
                   <div className="share-page-grid-image-wrapper">
                     <img
-                      src={pic.previewUrl}
+                      src={pic.previewUrl + '&size=400'}
                       alt={pic.pictureName || '分享图片'}
                       className="share-page-grid-image"
                     />
@@ -129,7 +120,7 @@ function SharePage() {
                           type="primary"
                           size="small"
                           icon={<DownloadOutlined />}
-                          onClick={() => handleDownload(pic.downloadUrl, pic.pictureName)}
+                          onClick={() => downloadFile(pic.downloadUrl, pic.pictureName)}
                         >
                           下载
                         </Button>
@@ -143,7 +134,7 @@ function SharePage() {
             <div className="share-page-single">
               <div className="share-page-single-image-wrapper">
                 <img
-                  src={pictures[0]?.previewUrl}
+                  src={pictures[0]?.previewUrl + '&size=800'}
                   alt={pictures[0]?.pictureName || '分享图片'}
                   className="share-page-single-image"
                 />
@@ -165,7 +156,7 @@ function SharePage() {
                       icon={<DownloadOutlined />}
                       size="large"
                       className="share-page-download-btn"
-                      onClick={() => handleDownload(pictures[0].downloadUrl, pictures[0].pictureName)}
+                      onClick={() => downloadFile(pictures[0].downloadUrl, pictures[0].pictureName)}
                     >
                       下载原图
                     </Button>

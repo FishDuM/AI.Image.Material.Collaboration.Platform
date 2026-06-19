@@ -1,11 +1,13 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Carousel, Masonry, Image as AntImage, Spin, Form } from 'antd'
 import { getPictureList, getRecommendPictures } from '../api'
 import { isCanceledError } from '../utils/error'
 import { FALLBACK_BANNER, FALLBACK_THUMB } from '../utils/fallbacks'
 import { useAuthModal } from '../hooks/useAuthModal.js'
-import { useFetchWithCleanup, useSystemTypes, useMarquee } from '../hooks/useRequestUtils'
+import { useFetchWithCleanup, useMarquee } from '../hooks/useRequestUtils'
+import { useSystemTypes } from '../hooks/useSystemTypes'
+import { useMasonryItems } from '../hooks/useMasonryItems'
 import { PAGE_SIZE } from '../utils/constants'
 import { getThumbnailUrl } from '../utils/image'
 import AuthModals from '../components/shared/AuthModals.jsx'
@@ -21,9 +23,9 @@ function HomePage() {
   const [currentSlide, setCurrentSlide] = useState(0)
   const [imgLoaded, setImgLoaded] = useState({})
   const [searchValue, setSearchValue] = useState('')
-  const [searchTag, setSearchTag] = useState('热门')
-  const [categoryList, setCategoryList] = useState(['热门', '推荐'])
-  const [selectedCategory, setSelectedCategory] = useState('热门')
+  const [searchTag, setSearchTag] = useState('')
+  const [categoryList, setCategoryList] = useState(['全部'])
+  const [selectedCategory, setSelectedCategory] = useState('全部')
   const [pictureList, setPictureList] = useState([])
   const [picturePage, setPicturePage] = useState(1)
   const [pictureLoading, setPictureLoading] = useState(true)
@@ -38,7 +40,7 @@ function HomePage() {
   const touchStartXRef = useRef(null)
 
   const { createSignal } = useFetchWithCleanup()
-  const { fetchSystemTypes } = useSystemTypes()
+  const systemTypes = useSystemTypes()
   const { fetchMarquee } = useMarquee()
 
   const authModal = useAuthModal(() => {
@@ -49,18 +51,16 @@ function HomePage() {
     navigate(from, { replace: true })
   })
 
-  // 支持从路由 state 打开登录弹窗（如从其他页面跳转而来）
   useEffect(() => {
     if (location.state?.showLogin) {
       authModal.openLogin()
-      // 清除 state 防止刷新后重复打开
       navigate(location.pathname, { replace: true, state: {} })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handlePrev = useCallback(() => carouselRef.current?.prev(), [])
-  const handleNext = useCallback(() => carouselRef.current?.next(), [])
+  const handlePrev = () => carouselRef.current?.prev()
+  const handleNext = () => carouselRef.current?.next()
 
   const handleSearch = useCallback(() => {
     const trimmed = searchValue.trim()
@@ -70,7 +70,7 @@ function HomePage() {
 
   const handleCategorySelect = useCallback((cat) => {
     setSelectedCategory(cat)
-    setSearchTag(cat === '热门' || cat === '推荐' ? '' : cat)
+    setSearchTag(cat === '全部' ? '' : cat)
     setPicturePage(1)
   }, [])
 
@@ -81,14 +81,10 @@ function HomePage() {
   }, [fetchMarquee])
 
   useEffect(() => {
-    fetchSystemTypes().then((result) => {
-      if (Array.isArray(result)) {
-        setCategoryList(['热门', '推荐', ...result.filter(c => c !== '推荐' && c !== '热门')])
-      } else {
-        setCategoryList(['热门', '推荐'])
-      }
-    }).catch(() => setCategoryList(['热门', '推荐']))
-  }, [fetchSystemTypes])
+    if (systemTypes.length > 0) {
+      setCategoryList(['全部', ...systemTypes.filter(c => c !== '推荐')])
+    }
+  }, [systemTypes])
 
   const loadPictures = useCallback(async (page) => {
     const requestId = ++requestIdRef.current
@@ -118,7 +114,6 @@ function HomePage() {
     }
   }, [createSignal, searchTag, selectedCategory])
 
-  // searchTag/selectedCategory 变化时重新加载
   useEffect(() => {
     loadPictures(1)
   }, [searchTag, selectedCategory, loadPictures])
@@ -169,11 +164,11 @@ function HomePage() {
     setCoverflowTick(t => t + 1)
   }, [])
 
-  const handleDragStart = useCallback((clientX) => {
+  const handleDragStart = (clientX) => {
     touchStartXRef.current = clientX
-  }, [])
+  }
 
-  const handleDragEnd = useCallback((clientX) => {
+  const handleDragEnd = (clientX) => {
     const startX = touchStartXRef.current
     touchStartXRef.current = null
     if (startX === null) return
@@ -184,14 +179,14 @@ function HomePage() {
     } else {
       if (deltaX < 0) handleNext(); else handlePrev()
     }
-  }, [useCoverflow, handleCoverflowNext, handleCoverflowPrev, handleNext, handlePrev])
+  }
 
-  const handleTouchStart = useCallback((e) => handleDragStart(e.touches[0].clientX), [handleDragStart])
-  const handleTouchEnd = useCallback((e) => handleDragEnd(e.changedTouches[0].clientX), [handleDragEnd])
-  const handleMouseDown = useCallback((e) => { e.preventDefault(); handleDragStart(e.clientX) }, [handleDragStart])
-  const handleMouseUp = useCallback((e) => handleDragEnd(e.clientX), [handleDragEnd])
+  const handleTouchStart = (e) => handleDragStart(e.touches[0].clientX)
+  const handleTouchEnd = (e) => handleDragEnd(e.changedTouches[0].clientX)
+  const handleMouseDown = (e) => { e.preventDefault(); handleDragStart(e.clientX) }
+  const handleMouseUp = (e) => handleDragEnd(e.clientX)
 
-  const masonryItems = useMemo(() => pictureList.map(pic => ({ key: `pic-${pic.id}`, data: pic })), [pictureList])
+  const masonryItems = useMasonryItems(pictureList)
 
   return (
     <>

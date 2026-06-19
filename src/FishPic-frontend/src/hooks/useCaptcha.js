@@ -24,10 +24,10 @@ export function useCaptcha(fetcher) {
     }
   }, [fetcher, message])
 
-  const clearCaptcha = useCallback(() => {
+  const clearCaptcha = () => {
     setCaptchaKey('')
     setCaptchaImage('')
-  }, [])
+  }
 
   return {
     captchaImage,

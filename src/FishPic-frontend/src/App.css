@@ -176,42 +176,7 @@
   transform: scale(0.95);
 }
 
-.notification-btn {
-  color: var(--text-secondary);
-  font-size: var(--text-lg);
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-full);
-  transition: all var(--duration-fast) var(--ease-out);
-  position: relative;
-  box-shadow: var(--shadow-xs);
-}
 
-.notification-btn:hover {
-  background: var(--bg-hover);
-  color: var(--accent);
-  box-shadow: var(--shadow-sm);
-}
-
-.notification-btn:active {
-  box-shadow: var(--shadow-xs);
-  transform: scale(0.95);
-}
-
-.notification-btn-active {
-  color: var(--accent);
-  background: var(--accent-light);
-  box-shadow: var(--shadow-sm);
-}
-
-.notification-btn-active:hover {
-  color: var(--accent);
-  background: var(--accent-medium);
-  box-shadow: var(--shadow-md);
-}
 
 .user-info {
   display: flex;
@@ -987,7 +952,6 @@
 
   .theme-toggle-btn,
   .settings-btn,
-  .notification-btn,
   .system-management-btn,
   .nav-btn-active {
     box-shadow: none;
@@ -995,7 +959,6 @@
 
   .theme-toggle-btn:hover,
   .settings-btn:hover,
-  .notification-btn:hover,
   .system-management-btn:hover,
   .nav-btn-active:hover {
     box-shadow: none;
@@ -1003,7 +966,6 @@
 
   .theme-toggle-btn:active,
   .settings-btn:active,
-  .notification-btn:active,
   .system-management-btn:active {
     transform: none;
   }

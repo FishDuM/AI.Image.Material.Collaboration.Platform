@@ -32,19 +32,15 @@ export function useCollabWebSocket(spaceId, onMessage, onCleanup, onReady) {
     ws.onopen = () => {
       retryRef.current = 0
       setConnected(true)
-      console.log('[CollabWS] 已连接')
       try {
         ws.send(JSON.stringify({ type: 'resync', spaceId }))
-      } catch (e) {
-        console.warn('[CollabWS] resync 消息发送失败:', e)
-      }
+      } catch { /* 忽略 */ }
       onReadyRef.current?.()
     }
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
-        console.log('[CollabWS] 收到消息:', data.type, data)
         onMessageRef.current?.(data)
       } catch { /* 忽略 */ }
     }
@@ -59,13 +55,11 @@ export function useCollabWebSocket(spaceId, onMessage, onCleanup, onReady) {
           connectRef.current?.()
         }, delay)
       } else if (retryRef.current >= 10) {
-        console.warn('[CollabWS] 重连超过 10 次,停止重连。请检查网络或刷新页面。')
         // 不重连,让用户手动刷新
       }
     }
 
-    ws.onerror = (err) => {
-      console.warn('[CollabWS] 错误类型:', err?.type || 'unknown')
+    ws.onerror = () => {
       ws.close()
     }
   }, [spaceId])
@@ -85,7 +79,6 @@ export function useCollabWebSocket(spaceId, onMessage, onCleanup, onReady) {
     onCleanupRef.current?.()
   }, [])
 
-  // 用 ref 跟踪 unmounted,避免快速 unmount 后 setTimeout 仍触发 connect
   const unmountedRef = useRef(false)
   useEffect(() => {
     unmountedRef.current = false
@@ -114,9 +107,6 @@ export function useCollabWebSocket(spaceId, onMessage, onCleanup, onReady) {
   const sendMessage = useCallback((data) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(data))
-      console.log('[CollabWS] 发送消息:', data.type, data)
-    } else {
-      console.warn('[CollabWS] 发送失败，WebSocket 未就绪, readyState=', wsRef.current?.readyState)
     }
   }, [])
 

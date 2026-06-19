@@ -28,7 +28,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static hk.ljx.fishpicsbackend.common.constants.SysConstants.MARQUESS_KEY;
+import static hk.ljx.fishpicsbackend.common.constants.SysConstants.MARQUEES_KEY;
 import static hk.ljx.fishpicsbackend.common.constants.SysConstants.TYPE_LIST_KEY;
 
 /**
@@ -50,9 +50,7 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
     @Resource
     private DistributedLockService distributedLockService;
 
-    /**
-     * sysvalue JSON 解析失败兜底返回 empty list
-     */
+    // JSON 解析失败返回空 list
     private List<String> safeParseList(String json) {
         if (json == null || json.isBlank()) return List.of();
         try {
@@ -65,28 +63,8 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public List<String> getTypeList() {
-        List<String> cached = cacheManager.getSysConfigCache().getList(TYPE_LIST_KEY, String.class);
-        if (cached != null) {
-            return cached;
-        }
-
-        // 缓存miss，查数据库
-        LambdaQueryWrapper<PicSystem> queryWrapper = new LambdaQueryWrapper<PicSystem>().eq(PicSystem::getSyskey, TYPE_LIST_KEY);
-        List<PicSystem> list = baseMapper.selectList(queryWrapper);
-        // 无配置时返回空列表（与 getMarquess 行为一致，管理员可通过后台新增）
-        if (list == null || list.isEmpty()) {
-            return List.of();
-        }
-        PicSystem picSystem = list.get(0);
-        if (picSystem.getSysvalue() == null) {
-            return List.of();
-        }
-        List<String> result = safeParseList(picSystem.getSysvalue());
-
-        cacheManager.getSysConfigCache().put(TYPE_LIST_KEY, result);
-        return result;
+        return getConfigList(TYPE_LIST_KEY);
     }
 
     @Override
@@ -110,27 +88,8 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
     }
 
     @Override
-    @SuppressWarnings("unchecked")
-    public List<String> getMarquess() {
-        List<String> cached = cacheManager.getSysConfigCache().getList(MARQUESS_KEY, String.class);
-        if (cached != null) {
-            return cached;
-        }
-
-        // 缓存miss，查数据库
-        LambdaQueryWrapper<PicSystem> queryWrapper = new LambdaQueryWrapper<PicSystem>().eq(PicSystem::getSyskey, MARQUESS_KEY);
-        List<PicSystem> list = baseMapper.selectList(queryWrapper);
-        if (list == null || list.isEmpty()) {
-            return List.of();
-        }
-        PicSystem picSystem = list.get(0);
-        if (picSystem.getSysvalue() == null) {
-            return List.of();
-        }
-        List<String> result = safeParseList(picSystem.getSysvalue());
-
-        cacheManager.getSysConfigCache().put(MARQUESS_KEY, result);
-        return result;
+    public List<String> getMarquees() {
+        return getConfigList(MARQUEES_KEY);
     }
 
     @Override
@@ -151,24 +110,41 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         ExcUtils.throwIfTrue(!requestedIds.equals(foundIds), ExceptionCode.NOT_FOUND, "部分图片不存在，请检查所有图片ID");
 
         List<String> marqueeUrls = pictures.stream().map(Picture::getUrl).collect(Collectors.toList());
-        upsertConfigList("LOCK:SYS:MARQUESS", MARQUESS_KEY, marqueeUrls, true);
+        upsertConfigList("LOCK:SYS:MARQUESS", MARQUEES_KEY, marqueeUrls, true);
     }
 
     @Override
     public void deleteMarquee(String url) {
         ExcUtils.throwIfTrue(url == null || url.trim().isEmpty(), ExceptionCode.PARAMETER_ERROR, "图片url不能为空");
-        removeFromConfigList("LOCK:SYS:MARQUESS", MARQUESS_KEY, url);
+        removeFromConfigList("LOCK:SYS:MARQUESS", MARQUEES_KEY, url);
     }
 
     /**
-     * 通用的配置列表更新（加锁 → 查现有 → 去重合并/新建 → 更新 → 清缓存）
-     * 用于 addTypeList / addMarquee
-     *
-     * @param lockKey   Redis 分布式锁 key
-     * @param configKey pic_system 表的 syskey
-     * @param newItems  要合并的新列表
-     * @param dedup     是否去重
+     * 通用的配置列表读取（消除 getTypeList / getMarquees 重复代码）
      */
+    private List<String> getConfigList(String configKey) {
+        List<String> cached = cacheManager.getSysConfigCache().getList(configKey, String.class);
+        if (cached != null) {
+            return cached;
+        }
+
+        LambdaQueryWrapper<PicSystem> queryWrapper = new LambdaQueryWrapper<PicSystem>()
+                .eq(PicSystem::getSyskey, configKey);
+        List<PicSystem> list = baseMapper.selectList(queryWrapper);
+        if (list == null || list.isEmpty()) {
+            return List.of();
+        }
+        PicSystem picSystem = list.get(0);
+        if (picSystem.getSysvalue() == null) {
+            return List.of();
+        }
+        List<String> result = safeParseList(picSystem.getSysvalue());
+
+        cacheManager.getSysConfigCache().put(configKey, result);
+        return result;
+    }
+
+    // 加锁、查现有、去重合并/新建、更新、清缓存
     private void upsertConfigList(String lockKey, String configKey, List<String> newItems, boolean dedup) {
         if (!distributedLockService.tryLock(lockKey, 30)) {
             throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "其他节点正在修改,请稍后再试");
@@ -200,14 +176,7 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         }
     }
 
-    /**
-     * 通用的配置列表删除（加锁 → 查现有 → 移除 → 更新 → 清缓存）
-     * 用于 deleteType / deleteMarquee
-     *
-     * @param lockKey    Redis 分布式锁 key
-     * @param configKey  pic_system 表的 syskey
-     * @param itemToRemove 要移除的项
-     */
+    // 加锁、查现有、移除、更新、清缓存
     private void removeFromConfigList(String lockKey, String configKey, String itemToRemove) {
         if (!distributedLockService.tryLock(lockKey, 30)) {
             throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "其他节点正在修改,请稍后再试");
@@ -240,5 +209,3 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         }
     }
 }
-
-

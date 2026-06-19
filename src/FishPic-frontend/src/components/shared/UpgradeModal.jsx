@@ -1,21 +1,17 @@
 import UpgradeContent from './UpgradeContent'
 
 function UpgradeModal({ open, onClose, onConfirm, cancelButtonText }) {
-  const handleClose = () => {
-    onClose()
-  }
-
   if (!open) return null
 
   return (
-    <div className="upgrade-overlay" onClick={handleClose}>
+    <div className="upgrade-overlay" onClick={onClose}>
       <div className="upgrade-content" onClick={(e) => e.stopPropagation()}>
         <UpgradeContent
-          onCancel={handleClose}
+          onCancel={onClose}
           cancelButtonText={cancelButtonText}
           onConfirm={(plan) => {
-            if (onConfirm) onConfirm(plan)
-            handleClose()
+            onConfirm?.(plan)
+            onClose()
           }}
         />
       </div>

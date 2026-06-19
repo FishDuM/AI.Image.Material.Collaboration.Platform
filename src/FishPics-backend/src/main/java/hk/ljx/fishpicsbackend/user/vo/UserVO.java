@@ -7,7 +7,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -17,7 +16,7 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class UserVO implements Serializable {
+public class UserVO {
 
     private Long id;
     private String username;
@@ -37,12 +36,6 @@ public class UserVO implements Serializable {
     private String token;
     private LocalDateTime createTime;
     private List<Long> roleIds;
-
-    // 隐私设置
-    private Integer isPrivateFollows;
-    private Integer isPrivatePostCollect;
-    private Integer isPrivateLikes;
-    private Integer isPrivateFans;
 
     // ---- 工厂方法，不同场景返回不同字段 ----
 
@@ -64,9 +57,7 @@ public class UserVO implements Serializable {
     // 个人资料页
     public static UserVO ofInfo(Long id, String username, String nickname, String avatar,
                                  String email, String phone, Integer level, Integer roleId, String role,
-                                 LocalDateTime createTime, Integer isPrivateFollows,
-                                 Integer isPrivatePostCollect, Integer isPrivateLikes,
-                                 Integer isPrivateFans) {
+                                 LocalDateTime createTime) {
         return UserVO.builder()
                 .id(id)
                 .username(username)
@@ -78,10 +69,6 @@ public class UserVO implements Serializable {
                 .roleId(roleId)
                 .role(role)
                 .createTime(createTime)
-                .isPrivateFollows(isPrivateFollows)
-                .isPrivatePostCollect(isPrivatePostCollect)
-                .isPrivateLikes(isPrivateLikes)
-                .isPrivateFans(isPrivateFans)
                 .build();
     }
 

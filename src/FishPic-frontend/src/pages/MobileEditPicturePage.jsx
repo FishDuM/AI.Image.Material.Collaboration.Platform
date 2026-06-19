@@ -3,8 +3,9 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Form, Input, Select, Button, message } from 'antd'
 import MobilePageWrapper from '../components/MobilePageWrapper'
 import { updatePicture, getPictureEditMessage, submitAiTag } from '../api'
-import { useSystemTypes } from '../hooks/useRequestUtils'
+import { useSystemTypes } from '../hooks/useSystemTypes'
 import { AuthContext } from '../context/AuthContext'
+import { isVipUser } from '../utils/constants'
 import './MobileEditPicturePage.css'
 
 export default function MobileEditPicturePage() {
@@ -12,17 +13,10 @@ export default function MobileEditPicturePage() {
   const navigate = useNavigate()
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
-  const [systemTags, setSystemTags] = useState([])
+  const systemTags = useSystemTypes()
   const { userInfo } = useContext(AuthContext)
-  const { fetchSystemTypes } = useSystemTypes()
 
   const { pictureId, pictureUrl, pictureName, introduction, tags } = location.state || {}
-
-  useEffect(() => {
-    fetchSystemTypes().then(result => {
-      if (Array.isArray(result)) setSystemTags(result)
-    }).catch(() => {})
-  }, [])
 
   useEffect(() => {
     if (!pictureId) return
@@ -94,7 +88,7 @@ export default function MobileEditPicturePage() {
             <Form.Item name="tags" label="标签">
               <Select mode="multiple" placeholder="请选择标签" allowClear options={systemTags.map(t => ({ label: t, value: t }))} />
             </Form.Item>
-            {(userInfo?.level === 1 || userInfo?.level === 2) && (
+            {isVipUser(userInfo?.level) && (
               <Form.Item>
               <Button block onClick={async () => {
                 try {

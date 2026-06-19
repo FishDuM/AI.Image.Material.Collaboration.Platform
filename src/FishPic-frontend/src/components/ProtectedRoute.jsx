@@ -4,10 +4,6 @@ import { Spin, message } from 'antd'
 import { AuthContext } from '../context/AuthContext'
 import { useIsMobile } from '../hooks/useIsMobile'
 
-/**
- * 路由守卫组件
- * 支持 permission 属性：要求用户拥有指定权限码才可访问
- */
 function ProtectedRoute({ children, requireAdmin = false, permission }) {
   const auth = useContext(AuthContext)
   const location = useLocation()
@@ -15,7 +11,6 @@ function ProtectedRoute({ children, requireAdmin = false, permission }) {
   const hasPrompted = useRef(false)
 
   useEffect(() => {
-    // 监听认证过期事件（非主动退出），显示提示
     const handleExpired = () => {
       if (!hasPrompted.current) {
         hasPrompted.current = true
@@ -49,7 +44,6 @@ function ProtectedRoute({ children, requireAdmin = false, permission }) {
     }
   }
 
-  // 按权限码控制
   if (permission) {
     const perms = auth.userInfo?.permissions || []
     const required = Array.isArray(permission) ? permission : [permission]

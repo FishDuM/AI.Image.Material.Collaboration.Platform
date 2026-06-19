@@ -65,6 +65,8 @@ public class MultipartUploadCoordinator {
                 RedisConstants.FILE_UPLOAD_TTL * 3600);
         if (!newUploadId.equals(uploadId)) {
             log.warn("[uploadChunk] uploadId race: cosKey={}, mine={}, actual={}", cosKey, newUploadId, uploadId);
+            // 竞争失败，abort 泄漏的 COS 分片上传
+            cosService.abortMultipartUpload(cosKey, newUploadId);
         }
         return uploadId;
     }
@@ -148,27 +150,14 @@ public class MultipartUploadCoordinator {
             pictureMapper.deleteById(context.pictureId());
             log.error("[mergeChunks] COS merge failed, DB picture deleted: pictureId={}, cosKey={}",
                     context.pictureId(), context.cosKey());
-        } catch (Exception ex) {
-            log.error("[mergeChunks] failed to delete picture after COS merge failure: pictureId={}",
-                    context.pictureId(), ex);
-        }
-        try {
             quotaManager.release(context.space(), context.size());
-        } catch (Exception ex) {
-            log.error("[mergeChunks] failed to release quota: space={}, size={}",
-                    context.space().getId(), context.size(), ex);
-        }
-        if (context.resourceId() != null) {
-            try {
+            if (context.resourceId() != null) {
                 fileResourceService.decrementRefCount(context.resourceId());
-            } catch (Exception ex) {
-                log.error("[mergeChunks] failed to rollback file_resource: resourceId={}", context.resourceId(), ex);
             }
-        }
-        try {
             uploadSessionStore.cleanup(context.md5(), true, context.userId());
         } catch (Exception ex) {
-            log.warn("[mergeChunks] failed to cleanup upload session: md5={}", context.md5(), ex);
+            log.error("[mergeChunks] cleanup after COS merge failure partially failed: pictureId={}, cosKey={}",
+                    context.pictureId(), context.cosKey(), ex);
         }
     }
 

@@ -18,8 +18,7 @@ public class SecurityHeaderFilter implements Filter {
         HttpServletResponse httpResponse = (HttpServletResponse) response;
         httpResponse.setHeader("X-Content-Type-Options", "nosniff");
         httpResponse.setHeader("X-Frame-Options", "DENY");
-        httpResponse.setHeader("X-XSS-Protection", "1; mode=block");
-        httpResponse.setHeader("Cache-Control", "no-store");
+        httpResponse.setHeader("X-XSS-Protection", "0");
         chain.doFilter(request, response);
     }
 }

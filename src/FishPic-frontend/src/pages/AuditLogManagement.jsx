@@ -80,11 +80,6 @@ function AuditLogManagement() {
     setPageSize(pagination.pageSize)
   }
 
-  const formatTime = (t) => {
-    if (!t) return '-'
-    return new Date(t).toLocaleString('zh-CN')
-  }
-
   if (!userInfo) {
     return (
       <main className="audit-log-container">
@@ -108,7 +103,7 @@ function AuditLogManagement() {
     { title: 'IP', dataIndex: 'ip', key: 'ip', width: 130 },
     {
       title: '时间', dataIndex: 'createTime', key: 'createTime', width: 180,
-      render: (t) => formatTime(t),
+      render: (t) => t ? new Date(t).toLocaleString('zh-CN') : '-',
     },
   ]
 

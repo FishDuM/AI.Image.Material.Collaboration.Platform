@@ -28,8 +28,7 @@ public interface PictureService extends IService<Picture> {
 
     IPage<PictureVO> getAdminPictureList(AdminPictureListDTO dto);
 
-    // status: 1=通过 0=拒绝
-    void reviewPicture(Long pictureId, Integer status, Integer selected);
+    void reviewPicture(Long pictureId, Integer selected);
 
     String deletePicture(DeleteByIdListRequest deleteByIdList);
 

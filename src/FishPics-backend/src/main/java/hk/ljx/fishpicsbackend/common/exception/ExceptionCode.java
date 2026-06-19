@@ -7,7 +7,7 @@ import org.springframework.http.HttpStatus;
 public enum ExceptionCode {
     SUCCESS(1, "success"),
     PARAMETER_ERROR(40001, "参数错误"),
-    UNAUTHORIZED(40002, "无权限"),
+    UNAUTHORIZED(40002, "未认证"),
     FORBIDDEN(40003, "禁止访问"),
     CONFLICT(40009, "操作冲突"),
     NOT_FOUND(40004, "资源未找到"),

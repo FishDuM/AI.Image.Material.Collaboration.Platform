@@ -37,25 +37,14 @@ public class CosService {
     @Value("${cos.url}")
     private String url;
 
-    /**
-     * 上传路径前缀
-     */
     private static final String UPLOAD_PREFIX = "picture/";
 
-    /**
-     * 生成唯一的 COS key
-     */
+    // timestamp_uuid.webp
     public String generateKey() {
         return UPLOAD_PREFIX + System.currentTimeMillis() + "_" + UUID.randomUUID().toString(true) + ".webp";
     }
 
-    /**
-     * 上传图片到腾讯云COS（MultipartFile 上传）
-     * 纯 COS 操作，不含业务校验
-     *
-     * @param file 前端上传的文件
-     * @return cos文件唯一key
-     */
+    // 纯 COS 上传，不含业务校验
     public String uploadPicture(MultipartFile file) {
         ExcUtils.throwIfTrue(file == null || file.isEmpty(), "上传文件不能为空");
 
@@ -74,16 +63,10 @@ public class CosService {
         return key;
     }
 
-    /**
-     * 上传图片到腾讯云COS（InputStream 上传，用于 URL 下载等场景）
-     *
-     * @param inputStream   图片输入流
-     * @param contentLength 图片字节数
-     * @return cos文件唯一key
-     */
+    // InputStream 上传（URL 下载等场景用）
     public String uploadPicture(InputStream inputStream, long contentLength) {
         String key = UPLOAD_PREFIX + System.currentTimeMillis() + "_" + UUID.randomUUID().toString(true) + ".webp";
-        try {
+        try (inputStream) {
             ObjectMetadata metadata = new ObjectMetadata();
             metadata.setContentLength(contentLength);
 
@@ -101,32 +84,22 @@ public class CosService {
         return key;
     }
 
-    /**
-     * 根据 COS 的文件 key 获取访问 URL
-     */
-    public String getImageUrl(String key) {
+    private void requireKey(String key) {
         ExcUtils.throwIfTrue(key == null || key.isEmpty(), "文件key不能为空");
+    }
+
+    public String getImageUrl(String key) {
+        requireKey(key);
         return "https://" + bucket + ".cos." + region + ".myqcloud.com/" + key;
     }
 
-    /**
-     * 上传图片并返回 url
-     * 
-     * @param file 图片文件
-     * @return 图片 url
-     */
     public String uploadAndGetImageUrl(MultipartFile file) {
         String key = uploadPicture(file);
         return getImageUrl(key);
     }
 
-    /**
-     * 根据 COS 的文件 key 删除文件
-     * 
-     * @param key 文件唯一标识
-     */
     public void deletePicture(String key) {
-        ExcUtils.throwIfTrue(key == null || key.isEmpty(), "文件key不能为空");
+        requireKey(key);
         try {
             cosClient.deleteObject(bucket, key);
         } catch (Exception e) {
@@ -135,10 +108,7 @@ public class CosService {
         }
     }
 
-    /**
-     * 根据完整 URL 删除 COS 文件
-     * 校验 URL host 等于当前 bucket，防止通过拼接 URL 误删其他 bucket 的文件
-     */
+    // 校验 URL host 必须是当前 bucket，防止误删别的 bucket
     public void deletePictureByUrl(String allUrl) {
         ExcUtils.throwIfTrue(allUrl == null || allUrl.isEmpty(), "文件URL不能为空");
         // 使用 URI 解析提取路径，避免依赖配置 URL 的精确格式
@@ -168,11 +138,7 @@ public class CosService {
         }
     }
 
-    /**
-     * 根据 COS 的文件 key 获取图片信息（宽高、大小、格式）
-     * 优先使用 imageInfo 查询参数（不下载完整图片）获取精确元数据；
-     * 如果失败（文件不存在、格式不支持等），降级为仅获取文件大小
-     */
+    // 优先用 imageInfo 查元数据，失败则降级只拿文件大小
     public PictureMetadata getPictureMetadata(String key) {
         PictureMetadata metadata = new PictureMetadata();
 
@@ -187,11 +153,19 @@ public class CosService {
 
             try (COSObjectInputStream inputStream = cosObject.getObjectContent()) {
                 String imageInfoJson = IoUtil.readUtf8(inputStream);
-                log.info("图片信息 JSON：{}", imageInfoJson);
                 Map<String, Object> imageInfo = JSONUtil.parseObj(imageInfoJson);
                 metadata.setWidth(String.valueOf(imageInfo.get("width")));
                 metadata.setHeight(String.valueOf(imageInfo.get("height")));
-                metadata.setSize(String.valueOf(imageInfo.get("size")));
+                Object sizeVal = imageInfo.get("size");
+                if (sizeVal instanceof Number) {
+                    metadata.setSize(((Number) sizeVal).longValue());
+                } else if (sizeVal instanceof String) {
+                    try {
+                        metadata.setSize(Long.parseLong((String) sizeVal));
+                    } catch (NumberFormatException ignored) {
+                        // size 字符串无法解析，后续降级处理
+                    }
+                }
             }
         } catch (BaseException e) {
             throw e;
@@ -203,12 +177,24 @@ public class CosService {
                 if (objectMetadata == null) {
                     throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "COS 文件不存在: " + key);
                 }
-                metadata.setSize(String.valueOf(objectMetadata.getContentLength()));
+                metadata.setSize(objectMetadata.getContentLength());
             } catch (BaseException be) {
                 throw be;
             } catch (Exception ex) {
                 log.error("获取图片信息最终失败: key={}", key, ex);
                 throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "获取图片信息失败");
+            }
+        }
+
+        // imageInfo 成功但 size 仍为空时，降级用 getObjectMetadata 补充
+        if (metadata.getSize() == null) {
+            try {
+                ObjectMetadata objectMetadata = cosClient.getObjectMetadata(bucket, key);
+                if (objectMetadata != null) {
+                    metadata.setSize(objectMetadata.getContentLength());
+                }
+            } catch (Exception ex) {
+                log.warn("降级获取文件大小失败: key={}", key, ex);
             }
         }
 
@@ -222,15 +208,8 @@ public class CosService {
 
     // ==================== 预签名 URL ====================
 
-    /**
-     * 生成 COS 预签名 URL（用于分享场景）
-     *
-     * @param key             COS 文件 key
-     * @param expirationSeconds 有效期（秒）
-     * @return 预签名 URL
-     */
     public String getPresignedUrl(String key, int expirationSeconds) {
-        ExcUtils.throwIfTrue(key == null || key.isEmpty(), "文件key不能为空");
+        requireKey(key);
         Date expiration = new Date(System.currentTimeMillis() + expirationSeconds * 1000L);
         GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(bucket, key);
         request.setExpiration(expiration);
@@ -241,14 +220,8 @@ public class CosService {
 
     // ==================== 分片上传方法 ====================
 
-    /**
-     * 初始化分片上传
-     *
-     * @param cosKey COS 存储路径
-     * @return uploadId
-     */
     public byte[] getObjectBytes(String key) {
-        ExcUtils.throwIfTrue(key == null || key.isEmpty(), "文件key不能为空");
+        requireKey(key);
         try (COSObject cosObject = cosClient.getObject(bucket, key);
              COSObjectInputStream inputStream = cosObject.getObjectContent()) {
             return IoUtil.readBytes(inputStream);
@@ -259,7 +232,7 @@ public class CosService {
     }
 
     public String getObjectContentType(String key) {
-        ExcUtils.throwIfTrue(key == null || key.isEmpty(), "文件key不能为空");
+        requireKey(key);
         try {
             ObjectMetadata metadata = cosClient.getObjectMetadata(bucket, key);
             String contentType = metadata != null ? metadata.getContentType() : null;
@@ -276,16 +249,6 @@ public class CosService {
         return result.getUploadId();
     }
 
-    /**
-     * 上传单个分片
-     *
-     * @param cosKey      COS 存储路径
-     * @param uploadId    分片上传 ID
-     * @param partNumber  分片编号（从 1 开始）
-     * @param inputStream 分片数据流
-     * @param partSize    分片大小
-     * @return ETag
-     */
     public String uploadPart(String cosKey, String uploadId, int partNumber,
                              InputStream inputStream, long partSize) {
         UploadPartRequest request = new UploadPartRequest();
@@ -299,13 +262,6 @@ public class CosService {
         return result.getETag();
     }
 
-    /**
-     * 完成分片上传（合并分片）
-     *
-     * @param cosKey      COS 存储路径
-     * @param uploadId    分片上传 ID
-     * @param partETags   分片 ETag 列表（需按分片编号排序）
-     */
     public void completeMultipartUpload(String cosKey, String uploadId,
                                         List<PartETag> partETags) {
         CompleteMultipartUploadRequest request = new CompleteMultipartUploadRequest(
@@ -313,9 +269,7 @@ public class CosService {
         cosClient.completeMultipartUpload(request);
     }
 
-    /**
-     * 放弃未完成的分片上传，防止 COS 端残留 multipart session
-     */
+    // COS 会自动清理未完成的分片上传，这里主动调一下
     public void abortMultipartUpload(String cosKey, String uploadId) {
         try {
             AbortMultipartUploadRequest request = new AbortMultipartUploadRequest(bucket, cosKey, uploadId);
@@ -326,9 +280,6 @@ public class CosService {
         }
     }
 
-    /**
-     * V12-#8:从配置 url 字符串解析 host
-     */
     private static String parseHost(String url) {
         if (url == null) return null;
         try {

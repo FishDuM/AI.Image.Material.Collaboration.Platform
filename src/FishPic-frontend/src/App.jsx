@@ -21,7 +21,6 @@ const AdminPictureManagement = lazy(() => import('./pages/AdminPictureManagement
 const PrivateSpace = lazy(() => import('./pages/PrivateSpace'))
 const TeamSpace = lazy(() => import('./pages/TeamSpace'))
 const TeamSpaceDetail = lazy(() => import('./pages/TeamSpaceDetail'))
-const Notifications = lazy(() => import('./pages/Notifications'))
 const MobileLoginPage = lazy(() => import('./pages/MobileLoginPage'))
 const MobileRegisterPage = lazy(() => import('./pages/MobileRegisterPage'))
 const MobileEditPicturePage = lazy(() => import('./pages/MobileEditPicturePage'))
@@ -60,7 +59,7 @@ function RouteErrorFallback() {
   )
 }
 
-// 包装懒加载组件的路由级错误边界
+// 路由级错误边界，懒加载组件用
 function RouteWithBoundary({ children }) {
   return (
     <ErrorBoundary fallback={<RouteErrorFallback />}>
@@ -95,7 +94,6 @@ function App() {
               <Route path="/private-space" element={<RouteWithBoundary><ProtectedRoute><PrivateSpace /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/team-space" element={<RouteWithBoundary><ProtectedRoute><TeamSpace /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/team-space/:id" element={<RouteWithBoundary><ProtectedRoute><TeamSpaceDetail /></ProtectedRoute></RouteWithBoundary>} />
-              <Route path="/notifications" element={<RouteWithBoundary><ProtectedRoute><Notifications /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/ai-tools" element={<RouteWithBoundary><ProtectedRoute><AIImageTools /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/admin/users" element={<RouteWithBoundary><ProtectedRoute permission="system:user:manage"><UserManagement /></ProtectedRoute></RouteWithBoundary>} />
               <Route path="/admin/pictures" element={<RouteWithBoundary><ProtectedRoute permission="system:log:manage"><AdminPictureManagement /></ProtectedRoute></RouteWithBoundary>} />

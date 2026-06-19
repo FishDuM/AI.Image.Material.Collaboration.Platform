@@ -53,7 +53,7 @@ public class UserQueryManager {
         ExcUtils.throwIfTrue(fresh == null, ExceptionCode.NOT_FOUND, "用户不存在");
         return UserVO.ofInfo(fresh.getId(), fresh.getUsername(), fresh.getNickname(), fresh.getAvatar(),
                 fresh.getEmail(), fresh.getPhone(), fresh.getLevel(), fresh.getRole(), null,
-                fresh.getCreateTime(), null, null, null, null);
+                fresh.getCreateTime());
     }
 
     public UserVO getUserProfile(Long userId) {

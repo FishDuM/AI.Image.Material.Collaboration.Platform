@@ -1,4 +1,4 @@
-import { useCallback, useContext } from 'react'
+import { useContext } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LeftOutlined } from '@ant-design/icons'
 import { ThemeContext } from '../context/ThemeContext'
@@ -11,13 +11,13 @@ export default function MobilePageWrapper({ title, titleContent, children, onClo
   const theme = isDarkMode ? 'dark' : 'light'
   const isMobile = useIsMobile()
 
-  const handleBack = useCallback(() => {
+  const handleBack = () => {
     if (onClose) {
       onClose()
     } else {
       navigate(-1)
     }
-  }, [onClose, navigate])
+  }
 
   if (!isMobile) return null
 

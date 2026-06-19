@@ -8,6 +8,10 @@ public interface UserConstants {
     // 验证码
     String CHECK_CODE = "data:image/png;base64,";
 
+    // 密码长度
+    int PASSWORD_MIN_LENGTH = 8;
+    int PASSWORD_MAX_LENGTH = 32;
+
     // 个人信息类
     String DEFAULT_NICK_NAME = "小鱼籽_";
 

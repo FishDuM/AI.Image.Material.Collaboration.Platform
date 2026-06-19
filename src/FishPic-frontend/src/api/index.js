@@ -19,19 +19,16 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`
     }
     return config
-  },
-  (error) => {
-    return Promise.reject(error)
   }
 )
 
 api.interceptors.response.use(
   (response) => {
-    if (!response || !response.config) return response
     const newToken = response.headers['x-new-token']
     if (newToken) {
       saveToken(newToken)
     }
+    consecutiveAuthFailures = 0
     if (response.config.responseType === 'blob') {
       return response.data
     }
@@ -52,7 +49,7 @@ api.interceptors.response.use(
       businessError.data = responseData
       return Promise.reject(businessError)
     }
-    return responseData.data ?? responseData
+    return Object.prototype.hasOwnProperty.call(responseData, 'data') ? responseData.data : responseData
   },
   (error) => {
     if (axios.isCancel(error)) {
@@ -60,6 +57,14 @@ api.interceptors.response.use(
     }
     if (error.response?.status === 401) {
       handleAuthExpired()
+    }
+    // 提取后端业务错误消息，替换 Axios 默认的英文提示
+    const bizMessage = error.response?.data?.message
+    if (bizMessage) {
+      const bizError = new Error(bizMessage)
+      bizError.code = error.response.data.code
+      bizError.data = error.response.data
+      return Promise.reject(bizError)
     }
     return Promise.reject(error)
   }
@@ -144,7 +149,7 @@ export const uploadAvatar = (formData, onProgress) => api.post('/picture/avatar'
 })
 
 export const getMarquee = () => api.get('/system/marquee')
-export const addMarquee = (pictureIds) => api.post('/system/addMarquee', { pictureId: pictureIds })
+export const addMarquee = (pictureIds) => api.post('/system/addMarquee', { pictureIds })
 export const addSystemType = (tag) => api.post('/system/addList', { value: [tag] })
 export const deleteSystemType = (tag) => api.post('/system/deleteType', { value: tag })
 export const deleteMarquee = (url) => api.post('/system/deleteMarquee', { url })
@@ -157,15 +162,15 @@ export const getPictureList = (current = 1, pageSize = 20, config = {}, tag = ''
   return api.post('/picture/list', data, config)
 }
 
-export const getAdminPictureList = (current = 1, pageSize = 20, status) => {
+export const getAdminPictureList = (current = 1, pageSize = 20, selected) => {
   const body = { current, pageSize }
-  if (status !== undefined && status !== null) {
-    body.status = status
+  if (selected != null) {
+    body.selected = selected
   }
   return api.post('/picture/admin/list', body)
 }
 
-export const reviewPicture = (pictureId, status, selected) => api.post('/picture/admin/review', { pictureId, status, selected })
+export const reviewPicture = (pictureId, selected) => api.post('/picture/admin/review', { pictureId, selected })
 
 export const createSpace = (data) => api.post('/space/create', data)
 

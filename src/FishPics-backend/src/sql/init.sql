@@ -64,13 +64,11 @@ CREATE TABLE picture (
     width        INT UNSIGNED                       NULL COMMENT '宽度(像素)',
     height       INT UNSIGNED                       NULL COMMENT '高度(像素)',
     size         BIGINT                             NULL COMMENT '文件大小(Byte)',
-    status       TINYINT  DEFAULT 2                 NULL COMMENT '状态 1=正常 0=禁用 2=待审核',
-    is_private   TINYINT  DEFAULT 1                 NOT NULL COMMENT '0=公开 1=私有',
     space_id     BIGINT                             NULL COMMENT '所属空间ID',
     resource_id  BIGINT                             NULL COMMENT '关联file_resource.id（文件去重）',
     introduction VARCHAR(256)                       NULL COMMENT '图片介绍',
     type         VARCHAR(32)                        NULL COMMENT '图片格式',
-    is_selected  TINYINT  DEFAULT 0                 NOT NULL COMMENT '是否精选 0=普通 1=精选',
+    is_selected  TINYINT  DEFAULT 0                 NOT NULL COMMENT '是否精选 0=普通 1=精选 2=申请中',
     version      BIGINT   DEFAULT 1                 NOT NULL COMMENT '乐观锁版本号',
     create_time  DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL COMMENT '创建时间',
     update_time  DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -78,7 +76,7 @@ CREATE TABLE picture (
     INDEX idx_space_id (space_id),
     INDEX idx_picture_name (picture_name),
     INDEX idx_introduction (introduction),
-    INDEX idx_status (status),
+    INDEX idx_is_selected (is_selected),
     INDEX idx_update_time (update_time),
     UNIQUE KEY uk_resource_user_space (resource_id, user_id, space_id)
 ) COMMENT '图片表';
@@ -188,3 +186,9 @@ CREATE TABLE picture_share_item (
     KEY idx_share_id (share_id),
     KEY idx_picture_id (picture_id)
 ) COMMENT '分享图片关联表';
+
+ALTER TABLE picture
+    DROP COLUMN status,
+    DROP COLUMN is_private,
+    DROP INDEX idx_status,
+    ADD INDEX idx_is_selected (is_selected);

@@ -14,12 +14,9 @@ import CropperEditor from './CropperEditor'
 import './CollaborativeCanvas.css'
 
 const sameId = (left, right) => String(left) === String(right)
-const hasId = (value) => value !== null && value !== undefined && value !== ''
+const hasId = (value) => value != null && value !== ''
 
-/**
- * 协同编辑画布组件
- */
-export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId, updatedAt, onSuccess, onClose }) {
+export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId, updatedAt, onSuccess, onClose, onFileReplaced }) {
   const { message } = App.useApp()
   const [scale, setScale] = useState(1)
   const [rotation, setRotation] = useState(0)
@@ -30,15 +27,12 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
   const [myUserId, setMyUserId] = useState(null)
   const [imageNaturalSize, setImageNaturalSize] = useState(null)
 
-  // 编辑权状态
   const [lockedBy, setLockedBy] = useState(null)
   const [lockedNickname, setLockedNickname] = useState('')
 
-  // 裁剪状态
   const [cropMode, setCropMode] = useState(false)
   const [cropData, setCropData] = useState(null) // { x, y, w, h } 原图像素坐标
 
-  // 操作历史栈
   const [history, setHistory] = useState([])
 
   const proxyUrlRef = useRef('')
@@ -48,6 +42,11 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
   const cropperRef = useRef(null)
   const pendingLockRef = useRef(false)
   const wasMyLockRef = useRef(false)
+  const lockedByRef = useRef(null)
+  const onCloseRef = useRef(onClose)
+  const onFileReplacedRef = useRef(onFileReplaced)
+  useEffect(() => { onCloseRef.current = onClose }, [onClose])
+  useEffect(() => { onFileReplacedRef.current = onFileReplaced }, [onFileReplaced])
 
   const isMyLock = lockedBy != null && hasId(myUserId) && sameId(lockedBy, myUserId)
   const isOtherLock = lockedBy != null && (!hasId(myUserId) || !sameId(lockedBy, myUserId))
@@ -76,7 +75,6 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
     return `inset(${top}% ${right}% ${bottom}% ${left}%)`
   }, [cropData, imageNaturalSize])
 
-  // ---- WebSocket 消息处理 ----
   const handleMessage = useCallback((data) => {
     switch (data.type) {
       case 'transform':
@@ -88,10 +86,13 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
         break
       case 'lock':
         if (sameId(data.pictureId, pictureId)) {
+          const prevLockedBy = lockedByRef.current
           setLockedBy(data.userId)
           setLockedNickname(data.nickname || '')
+          lockedByRef.current = data.userId
           pendingLockRef.current = false
-          if (hasId(myUserIdRef.current) && !sameId(data.userId, myUserIdRef.current)) {
+          // 仅当锁定者发生变化时才提示（避免重连 resync 重复弹）
+          if (hasId(myUserIdRef.current) && !sameId(data.userId, myUserIdRef.current) && !sameId(data.userId, prevLockedBy)) {
             message.info(`${data.nickname || '用户'} 开始编辑`)
           }
           if (hasId(myUserIdRef.current) && sameId(data.userId, myUserIdRef.current)) {
@@ -103,6 +104,7 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
         if (sameId(data.pictureId, pictureId)) {
           setLockedBy(data.userId)
           setLockedNickname(data.nickname || '')
+          lockedByRef.current = data.userId
           pendingLockRef.current = false
           wasMyLockRef.current = false
           message.warning(`${data.nickname || '用户'} 正在编辑，当前仅查看`)
@@ -111,6 +113,7 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
       case 'unlock':
         if (sameId(data.pictureId, pictureId)) {
           setLockedBy(null); setLockedNickname('')
+          lockedByRef.current = null
           wasMyLockRef.current = false
         }
         break
@@ -132,20 +135,27 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
         break
       case 'file-replaced':
         if (sameId(data.pictureId, pictureId)) {
-          setScale(1); setRotation(0); setCropData(null)
-          setHistory([])
-          setReloadTick(prev => prev + 1)
-          const fromName = data.fromNickname || '其他用户'
-          message.info(`图片已被 ${fromName} 更新,正在重新加载`)
+          const isMyReplace = hasId(myUserIdRef.current) && sameId(data.userId, myUserIdRef.current)
+          if (isMyReplace) {
+            // 保存者自己：重新加载图片
+            setScale(1); setRotation(0); setCropData(null)
+            setHistory([])
+            setReloadTick(prev => prev + 1)
+          } else {
+            // 其他查看者：关闭弹窗并刷新列表
+            const fromName = data.fromNickname || '其他用户'
+            message.info(`图片已被 ${fromName} 更新`)
+            onFileReplacedRef.current?.()
+            onCloseRef.current?.()
+          }
         }
         break
       default: break
     }
-  }, [pictureId, message, isMyLock])
+  }, [pictureId, message])
 
   const sendMsgRef = useRef(null)
 
-  // WebSocket 就绪时发送 lock
   const handleWsReady = useCallback(() => {
     if (pendingLockRef.current) {
       pendingLockRef.current = false
@@ -169,7 +179,6 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
     }
   }, [connected, sendMessage, pictureId])
 
-  // 打开时重置状态
   useEffect(() => {
     if (open) {
       setScale(1); setRotation(0); setOnlineUsers([])
@@ -177,6 +186,7 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
       setHistory([]); setCropMode(false); setCropData(null)
       proxyUrlRef.current = proxyUrl
       pendingLockRef.current = true
+      lockedByRef.current = null
 
       try {
         const token = getToken()
@@ -191,9 +201,8 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
         setMyUserId(null)
       }
     }
-  }, [open, proxyUrl]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, proxyUrl])
 
-  // 关闭时释放锁
   useEffect(() => {
     return () => {
       if (open && wasMyLockRef.current) {
@@ -203,14 +212,17 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
     }
   }, [open, pictureId])
 
-  // ---- 操作 ----
+  const scaleRef = useRef(scale)
+  const rotationRef = useRef(rotation)
+  const cropDataRef = useRef(cropData)
+  useEffect(() => { scaleRef.current = scale; rotationRef.current = rotation; cropDataRef.current = cropData }, [scale, rotation, cropData])
 
   const emitTransform = useCallback((newScale, newRotation, crop) => {
-    setHistory(prev => [...prev, { scale, rotation, cropData }])
+    setHistory(prev => [...prev, { scale: scaleRef.current, rotation: rotationRef.current, cropData: cropDataRef.current }])
     const msg = { type: 'transform', pictureId, scale: newScale, rotation: newRotation }
     if (crop) msg.crop = crop
     sendMessage(msg)
-  }, [sendMessage, pictureId, scale, rotation, cropData]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sendMessage, pictureId])
 
   const handleUndo = useCallback(() => {
     setHistory(prev => {
@@ -229,7 +241,6 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
   const handleRotateLeft = () => { if (!isEditable || cropMode) return; const n = rotation - 90; setRotation(n); emitTransform(scale, n, cropData) }
   const handleRotateRight = () => { if (!isEditable || cropMode) return; const n = rotation + 90; setRotation(n); emitTransform(scale, n, cropData) }
 
-  // 裁剪模式
   const handleEnterCrop = () => { if (!isEditable) return; setCropMode(true) }
 
   const handleCropConfirm = () => {
@@ -260,17 +271,31 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
     sendMessage({ type: 'lock', pictureId })
   }
 
-  // ---- 保存 ----
   const handleSave = async () => {
     if (!isMyLockRef.current) {
       message.warning('只有当前编辑者可以保存')
       return
     }
     setSaving(true)
+    let blobUrl = null
     try {
+      // 通过 fetch + blob URL 加载图片，避免 canvas 跨域污染
+      // 优先走代理，失败则用直链（需 COS 配置了 CORS）
+      let imgSrc = imageUrl
+      try {
+        const res = await fetch(proxyUrlRef.current)
+        if (res.ok) {
+          const blob = await res.blob()
+          blobUrl = URL.createObjectURL(blob)
+          imgSrc = blobUrl
+        }
+      } catch {
+        // 代理不可用，回退到直链
+      }
+
       const img = new Image()
       img.crossOrigin = 'anonymous'
-      await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = proxyUrlRef.current })
+      await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = imgSrc })
 
       const radians = (rotation * Math.PI) / 180
       const cos = Math.abs(Math.cos(radians)), sin = Math.abs(Math.sin(radians))
@@ -321,11 +346,11 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
     } catch (e) {
       message.error(e?.message || '保存失败')
     } finally {
+      if (blobUrl) URL.revokeObjectURL(blobUrl)
       setSaving(false)
     }
   }
 
-  // ---- 渲染 ----
   const renderStatusBar = () => {
     if (isMyLock) return <div className="collab-status-bar collab-status-editing">✏️ 你正在编辑</div>
     if (isOtherLock) return <div className="collab-status-bar collab-status-viewing">👁️ {lockedNickname} 正在编辑（仅查看）</div>
@@ -336,8 +361,7 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
   const extraCount = onlineUsers.length - 5
 
   return (
-    <>
-      <Modal
+    <Modal
         title="协同编辑"
         open={open}
         onCancel={onClose}
@@ -376,7 +400,7 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
         {renderStatusBar()}
         <div className="collab-canvas-container" ref={containerRef}>
           {loading && !cropMode && (
-            <div className="collab-loading"><Spin description="加载图片中..." /></div>
+            <div className="collab-loading"><Spin>加载图片中...</Spin></div>
           )}
 
           {cropMode ? (
@@ -442,7 +466,6 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
             </div>
           )}
         </div>
-      </Modal>
-    </>
+    </Modal>
   )
 }

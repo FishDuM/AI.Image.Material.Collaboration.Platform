@@ -20,8 +20,7 @@ export default function MobileEditProfilePage() {
 
   const fetchUserData = useCallback(async () => {
     try {
-      const res = await getUserMyself()
-      const data = res?.data || res
+      const data = await getUserMyself()
       setUserData(data)
       form.setFieldsValue({
         username: data.username,
@@ -54,8 +53,7 @@ export default function MobileEditProfilePage() {
       const formData = new FormData()
       formData.append('file', file)
       formData.append('id', userData.id)
-      const res = await uploadAvatar(formData)
-      const newAvatar = res?.data || res
+      const newAvatar = await uploadAvatar(formData)
       if (typeof newAvatar === 'string' && newAvatar.startsWith('http')) {
         setUserData(prev => ({ ...prev, avatar: newAvatar }))
         updateUserInfo(prev => ({ ...prev, avatar: newAvatar }))
@@ -69,10 +67,6 @@ export default function MobileEditProfilePage() {
   }
 
   const handleFinish = async (values) => {
-    if (!userData?.id) {
-      message.error('用户信息尚未加载完成,请稍后再试')
-      return
-    }
     setLoading(true)
     try {
       const submitData = {

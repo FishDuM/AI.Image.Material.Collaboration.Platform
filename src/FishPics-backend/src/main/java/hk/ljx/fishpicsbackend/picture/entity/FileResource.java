@@ -17,40 +17,21 @@ import java.time.LocalDateTime;
 @TableName(value = "file_resource")
 @Data
 public class FileResource implements Serializable {
-    /**
-     * 主键
-     */
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    /**
-     * 文件MD5
-     */
     private String md5;
 
-    /**
-     * 文件大小(Byte)
-     */
+    /** 文件大小(Byte) */
     private Long size;
 
-    /**
-     * COS存储路径
-     */
+    /** COS存储路径 */
     private String cosKey;
 
-    /**
-     * 引用计数
-     */
     private Integer refCount;
 
-    /**
-     * 创建时间
-     */
     private LocalDateTime createTime;
 
-    /**
-     * 乐观锁版本号
-     */
     @Version
     private Integer version;
 

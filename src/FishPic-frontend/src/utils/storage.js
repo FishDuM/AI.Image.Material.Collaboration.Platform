@@ -1,4 +1,5 @@
 const USER_KEY = 'fishpics_user_info'
+// LEGACY: 从 localStorage 迁移到 sessionStorage，key 名相同但存储位置不同
 const LEGACY_TOKEN_KEY = 'fishpics_auth_token'
 const TOKEN_KEY = 'fishpics_auth_token'
 const LEGACY_ENC_KEY_STORAGE = 'fishpics_enc_key'

@@ -4,9 +4,6 @@ import { RotateLeftOutlined, RotateRightOutlined, ZoomInOutlined, ZoomOutOutline
 import Cropper from 'cropperjs'
 import 'cropperjs/dist/cropper.css'
 
-/**
- * Shared cropper editor with toolbar.
- */
 const CropperEditor = forwardRef(function CropperEditor(
   { src, aspectRatio = NaN, onReady },
   ref,
@@ -25,7 +22,6 @@ const CropperEditor = forwardRef(function CropperEditor(
     getCropper: () => cropperRef.current,
   }))
 
-  // Initialize cropper when src changes
   useEffect(() => {
     if (!src) {
       destroyCropper()

@@ -19,21 +19,15 @@ public class PictureShare implements Serializable {
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    /** 图片ID */
     private Long pictureId;
 
-    /** 分享人ID */
     private Long shareUserId;
 
     /** 分享令牌(明文,只在创建时返回给调用方一次) */
     private String shareToken;
 
-    /**
-     * token 哈希
-     */
     private String shareTokenHash;
 
-    /** 过期时间 */
     private LocalDateTime expireTime;
 
     /** 是否允许下载 0=仅预览 1=允许 */
@@ -49,7 +43,6 @@ public class PictureShare implements Serializable {
     @TableField(exist = false)
     private Integer viewCount;
 
-    /** 创建时间 */
     private LocalDateTime createTime;
 
     private static final long serialVersionUID = 1L;

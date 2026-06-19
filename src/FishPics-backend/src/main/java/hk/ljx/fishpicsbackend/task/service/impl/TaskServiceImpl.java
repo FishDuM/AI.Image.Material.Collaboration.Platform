@@ -49,7 +49,7 @@ public class TaskServiceImpl extends ServiceImpl<TaskMapper, Task> implements Ta
             dispatchTask(task.getTaskId());
         }
 
-        log.info("task submitted: taskId={}, bizType={}, bizId={}", task.getTaskId(), bizType, bizId);
+        log.debug("task submitted: taskId={}, bizType={}, bizId={}", task.getTaskId(), bizType, bizId);
         return task.getTaskId();
     }
 

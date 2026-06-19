@@ -60,9 +60,7 @@ public class AiController {
     @RequireLogin
     @GetMapping("/tags/result/{taskId}")
     public Response<Task> getTagResult(@PathVariable String taskId) {
-        Task task = aiService.getTagResult(taskId);
-        resolveTaskOwnership(task);
-        return Response.ok(task);
+        return Response.ok(aiService.getTagResult(taskId));
     }
 
     @RequireLogin
@@ -78,9 +76,7 @@ public class AiController {
     @RequireLogin
     @GetMapping("/draw/result/{taskId}")
     public Response<Task> getDrawResult(@PathVariable String taskId) {
-        Task task = aiService.getDrawResult(taskId);
-        resolveTaskOwnership(task);
-        return Response.ok(task);
+        return Response.ok(aiService.getDrawResult(taskId));
     }
 
     /**
@@ -94,31 +90,15 @@ public class AiController {
 
         // 任务已完成，直接返回
         if ("DONE".equals(task.getStatus())) {
-            SseEmitter emitter = new SseEmitter(5_000L);
-            try {
-                emitter.send(SseEmitter.event().name("result")
-                        .data(Map.of("taskId", taskId, "status", "DONE",
-                                "result", task.getResult() != null ? task.getResult() : "")));
-                emitter.complete();
-            } catch (Exception e) {
-                emitter.completeWithError(e);
-            }
-            return emitter;
+            return sendImmediateSse(taskId, Map.of("taskId", taskId, "status", "DONE",
+                    "result", task.getResult() != null ? task.getResult() : ""));
         }
         if ("FAILED".equals(task.getStatus())) {
-            SseEmitter emitter = new SseEmitter(5_000L);
-            try {
-                emitter.send(SseEmitter.event().name("result")
-                        .data(Map.of("taskId", taskId, "status", "FAILED",
-                                "errorMsg", task.getErrorMsg() != null ? task.getErrorMsg() : "")));
-                emitter.complete();
-            } catch (Exception e) {
-                emitter.completeWithError(e);
-            }
-            return emitter;
+            return sendImmediateSse(taskId, Map.of("taskId", taskId, "status", "FAILED",
+                    "errorMsg", task.getErrorMsg() != null ? task.getErrorMsg() : ""));
         }
 
-        // 任务仍在处理，注册 SSE 等待推送
+        // 还在处理，注册 SSE 等结果推送
         return sseEmitterRegistry.register(taskId);
     }
 
@@ -172,7 +152,21 @@ public class AiController {
     }
 
     /**
-     * 校验任务存在性和所有权（getTagResult/getDrawResult/subscribeResult 共用）
+     * 任务已终结时直接发送 SSE 事件（消除 DONE/FAILED 分支重复）
+     */
+    private SseEmitter sendImmediateSse(String taskId, Map<String, String> data) {
+        SseEmitter emitter = new SseEmitter(5_000L);
+        try {
+            emitter.send(SseEmitter.event().name("result").data(data));
+            emitter.complete();
+        } catch (Exception e) {
+            emitter.completeWithError(e);
+        }
+        return emitter;
+    }
+
+    /**
+     * 校验任务存在性和所有权（subscribeResult 使用，因 getTaskByTaskId 未做权限校验）
      */
     private void resolveTaskOwnership(Task task) {
         ExcUtils.throwIfTrue(task == null, ExceptionCode.NOT_FOUND, "任务不存在");

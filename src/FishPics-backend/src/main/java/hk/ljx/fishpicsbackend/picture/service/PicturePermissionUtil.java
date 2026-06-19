@@ -86,12 +86,13 @@ public final class PicturePermissionUtil {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
         if (!spaceIds.isEmpty()) {
-            Set<Long> ownedSpaceIds = teamMemberMapper.selectList(
+            // 与 checkWrite 保持一致：可写成员（owner + member）均可删除
+            Set<Long> writableSpaceIds = teamMemberMapper.selectList(
                             new LambdaQueryWrapper<SpaceTeamMember>()
                                     .in(SpaceTeamMember::getSpaceId, spaceIds)
-                                    .eq(SpaceTeamMember::getUserId, current.getId())
-                                    .eq(SpaceTeamMember::getRoleId, TeamMemberRole.OWNER.code()))
+                                    .eq(SpaceTeamMember::getUserId, current.getId()))
                     .stream()
+                    .filter(m -> TeamMemberRole.isWritable(m.getRoleId()))
                     .map(SpaceTeamMember::getSpaceId)
                     .filter(Objects::nonNull)
                     .collect(Collectors.toSet());
@@ -99,7 +100,7 @@ public final class PicturePermissionUtil {
             pictures.stream()
                     .filter(p -> p.getId() != null
                             && p.getSpaceId() != null
-                            && ownedSpaceIds.contains(p.getSpaceId()))
+                            && writableSpaceIds.contains(p.getSpaceId()))
                     .map(Picture::getId)
                     .forEach(allowedIds::add);
         }

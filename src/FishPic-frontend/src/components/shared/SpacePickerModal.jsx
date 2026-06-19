@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { App, Modal, Button, Tabs, Pagination, Spin, Empty } from 'antd'
 import { CheckOutlined, LeftOutlined, TeamOutlined } from '@ant-design/icons'
 import { listSpace, spaceListPicture } from '../../api'
+import { MAX_SELECT_COUNT } from '../../utils/constants'
 
 function SpacePickerModal({ open, onClose, onConfirm, currentImageCount, existingImageIds = [] }) {
   const { message: msg } = App.useApp()
@@ -102,8 +103,8 @@ function SpacePickerModal({ open, onClose, onConfirm, currentImageCount, existin
       msg.warning('该图片已添加，请勿重复选择')
       return
     }
-    if (currentImageCount + selectedItems.length >= 15) {
-      msg.warning(`最多只能选择15张图片（已选择${currentImageCount}张）`)
+    if (currentImageCount + selectedItems.length >= MAX_SELECT_COUNT) {
+      msg.warning(`最多只能选择${MAX_SELECT_COUNT}张图片（已选择${currentImageCount}张）`)
       return
     }
     setSelectedItems(prev => [...prev, img])
@@ -163,7 +164,7 @@ function SpacePickerModal({ open, onClose, onConfirm, currentImageCount, existin
         onChange={onPageChange}
       />
       <span className="space-picker-limit-hint">
-        {currentImageCount > 0 || selectedIds.length > 0 ? `已选 ${currentImageCount + selectedIds.length} 张，还可选 ${Math.max(0, 15 - currentImageCount - selectedIds.length)} 张` : `最多可选 15 张`}
+        {currentImageCount > 0 || selectedIds.length > 0 ? `已选 ${currentImageCount + selectedIds.length} 张，还可选 ${Math.max(0, MAX_SELECT_COUNT - currentImageCount - selectedIds.length)} 张` : `最多可选 ${MAX_SELECT_COUNT} 张`}
       </span>
     </div>
   )

@@ -3,10 +3,10 @@ import { getUserInfo } from './storage'
 export const ALLOWED_IMAGE_TYPES = [
   'image/jpeg',
   'image/png',
-  'image/jpg',
   'image/gif',
   'image/webp',
   'image/heic',
+  'image/heif',
   'image/bmp',
   'image/avif',
   'image/tiff',
@@ -14,7 +14,7 @@ export const ALLOWED_IMAGE_TYPES = [
   'image/x-eps',
 ]
 
-/** 浏览器 <img> 能渲染的 MIME 类型 */
+// 浏览器 <img> 能渲染的 MIME 类型
 export const BROWSER_RENDERABLE_TYPES = [
   'image/jpeg',
   'image/png',
@@ -56,9 +56,6 @@ export function formatMaxUploadSize() {
   return `${Math.round(bytes / 1024 / 1024)}MB`
 }
 
-/**
- * 判断文件是否为允许的图片格式
- */
 export function isAllowedImageFile(file) {
   if (ALLOWED_IMAGE_TYPES.includes(file.type)) return true
   if (!file.name) return false

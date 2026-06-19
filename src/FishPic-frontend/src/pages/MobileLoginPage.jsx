@@ -44,7 +44,6 @@ export default function MobileLoginPage() {
       message.success('登录成功')
       authLogin(result)
       form.resetFields()
-      // 登录成功后,如果 url 带 ?redirect=...,跳回原页面
       const redirect = searchParams.get('redirect')
       const safeRedirect = redirect && /^\/(?!\/)/.test(redirect) ? redirect : '/'
       navigate(safeRedirect, { replace: true })

@@ -119,7 +119,8 @@ public class TaskProcessor {
                         .eq(Task::getTaskId, taskId)
                         .eq(Task::getStatus, "PROCESSING")
                         .apply("update_time < DATE_SUB(NOW(), INTERVAL 5 MINUTE)")
-                        .set(Task::getUpdateTime, LocalDateTime.now()));
+                        .set(Task::getUpdateTime, LocalDateTime.now())
+                        .set(Task::getRetryCount, 0));
         if (reclaimed == 0) {
             log.warn("task re-claim failed, skipping: taskId={}", taskId);
             return false;

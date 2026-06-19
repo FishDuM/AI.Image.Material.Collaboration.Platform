@@ -45,7 +45,11 @@ public class AiServiceImpl implements AiService {
 
     private static final String CONFIG_LOCK_KEY = "ai:config:update";
 
-    /** AI 配置默认值 */
+    private static final String FIELD_TAGGING = "taggingEnabled";
+    private static final String FIELD_EDITING = "editingEnabled";
+    private static final String FIELD_GENERATION = "generationEnabled";
+    private static final String FIELD_RECOMMENDATION = "recommendationEnabled";
+
     private static AiConfigDTO defaultConfig() {
         return AiConfigDTO.withDefaults();
     }
@@ -74,9 +78,6 @@ public class AiServiceImpl implements AiService {
     @Resource
     private RedisCacheManager cacheManager;
 
-    /**
-     * 提交图片标签任务
-     */
     @Override
     public String submitTagTask(Long pictureId) {
         User user = LoginContextHelper.requireUser();
@@ -86,10 +87,7 @@ public class AiServiceImpl implements AiService {
         ExcUtils.throwIfTrue(picture == null, "图片不存在");
         ExcUtils.throwIfTrue(picture.getUserId() == null, "图片数据异常");
         ExcUtils.throwIfTrue(!user.getId().equals(picture.getUserId()), ExceptionCode.FORBIDDEN, "只能对自己的图片触发 AI 标签识别");
-        ExcUtils.throwIfTrue(picture.getIsPrivate() != null && picture.getIsPrivate() == 1,
-                ExceptionCode.FORBIDDEN, "私密图片不能使用 AI 功能");
 
-        // 月度配额检查
         aiQuotaManager.checkAndConsume("tag", user.getId(), user.getLevel());
 
         // 防双击/重试导致重复提交任务
@@ -112,9 +110,6 @@ public class AiServiceImpl implements AiService {
         return task;
     }
 
-    /**
-     * AI 生图（月度配额制：普通用户禁用，VIP 50次/月，SVIP 200次/月）
-     */
     @Override
     public String submitDrawTask(AiDrawPictureDTO drawPictureDTO, Long userId) {
         ExcUtils.throwIfTrue(drawPictureDTO == null || drawPictureDTO.getDescription() == null,
@@ -129,10 +124,8 @@ public class AiServiceImpl implements AiService {
                 ExceptionCode.FORBIDDEN, "用户身份不匹配");
         int level = user.getLevel() != null ? user.getLevel() : 0;
 
-        // 月度配额检查
         aiQuotaManager.checkAndConsume("draw", userId, level);
 
-        // 去重
         String dedupInput = description
                 + "|" + (drawPictureDTO.getStyle() != null ? drawPictureDTO.getStyle() : "")
                 + "|" + (drawPictureDTO.getSize() != null ? drawPictureDTO.getSize() : "")
@@ -195,7 +188,6 @@ public class AiServiceImpl implements AiService {
         ExcUtils.throwIfTrue(task == null, ExceptionCode.NOT_FOUND, "任务不存在");
 
         User user = LoginContextHelper.requireUser();
-        // 已登录但不是任务 owner → FORBIDDEN
         ExcUtils.throwIfTrue(!user.getId().equals(task.getUserId()), ExceptionCode.FORBIDDEN, "无权下载此任务结果");
         ExcUtils.throwIfTrue(!"ai_draw".equals(task.getBizType()), ExceptionCode.PARAMETER_ERROR, "任务类型不支持下载");
         ExcUtils.throwIfTrue(!"DONE".equals(task.getStatus()), ExceptionCode.PARAMETER_ERROR, "任务尚未完成");
@@ -203,37 +195,26 @@ public class AiServiceImpl implements AiService {
         return task.getResult();
     }
 
-    /**
-     * 从 AiController 移到 AiService，让其他端点能查 AiConfig 开关
-     * 无配置记录/null 字段 = 全开
-     * editingEnabled 特殊：默认 false（无对应端点实现）
-     * Redis TTL 缓存：复用 sysConfigCache
-     */
+    // 无配置/null = 全开；editingEnabled 默认 false（还没实现对应端点）
+    // 缓存复用 sysConfigCache
     @Override
     public boolean isFeatureEnabled(String fieldName) {
         try {
-            AiConfigDTO config = cacheManager.getSysConfigCache().get(SysConstants.AI_CONFIG_KEY, AiConfigDTO.class);
+            AiConfigDTO config = loadAiConfig();
             if (config == null) {
-                // 缓存miss，查数据库
-                List<PicSystem> records = picSystemMapper.selectList(
-                        new LambdaQueryWrapper<PicSystem>().eq(PicSystem::getSyskey, SysConstants.AI_CONFIG_KEY));
-                if (records == null || records.isEmpty() || records.get(0).getSysvalue() == null) {
-                    // 无配置:tagging/generation/recommendation 默认开,editing 默认关
-                    return !"editingEnabled".equals(fieldName);
-                }
-                config = JSONUtil.toBean(records.get(0).getSysvalue(), AiConfigDTO.class);
-                cacheManager.getSysConfigCache().put(SysConstants.AI_CONFIG_KEY, config);
+                // 无配置:tagging/generation/recommendation 默认开,editing 默认关
+                return !FIELD_EDITING.equals(fieldName);
             }
             switch (fieldName) {
-                case "taggingEnabled": return config.getTaggingEnabled() == null || config.getTaggingEnabled();
-                case "editingEnabled": return config.getEditingEnabled() != null && config.getEditingEnabled();
-                case "generationEnabled": return config.getGenerationEnabled() == null || config.getGenerationEnabled();
-                case "recommendationEnabled": return config.getRecommendationEnabled() == null || config.getRecommendationEnabled();
+                case FIELD_TAGGING: return config.getTaggingEnabled() == null || config.getTaggingEnabled();
+                case FIELD_EDITING: return config.getEditingEnabled() != null && config.getEditingEnabled();
+                case FIELD_GENERATION: return config.getGenerationEnabled() == null || config.getGenerationEnabled();
+                case FIELD_RECOMMENDATION: return config.getRecommendationEnabled() == null || config.getRecommendationEnabled();
                 default: return true;
             }
         } catch (Exception e) {
-            log.warn("read AI config failed, default to enabled: {}", e.getMessage());
-            return true;
+            log.warn("[AI] isFeatureEnabled check failed for {}, defaulting to false: {}", fieldName, e.getMessage());
+            return false;
         }
     }
 
@@ -302,28 +283,47 @@ public class AiServiceImpl implements AiService {
 
     @Override
     public AiStatsVO getAdminStats() {
-        AiStatsVO stats = new AiStatsVO();
-        stats.setTotalTasks(taskService.count());
-        stats.setSuccessTasks(taskService.count(new LambdaQueryWrapper<Task>().eq(Task::getStatus, "DONE")));
-        stats.setFailedTasks(taskService.count(new LambdaQueryWrapper<Task>().eq(Task::getStatus, "FAILED")));
-        stats.setProcessingTasks(taskService.count(new LambdaQueryWrapper<Task>().in(Task::getStatus, "PENDING", "PROCESSING")));
+        // 单条 SQL 聚合查询，避免 5 次独立 count
+        List<Map<String, Object>> rows = taskService.getBaseMapper().selectMaps(
+                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<Task>()
+                        .select("status",
+                                "COUNT(*) AS cnt",
+                                "SUM(CASE WHEN biz_type='ai_tag' THEN 1 ELSE 0 END) AS tag_cnt",
+                                "SUM(CASE WHEN biz_type='ai_draw' THEN 1 ELSE 0 END) AS draw_cnt")
+                        .groupBy("status"));
 
+        long total = 0, success = 0, failed = 0, processing = 0, tagCount = 0, drawCount = 0;
+        for (Map<String, Object> row : rows) {
+            long cnt = ((Number) row.get("cnt")).longValue();
+            total += cnt;
+            String status = (String) row.get("status");
+            if ("DONE".equals(status)) success = cnt;
+            else if ("FAILED".equals(status)) failed = cnt;
+            else processing += cnt;
+            tagCount += ((Number) row.get("tag_cnt")).longValue();
+            drawCount += ((Number) row.get("draw_cnt")).longValue();
+        }
+
+        AiStatsVO stats = new AiStatsVO();
+        stats.setTotalTasks(total);
+        stats.setSuccessTasks(success);
+        stats.setFailedTasks(failed);
+        stats.setProcessingTasks(processing);
         Map<String, Long> typeCounts = new HashMap<>();
-        typeCounts.put("0", taskService.count(new LambdaQueryWrapper<Task>().eq(Task::getBizType, "ai_tag")));
-        typeCounts.put("2", taskService.count(new LambdaQueryWrapper<Task>().eq(Task::getBizType, "ai_draw")));
+        typeCounts.put("0", tagCount);
+        typeCounts.put("2", drawCount);
         stats.setTypeCounts(typeCounts);
         return stats;
     }
 
     @Override
     public AiConfigDTO getAdminConfig() {
-        List<PicSystem> records = picSystemMapper.selectList(
-                new LambdaQueryWrapper<PicSystem>().eq(PicSystem::getSyskey, SysConstants.AI_CONFIG_KEY));
+        AiConfigDTO config = loadAiConfig();
+        return config != null ? config : defaultConfig();
+    }
 
-        if (records == null || records.isEmpty() || records.get(0).getSysvalue() == null) {
-            return defaultConfig();
-        }
-        return JSONUtil.toBean(records.get(0).getSysvalue(), AiConfigDTO.class);
+    private AiConfigDTO loadAiConfig() {
+        return aiQuotaManager.loadRawConfig();
     }
 
     @Override

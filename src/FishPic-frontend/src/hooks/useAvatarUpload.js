@@ -2,7 +2,6 @@ import { useState, useCallback, createElement } from 'react'
 import { App as AntApp } from 'antd'
 import { PlusOutlined, LoadingOutlined } from '@ant-design/icons'
 import { uploadAvatar } from '../api'
-import { getBase64 } from '../utils/upload'
 
 export function useAvatarUpload({ userId, onSuccess }) {
   const { message } = AntApp.useApp()
@@ -15,12 +14,8 @@ export function useAvatarUpload({ userId, onSuccess }) {
       return
     }
     if (info.file.status === 'done') {
-      const url = await getBase64(info.file.originFileObj)
       setUploading(false)
-      setPreviewUrl(url)
-      if (info.file.response) {
-        setPreviewUrl(info.file.response)
-      }
+      setPreviewUrl(info.file.response || null)
       onSuccess?.()
       message.success('头像上传成功')
     }
@@ -44,10 +39,10 @@ export function useAvatarUpload({ userId, onSuccess }) {
     }
   }, [userId])
 
-  const reset = useCallback(() => {
+  const reset = () => {
     setPreviewUrl(null)
     setUploading(false)
-  }, [])
+  }
 
   const uploadButton = createElement(
     'button',

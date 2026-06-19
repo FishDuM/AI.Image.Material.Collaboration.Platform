@@ -9,7 +9,6 @@ import hk.ljx.fishpicsbackend.common.annotation.RequireLogin;
 import hk.ljx.fishpicsbackend.common.cache.RedisCacheManager;
 import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
 import hk.ljx.fishpicsbackend.common.constants.UserConstants;
-import hk.ljx.fishpicsbackend.common.context.LoginContext;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.Response;
@@ -19,7 +18,6 @@ import hk.ljx.fishpicsbackend.user.dto.*;
 import hk.ljx.fishpicsbackend.user.service.UserService;
 import hk.ljx.fishpicsbackend.user.vo.*;
 
-import java.util.ArrayList;
 import java.util.List;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
@@ -94,7 +92,7 @@ public class UserController {
                                         HttpServletRequest request, HttpServletResponse response) {
         String currentJwt = JwtUtils.extractJwt(request);
         Boolean result = userService.editMyself(userEditRequest, currentJwt);
-        // 改完密码 → 给前端下发新 token(走 X-New-Token header,前端 axios 拦截器已自动 saveToken)
+        // 改完密码后下发新 token（X-New-Token header，前端 axios 拦截器自动保存）
         if (Boolean.TRUE.equals(result) && userEditRequest.getPassword() != null
                 && !userEditRequest.getPassword().isEmpty()) {
             UserVO me = userService.getMyselfMessage();

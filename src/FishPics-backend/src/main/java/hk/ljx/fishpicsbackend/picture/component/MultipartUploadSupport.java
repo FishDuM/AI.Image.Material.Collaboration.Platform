@@ -4,11 +4,9 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import hk.ljx.fishpicsbackend.common.context.LoginContext;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.infra.CosService;
-import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
 import hk.ljx.fishpicsbackend.picture.dto.MergeChunksRequest;
@@ -24,8 +22,6 @@ import org.springframework.stereotype.Component;
 import static hk.ljx.fishpicsbackend.common.constants.SpaceConstants.UPLOAD_MAX_SIZE_NORMAL;
 import static hk.ljx.fishpicsbackend.common.constants.SpaceConstants.UPLOAD_MAX_SIZE_SVIP;
 import static hk.ljx.fishpicsbackend.common.constants.SpaceConstants.UPLOAD_MAX_SIZE_VIP;
-import static hk.ljx.fishpicsbackend.picture.constants.PictureConstants.STATUS_APPROVED;
-import static hk.ljx.fishpicsbackend.picture.constants.PictureConstants.STATUS_PENDING_REVIEW;
 
 @Slf4j
 @Component
@@ -84,7 +80,7 @@ public class MultipartUploadSupport {
         return switch (level) {
             case 1 -> UPLOAD_MAX_SIZE_VIP;
             case 2 -> UPLOAD_MAX_SIZE_SVIP;
-            default -> UPLOAD_MAX_SIZE_SVIP;
+            default -> UPLOAD_MAX_SIZE_NORMAL;
         };
     }
 
@@ -101,7 +97,6 @@ public class MultipartUploadSupport {
         picture.setSize(size);
         picture.setSpaceId(space.getId());
         picture.setResourceId(resource.getId());
-        picture.setStatus(resolveInitialPictureStatus());
         ExcUtils.throwIfTrue(pictureMapper.insert(picture) != 1, "保存图片失败");
         return picture;
     }
@@ -119,7 +114,6 @@ public class MultipartUploadSupport {
         picture.setSize(resource.getSize());
         picture.setSpaceId(space.getId());
         picture.setResourceId(resource.getId());
-        picture.setStatus(resolveInitialPictureStatus());
 
         try {
             ExcUtils.throwIfTrue(pictureMapper.insert(picture) != 1, "save picture failed");
@@ -147,12 +141,5 @@ public class MultipartUploadSupport {
         String fileName = cosKey.substring(cosKey.lastIndexOf('/') + 1);
         int dotIndex = fileName.lastIndexOf('.');
         return dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName;
-    }
-
-    private int resolveInitialPictureStatus() {
-        LoginContext context = UserHolder.getLoginContext();
-        return context != null && context.hasSystemPerm("system:user:manage")
-                ? STATUS_APPROVED
-                : STATUS_PENDING_REVIEW;
     }
 }

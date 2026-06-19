@@ -30,6 +30,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import static hk.ljx.fishpicsbackend.common.constants.UserConstants.DEFAULT_NICK_NAME;
+import static hk.ljx.fishpicsbackend.common.constants.UserConstants.PASSWORD_MAX_LENGTH;
+import static hk.ljx.fishpicsbackend.common.constants.UserConstants.PASSWORD_MIN_LENGTH;
 
 @Component
 @Slf4j
@@ -37,8 +39,6 @@ public class UserManager {
 
     private static final int USERNAME_MIN_LENGTH = 6;
     private static final int USERNAME_MAX_LENGTH = 30;
-    private static final int PASSWORD_MIN_LENGTH = 8;
-    private static final int PASSWORD_MAX_LENGTH = 32;
     private static final String DEFAULT_AVATAR_URL = "https://avatars.githubusercontent.com/u/179127403?v=4";
 
     @Resource
@@ -113,7 +113,7 @@ public class UserManager {
         if (user == null || !credentialOk) {
             throw new BaseException(ExceptionCode.PARAMETER_ERROR, "账号或密码错误");
         }
-        ExcUtils.throwIfTrue(!ExcUtils.eq(user.getStatus(), 1),
+        ExcUtils.throwIfTrue(!user.isActive(),
                 ExceptionCode.PARAMETER_ERROR, "账号已被禁用");
 
         String jwt = jwtUtils.sign(user.getId());
@@ -193,10 +193,10 @@ public class UserManager {
         }
 
         if (StrUtil.isNotBlank(request.getNickname())) {
-            request.setNickname(cleanPlain(request.getNickname()));
+            request.setNickname(XssSanitizer.cleanIfNotBlank(request.getNickname()));
         }
         if (StrUtil.isNotBlank(request.getUsername())) {
-            request.setUsername(cleanPlain(request.getUsername()));
+            request.setUsername(XssSanitizer.cleanIfNotBlank(request.getUsername()));
             validateUsername(request.getUsername(), "账号长度必须为 6-30 位");
             Long dupCount = userMapper.selectCount(new LambdaQueryWrapper<User>()
                     .eq(User::getUsername, request.getUsername())
@@ -219,7 +219,4 @@ public class UserManager {
                 ExceptionCode.PARAMETER_ERROR, "密码长度必须为 8-32 位");
     }
 
-    private String cleanPlain(String value) {
-        return StrUtil.isBlank(value) ? value : XssSanitizer.clean(value);
-    }
 }

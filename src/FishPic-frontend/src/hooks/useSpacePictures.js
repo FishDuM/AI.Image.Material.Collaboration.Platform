@@ -4,9 +4,6 @@ import { useFetchWithCleanup } from './useRequestUtils'
 import { PAGE_SIZE, LOAD_MORE_THRESHOLD } from '../utils/constants'
 import { isCanceledError } from '../utils/error'
 
-/**
- * 图片数据获取 + 搜索 + 无限滚动
- */
 export function usePictureFetch({ spaces = [], spaceId, pageSize = PAGE_SIZE, pagination = false }) {
   const [pictures, setPictures] = useState([])
   const [pictureLoading, setPictureLoading] = useState(false)
@@ -46,7 +43,7 @@ export function usePictureFetch({ spaces = [], spaceId, pageSize = PAGE_SIZE, pa
         setPictures(list)
       }
       setPictureTotal(total)
-      const totalPages = result.pages ?? Math.ceil((result.total || 0) / pageSize)
+      const totalPages = result.pages ?? Math.ceil(total / pageSize)
       currentPageRef.current = page
       setHasMore(page < totalPages)
     } catch (err) {
@@ -91,12 +88,12 @@ export function usePictureFetch({ spaces = [], spaceId, pageSize = PAGE_SIZE, pa
     }
   }, [resolvedSpaceId, refreshPictures, searchKeyword])
 
-  const handleSearchReset = useCallback(() => {
+  const handleSearchReset = () => {
     setSearchKeyword('')
     if (resolvedSpaceId) {
       refreshPictures(resolvedSpaceId, 1, '')
     }
-  }, [resolvedSpaceId, refreshPictures])
+  }
 
   return {
     pictures,
@@ -113,9 +110,6 @@ export function usePictureFetch({ spaces = [], spaceId, pageSize = PAGE_SIZE, pa
   }
 }
 
-/**
- * 批量选择 + 批量删除
- */
 export function useBatchSelection({ spaces = [], spaceId, searchKeyword, refreshPictures, refreshSpaces, message, onAfterDelete }) {
   const [batchMode, setBatchMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState([])
@@ -166,9 +160,6 @@ export function useBatchSelection({ spaces = [], spaceId, searchKeyword, refresh
   }
 }
 
-/**
- * 图片编辑 + 上传 + AI标注
- */
 export function usePictureEditUpload({
   selectedIds,
   setSelectedIds,
@@ -224,7 +215,7 @@ export function usePictureEditUpload({
           tags: Array.isArray(result.tags) ? result.tags : [],
         })
       }
-    }).catch(error => { console.error('[getPictureEditMessage]', error) })
+    }).catch(() => {})
   }, [selectedIds, pictures, isMobile, navigate, message, editPictureForm])
 
   const handleUploadSuccess = useCallback(() => {

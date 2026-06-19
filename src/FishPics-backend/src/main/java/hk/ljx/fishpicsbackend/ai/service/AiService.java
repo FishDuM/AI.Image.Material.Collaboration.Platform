@@ -30,23 +30,11 @@ public interface AiService {
      */
     Task getTaskByTaskId(String taskId);
 
-    /**
-     * 管理后台：分页查询 AI 任务
-     */
     IPage<AiTaskVO> getAdminTasks(AiTaskQueryDTO queryDTO);
 
-    /**
-     * 管理后台：AI 任务统计
-     */
     AiStatsVO getAdminStats();
 
-    /**
-     * 管理后台：获取 AI 配置
-     */
     AiConfigDTO getAdminConfig();
 
-    /**
-     * 管理后台：更新 AI 配置
-     */
     Boolean updateAdminConfig(AiConfigDTO configDTO);
 }

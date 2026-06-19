@@ -50,7 +50,7 @@ public class SystemController {
 
     @GetMapping("/marquee")
     public Response<List<String>> listMarquees() {
-        List<String> urls = picSystemService.getMarquess();
+        List<String> urls = picSystemService.getMarquees();
         return Response.ok(urls);
     }
 

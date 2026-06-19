@@ -14,25 +14,13 @@ import lombok.Data;
 @TableName(value = "picture_tag")
 @Data
 public class PictureTag implements Serializable {
-    /**
-     * 主键
-     */
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    /**
-     * 图片ID
-     */
     private Long pictureId;
 
-    /**
-     * 标签名称
-     */
     private String tagName;
 
-    /**
-     * 创建时间
-     */
     private LocalDateTime createTime;
 
     private static final long serialVersionUID = 1L;

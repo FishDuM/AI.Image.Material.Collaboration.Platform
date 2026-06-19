@@ -10,6 +10,9 @@ import com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeConnectionPropertie
 import hk.ljx.fishpicsbackend.ai.dto.AiDrawPictureDTO;
 import hk.ljx.fishpicsbackend.common.enums.PicturePromptEnum;
 import hk.ljx.fishpicsbackend.common.enums.PictureSizeEnum;
+import hk.ljx.fishpicsbackend.common.exception.BaseException;
+import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
+import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.task.entity.Task;
 import hk.ljx.fishpicsbackend.task.handler.TaskHandler;
 import jakarta.annotation.Resource;
@@ -44,9 +47,8 @@ public class AiDrawTaskHandler implements TaskHandler {
 
     @Override
     public void execute(Task task) throws Exception {
-        if (task.getParam() == null || task.getParam().isBlank()) {
-            throw new RuntimeException("任务参数为空，无法执行AI生图");
-        }
+        ExcUtils.throwIfTrue(task.getParam() == null || task.getParam().isBlank(),
+                ExceptionCode.PARAMETER_ERROR, "任务参数为空，无法执行AI生图");
         AiDrawPictureDTO dto = JSONUtil.toBean(task.getParam(), AiDrawPictureDTO.class);
 
         String description = dto.getDescription();
@@ -70,9 +72,8 @@ public class AiDrawTaskHandler implements TaskHandler {
         parameters.put("size", size);
 
         String apiKey = dashScopeConnectionProperties.getApiKey();
-        if (apiKey == null || apiKey.isBlank()) {
-            throw new RuntimeException("AI 服务 API Key 未配置");
-        }
+        ExcUtils.throwIfTrue(apiKey == null || apiKey.isBlank(),
+                ExceptionCode.SERVICE_UNAVAILABLE, "AI 服务 API Key 未配置");
         MultiModalConversationParam param = MultiModalConversationParam.builder()
                 .apiKey(apiKey)
                 .model("qwen-image-2.0-pro")
@@ -80,47 +81,36 @@ public class AiDrawTaskHandler implements TaskHandler {
                 .parameters(parameters)
                 .build();
 
-        MultiModalConversationResult result;
         MultiModalConversation conv = multiModalConversation;
         CompletableFuture<MultiModalConversationResult> future = CompletableFuture.supplyAsync(() -> {
             try {
                 return conv.call(param);
             } catch (Exception e) {
-                throw new RuntimeException(e);
+                throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "AI 生图执行失败", e);
             }
         }, aiTaskExecutor);
+        MultiModalConversationResult result;
         try {
             result = future.get(AI_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         } catch (TimeoutException e) {
             future.cancel(true);
-            throw new RuntimeException("AI 生图超时（" + AI_TIMEOUT_SECONDS + "秒），请重试");
+            throw new BaseException(ExceptionCode.SERVICE_UNAVAILABLE, "AI 生图超时（" + AI_TIMEOUT_SECONDS + "秒），请重试");
         } catch (ExecutionException e) {
             Throwable cause = e.getCause();
-            throw new RuntimeException("AI 生图失败: " + (cause != null ? cause.getMessage() : e.getMessage()), cause);
+            throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR,
+                    "AI 生图失败: " + (cause != null ? cause.getMessage() : e.getMessage()), cause);
         }
-        // 逐层校验返回结果，拿到生成的图片 URL
-        if (result == null || result.getOutput() == null
-                || result.getOutput().getChoices() == null
-                || result.getOutput().getChoices().isEmpty()) {
-            throw new RuntimeException("AI 生图返回结果为空");
-        }
-        var choice = result.getOutput().getChoices().getFirst();
-        if (choice.getMessage() == null || choice.getMessage().getContent() == null
-                || choice.getMessage().getContent().isEmpty()) {
-            throw new RuntimeException("AI 生图返回内容为空");
-        }
-        var imageEntry = choice.getMessage().getContent().getFirst().get("image");
-        if (imageEntry == null) {
-            throw new RuntimeException("AI 生图返回结果中无图片 URL");
-        }
+        // AI SDK 会在调用失败时自行抛异常，此处只需确认结果非空并提取图片 URL
+        ExcUtils.throwIfTrue(result == null || result.getOutput() == null,
+                ExceptionCode.INTERNAL_SERVER_ERROR, "AI 生图返回结果为空");
+        var content = result.getOutput().getChoices().getFirst().getMessage().getContent();
+        var imageEntry = content != null && !content.isEmpty() ? content.getFirst().get("image") : null;
+        ExcUtils.throwIfTrue(imageEntry == null,
+                ExceptionCode.INTERNAL_SERVER_ERROR, "AI 生图结果格式异常");
         String url = imageEntry.toString();
         log.info("ai draw success: {}", url);
 
         task.setResult(url);
     }
 
-    @Override
-    public void persist(Task task) {
-        // 生图结果不自动入库，前端通过轮询获取 URL
-    }
 }

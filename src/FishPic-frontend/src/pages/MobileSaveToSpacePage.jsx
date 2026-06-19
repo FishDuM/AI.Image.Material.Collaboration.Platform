@@ -4,8 +4,8 @@ import { Alert, App as AntApp, Button, Checkbox, Empty, Spin, Tabs, Tag } from '
 import { LockOutlined, SaveOutlined, TeamOutlined } from '@ant-design/icons'
 import MobilePageWrapper from '../components/MobilePageWrapper'
 import { AuthContext } from '../context/AuthContext'
-import { formatStorage } from '../utils/constants'
-import { SPACE_TYPE_COLOR, SPACE_TYPE_MAP, useSaveToSpace } from '../hooks/useSaveToSpace'
+import { formatStorage, SPACE_TYPE_COLOR, SPACE_TYPE_MAP } from '../utils/constants'
+import { useSaveToSpace } from '../hooks/useSaveToSpace'
 import './MobileSaveToSpacePage.css'
 
 function MobileSaveToSpacePage() {

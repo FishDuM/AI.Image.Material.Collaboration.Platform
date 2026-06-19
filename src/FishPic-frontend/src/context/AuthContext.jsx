@@ -1,5 +1,6 @@
 import { createContext, useState, useEffect, useCallback, useRef } from 'react'
 import { getUserInfo, saveUserInfo, saveToken, getToken, clearAuth } from '../utils/storage'
+import { TOKEN_REFRESH_INTERVAL } from '../utils/constants'
 import { resetAuthFailureCounter } from '../api'
 import { getUser, logout as logoutApi } from '../api'
 
@@ -94,9 +95,8 @@ export function AuthProvider({ children }) {
         if (status === 401 || code === 40005 || code === 40002) {
           return
         }
-        console.warn('[AuthContext] 静默刷新失败:', error?.message || error)
       }
-    }, 5 * 60 * 1000)
+    }, TOKEN_REFRESH_INTERVAL)
 
     return () => clearInterval(interval)
   }, [isAuthenticated])

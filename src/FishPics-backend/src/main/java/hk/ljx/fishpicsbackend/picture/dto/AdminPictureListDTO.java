@@ -12,7 +12,7 @@ import lombok.EqualsAndHashCode;
 public class AdminPictureListDTO extends PageRequest {
 
     /**
-     * 图片状态筛选: 0-禁用 1-正常 2-待审核 4-精选，不传则查全部
+     * 精选状态筛选: 0-普通 1-已精选 2-精选申请中，不传则查全部
      */
-    private Integer status;
+    private Integer selected;
 }

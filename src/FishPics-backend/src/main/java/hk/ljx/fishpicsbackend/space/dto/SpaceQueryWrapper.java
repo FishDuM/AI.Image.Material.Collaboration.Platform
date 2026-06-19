@@ -16,16 +16,13 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class SpaceQueryWrapper extends PageRequest {
 
-    // 空间ID
     private Long id;
 
-    // 空间介绍
     private String introduction;
 
     // 空间类型：0-私人空间，1-团队空间
     private Integer type;
 
-    // 创建者用户ID
     private Long userId;
 
     // 空间存储大小(字节)：私人空间512MB/5GB/10GB，团队空间512MB/30GB/50GB
@@ -34,7 +31,6 @@ public class SpaceQueryWrapper extends PageRequest {
     // 空间等级：0-普通，1-VIP，2-SVIP
     private Integer level;
 
-    // 空间名称
     private String name;
 
 }

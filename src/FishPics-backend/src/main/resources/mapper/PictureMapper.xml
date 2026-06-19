@@ -12,20 +12,19 @@
             <result property="width" column="width" />
             <result property="height" column="height" />
             <result property="size" column="size" />
-            <result property="status" column="status" />
             <result property="createTime" column="create_time" />
             <result property="updateTime" column="update_time" />
-            <result property="isPrivate" column="is_private" />
             <result property="spaceId" column="space_id" />
             <result property="introduction" column="introduction" />
             <result property="type" column="type"/>
             <result property="resourceId" column="resource_id"/>
             <result property="isSelected" column="is_selected"/>
+            <result property="version" column="version"/>
     </resultMap>
 
     <sql id="Base_Column_List">
         id,user_id,picture_name,url,width,height,
-        size,status,create_time,update_time,is_private,
-        space_id,introduction,type,resource_id,is_selected
+        size,create_time,update_time,
+        space_id,introduction,type,resource_id,is_selected,version
     </sql>
 </mapper>

@@ -297,7 +297,7 @@
 }
 
 .tsd-masonry-section {
-  padding: var(--space-4) 0 10;
+  padding: var(--space-4) 0 10px;
 }
 
 .tsd-masonry-section .ant-masonry {

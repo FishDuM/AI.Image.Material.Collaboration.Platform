@@ -74,15 +74,13 @@ function ThemeWrapper({ children }) {
 }
 
 createRoot(document.getElementById('root')).render(
-  <StrictMode>
-    <ErrorBoundary>
-      <ThemeWrapper>
-        <BrowserRouter>
-          <AntdApp>
-            <App/>
-          </AntdApp>
-        </BrowserRouter>
-      </ThemeWrapper>
-    </ErrorBoundary>
-  </StrictMode>,
+  <ErrorBoundary>
+    <ThemeWrapper>
+      <BrowserRouter>
+        <AntdApp>
+          <App/>
+        </AntdApp>
+      </BrowserRouter>
+    </ThemeWrapper>
+  </ErrorBoundary>,
 )

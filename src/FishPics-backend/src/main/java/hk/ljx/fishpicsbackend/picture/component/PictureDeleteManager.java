@@ -9,7 +9,9 @@ import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.infra.CosService;
 import hk.ljx.fishpicsbackend.common.utils.LoginContextHelper;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
+import hk.ljx.fishpicsbackend.mapper.PictureShareItemMapper;
 import hk.ljx.fishpicsbackend.mapper.PictureShareMapper;
+import hk.ljx.fishpicsbackend.picture.entity.PictureShareItem;
 import hk.ljx.fishpicsbackend.mapper.PictureTagMapper;
 import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
 import hk.ljx.fishpicsbackend.mapper.SpaceTeamMemberMapper;
@@ -43,6 +45,9 @@ public class PictureDeleteManager {
 
     @Resource
     private PictureShareMapper pictureShareMapper;
+
+    @Resource
+    private PictureShareItemMapper pictureShareItemMapper;
 
     @Resource
     private PictureTagMapper pictureTagMapper;
@@ -91,16 +96,36 @@ public class PictureDeleteManager {
     }
 
     private void deleteRelations(List<Long> pictureIds) {
+        // 先查出所有关联这些图片的分享ID（包括多图分享中非首图的情况）
+        List<Long> relatedShareIds = pictureShareItemMapper.selectList(
+                new LambdaQueryWrapper<PictureShareItem>()
+                        .in(PictureShareItem::getPictureId, pictureIds))
+                .stream().map(PictureShareItem::getShareId).distinct().collect(Collectors.toList());
+
+        // 删除 PictureShareItem 记录
+        int shareItemCount = pictureShareItemMapper.delete(
+                new LambdaQueryWrapper<PictureShareItem>()
+                        .in(PictureShareItem::getPictureId, pictureIds));
+        if (shareItemCount > 0) {
+            log.debug("deleted picture share items: count={}", shareItemCount);
+        }
+
+        // 也删除以这些图片为首图的分享记录
         int shareCount = pictureShareMapper.delete(new LambdaQueryWrapper<PictureShare>()
                 .in(PictureShare::getPictureId, pictureIds));
+        // 额外删除通过 PictureShareItem 关联到的分享记录（多图分享中非首图的情况）
+        if (!relatedShareIds.isEmpty()) {
+            shareCount += pictureShareMapper.delete(new LambdaQueryWrapper<PictureShare>()
+                    .in(PictureShare::getId, relatedShareIds));
+        }
         if (shareCount > 0) {
-            log.info("deleted picture shares: count={}", shareCount);
+            log.debug("deleted picture shares: count={}", shareCount);
         }
 
         int tagCount = pictureTagMapper.delete(new LambdaQueryWrapper<PictureTag>()
                 .in(PictureTag::getPictureId, pictureIds));
         if (tagCount > 0) {
-            log.info("deleted picture tags: count={}", tagCount);
+            log.debug("deleted picture tags: count={}", tagCount);
         }
     }
 

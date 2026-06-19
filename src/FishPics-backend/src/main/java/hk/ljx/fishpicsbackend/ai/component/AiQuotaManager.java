@@ -40,14 +40,7 @@ public class AiQuotaManager {
     private static final String QUOTA_KEY_PREFIX = "AI:QUOTA:";
     private static final DateTimeFormatter MONTH_FMT = DateTimeFormatter.ofPattern("yyyyMM");
 
-    /**
-     * 检查并消费一次 AI 配额
-     *
-     * @param feature "tag" 或 "draw"
-     * @param userId  用户 ID
-     * @param level   用户等级 (0=普通, 1=VIP, 2=SVIP)
-     * @return 本月剩余次数
-     */
+    // feature: "tag" 或 "draw"，level: 0=普通 1=VIP 2=SVIP
     public int checkAndConsume(String feature, Long userId, Integer level) {
         if (level == null || level <= 0) {
             throw new BaseException(ExceptionCode.FORBIDDEN, "升级 VIP 解锁 AI 功能");
@@ -75,7 +68,7 @@ public class AiQuotaManager {
         }
 
         int remaining = limit - (used != null ? used.intValue() : 0);
-        log.info("AI配额消耗: userId={}, feature={}, used={}, limit={}, remaining={}",
+        log.debug("AI配额消耗: userId={}, feature={}, used={}, limit={}, remaining={}",
                 userId, feature, used, limit, remaining);
         return remaining;
     }
@@ -108,19 +101,31 @@ public class AiQuotaManager {
         };
     }
 
-    private AiConfigDTO loadConfig() {
+    /**
+     * 加载 AI 配置（公共方法）：先查 Redis 缓存，再查数据库，解析 JSON。
+     * 无配置记录时返回 null。
+     */
+    public AiConfigDTO loadRawConfig() {
         AiConfigDTO config = cacheManager.getSysConfigCache().get(SysConstants.AI_CONFIG_KEY, AiConfigDTO.class);
         if (config != null) return config;
 
         List<PicSystem> records = picSystemMapper.selectList(
                 new LambdaQueryWrapper<PicSystem>().eq(PicSystem::getSyskey, SysConstants.AI_CONFIG_KEY));
         if (records == null || records.isEmpty() || records.get(0).getSysvalue() == null) {
-            return defaultQuotaConfig();
+            return null;
         }
         config = JSONUtil.toBean(records.get(0).getSysvalue(), AiConfigDTO.class);
-        // 补齐配额默认值（兼容旧数据无配额字段的情况）
-        config.fillDefaults();
         cacheManager.getSysConfigCache().put(SysConstants.AI_CONFIG_KEY, config);
+        return config;
+    }
+
+    private AiConfigDTO loadConfig() {
+        AiConfigDTO config = loadRawConfig();
+        if (config == null) {
+            return defaultQuotaConfig();
+        }
+        // 兼容旧数据：补齐配额默认值
+        config.fillDefaults();
         return config;
     }
 

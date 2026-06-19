@@ -25,12 +25,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Objects;
 
+import static hk.ljx.fishpicsbackend.common.constants.UserConstants.PASSWORD_MAX_LENGTH;
+import static hk.ljx.fishpicsbackend.common.constants.UserConstants.PASSWORD_MIN_LENGTH;
+
 @Component
 @Slf4j
 public class UserAdminManager {
-
-    private static final int PASSWORD_MIN_LENGTH = 8;
-    private static final int PASSWORD_MAX_LENGTH = 32;
 
     @Resource
     private UserMapper userMapper;
@@ -152,13 +152,9 @@ public class UserAdminManager {
     }
 
     private void cleanAdminEditRequest(UserEditByAdminRequest request) {
-        request.setUsername(cleanPlain(request.getUsername()));
-        request.setNickname(cleanPlain(request.getNickname()));
-        request.setEmail(cleanPlain(request.getEmail()));
-        request.setPhone(cleanPlain(request.getPhone()));
-    }
-
-    private String cleanPlain(String value) {
-        return StrUtil.isBlank(value) ? value : XssSanitizer.clean(value);
+        request.setUsername(XssSanitizer.cleanIfNotBlank(request.getUsername()));
+        request.setNickname(XssSanitizer.cleanIfNotBlank(request.getNickname()));
+        request.setEmail(XssSanitizer.cleanIfNotBlank(request.getEmail()));
+        request.setPhone(XssSanitizer.cleanIfNotBlank(request.getPhone()));
     }
 }

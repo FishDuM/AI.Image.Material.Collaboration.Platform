@@ -5,10 +5,10 @@ import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import hk.ljx.fishpicsbackend.collab.CollabSessionRegistry;
 import hk.ljx.fishpicsbackend.common.cache.RedisCacheManager;
+import hk.ljx.fishpicsbackend.common.constants.SpaceConstants;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.utils.LoginContextHelper;
-import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
 import hk.ljx.fishpicsbackend.mapper.SpaceTeamMemberMapper;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
 import hk.ljx.fishpicsbackend.space.dto.TeamChangeRoleRequest;
@@ -37,12 +37,6 @@ import java.util.stream.Collectors;
 @Component
 public class SpaceTeamMemberManager {
 
-    private static final int TEAM_TYPE = 1;
-    private static final int STATUS_ENABLED = 1;
-
-    @Resource
-    private SpaceMapper spaceMapper;
-
     @Resource
     private SpaceTeamMemberMapper spaceTeamMemberMapper;
 
@@ -57,6 +51,9 @@ public class SpaceTeamMemberManager {
 
     @Resource
     private SpacePermissionChecker spacePermissionChecker;
+
+    @Resource
+    private SpaceAccessResolver spaceAccessResolver;
 
     public boolean isTeamOwner(Long spaceId, Long userId) {
         return spacePermissionChecker.isTeamOwner(spaceId, userId);
@@ -98,7 +95,7 @@ public class SpaceTeamMemberManager {
 
         User targetUser = userMapper.selectById(userId);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(targetUser), ExceptionCode.PARAMETER_ERROR, "目标用户不存在");
-        ExcUtils.throwIfTrue(targetUser.getStatus() == null || !ExcUtils.eq(targetUser.getStatus(), STATUS_ENABLED),
+        ExcUtils.throwIfTrue(!targetUser.isActive(),
                 ExceptionCode.FORBIDDEN, "不能邀请已禁用的用户");
 
         validateRole(roleId);
@@ -172,14 +169,11 @@ public class SpaceTeamMemberManager {
     }
 
     private Space resolveSpaceAccess(Long spaceId) {
-        Space space = spaceMapper.selectById(spaceId);
-        Space.validateActive(space);
-        spacePermissionChecker.checkAccess(space, LoginContextHelper.requireUser().getId());
-        return space;
+        return spaceAccessResolver.resolve(spaceId);
     }
 
     private void ensureTeamSpace(Space space) {
-        ExcUtils.throwIfTrue(!ExcUtils.eq(space.getType(), TEAM_TYPE),
+        ExcUtils.throwIfTrue(!ExcUtils.eq(space.getType(), SpaceConstants.SPACE_TYPE_TEAM),
                 ExceptionCode.PARAMETER_ERROR, "非团队空间");
     }
 
@@ -231,20 +225,7 @@ public class SpaceTeamMemberManager {
     }
 
     private void evictUserPermCacheAfterCommit(Long userId) {
-        if (userId == null) {
-            return;
-        }
-        Runnable evict = () -> cacheManager.getUserPermCache().evict(String.valueOf(userId));
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            evict.run();
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                evict.run();
-            }
-        });
+        cacheManager.evictUserPermCacheAfterCommit(userId);
     }
 
     private void disconnectUserAfterCommit(Long userId, Long spaceId) {

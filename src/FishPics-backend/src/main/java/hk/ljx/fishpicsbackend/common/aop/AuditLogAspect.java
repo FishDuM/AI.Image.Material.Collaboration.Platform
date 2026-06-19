@@ -23,9 +23,6 @@ import jakarta.annotation.Resource;
 import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 
-/**
- * 审计日志 AOP 切面，异步写入数据库。
- */
 @Slf4j
 @Aspect
 @Component
@@ -40,11 +37,9 @@ public class AuditLogAspect {
     @Around("auditLogPointcut()")
     public Object around(ProceedingJoinPoint joinPoint) throws Throwable {
         SysAuditLog auditLog = new SysAuditLog();
-        // 提前记录请求时间，反映真实请求时间点
         auditLog.setCreateTime(LocalDateTime.now());
 
         try {
-            // 获取注解信息
             MethodSignature signature = (MethodSignature) joinPoint.getSignature();
             Method method = signature.getMethod();
             AuditLog auditLogAnnotation = method.getAnnotation(AuditLog.class);
@@ -55,7 +50,6 @@ public class AuditLogAspect {
                 auditLog.setDetail(auditLogAnnotation.description());
             }
 
-            // 获取请求信息
             ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
             if (attributes != null) {
                 HttpServletRequest request = attributes.getRequest();
@@ -72,27 +66,16 @@ public class AuditLogAspect {
                 }
             }
 
-            // 获取当前用户
             User user = UserHolder.getUser();
             if (user != null) {
                 auditLog.setUserId(user.getId());
                 auditLog.setUsername(user.getUsername());
             }
 
-            // 获取请求参数（过滤敏感字段，截断过长内容）
             try {
-                // 把 query params 拼到 params 前面
-                if (attributes != null) {
-                    HttpServletRequest req = attributes.getRequest();
-                    Object maskedQuery = req.getAttribute("__auditQuery");
-                    if (maskedQuery != null) {
-                        auditLog.setParams(maskedQuery.toString());
-                    }
-                }
                 Object[] args = joinPoint.getArgs();
                 if (args != null && args.length > 0) {
                     StringBuilder params = new StringBuilder();
-                    // 把 query params 拼在前面
                     if (attributes != null) {
                         Object maskedQuery = attributes.getRequest().getAttribute("__auditQuery");
                         if (maskedQuery != null) {
@@ -102,7 +85,6 @@ public class AuditLogAspect {
                     for (Object arg : args) {
                         if (arg != null && !arg.getClass().getName().startsWith("jakarta.servlet")) {
                             String json = JSONUtil.toJsonStr(arg);
-                            // 过滤包含密码/token等敏感字段
                             json = json.replaceAll("\"password\":\"[^\"]*\"", "\"password\":\"***\"")
                                       .replaceAll("\"originalPassword\":\"[^\"]*\"", "\"originalPassword\":\"***\"")
                                       .replaceAll("\"token\":\"[^\"]*\"", "\"token\":\"***\"")
@@ -124,17 +106,14 @@ public class AuditLogAspect {
                 log.warn("获取请求参数失败", e);
             }
 
-            // 执行方法
             Object result = joinPoint.proceed();
 
-            // 记录成功
             auditLog.setResult(1);
             auditLogWriter.saveAsync(auditLog);
 
             return result;
 
         } catch (Throwable e) {
-            // 记录失败
             auditLog.setResult(0);
             auditLog.setErrorMsg(e.getMessage());
             // 业务异常（BaseException）用 WARN，系统异常用 ERROR

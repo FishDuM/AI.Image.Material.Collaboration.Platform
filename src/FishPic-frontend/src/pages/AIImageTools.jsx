@@ -8,6 +8,7 @@ import {
   CrownOutlined,
 } from '@ant-design/icons'
 import { submitAiDraw, savePictureByUrl, downloadAiImage } from '../api'
+import { downloadFile } from '../utils/file'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { useAiSse } from '../hooks/useAiSse'
 import { AuthContext } from '../context/AuthContext'
@@ -54,7 +55,6 @@ function AIImageTools() {
   const [genStyle, setGenStyle] = useState('photography')
   const [genResults, setGenResults] = useState(null)
 
-  // async generation state: idle | generating | done | failed
   const [genState, setGenState] = useState('idle')
   const [genError, setGenError] = useState('')
   const [currentTaskId, setCurrentTaskId] = useState(null)
@@ -97,7 +97,6 @@ function AIImageTools() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 在提交任务时保存到 sessionStorage，完成后清除
   useEffect(() => {
     if (genState === 'generating' && currentTaskId) {
       sessionStorage.setItem('ai_pending_task', currentTaskId)
@@ -110,7 +109,6 @@ function AIImageTools() {
     try {
       const result = await submitAiDraw(params)
       setCurrentTaskId(result.taskId)
-      // SSE hook 会自动监听 currentTaskId
     } catch (e) {
       setGenStateAndRef('failed')
       setGenError(e.message || '提交生成任务失败')
@@ -186,15 +184,8 @@ function AIImageTools() {
       if (!(blob instanceof Blob)) {
         throw new Error('下载响应无效')
       }
-
       const objectUrl = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = objectUrl
-      link.download = `ai-image-${currentTaskId}.png`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(objectUrl)
+      downloadFile(objectUrl, `ai-image-${currentTaskId}.png`)
     } catch (error) {
       message.error(error.message || '下载失败')
     }
@@ -255,7 +246,6 @@ function AIImageTools() {
       )
     }
 
-    // idle
     return (
       <div className="ai-result-placeholder">
         <ExperimentOutlined className="ai-result-icon" />
@@ -264,7 +254,6 @@ function AIImageTools() {
     )
   }
 
-  // 普通用户：显示升级引导
   if (!isVip) {
     return (
       <main className="ai-tools-container">

@@ -1,5 +1,7 @@
 package hk.ljx.fishpicsbackend.picture.dto;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -26,5 +28,7 @@ public class ShareCreateRequest {
     /**
      * 最大访问次数(0 或 null = 不限,默认 200)
      */
+    @Min(value = 0, message = "最大访问次数不能为负数")
+    @Max(value = 1000, message = "最大访问次数不能超过1000")
     private Integer maxViewCount;
 }

@@ -1,13 +1,10 @@
-import { message } from 'antd'
 import { checkUpload, mergeChunks, uploadChunk } from '../api'
 import { validateImageUpload } from './uploadConstraints'
+import { CHUNK_UPLOAD_RETRY_COUNT, CHUNK_UPLOAD_BACKOFF_BASE } from './constants'
 
 export const CHUNK_SIZE = 2 * 1024 * 1024
 export const MAX_CONCURRENT_UPLOADS = 5
 
-/**
- * 文件转 Base64
- */
 export const getBase64 = (file) => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -17,13 +14,14 @@ export const getBase64 = (file) => {
   })
 }
 
-/**
- * 通用图片上传前校验
- */
 export const beforeUpload = (file) => {
+  return validateImageUpload(file).valid
+}
+
+export const createBeforeUpload = (messageApi) => (file) => {
   const result = validateImageUpload(file)
-  if (!result.valid) {
-    message.error(result.message)
+  if (!result.valid && result.message) {
+    messageApi.error(result.message)
   }
   return result.valid
 }
@@ -97,7 +95,7 @@ export async function uploadLargePicture(file, {
     formData.append('file', chunkFile)
 
     let lastError
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
+    for (let attempt = 1; attempt <= CHUNK_UPLOAD_RETRY_COUNT; attempt += 1) {
       try {
         await uploadChunk(formData, md5, index)
         completed += 1
@@ -105,12 +103,12 @@ export async function uploadLargePicture(file, {
         return
       } catch (error) {
         lastError = error
-        if (attempt < 3) {
-          await new Promise(resolve => setTimeout(resolve, 500 * attempt))
+        if (attempt < CHUNK_UPLOAD_RETRY_COUNT) {
+          await new Promise(resolve => setTimeout(resolve, CHUNK_UPLOAD_BACKOFF_BASE * attempt))
         }
       }
     }
-    throw new Error(`分片 ${index} 上传失败(重试 3 次): ${lastError?.message || lastError}`)
+    throw new Error(`分片 ${index} 上传失败(重试 ${CHUNK_UPLOAD_RETRY_COUNT} 次): ${lastError?.message || lastError}`)
   }
 
   for (let i = 0; i < pending.length; i += maxConcurrent) {

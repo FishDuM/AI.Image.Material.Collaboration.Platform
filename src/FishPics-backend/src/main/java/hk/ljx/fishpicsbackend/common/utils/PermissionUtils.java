@@ -18,13 +18,20 @@ public final class PermissionUtils {
 
     public static LoginContext buildLoginContext(User user, List<SpaceTeamMember> teamMemberships) {
         boolean isAdmin = Role.isAdmin(user.getRole());
-        List<String> permissions = getPermissionsByLevel(user.getLevel(), user.getRole());
-        List<String> systemPerms = permissions.stream()
-                .filter(permission -> permission.startsWith("system:"))
-                .collect(Collectors.toList());
-        List<String> vipPerms = permissions.stream()
-                .filter(permission -> !permission.startsWith("system:"))
-                .collect(Collectors.toList());
+        List<String> systemPerms;
+        List<String> vipPerms;
+        if (isAdmin) {
+            systemPerms = List.of("system:user:manage", "system:team:manage", "system:ai:manage", "system:log:manage", "system:config");
+            vipPerms = List.of("space:create", "space:manage", "picture:upload", "picture:manage");
+        } else {
+            List<String> permissions = getPermissionsByLevel(user.getLevel(), user.getRole());
+            systemPerms = permissions.stream()
+                    .filter(permission -> permission.startsWith("system:"))
+                    .collect(Collectors.toList());
+            vipPerms = permissions.stream()
+                    .filter(permission -> !permission.startsWith("system:"))
+                    .collect(Collectors.toList());
+        }
 
         Map<String, LoginContext.TeamPerm> teams = null;
         if (teamMemberships != null && !teamMemberships.isEmpty()) {
@@ -57,13 +64,19 @@ public final class PermissionUtils {
 
     private static List<String> getPermsByTeamRoleId(Integer roleId) {
         if (roleId == null) return List.of();
-        return switch (roleId) {
-            case 1 -> TeamMemberRole.isOwner(roleId) ? List.of("team:view", "team:edit", "team:delete", "team:invite", "team:kick", "team:transfer") : List.of();
-            case 2 -> roleId == TeamMemberRole.MEMBER.code() ? List.of("team:view", "team:edit", "team:invite", "team:kick") : List.of();
-            case 3 -> roleId == TeamMemberRole.EDITOR.code() ? List.of("team:view", "team:edit") : List.of();
-            case 4 -> roleId == TeamMemberRole.VIEWER.code() ? List.of("team:view") : List.of();
-            default -> List.of();
-        };
+        if (roleId == TeamMemberRole.OWNER.code()) {
+            return List.of("team:view", "team:edit", "team:delete", "team:invite", "team:kick", "team:transfer");
+        }
+        if (roleId == TeamMemberRole.MEMBER.code()) {
+            return List.of("team:view", "team:edit", "team:invite", "team:kick");
+        }
+        if (roleId == TeamMemberRole.EDITOR.code()) {
+            return List.of("team:view", "team:edit");
+        }
+        if (roleId == TeamMemberRole.VIEWER.code()) {
+            return List.of("team:view");
+        }
+        return List.of();
     }
 
     public static List<String> getPermissionsByLevel(Integer level, Integer role) {

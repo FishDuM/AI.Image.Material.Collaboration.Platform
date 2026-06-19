@@ -7,7 +7,8 @@ import { ThemeContext } from '../context/ThemeContext'
 import { useFetchWithCleanup } from '../hooks/useRequestUtils'
 import { LEVEL_MAP, formatStorage } from '../utils/constants'
 import { isCanceledError } from '../utils/error'
-import { spaceNameRules, teamNameRules } from '../utils/formRules'
+import { teamNameRules } from '../utils/formRules'
+import EditSpaceModal from '../components/shared/EditSpaceModal'
 import './TeamSpace.css'
 
 const { Title, Text } = Typography
@@ -24,7 +25,6 @@ function TeamSpace() {
   const [createLoading, setCreateLoading] = useState(false)
   const [updateLoading, setUpdateLoading] = useState(false)
   const [form] = Form.useForm()
-  const [editForm] = Form.useForm()
 
   const { createSignal } = useFetchWithCleanup()
 
@@ -70,7 +70,6 @@ function TeamSpace() {
 
   const handleEditOpen = (space) => {
     setEditTarget(space)
-    editForm.setFieldsValue({ name: space.name, introduction: space.introduction || '' })
     setShowEdit(true)
   }
 
@@ -99,7 +98,6 @@ function TeamSpace() {
       message.success('修改成功')
       setShowEdit(false)
       setEditTarget(null)
-      editForm.resetFields()
       fetchSpaces()
     } catch (error) {
       if (isCanceledError(error)) return
@@ -243,35 +241,13 @@ function TeamSpace() {
         )}
       </Spin>
 
-      <Modal
-        title="编辑空间"
+      <EditSpaceModal
         open={showEdit}
-        onCancel={() => { setShowEdit(false); setEditTarget(null); editForm.resetFields() }}
-        footer={
-          <div style={{ textAlign: 'right' }}>
-            <Button onClick={() => { setShowEdit(false); setEditTarget(null); editForm.resetFields() }} style={{ marginRight: 8 }}>
-              取消
-            </Button>
-            <Button type="primary" onClick={() => editForm.submit()} loading={updateLoading}>
-              保存
-            </Button>
-          </div>
-        }
-        closable={false}
-      >
-        <Form form={editForm} layout="vertical" onFinish={handleUpdate} style={{ marginTop: 16 }}>
-          <Form.Item
-            name="name"
-            label="空间名称"
-            rules={spaceNameRules}
-          >
-            <Input placeholder="请输入空间名称" maxLength={20} />
-          </Form.Item>
-          <Form.Item name="introduction" label="空间介绍">
-            <Input.TextArea placeholder="请输入空间介绍" maxLength={200} rows={3} showCount />
-          </Form.Item>
-        </Form>
-      </Modal>
+        loading={updateLoading}
+        initialValues={editTarget ? { name: editTarget.name, introduction: editTarget.introduction || '' } : undefined}
+        onSubmit={handleUpdate}
+        onCancel={() => { setShowEdit(false); setEditTarget(null) }}
+      />
 
       <Modal
         title="创建团队空间"
@@ -287,7 +263,6 @@ function TeamSpace() {
             </Button>
           </div>
         }
-        destroyOnHidden
         closable={false}
       >
         <Form form={form} layout="vertical" onFinish={handleCreate} style={{ marginTop: 16 }}>

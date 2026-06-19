@@ -26,14 +26,16 @@ import { editUser, getUser, getUserMyself, getUserProfile, markPasswordChange } 
 import { AuthContext } from '../context/AuthContext'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { useAvatarUpload } from '../hooks/useAvatarUpload'
-import { beforeUpload } from '../utils/upload'
+import { createBeforeUpload } from '../utils/upload'
 import { copyToClipboard } from '../utils/clipboard'
 import { isCanceledError } from '../utils/error'
+import { formatTime } from '../utils/constants'
 import { emailRules, newPasswordRules, nicknameRules, originalPasswordRules, phoneRules, usernameRules } from '../utils/formRules'
 import './UserProfile.css'
 
 function UserProfile() {
   const { message } = AntApp.useApp()
+  const beforeUpload = createBeforeUpload(message)
   const { userInfo, updateUserInfo, isAuthenticated } = useContext(AuthContext)
   const navigate = useNavigate()
   const isMobile = useIsMobile()
@@ -96,22 +98,6 @@ function UserProfile() {
     })
     return () => controller.abort()
   }, [profileUserId, isAuthenticated, isOwnProfile, navigate])
-
-  const formatDate = (date) => {
-    if (!date) return '未知'
-    const d = new Date(date)
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  }
-
-  const calculateDaysSinceJoin = (date) => {
-    if (!date) return 0
-    const joinDate = new Date(date)
-    const today = new Date()
-    joinDate.setHours(0, 0, 0, 0)
-    today.setHours(0, 0, 0, 0)
-    const diffTime = Math.abs(today - joinDate)
-    return Math.round(diffTime / (1000 * 60 * 60 * 24))
-  }
 
   const handleCopyUsername = async () => {
     if (userData?.username) {
@@ -193,6 +179,9 @@ function UserProfile() {
     if (!userData) {
       return <Empty description="暂无用户信息" />
     }
+    const joinDays = userData.createTime
+      ? Math.round(Math.abs(new Date().setHours(0,0,0,0) - new Date(userData.createTime).setHours(0,0,0,0)) / (1000 * 60 * 60 * 24))
+      : 0
     return (
       <>
         <Avatar
@@ -221,9 +210,9 @@ function UserProfile() {
         </div>
 
         <div className="profile-meta-row">
-          <Tooltip title={isOwnProfile ? `你已经加入 ${calculateDaysSinceJoin(userData.createTime)} 天` : `TA已加入 ${calculateDaysSinceJoin(userData.createTime)} 天`}>
+          <Tooltip title={isOwnProfile ? `你已经加入 ${joinDays} 天` : `TA已加入 ${joinDays} 天`}>
             <span>
-              <CalendarOutlined /> 加入于 {formatDate(userData.createTime)}
+              <CalendarOutlined /> 加入于 {formatTime(userData.createTime) || '未知'}
             </span>
           </Tooltip>
         </div>

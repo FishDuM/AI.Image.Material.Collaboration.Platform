@@ -104,7 +104,7 @@
 | `user` | 用户注册、登录、验证码、资料管理、缓存管理、管理端用户管理 | 5 个 Component |
 | `picture` | 图片上传（普通 / 分片）、CRUD、替换、去重、URL 保存、管理端审核、分享 | 11 个 Component |
 | `space` | 私人空间、团队空间、成员管理（四级角色）、权限检查、管理端空间管理 | 4 个 Component |
-| `ai` | AI 标注（qwen3.5-plus）、文生图（qwen-image-2.0）、SSE 推送、配额管理 | 2 个 Handler |
+| `ai` | AI 标注（视觉理解大模型）、文生图（文生图大模型）、SSE 推送、配额管理 | 2 个 Handler |
 | `system` | 分类标签、轮播图、审计日志、系统统计 | — |
 | `task` | 异步任务框架（分发、CAS 抢占、补偿、重试、卡死恢复） | 2 个 Component |
 | `collab` | WebSocket 协同编辑（空间级单编辑锁、操作广播、断连恢复、Redis 状态存储） | 5 个类 |
@@ -357,14 +357,18 @@ RedisCacheManager 管理三个缓存键空间：
 **功能清单**：
 - 创建分享链接（可配置有效期、下载权限、最大查看次数）
 - 多图分享（支持将多张图片打包为一个分享链接）
+- 团队分享（团队空间所有者可分享空间内任意成员的图片）
 - 查看分享信息
-- 预览分享图片（免登录）
-- 下载分享图片（免登录）
+- 预览分享图片（免登录，支持缩略图）
+- 下载分享图片（免登录，文件名自动追加扩展名）
 - 取消分享
 
 **设计要点**：
 - 分享链接使用 UUID Token 标识，数据库存储 SHA-256 哈希（`share_token_hash`）
 - 创建时仅返回一次明文 Token，后续无法再获取
+- 分享权限校验：图片所有者 或 团队空间 Owner 身份
+- 预览接口支持 `size` 参数，通过 COS `imageMogr2` 实时生成缩略图，减少带宽消耗
+- 下载文件名无扩展名时根据 Content-Type 自动追加（如 `image/png` → `.png`）
 - 预览和下载接口仅允许 `image/*` Content-Type，防 XSS
 - 支持过期自动失效和查看次数限制
 - 下载权限可独立控制（`allow_download`）
@@ -391,8 +395,8 @@ RedisCacheManager 管理三个缓存键空间：
 ### 7.5 AI 模块
 
 **功能清单**：
-- AI 标注：上传图片 → 自动提取标签和描述（qwen3.5-plus 模型）
-- AI 文生图：输入文本描述 → 生成图片（qwen-image-2.0 模型）
+- AI 标注：上传图片 → 自动提取标签和描述（视觉理解大模型）
+- AI 文生图：输入文本描述 → 生成图片（文生图大模型）
 - SSE 实时推送任务结果
 - 下载 AI 生成的图片
 - 月度配额管理（按用户等级分配，Redis 计数）
@@ -404,7 +408,7 @@ RedisCacheManager 管理三个缓存键空间：
 1. 用户提交图片 ID → AiQuotaManager 检查配额 → 创建 Task (PENDING)
 2. 异步分发到线程池
 3. Worker 通过 CAS 抢占（条件 UPDATE）→ PROCESSING
-4. AiTagTaskHandler 调用 Spring AI Alibaba + 通义千问（qwen3.5-plus）
+4. AiTagTaskHandler 调用 Spring AI Alibaba + 通义千问视觉理解大模型
 5. 提取标签和描述 → 写入 Task.result → DONE
 6. SSE 推送结果到前端（AiSseEmitterRegistry）
 
@@ -412,7 +416,7 @@ RedisCacheManager 管理三个缓存键空间：
 1. 用户提交文本描述 → AiQuotaManager 检查配额 → 创建 Task (PENDING)
 2. 异步分发到线程池
 3. Worker 通过 CAS 抢占 → PROCESSING
-4. AiDrawTaskHandler 调用 DashScope SDK + 万相模型（qwen-image-2.0）
+4. AiDrawTaskHandler 调用 DashScope SDK + 万相文生图大模型
 5. 生成图片 URL → 下载上传到 COS → 创建 picture 记录 → DONE
 6. SSE 推送结果到前端
 
@@ -636,6 +640,7 @@ USER ──1:N──▶ SPACE ──1:N──▶ PICTURE ──1:0..1──▶ F
 
 - 用户输入通过 Jsoup 白名单过滤（XssSanitizer），仅允许安全 HTML 标签
 - 分享预览 / 下载接口强制 Content-Type 为 `image/*`
+- 下载文件名无扩展名时根据 Content-Type 自动追加，防止浏览器误判文件类型
 - 前端输出使用 React 默认的 JSX 转义
 
 ### 认证安全

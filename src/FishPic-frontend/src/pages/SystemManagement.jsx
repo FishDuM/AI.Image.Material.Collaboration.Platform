@@ -10,7 +10,7 @@ import {
   getMarquee,
 } from '../api'
 import { useSystemTypes } from '../hooks/useRequestUtils'
-import { PAGINATION_LOCALE } from '../utils/constants'
+import { PAGINATION_LOCALE, getPlaceholderImageBase64 } from '../utils/constants'
 import { useAdminGuard } from '../hooks/useAdminGuard'
 import './SystemManagement.css'
 
@@ -62,8 +62,7 @@ function SystemManagement() {
       if (Array.isArray(result)) {
         setMarqueeUrls(result)
       }
-    } catch (error) {
-      console.error('[fetchMarquee]', error)
+    } catch {
       setMarqueeUrls([])
     } finally {
       setMarqueeLoading(false)
@@ -87,7 +86,7 @@ function SystemManagement() {
   const fetchFeaturedPictures = async (page) => {
     setPickerLoading(true)
     try {
-      const result = await getAdminPictureList(page, 20, 4)
+      const result = await getAdminPictureList(page, 20, 1)
       const { records, total } = result
       setPickerPictures(records || [])
       setPickerPagination({ current: page, total: total || 0 })
@@ -169,7 +168,7 @@ function SystemManagement() {
     }
   }
 
-  if (!userInfo || !userInfo?.permissions?.includes('system:config')) {
+  if (!userInfo?.permissions?.includes('system:config')) {
     return (
       <main className="system-management-container">
         <div style={{ textAlign: 'center', padding: '100px 0' }}>
@@ -391,7 +390,7 @@ function SystemManagement() {
                       height={140}
                       style={{ objectFit: 'cover', display: 'block' }}
                       preview={{ cover: <EyeOutlined /> }}
-                      fallback="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTQwIiBoZWlnaHQ9IjE0MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTQwIiBoZWlnaHQ9IjE0MCIgZmlsbD0iIzIxMjEyMSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iYXJpYWwiIGZvbnQtc2l6ZT0iMTIiIGZpbGw9IiM2YjZiNmIiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGR5PSIuM2VtIj5Mb2FkaW5nLi4uPC90ZXh0Pjwvc3ZnPg=="
+                      fallback={getPlaceholderImageBase64(140, 140)}
                     />
                     <Checkbox
                       checked={pickerSelectedIds.includes(pic.id)}

@@ -19,6 +19,7 @@ import hk.ljx.fishpicsbackend.picture.service.ShareService;
 import hk.ljx.fishpicsbackend.picture.vo.ShareFileVO;
 import hk.ljx.fishpicsbackend.picture.vo.ShareInfoVO;
 import hk.ljx.fishpicsbackend.picture.vo.SharePictureVO;
+import hk.ljx.fishpicsbackend.space.component.SpacePermissionChecker;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -42,9 +43,10 @@ import java.util.stream.Collectors;
 public class ShareServiceImpl implements ShareService {
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private static final int TOKEN_LENGTH = 43;
     private static final char[] TOKEN_CHARS =
             "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".toCharArray();
-    private static final String TOKEN_PATTERN = "^[A-Za-z0-9_-]{43}$";
+    private static final String TOKEN_PATTERN = "^[A-Za-z0-9_-]{" + TOKEN_LENGTH + "}$";
 
     private static final long MAX_SHARE_PROXY_SIZE = 50L * 1024 * 1024;
     private static final long SHARE_VIEW_RATE_LIMIT_PER_MIN = 5;
@@ -66,6 +68,9 @@ public class ShareServiceImpl implements ShareService {
     @Resource
     private RedisAtomicOps redisAtomicOps;
 
+    @Resource
+    private SpacePermissionChecker spacePermissionChecker;
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public String createShare(List<Long> pictureIds, Long userId, int expireDays,
@@ -77,8 +82,12 @@ public class ShareServiceImpl implements ShareService {
         ExcUtils.throwIfTrue(pictures.size() != pictureIds.size(),
                 ExceptionCode.NOT_FOUND, "部分图片不存在");
         for (Picture picture : pictures) {
-            ExcUtils.throwIfTrue(!picture.getUserId().equals(userId),
-                    ExceptionCode.FORBIDDEN, "只能分享自己的图片");
+            boolean isOwner = picture.getUserId().equals(userId);
+            if (!isOwner && picture.getSpaceId() != null) {
+                isOwner = spacePermissionChecker.isTeamOwner(picture.getSpaceId(), userId);
+            }
+            ExcUtils.throwIfTrue(!isOwner,
+                    ExceptionCode.FORBIDDEN, "只能分享自己的图片或所在团队空间的图片");
         }
 
         int actualExpireDays = Math.min(Math.max(expireDays, 1), 7);
@@ -90,7 +99,7 @@ public class ShareServiceImpl implements ShareService {
 
         PictureShare share = new PictureShare();
         share.setPictureId(pictureIds.get(0));
-        share.setShareToken(tokenHash);
+        share.setShareToken(shareToken);
         share.setShareTokenHash(tokenHash);
         share.setShareUserId(userId);
         share.setExpireTime(LocalDateTime.now().plusDays(actualExpireDays));
@@ -114,7 +123,7 @@ public class ShareServiceImpl implements ShareService {
     }
 
     private String generateSecureToken() {
-        char[] token = new char[43];
+        char[] token = new char[TOKEN_LENGTH];
         for (int i = 0; i < token.length; i++) {
             token[i] = TOKEN_CHARS[SECURE_RANDOM.nextInt(TOKEN_CHARS.length)];
         }
@@ -152,10 +161,15 @@ public class ShareServiceImpl implements ShareService {
 
     @Override
     public ShareFileVO getPreviewFile(String shareToken, Long pictureId) {
+        return getPreviewFile(shareToken, pictureId, null);
+    }
+
+    @Override
+    public ShareFileVO getPreviewFile(String shareToken, Long pictureId, Integer size) {
         ShareResolved resolved = resolveShare(shareToken);
         Picture picture = resolveTargetPicture(resolved.share(), pictureId);
         countShareView(resolved, shareToken);
-        return buildShareFile(resolved.share(), picture);
+        return buildShareFile(resolved.share(), picture, size);
     }
 
     @Override
@@ -309,7 +323,16 @@ public class ShareServiceImpl implements ShareService {
     }
 
     private ShareFileVO buildShareFile(PictureShare share, Picture picture) {
-        DownloadUtils.RemoteFileStream remoteFile = DownloadUtils.openRemoteFile(picture.getUrl(), MAX_SHARE_PROXY_SIZE);
+        return buildShareFile(share, picture, null);
+    }
+
+    private ShareFileVO buildShareFile(PictureShare share, Picture picture, Integer size) {
+        String url = picture.getUrl();
+        if (size != null && size > 0) {
+            String separator = url.contains("?") ? "&" : "?";
+            url = url + separator + "imageMogr2/thumbnail/" + size + "x" + size;
+        }
+        DownloadUtils.RemoteFileStream remoteFile = DownloadUtils.openRemoteFile(url, MAX_SHARE_PROXY_SIZE);
         recordShareAccess(share);
         return new ShareFileVO(
                 picture.getPictureName(),

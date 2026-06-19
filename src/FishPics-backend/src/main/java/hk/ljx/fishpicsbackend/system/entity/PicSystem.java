@@ -13,20 +13,12 @@ import lombok.Data;
 @TableName(value ="pic_system")
 @Data
 public class PicSystem implements Serializable {
-    /**
-     * id
-     */
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    /**
-     * 配置键名
-     */
     private String syskey;
 
-    /**
-     * 配置值（JSON格式）
-     */
+    /** 配置值（JSON格式） */
     private String sysvalue;
 
     private static final long serialVersionUID = 1L;

@@ -1,6 +1,7 @@
 package hk.ljx.fishpicsbackend.space.component;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import hk.ljx.fishpicsbackend.common.enums.Role;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.mapper.SpaceTeamMemberMapper;
@@ -17,8 +18,6 @@ import static hk.ljx.fishpicsbackend.common.constants.SpaceConstants.SPACE_TYPE_
 
 @Component
 public class SpacePermissionChecker {
-
-    private static final int SYSTEM_ADMIN = 1;
 
     @Resource
     private SpaceTeamMemberMapper spaceTeamMemberMapper;
@@ -61,7 +60,7 @@ public class SpacePermissionChecker {
         if (canManageMembers(space, operator)) {
             return true;
         }
-        return operator != null && ExcUtils.eq(operator.getRole(), SYSTEM_ADMIN);
+        return operator != null && Role.isAdmin(operator.getRole());
     }
 
     public void checkAccess(Space space, Long userId) {

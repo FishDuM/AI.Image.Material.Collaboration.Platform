@@ -1,11 +1,9 @@
-import { useState, useEffect, useContext, useCallback, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Table, Card, Typography, Button, Tag, Space, Select, Tabs, Statistic, Row, Col, Switch, message as antMsg } from 'antd'
 import { ReloadOutlined, RobotOutlined, CheckCircleOutlined, CloseCircleOutlined, SyncOutlined, BarChartOutlined, SettingOutlined, UnorderedListOutlined } from '@ant-design/icons'
 import { getAiTasks, getAiStats, getAiConfig, updateAiConfig } from '../api'
-import { CHART_COLORS } from '../utils/constants'
-import { AuthContext } from '../context/AuthContext.jsx'
-import { PAGINATION_LOCALE } from '../utils/constants'
+import { CHART_COLORS, PAGINATION_LOCALE, formatDateTime } from '../utils/constants'
+import { useAdminGuard } from '../hooks/useAdminGuard'
 import './AIManagement.css'
 
 const { Title } = Typography
@@ -39,8 +37,7 @@ const STATUS_OPTIONS = [
 ]
 
 function AIManagement() {
-  const navigate = useNavigate()
-  const { userInfo } = useContext(AuthContext)
+  const { hasPermission } = useAdminGuard('system:ai:manage')
   const [activeTab, setActiveTab] = useState('tasks')
   const [loading, setLoading] = useState(false)
   const [data, setData] = useState([])
@@ -73,15 +70,11 @@ function AIManagement() {
   }, [])
 
   useEffect(() => {
-    if (!userInfo || !userInfo?.permissions?.includes('system:ai:manage')) {
-      antMsg.error('无权访问，正在跳转到 404 页面...')
-      setTimeout(() => navigate('/404', { replace: true }), 500)
-      return
-    }
+    if (!hasPermission) return
     if (hasFetchedRef.current) return
     hasFetchedRef.current = true
     fetchTasks(1, 20)
-  }, [userInfo, navigate, fetchTasks])
+  }, [hasPermission, fetchTasks])
 
   const fetchStats = useCallback(async () => {
     setStatsLoading(true)
@@ -172,7 +165,7 @@ function AIManagement() {
     },
     {
       title: '创建时间', dataIndex: 'createTime', key: 'createTime', width: 170,
-      render: (t) => t ? new Date(t).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '-',
+      render: (t) => formatDateTime(t),
     },
     {
       title: '错误信息', dataIndex: 'errorMsg', key: 'errorMsg', width: 200, ellipsis: true,
@@ -180,7 +173,7 @@ function AIManagement() {
     },
   ]
 
-  if (!userInfo || !userInfo?.permissions?.includes('system:ai:manage')) {
+  if (!hasPermission) {
     return (
       <main className="ai-management-container">
         <div style={{ textAlign: 'center', padding: '100px 0' }}>

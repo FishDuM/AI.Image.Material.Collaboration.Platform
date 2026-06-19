@@ -5,13 +5,12 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.io.Serializable;
 import java.util.List;
 
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class DeleteByIdListRequest implements Serializable {
+public class DeleteByIdListRequest {
     @Size(max = 100, message = "单次最多删除100条")
     private List<Long> ids;
 }

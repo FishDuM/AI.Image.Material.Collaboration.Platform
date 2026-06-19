@@ -18,6 +18,10 @@ public class ExcUtils {
         throw new BaseException(code, message);
     }
 
+    public static void error(ExceptionCode exceptionCode, String message, Throwable cause) {
+        throw new BaseException(exceptionCode, message, cause);
+    }
+
     public static void throwIfTrue(boolean flag, ExceptionCode exceptionCode) {
         if (flag) {
             error(exceptionCode);

@@ -31,15 +31,36 @@ export const formatStorage = (bytes, fallback = '0 B') => {
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   const i = Math.min(Math.floor(Math.log(n) / Math.log(1024)), units.length - 1)
   const val = n / Math.pow(1024, i)
-  return `${val.toFixed(i > 2 ? 1 : (i > 1 ? 2 : 0))} ${units[i]}`
+  return `${val.toFixed(i > 2 ? 1 : (i > 0 ? 2 : 0))} ${units[i]}`
+}
+
+export function computeSpaceStorage(space) {
+  const sizeBytes = Number(space?.size) || 0;
+  const storageBytes = Number(space?.storageSize) || 0;
+  const percent = storageBytes > 0 ? Math.min(100, Math.round((sizeBytes / storageBytes) * 100)) : 0;
+  return { sizeBytes, storageBytes, percent };
+}
+
+export function isVipUser(level) {
+  return level != null && level >= 1;
+}
+
+export function showUpgradeHint(modal) {
+  modal.info({ title: '升级会员', content: '请联系管理员开通 VIP/SVIP 会员', okText: '知道了' });
 }
 
 export const PAGE_SIZE = 20
 
-// 滚动加载更多阈值（px）
+export const TOKEN_REFRESH_INTERVAL = 5 * 60 * 1000
+
+export const MAX_SELECT_COUNT = 15
+
+export const CHUNK_UPLOAD_RETRY_COUNT = 3
+
+export const CHUNK_UPLOAD_BACKOFF_BASE = 500
+
 export const LOAD_MORE_THRESHOLD = 200
 
-// API 超时时间（ms）
 export const TIMEOUT_DEFAULT = 10000
 export const TIMEOUT_AVATAR = 60000
 export const TIMEOUT_PICTURE = 120000
@@ -79,4 +100,24 @@ export const CHART_COLORS = {
   primary: ['#1890ff', '#69c0ff'],
   success: ['#52c41a', '#95de64'],
   error: '#ff4d4f',
+}
+
+export function formatDateTime(t) {
+  if (!t) return '-'
+  const date = new Date(t)
+  if (Number.isNaN(date.getTime())) return '-'
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
+}
+
+export function getPlaceholderImageBase64(width = 80, height = 80) {
+  const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg"><rect width="${width}" height="${height}" fill="#212121"/><text x="50%" y="50%" font-family="arial" font-size="12" fill="#6b6b6b" text-anchor="middle" dy=".3em">Loading...</text></svg>`
+  return `data:image/svg+xml;base64,${btoa(svg)}`
 }

@@ -1,9 +1,5 @@
 import { useCallback, useState } from 'react'
 import { getSaveableSpaces, savePictureByUrl } from '../api'
-import { SPACE_TYPE_MAP, SPACE_TYPE_COLOR } from '../utils/constants'
-
-export { SPACE_TYPE_MAP, SPACE_TYPE_COLOR }
-
 export function useSaveToSpace({ imageUrl, message, onSaved }) {
   const [activeTab, setActiveTab] = useState('private')
   const [privateSpace, setPrivateSpace] = useState(null)
@@ -32,11 +28,11 @@ export function useSaveToSpace({ imageUrl, message, onSaved }) {
     }
   }, [])
 
-  const toggleSpace = useCallback((spaceId) => {
+  const toggleSpace = (spaceId) => {
     setSelectedSpaceIds(prev =>
       prev.includes(spaceId) ? prev.filter(id => id !== spaceId) : [...prev, spaceId]
     )
-  }, [])
+  }
 
   const saveSelectedSpaces = useCallback(async () => {
     if (selectedSpaceIds.length === 0) {

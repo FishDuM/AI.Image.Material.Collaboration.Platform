@@ -46,7 +46,7 @@ public class PictureController {
     private static final String MD5_PATTERN = "^[a-fA-F0-9]{32}$";
 
     @RequireLogin
-    @AuditLog(module = "用户管理", operation = "修改头像")
+    @AuditLog(module = "图片管理", operation = "修改头像")
     @PostMapping("/avatar")
     public Response<String> uploadAvatar(@RequestParam("file") MultipartFile file,
             @RequestParam(value = "id", required = false) Long targetUserId) {
@@ -57,14 +57,7 @@ public class PictureController {
         return Response.ok(pictureService.uploadAvatar(file, actualTargetUserId));
     }
 
-    /**
-     * 上传图片
-     * 支持指定目标空间ID（targetSpaceId），未传入时默认上传至私人空间
-     *
-     * @param file          上传的图片文件
-     * @param targetSpaceId 目标空间ID，为null时默认上传至私人空间
-     * @return 图片基本信息(id/url)
-     */
+    // targetSpaceId 为 null 时默认上传至私人空间
     @RequireLogin
     @AuditLog(module = "图片管理", operation = "上传图片")
     @PostMapping("/upload")
@@ -110,7 +103,7 @@ public class PictureController {
     @AuditLog(module = "图片管理", operation = "删除图片")
     @PostMapping("/delete")
     public Response<String> deletePicture(@Valid @RequestBody DeleteByIdListRequest deleteByIdList) {
-        ExcUtils.throwIfTrue(ObjUtil.isEmpty(deleteByIdList), "id不能为空");
+        ExcUtils.throwIfTrue(deleteByIdList == null || deleteByIdList.getIds() == null || deleteByIdList.getIds().isEmpty(), "id不能为空");
         return Response.okMsg(pictureService.deletePicture(deleteByIdList));
     }
 
@@ -148,10 +141,10 @@ public class PictureController {
     }
 
     @RequireAdmin
-    @AuditLog(module = "图片管理", operation = "图片审核")
+    @AuditLog(module = "图片管理", operation = "精选审核")
     @PostMapping("/admin/review")
     public Response<Boolean> reviewPicture(@Valid @RequestBody ReviewPictureDTO dto) {
-        pictureService.reviewPicture(dto.getPictureId(), dto.getStatus(), dto.getSelected());
+        pictureService.reviewPicture(dto.getPictureId(), dto.getSelected());
         return Response.ok(true);
     }
 

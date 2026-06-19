@@ -25,7 +25,6 @@ function CategoryBar({ items, selected, onSelect, className = '' }) {
     }
   }, [items, updateScrollState])
 
-  // 选中项变化时自动滚动到可见区域
   useEffect(() => {
     const el = scrollRef.current
     if (!el || !selected) return

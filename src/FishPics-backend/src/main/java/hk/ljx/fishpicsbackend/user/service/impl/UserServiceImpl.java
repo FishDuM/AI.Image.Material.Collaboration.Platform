@@ -1,7 +1,7 @@
 package hk.ljx.fishpicsbackend.user.service.impl;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
@@ -111,9 +111,4 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         return userQueryManager.getCurrentUserVO();
     }
 
-    @SuppressWarnings("unused")
-    private QueryWrapper<User> newQueryWrapper(UserQueryWrapper userQueryWrapper) {
-        UserQueryManager queryManager = userQueryManager != null ? userQueryManager : new UserQueryManager();
-        return queryManager.buildQueryWrapper(userQueryWrapper);
-    }
 }

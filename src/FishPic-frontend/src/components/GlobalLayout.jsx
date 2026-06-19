@@ -17,7 +17,6 @@ import {
   LockFilled,
   ToolOutlined,
   PictureOutlined,
-  BellOutlined,
   ReloadOutlined,
   UpOutlined,
   DashboardOutlined,
@@ -108,7 +107,6 @@ function GlobalLayout({ children }) {
       items.push({ key: '/ai-tools', icon: <RobotOutlined />, label: 'AI 工具', onClick: () => handleSidebarMenuClick('/ai-tools') })
       items.push(
         { key: '/profile', icon: <UserOutlined />, label: '个人中心', onClick: () => handleSidebarMenuClick('/profile') },
-        { key: '/notifications', icon: <BellOutlined />, label: '通知', onClick: () => handleSidebarMenuClick('/notifications') },
         { key: '/logout', icon: <LogoutOutlined />, label: '退出登录', onClick: () => { handleLogout(); setSidebarVisible(false) } },
       )
     } else {
@@ -133,17 +131,17 @@ function GlobalLayout({ children }) {
     return items
   }, [userInfo, adminMenuConfig, handleSidebarMenuClick, handleLogout, handleLoginButtonClick])
 
-  const userMenuItems = useMemo(() => [
+  const userMenuItems = [
     { key: 'profile', icon: <UserOutlined />, label: '个人中心', onClick: () => navigate('/profile') },
     { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', onClick: handleLogout },
-  ], [navigate, handleLogout])
+  ]
 
-  const adminMenuItems = useMemo(() => adminMenuConfig.map((item) => ({
+  const adminMenuItems = adminMenuConfig.map((item) => ({
     key: item.path,
     icon: item.icon,
     label: item.label,
     onClick: () => navigate(item.path),
-  })), [adminMenuConfig, navigate])
+  }))
 
   const navActiveClass = (path) => location.pathname === path ? ' nav-btn-active' : ''
 
@@ -178,9 +176,6 @@ function GlobalLayout({ children }) {
               </Dropdown>
             ) : (
               <Button type="primary" className="login-btn desktop-only" onClick={handleLoginButtonClick} icon={<LoginOutlined />}>登录</Button>
-            )}
-            {userInfo && (
-              <Button type="text" size="large" className={`notification-btn${location.pathname === '/notifications' ? ' notification-btn-active' : ''}`} icon={<BellOutlined />} onClick={() => navigate('/notifications')} />
             )}
             <Button type="text" size="large" className="theme-toggle-btn" onClick={toggleTheme} icon={isDarkMode ? <SunOutlined /> : <MoonOutlined />} />
             <Button type="text" size="large" className="settings-btn" onClick={() => setSettingsOpen(true)} icon={<ToolOutlined />} />

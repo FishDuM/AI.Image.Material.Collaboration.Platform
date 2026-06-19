@@ -5,6 +5,8 @@ import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import hk.ljx.fishpicsbackend.ai.vo.AiPictureMessage;
+import hk.ljx.fishpicsbackend.common.exception.BaseException;
+import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.utils.XssSanitizer;
 import hk.ljx.fishpicsbackend.mapper.PictureTagMapper;
@@ -81,21 +83,9 @@ public class AiTagTaskHandler implements TaskHandler {
 
     @Override
     public void execute(Task task) throws Exception {
-        ExcUtils.throwIfTrue(task.getBizId() == null || task.getBizId().isBlank(), "任务 bizId 为空");
-        Long pictureId;
-        try {
-            pictureId = Long.valueOf(task.getBizId());
-        } catch (NumberFormatException e) {
-            throw new RuntimeException("任务 bizId 格式错误: " + task.getBizId());
-        }
-        Picture picture = pictureService.getById(pictureId);
-        if (picture == null) {
-            throw new RuntimeException("图片不存在: " + pictureId);
-        }
-
-        if (picture.getUrl() == null || picture.getUrl().isBlank()) {
-            throw new RuntimeException("图片 URL 为空: " + pictureId);
-        }
+        Picture picture = resolvePictureFromTask(task);
+        ExcUtils.throwIfTrue(picture.getUrl() == null || picture.getUrl().isBlank(),
+                ExceptionCode.INTERNAL_SERVER_ERROR, "图片 URL 为空: " + picture.getId());
 
         // 把图片 URL 作为多模态输入丢给 Agent
         UserMessage userMessage = UserMessage.builder()
@@ -104,31 +94,30 @@ public class AiTagTaskHandler implements TaskHandler {
                         .mimeType(MimeTypeUtils.ALL)
                         .data(new URI(picture.getUrl())).build())
                 .build();
-        AssistantMessage response;
         CompletableFuture<AssistantMessage> future = CompletableFuture.supplyAsync(() -> {
             try {
                 return tagAgent.call(userMessage);
             } catch (Exception e) {
-                throw new RuntimeException(e);
+                throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "AI 标签识别执行失败", e);
             }
         }, aiTaskExecutor);
+        AssistantMessage response;
         try {
             response = future.get(AI_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         } catch (TimeoutException e) {
             future.cancel(true);
-            throw new RuntimeException("AI 标签识别超时（" + AI_TIMEOUT_SECONDS + "秒），请重试");
+            throw new BaseException(ExceptionCode.SERVICE_UNAVAILABLE, "AI 标签识别超时（" + AI_TIMEOUT_SECONDS + "秒），请重试");
         } catch (ExecutionException e) {
             Throwable cause = e.getCause();
-            throw new RuntimeException("AI 标签识别失败: " + (cause != null ? cause.getMessage() : e.getMessage()), cause);
+            throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR,
+                    "AI 标签识别失败: " + (cause != null ? cause.getMessage() : e.getMessage()), cause);
         }
-        if (response == null || response.getText() == null) {
-            throw new RuntimeException("AI 标签识别返回结果为空");
-        }
-        log.info("AI tag result for picture {}: {}", pictureId, response.getText());
+        ExcUtils.throwIfTrue(response == null || response.getText() == null,
+                ExceptionCode.INTERNAL_SERVER_ERROR, "AI 标签识别返回结果为空");
+        log.info("AI tag result for picture {}: {}", picture.getId(), response.getText());
 
-        // Agent 有时会在 JSON 外面包 markdown 代码块，需要提取 JSON 内容
+        // AI 有时返回 markdown 代码块包裹的 JSON，需要剥掉
         String text = response.getText().strip();
-        // 处理 ```json ``` 包裹
         if (text.startsWith("```")) {
             int firstNewline = text.indexOf('\n');
             text = firstNewline > 0 ? text.substring(firstNewline + 1) : text.substring(3);
@@ -138,7 +127,7 @@ public class AiTagTaskHandler implements TaskHandler {
             }
             text = text.trim();
         }
-        // 鲁棒提取：如果清洗后仍不是合法 JSON，尝试提取第一个 { 到最后一个 }
+        // fallback: 不是合法 JSON，试着找第一个 { 到最后一个 }
         if (!text.startsWith("{")) {
             int firstBrace = text.indexOf('{');
             int lastBrace = text.lastIndexOf('}');
@@ -150,28 +139,16 @@ public class AiTagTaskHandler implements TaskHandler {
         task.setResult(text);
     }
 
-    /**
-     * 持久化阶段：把 AI 识别结果写回 picture 表
-     * 和 execute 分开是因为持久化需要在事务内完成
-     */
+    // 和 execute 分开，因为持久化要在事务里跑
     @Override
     public void persist(Task task) {
-        ExcUtils.throwIfTrue(task.getBizId() == null || task.getBizId().isBlank(), "任务 bizId 为空");
-        Long pictureId;
-        try {
-            pictureId = Long.valueOf(task.getBizId());
-        } catch (NumberFormatException e) {
-            throw new RuntimeException("任务 bizId 格式错误: " + task.getBizId());
-        }
-        Picture picture = pictureService.getById(pictureId);
-        if (picture == null) {
-            throw new RuntimeException("图片不存在: " + pictureId);
-        }
+        Picture picture = resolvePictureFromTask(task);
+        Long pictureId = picture.getId();
 
         String text = task.getResult();
         AiPictureMessage aiResult = JSONUtil.toBean(text, AiPictureMessage.class);
-        // XSS 清洗，防存储 XSS
-        // AI 结果只对"用户尚未填写"的字段填充，不覆盖手动编辑的元数据
+        // XSS 清洗
+        // 只填充用户没手动填过的字段，不覆盖已有数据
         if (aiResult.getTags() != null && !aiResult.getTags().isEmpty()) {
             // 只有图片尚无标签时才写入 AI 标签
             Long existingTagCount = pictureTagMapper.selectCount(
@@ -196,7 +173,6 @@ public class AiTagTaskHandler implements TaskHandler {
         if (aiResult.getPictureName() != null && !aiResult.getPictureName().isBlank()
                 && (picture.getPictureName() == null || picture.getPictureName().isBlank())) {
             String cleanName = XssSanitizer.clean(aiResult.getPictureName());
-            // AI 生成的名称可能超过 100 字符，截断保底
             cleanName = truncate(cleanName, MAX_AI_NAME_LENGTH);
             picture.setPictureName(cleanName);
         }
@@ -207,6 +183,20 @@ public class AiTagTaskHandler implements TaskHandler {
             picture.setIntroduction(cleanIntro);
         }
         pictureService.updateById(picture);
+    }
+
+    private Picture resolvePictureFromTask(Task task) {
+        ExcUtils.throwIfTrue(task.getBizId() == null || task.getBizId().isBlank(),
+                ExceptionCode.PARAMETER_ERROR, "任务 bizId 为空");
+        Long pictureId;
+        try {
+            pictureId = Long.valueOf(task.getBizId());
+        } catch (NumberFormatException e) {
+            throw new BaseException(ExceptionCode.PARAMETER_ERROR, "任务 bizId 格式错误: " + task.getBizId(), e);
+        }
+        Picture picture = pictureService.getById(pictureId);
+        ExcUtils.throwIfTrue(picture == null, ExceptionCode.NOT_FOUND, "图片不存在: " + pictureId);
+        return picture;
     }
 
     private String truncate(String value, int maxLength) {

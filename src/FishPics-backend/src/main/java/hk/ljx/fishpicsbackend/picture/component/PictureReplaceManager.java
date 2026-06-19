@@ -3,14 +3,12 @@ package hk.ljx.fishpicsbackend.picture.component;
 import cn.hutool.crypto.digest.DigestUtil;
 import hk.ljx.fishpicsbackend.collab.CollabMessageFactory;
 import hk.ljx.fishpicsbackend.collab.CollabSessionRegistry;
-import hk.ljx.fishpicsbackend.common.context.LoginContext;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.infra.CosService;
 import hk.ljx.fishpicsbackend.common.utils.FileTypeUtils;
 import hk.ljx.fishpicsbackend.common.utils.LoginContextHelper;
-import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
 import hk.ljx.fishpicsbackend.mapper.SpaceTeamMemberMapper;
@@ -32,7 +30,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
-import static hk.ljx.fishpicsbackend.picture.constants.PictureConstants.STATUS_APPROVED;
 
 @Slf4j
 @Component
@@ -69,8 +66,6 @@ public class PictureReplaceManager {
         ExcUtils.throwIfTrue(picture == null || picture.getUserId() == null,
                 ExceptionCode.NOT_FOUND, "图片不存在");
 
-        ensureEditableStatus(picture);
-        PicturePermissionUtil.checkWrite(picture, "替换", spaceTeamMemberMapper);
         ensureCollabLockIfRequired(picture, pictureId, user, requireCollabLock);
 
         String md5 = calculateMd5(file);
@@ -97,17 +92,6 @@ public class PictureReplaceManager {
 
         log.info("picture file replaced: pictureId={}, oldUrl={}, newUrl={}", pictureId, oldUrl, picture.getUrl());
         return buildResult(pictureId, picture.getUrl());
-    }
-
-    private void ensureEditableStatus(Picture picture) {
-        if (picture.getStatus() == null || ExcUtils.eq(picture.getStatus(), STATUS_APPROVED)) {
-            return;
-        }
-        LoginContext context = UserHolder.getLoginContext();
-        boolean isAdmin = context != null && context.hasSystemPerm("system:user:manage");
-        if (!isAdmin) {
-            throw new BaseException(ExceptionCode.FORBIDDEN, "图片当前状态不可编辑");
-        }
     }
 
     private void ensureCollabLockIfRequired(Picture picture, Long pictureId, User user, boolean requireCollabLock) {

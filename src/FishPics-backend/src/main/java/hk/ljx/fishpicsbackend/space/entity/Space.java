@@ -1,13 +1,13 @@
 package hk.ljx.fishpicsbackend.space.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.baomidou.mybatisplus.annotation.Version;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import java.io.Serializable;
+import java.time.LocalDateTime;
 
 import lombok.Data;
 
@@ -20,57 +20,35 @@ import static hk.ljx.fishpicsbackend.common.constants.SpaceConstants.SPACE_STATU
 @TableName(value ="space")
 @Data
 public class Space implements Serializable {
-    /**
-     * 空间id
-     */
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    /**
-     * 空间介绍
-     */
     private String introduction;
 
-    /**
-     * 0-私人空间，1-团队空间
-     */
+    /** 0-私人空间，1-团队空间 */
     private Integer type;
 
-    /**
-     * 创建的用户Id
-     */
     private Long userId;
 
-    /**
-     * 空间的存储大小(bytes)
-     */
+    /** 空间的存储大小(bytes) */
     private Long storageSize;
 
-    /**
-     * 空间级别：普通-VIP-SVIP
-     */
+    /** 空间级别：普通-VIP-SVIP */
     private Integer level;
 
-    /**
-     * 空间名
-     */
     private String name;
 
-    /**
-     * 现在使用大小
-     */
     private Long size;
 
-    /**
-     * 0=禁用, 1=正常
-     */
+    /** 0=禁用, 1=正常 */
     private Integer status;
 
-    /**
-     * 乐观锁版本号
-     */
     @Version
     private Integer version;
+
+    private LocalDateTime createTime;
+
+    private LocalDateTime updateTime;
 
     private static final long serialVersionUID = 1L;
 

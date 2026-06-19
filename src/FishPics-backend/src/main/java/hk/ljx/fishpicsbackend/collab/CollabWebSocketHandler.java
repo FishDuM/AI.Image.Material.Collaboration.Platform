@@ -2,7 +2,6 @@ package hk.ljx.fishpicsbackend.collab;
 
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import hk.ljx.fishpicsbackend.collab.CollabMessageFactory.Crop;
 import hk.ljx.fishpicsbackend.collab.CollabMessageFactory.PictureUserMessage;
 import hk.ljx.fishpicsbackend.collab.CollabMessageFactory.TransformMessage;
@@ -10,12 +9,11 @@ import hk.ljx.fishpicsbackend.collab.CollabMessageFactory.UserMessage;
 import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.infra.JwtUtils;
+import hk.ljx.fishpicsbackend.space.component.SpacePermissionChecker;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
-import hk.ljx.fishpicsbackend.mapper.SpaceTeamMemberMapper;
 import hk.ljx.fishpicsbackend.picture.entity.Picture;
 import hk.ljx.fishpicsbackend.space.entity.Space;
-import hk.ljx.fishpicsbackend.space.entity.SpaceTeamMember;
 import hk.ljx.fishpicsbackend.user.entity.User;
 import hk.ljx.fishpicsbackend.user.service.UserService;
 import jakarta.annotation.Resource;
@@ -47,10 +45,10 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
     private UserService userService;
 
     @Resource
-    private SpaceTeamMemberMapper teamMemberMapper;
+    private SpaceMapper spaceMapper;
 
     @Resource
-    private SpaceMapper spaceMapper;
+    private SpacePermissionChecker spacePermissionChecker;
 
     @Resource
     private PictureMapper pictureMapper;
@@ -144,7 +142,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         sessionRegistry.updatePictureState(spaceId, pictureId, outgoing);
         sessionRegistry.broadcastAll(spaceId, outgoing);
 
-        log.info("[Collab] transform broadcast: space={}, picture={}, online={}",
+        log.debug("[Collab] transform broadcast: space={}, picture={}, online={}",
                 spaceId, pictureId, sessionRegistry.getOnlineUserIds(spaceId).size());
     }
 
@@ -157,13 +155,13 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         if (acquired) {
             sessionRegistry.broadcastAll(spaceId,
                     CollabMessageFactory.lock(new PictureUserMessage(pictureId, userId, nickname)));
-            log.info("[Collab] lock acquired: space={}, picture={}, user={}", spaceId, pictureId, userId);
+            log.debug("[Collab] lock acquired: space={}, picture={}, user={}", spaceId, pictureId, userId);
             return;
         }
 
         var lock = sessionRegistry.getSpaceLock(spaceId);
         sessionRegistry.sendToUser(spaceId, userId, CollabMessageFactory.lockDenied(pictureId, lock));
-        log.info("[Collab] lock denied: space={}, picture={}, user={}", spaceId, pictureId, userId);
+        log.debug("[Collab] lock denied: space={}, picture={}, user={}", spaceId, pictureId, userId);
     }
 
     private void handleUnlock(JSONObject data, Long spaceId, Long userId) {
@@ -172,7 +170,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         boolean released = sessionRegistry.releaseEditLock(spaceId, pictureId, userId);
         if (released) {
             broadcastUnlockAndClearState(spaceId, pictureId, userId);
-            log.info("[Collab] lock released: space={}, picture={}, user={}", spaceId, pictureId, userId);
+            log.debug("[Collab] lock released: space={}, picture={}, user={}", spaceId, pictureId, userId);
         }
     }
 
@@ -190,11 +188,11 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         Long pictureId = sessionRegistry.clearLockByUserInSpace(userId, spaceId);
         if (pictureId != null) {
             broadcastUnlockAndClearState(spaceId, pictureId, userId);
-            log.info("[Collab] disconnected user lock released: space={}, picture={}", spaceId, pictureId);
+            log.debug("[Collab] disconnected user lock released: space={}, picture={}", spaceId, pictureId);
         }
 
         sessionRegistry.broadcast(spaceId, userId, CollabMessageFactory.leave(userId));
-        log.info("[Collab] user disconnect handled: space={}, user={}", spaceId, userId);
+        log.debug("[Collab] user disconnect handled: space={}, user={}", spaceId, userId);
     }
 
     private void handleResync(Long spaceId, Long userId) {
@@ -219,21 +217,6 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         sessionRegistry.clearPictureState(spaceId, pictureId);
     }
 
-    private boolean canAccessSpace(Long spaceId, Long userId) {
-        Space space = spaceMapper.selectById(spaceId);
-        if (space == null || !ExcUtils.eq(space.getStatus(), 1)) {
-            return false;
-        }
-        if (userId.equals(space.getUserId())) {
-            return true;
-        }
-        var memberQuery = new LambdaQueryWrapper<SpaceTeamMember>()
-                .eq(SpaceTeamMember::getSpaceId, spaceId)
-                .eq(SpaceTeamMember::getUserId, userId)
-                .select(SpaceTeamMember::getRoleId);
-        return teamMemberMapper.selectOne(memberQuery) != null;
-    }
-
     private SessionContext resolveSessionContext(WebSocketSession session) throws Exception {
         String token = getParam(session, "token");
         String spaceIdStr = getParam(session, "spaceId");
@@ -254,7 +237,9 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
             return null;
         }
 
-        if (!canAccessSpace(spaceId, userId)) {
+        Space space = spaceMapper.selectById(spaceId);
+        if (space == null || !ExcUtils.eq(space.getStatus(), 1)
+                || !spacePermissionChecker.canAccess(space, userId)) {
             session.close(CloseStatus.POLICY_VIOLATION.withReason("no space access"));
             return null;
         }
@@ -264,7 +249,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
             session.close(CloseStatus.POLICY_VIOLATION.withReason("user not found"));
             return null;
         }
-        if (user.getStatus() == null || !ExcUtils.eq(user.getStatus(), 1)) {
+        if (!user.isActive()) {
             session.close(CloseStatus.POLICY_VIOLATION.withReason("user disabled"));
             return null;
         }

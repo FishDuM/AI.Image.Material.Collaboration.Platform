@@ -16,42 +16,34 @@ export function useAuthModal(onLoginSuccess) {
   const loginCaptcha = useCaptcha(getLoginCheckCode)
   const registerCaptcha = useCaptcha(getRegisterCheckCode)
 
-  const fetchLoginCheckCode = useCallback(async () => {
-    await loginCaptcha.refreshCaptcha()
-  }, [loginCaptcha])
-
-  const fetchRegisterCheckCode = useCallback(async () => {
-    await registerCaptcha.refreshCaptcha()
-  }, [registerCaptcha])
-
-  const openLogin = useCallback(() => {
+  const openLogin = () => {
     setRegisterVisible(false)
     setLoginVisible(true)
-    fetchLoginCheckCode()
-  }, [fetchLoginCheckCode])
+    loginCaptcha.refreshCaptcha()
+  }
 
-  const openRegister = useCallback(() => {
+  const openRegister = () => {
     setLoginVisible(false)
     setRegisterVisible(true)
-    fetchRegisterCheckCode()
-  }, [fetchRegisterCheckCode])
+    registerCaptcha.refreshCaptcha()
+  }
 
-  const closeLogin = useCallback(() => {
+  const closeLogin = () => {
     setLoginVisible(false)
     loginCaptcha.clearCaptcha()
-  }, [loginCaptcha])
+  }
 
-  const closeRegister = useCallback(() => {
+  const closeRegister = () => {
     setRegisterVisible(false)
     registerCaptcha.clearCaptcha()
-  }, [registerCaptcha])
+  }
 
   const handleLoginSubmit = useCallback(async (values, loginForm) => {
     setLoginLoading(true)
     try {
       if (!loginCaptcha.captchaKey) {
         message.error('验证码已过期，请刷新验证码')
-        fetchLoginCheckCode()
+        loginCaptcha.refreshCaptcha()
         loginForm?.setFieldValue('checkCode', '')
         setLoginLoading(false)
         return
@@ -68,7 +60,7 @@ export function useAuthModal(onLoginSuccess) {
     } finally {
       setLoginLoading(false)
     }
-  }, [loginCaptcha.captchaKey, authLogin, message, closeLogin, onLoginSuccess, fetchLoginCheckCode])
+  }, [loginCaptcha, authLogin, message, closeLogin, onLoginSuccess])
 
   const handleRegisterSubmit = useCallback(async (values, registerForm) => {
     setRegisterLoading(true)
@@ -99,14 +91,14 @@ export function useAuthModal(onLoginSuccess) {
   }, [registerCaptcha.captchaKey, message, closeRegister, openLogin])
 
   const refreshLoginCode = useCallback((loginForm) => {
-    fetchLoginCheckCode()
+    loginCaptcha.refreshCaptcha()
     loginForm?.setFieldValue('checkCode', '')
-  }, [fetchLoginCheckCode])
+  }, [loginCaptcha])
 
   const refreshRegisterCode = useCallback((registerForm) => {
-    fetchRegisterCheckCode()
+    registerCaptcha.refreshCaptcha()
     registerForm?.setFieldValue('checkCode', '')
-  }, [fetchRegisterCheckCode])
+  }, [registerCaptcha])
 
   return {
     loginVisible,

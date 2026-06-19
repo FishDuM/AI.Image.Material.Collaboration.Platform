@@ -18,24 +18,15 @@ public class SpaceTeamMember implements Serializable {
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    /**
-     * 关联 space.id
-     */
+    /** 关联 space.id */
     private Long spaceId;
 
-    /**
-     * 关联 user.id
-     */
+    /** 关联 user.id */
     private Long userId;
 
-    /**
-     * 关联 role.id（仅允许 1=所有者, 2=成员）
-     */
+    /** 关联 role.id（仅允许 1=所有者, 2=成员） */
     private Integer roleId;
 
-    /**
-     * 加入时间
-     */
     private LocalDateTime createTime;
 
     private static final long serialVersionUID = 1L;

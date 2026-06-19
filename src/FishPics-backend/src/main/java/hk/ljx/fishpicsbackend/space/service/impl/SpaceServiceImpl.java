@@ -26,6 +26,7 @@ import hk.ljx.fishpicsbackend.space.dto.SpaceAdminUpdateRequest;
 import hk.ljx.fishpicsbackend.space.dto.SpacePictureListRequest;
 import hk.ljx.fishpicsbackend.space.dto.SpaceQueryWrapper;
 import hk.ljx.fishpicsbackend.space.dto.UpdateSpaceRequest;
+import hk.ljx.fishpicsbackend.space.component.SpaceAccessResolver;
 import hk.ljx.fishpicsbackend.space.component.SpaceAdminManager;
 import hk.ljx.fishpicsbackend.space.component.SpacePermissionChecker;
 import hk.ljx.fishpicsbackend.space.component.SpaceTeamMemberManager;
@@ -42,8 +43,6 @@ import hk.ljx.fishpicsbackend.space.dto.TeamChangeRoleRequest;
 import hk.ljx.fishpicsbackend.mapper.SpaceTeamMemberMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import lombok.extern.slf4j.Slf4j;
 
 import jakarta.annotation.Resource;
@@ -66,6 +65,9 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
 
     @Resource
     private SpaceTeamMemberMapper spaceTeamMemberMapper;
+
+    @Resource
+    private SpaceAccessResolver spaceAccessResolver;
 
     @Resource
     private SpaceAdminManager spaceAdminManager;
@@ -332,8 +334,6 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         return resultPage;
     }
 
-
-
     @Override
     public IPage<SpaceVO> adminList(SpaceQueryWrapper spaceQueryWrapper) {
         return spaceAdminManager.list(spaceQueryWrapper);
@@ -434,32 +434,14 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         };
     }
 
-
-
-    private Space resolveSpaceAccess(Long spaceId) {
-        Space space = baseMapper.selectById(spaceId);
-        Space.validateActive(space);
-        Long userId = LoginContextHelper.requireUser().getId();
-        spacePermissionChecker.checkAccess(space, userId);
-        return space;
+    @Override
+    public Space resolveSpaceAccess(Long spaceId) {
+        return spaceAccessResolver.resolve(spaceId);
     }
 
 
     private void evictUserPermCacheAfterCommit(Long userId) {
-        if (userId == null) {
-            return;
-        }
-        Runnable evict = () -> cacheManager.getUserPermCache().evict(String.valueOf(userId));
-        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            evict.run();
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                evict.run();
-            }
-        });
+        cacheManager.evictUserPermCacheAfterCommit(userId);
     }
 
 

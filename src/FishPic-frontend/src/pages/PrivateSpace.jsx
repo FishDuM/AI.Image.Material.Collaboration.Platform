@@ -1,14 +1,15 @@
-import { useState, useEffect, useCallback, useMemo, useContext } from 'react'
+import { useState, useEffect, useCallback, useMemo, useContext, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { App as AntApp, Typography, Button, Modal, Form, Input, Masonry, Image as AntImage, Spin, Empty, Popconfirm } from 'antd'
+import { App as AntApp, Typography, Button, Form, Input, Masonry, Image as AntImage, Spin, Empty } from 'antd'
 import { SearchOutlined, ReloadOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, ArrowUpOutlined, EditOutlined, CloudUploadOutlined, ShareAltOutlined, StarOutlined } from '@ant-design/icons'
-import { updateSpace, listSpace, createShare, updatePicture } from '../api'
+import { updateSpace, listSpace, updatePicture } from '../api'
 import { useIsMobile } from '../hooks/useIsMobile'
-import { useSystemTypes } from '../hooks/useRequestUtils'
+import { useSystemTypes } from '../hooks/useSystemTypes'
+import { useMasonryItems } from '../hooks/useMasonryItems'
+import { useShare } from '../hooks/useShare'
 import { AuthContext } from '../context/AuthContext'
-import { PAGE_SIZE, formatStorage } from '../utils/constants'
+import { PAGE_SIZE, formatStorage, computeSpaceStorage, isVipUser, showUpgradeHint } from '../utils/constants'
 import { getThumbnailUrl } from '../utils/image'
-import { spaceNameRules } from '../utils/formRules'
 import { isCanceledError } from '../utils/error'
 import { usePictureFetch, useBatchSelection, usePictureEditUpload } from '../hooks/useSpacePictures'
 import ImageUploadModal from '../components/shared/ImageUploadModal'
@@ -17,6 +18,8 @@ import PictureEditModal from '../components/shared/PictureEditModal'
 import UpgradeModal from '../components/shared/UpgradeModal'
 import SharePictureModal from '../components/shared/SharePictureModal'
 import StorageUsagePopover from '../components/shared/StorageUsagePopover'
+import EditSpaceModal from '../components/shared/EditSpaceModal'
+import BatchActionBar from '../components/shared/BatchActionBar'
 import './PrivateSpace.css'
 
 const { Title } = Typography
@@ -25,75 +28,20 @@ function PrivateSpace() {
   const navigate = useNavigate()
   const isMobile = useIsMobile()
   const { message, modal } = AntApp.useApp()
-  const [systemTags, setSystemTags] = useState([])
+  const systemTags = useSystemTypes()
   const { userInfo } = useContext(AuthContext)
-  const { fetchSystemTypes } = useSystemTypes()
   const [spaces, setSpaces] = useState([])
   const [showEdit, setShowEdit] = useState(false)
   const [updateLoading, setUpdateLoading] = useState(false)
-  const [editForm] = Form.useForm()
 
   const [showUpgrade, setShowUpgrade] = useState(false)
-  const [showShare, setShowShare] = useState(false)
-  const [shareForm] = Form.useForm()
-  const [shareLoading, setShareLoading] = useState(false)
-  const [shareLink, setShareLink] = useState('')
-  const handleOpenShare = () => {
-    if (selectedIds.length === 0) {
-      message.warning('请选择至少一张图片进行分享')
-      return
-    }
-    // 检查所选图片是否都属于当前用户
-    const targetPics = pictures.filter(p => selectedIds.includes(p.id))
-    const hasForeignPic = targetPics.some(p => p.userId && userInfo && p.userId !== userInfo.id)
-    if (hasForeignPic) {
-      message.warning('只能分享自己上传的图片')
-      return
-    }
-    shareForm.resetFields()
-    setShareLink('')
-    setShowShare(true)
-  }
-
-  const handleCreateShare = async (values) => {
-    setShareLoading(true)
-    try {
-      const token = await createShare({
-        pictureIds: selectedIds,
-        expireDays: values.expireDays || 1,
-        allowDownload: values.allowDownload ? 1 : 0,
-      })
-      const link = `${window.location.origin}/s/${token}`
-      setShareLink(link)
-      message.success('分享链接已生成')
-    } catch (error) {
-      message.error(error.message || '创建分享失败')
-    } finally {
-      setShareLoading(false)
-    }
-  }
-
-  const handleCopyShareLink = () => {
-    navigator.clipboard.writeText(shareLink).then(() => {
-      message.success('链接已复制到剪贴板')
-    }).catch(() => {
-      message.error('复制失败，请手动复制')
-    })
-  }
-
-  useEffect(() => {
-    fetchSystemTypes().then(result => {
-      if (Array.isArray(result)) setSystemTags(result)
-    }).catch((error) => { console.error('[fetchSystemTypes]', error) })
-  }, [])
 
   const fetchSpaces = useCallback(async () => {
     try {
       const result = await listSpace(0)
       const list = Array.isArray(result) ? result : []
       setSpaces(list)
-    } catch (error) {
-      console.error('[fetchSpaces]', error)
+    } catch {
       setSpaces([])
     }
   }, [])
@@ -108,31 +56,48 @@ function PrivateSpace() {
     toggleBatchMode, toggleSelect, handleBatchDelete,
   } = useBatchSelection({ pictures, spaces, searchKeyword, refreshPictures, refreshSpaces: fetchSpaces, message })
 
+  const picturesRef = useRef(pictures)
+  useEffect(() => { picturesRef.current = pictures })
+  const userInfoRef = useRef(userInfo)
+  useEffect(() => { userInfoRef.current = userInfo })
+
+  const {
+    showShare, shareForm, shareLoading, shareLink,
+    handleOpenShare, handleCreateShare, handleCopyShareLink, handleCloseShare,
+  } = useShare({
+    selectedIds,
+    message,
+    onValidate: () => {
+      const targetPics = picturesRef.current.filter(p => selectedIds.includes(p.id))
+      const hasForeignPic = targetPics.some(p => p.userId && userInfoRef.current && p.userId !== userInfoRef.current.id)
+      if (hasForeignPic) {
+        message.warning('只能分享自己上传的图片')
+        return false
+      }
+    },
+  })
+
   const {
     showEditPicture, setShowEditPicture, editPictureLoading, editPictureForm,
     showUploadModal, setShowUploadModal, showImageEditor, setShowImageEditor,
     handleEditPictureOpen, handleUploadSuccess, handleEditPictureSubmit, handleAiTag,
   } = usePictureEditUpload({ selectedIds, pictures, spaces, searchKeyword, refreshPictures, refreshSpaces: fetchSpaces, message, modal, navigate, isMobile, Form })
 
-  const masonryItems = useMemo(() => pictures.map(pic => ({ key: `pic-${pic.id}`, data: pic })), [pictures])
+  const masonryItems = useMasonryItems(pictures)
 
   useEffect(() => {
-    const init = async () => { await fetchSpaces() }
-    init()
+    fetchSpaces()
   }, [fetchSpaces])
 
   const spaceInfo = useMemo(() => {
     if (!spaces.length) return null
     const s = spaces[0]
-    const sizeBytes = Number(s.size) || 0
-    const storageBytes = Number(s.storageSize) || 0
-    const percent = storageBytes > 0 ? Math.min(100, Math.round((sizeBytes / storageBytes) * 100)) : 0
+    const { sizeBytes, storageBytes, percent } = computeSpaceStorage(s)
     return { ...s, percent, usedText: formatStorage(sizeBytes), totalText: formatStorage(storageBytes) }
   }, [spaces])
 
   const handleEditOpen = () => {
     if (spaces.length > 0) {
-      editForm.setFieldsValue({ name: spaces[0].name, introduction: spaces[0].introduction })
       setShowEdit(true)
     }
   }
@@ -147,7 +112,6 @@ function PrivateSpace() {
       })
       message.success('修改成功')
       setShowEdit(false)
-      editForm.resetFields()
       fetchSpaces()
     } catch (error) {
       if (isCanceledError(error)) return
@@ -271,34 +235,20 @@ function PrivateSpace() {
             <div className="load-more-indicator">没有更多了</div>
           )}
           {batchMode && (
-            <div className="private-space-batch-bar">
-              <span className="private-space-batch-count">
-                已选择 <strong>{selectedIds.length}</strong> 张图片
-              </span>
-              <div className="private-space-batch-actions">
-                <Button
-                  icon={<CloseOutlined />}
-                  onClick={toggleBatchMode}
-                >
-                  取消
-                </Button>
-                <Button
-                  icon={<EditOutlined />}
-                  onClick={handleEditPictureOpen}
-                  disabled={selectedIds.length === 0}
-                >
-                  编辑图片信息
-                </Button>
-                <Button
-                  icon={<ShareAltOutlined />}
-                  onClick={handleOpenShare}
-                  disabled={selectedIds.length === 0}
-                >
-                  分享
-                </Button>
-                <Button
-                  icon={<StarOutlined />}
-                  onClick={async () => {
+            <BatchActionBar
+              className="private-space-batch-bar"
+              countClassName="private-space-batch-count"
+              actionsClassName="private-space-batch-actions"
+              selectedCount={selectedIds.length}
+              cancelIcon={<CloseOutlined />}
+              onCancel={toggleBatchMode}
+              actions={[
+                { icon: <EditOutlined />, label: '编辑图片信息', onClick: handleEditPictureOpen, disabled: selectedIds.length === 0 },
+                { icon: <ShareAltOutlined />, label: '分享', onClick: handleOpenShare, disabled: selectedIds.length === 0 },
+                {
+                  icon: <StarOutlined />,
+                  label: '申请精选',
+                  onClick: async () => {
                     try {
                       await updatePicture({ id: selectedIds[0], isSelected: 1 })
                       message.success('已提交精选申请')
@@ -308,83 +258,31 @@ function PrivateSpace() {
                     } catch (err) {
                       message.error(err.message || '申请失败')
                     }
-                  }}
-                  disabled={selectedIds.length !== 1}
-                  style={{ color: '#d4a017', borderColor: '#d4a017' }}
-                >
-                  申请精选
-                </Button>
-                <Popconfirm
-                  title="确认删除"
-                  description={`确定要删除选中的 ${selectedIds.length} 张图片吗？`}
-                  onConfirm={handleBatchDelete}
-                  okText="删除"
-                  cancelText="取消"
-                  okButtonProps={{ danger: true, disabled: selectedIds.length === 0 }}
-                >
-                  <Button
-                    type="primary"
-                    danger
-                    icon={<DeleteOutlined />}
-                    disabled={selectedIds.length === 0}
-                  >
-                    删除选中
-                  </Button>
-                </Popconfirm>
-              </div>
-            </div>
+                  },
+                  disabled: selectedIds.length !== 1,
+                  style: { color: '#d4a017', borderColor: '#d4a017' },
+                },
+              ]}
+              deleteAction={{ onClick: handleBatchDelete, disabled: selectedIds.length === 0 }}
+            />
           )}
         </div>
       )}
 
-      <Modal
-        title="修改空间"
+      <EditSpaceModal
         open={showEdit}
-        onCancel={() => { setShowEdit(false); editForm.resetFields() }}
-        footer={
-          <div style={{ textAlign: 'right' }}>
-            <Button onClick={() => { setShowEdit(false); editForm.resetFields() }} style={{ marginRight: 8 }}>
-              取消
-            </Button>
-            <Button type="primary" onClick={() => editForm.submit()} loading={updateLoading}>
-              保存
-            </Button>
-          </div>
-        }
-        closable={false}
-      >
-        <Form
-          form={editForm}
-          layout="vertical"
-          onFinish={handleUpdate}
-          style={{ marginTop: 16 }}
-        >
-          <Form.Item
-            name="name"
-            label="空间名称"
-            rules={spaceNameRules}
-          >
-            <Input placeholder="请输入空间名称" maxLength={20} />
-          </Form.Item>
-          <Form.Item
-            name="introduction"
-            label="空间介绍"
-          >
-            <Input.TextArea placeholder="请输入空间介绍" maxLength={200} rows={3} showCount />
-          </Form.Item>
-        </Form>
-      </Modal>
+        loading={updateLoading}
+        initialValues={spaces.length > 0 ? { name: spaces[0].name, introduction: spaces[0].introduction } : undefined}
+        onSubmit={handleUpdate}
+        onCancel={() => setShowEdit(false)}
+      />
 
       {showUpgrade && (
         <UpgradeModal
           open={showUpgrade}
           onClose={() => setShowUpgrade(false)}
           onConfirm={() => {
-            modal.info({
-              title: '升级会员',
-              content: '请联系管理员开通 VIP/SVIP 会员',
-              okText: '知道了',
-            })
+            showUpgradeHint(modal)
             setShowUpgrade(false)
           }}
         />
@@ -396,7 +294,7 @@ function PrivateSpace() {
         picture={pictures.find(p => selectedIds.includes(p.id))}
         tags={systemTags}
         loading={editPictureLoading}
-        canUseAi={userInfo?.level === 1 || userInfo?.level === 2}
+        canUseAi={isVipUser(userInfo?.level)}
         onSubmit={handleEditPictureSubmit}
         onAiTag={handleAiTag}
         onEditImage={() => setShowImageEditor(true)}
@@ -426,7 +324,7 @@ function PrivateSpace() {
         shareLink={shareLink}
         onCreate={handleCreateShare}
         onCopy={handleCopyShareLink}
-        onClose={() => { setShowShare(false); shareForm.resetFields(); setShareLink('') }}
+        onClose={handleCloseShare}
       />
     </main>
   )

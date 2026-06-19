@@ -15,7 +15,7 @@ public interface PicSystemService extends IService<PicSystem> {
 
     void deleteType(String type);
 
-    List<String> getMarquess();
+    List<String> getMarquees();
 
     void addMarquee(AddSysMarqueeRequest addSysMarquee);
 

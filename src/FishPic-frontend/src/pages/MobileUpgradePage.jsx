@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { App as AntApp } from 'antd'
 import MobilePageWrapper from '../components/MobilePageWrapper'
 import { UpgradeContent } from '../components/shared/UpgradeContent'
+import { showUpgradeHint } from '../utils/constants'
 import './PrivateSpace.css'
 
 function MobileUpgradePage() {
@@ -11,11 +12,7 @@ function MobileUpgradePage() {
 
   const handleConfirm = useCallback((plan) => {
     if (!plan) return
-    modal.info({
-      title: '升级会员',
-      content: '请联系管理员开通 VIP/SVIP 会员',
-      okText: '知道了',
-    })
+    showUpgradeHint(modal)
   }, [modal])
 
   return (

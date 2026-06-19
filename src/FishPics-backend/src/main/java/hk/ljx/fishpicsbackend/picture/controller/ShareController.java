@@ -60,8 +60,9 @@ public class ShareController {
     @GetMapping("/preview/{token}")
     public void preview(@PathVariable String token,
                         @RequestParam(required = false) Long pictureId,
+                        @RequestParam(required = false) Integer size,
                         HttpServletResponse response) throws Exception {
-        try (ShareFileVO file = shareService.getPreviewFile(token, pictureId)) {
+        try (ShareFileVO file = shareService.getPreviewFile(token, pictureId, size)) {
             response.setContentType(DownloadUtils.resolveContentType(file.getContentType()));
             response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
             if (file.getContentLength() != null && file.getContentLength() >= 0) {
@@ -88,9 +89,11 @@ public class ShareController {
             if (file.getContentLength() != null && file.getContentLength() >= 0) {
                 response.setContentLengthLong(file.getContentLength());
             }
+            String safeName = DownloadUtils.defaultFileName(file.getPictureName(), file.getContentType());
             response.setHeader(
                     HttpHeaders.CONTENT_DISPOSITION,
-                    "attachment; filename*=UTF-8''" + URLEncoder.encode(DownloadUtils.defaultFileName(file.getPictureName()), StandardCharsets.UTF_8)
+                    "attachment; filename=\"" + safeName.replace("\"", "_") + "\"; "
+                            + "filename*=UTF-8''" + URLEncoder.encode(safeName, StandardCharsets.UTF_8)
             );
             response.setHeader("X-Content-Type-Options", "nosniff");
             StreamUtils.copy(file.getInputStream(), response.getOutputStream());

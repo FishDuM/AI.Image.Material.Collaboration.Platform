@@ -28,12 +28,7 @@ public class PictureVO {
     private Long size;
     private String type;
 
-    // 1=正常 0=禁用 2=待审核
-    private Integer status;
-    // 0=公开 1=私有
-    @JsonProperty("isPrivate")
-    private Integer isPrivate;
-    // 0=普通 1=精选
+    // 0=普通 1=精选 2=申请中
     @JsonProperty("isSelected")
     private Integer isSelected;
 
@@ -75,8 +70,8 @@ public class PictureVO {
 
     // 管理端，带完整信息
     public static PictureVO ofAdmin(Long id, String url, String width, String height,
-                                     Long size, Integer status, LocalDateTime createTime,
-                                     Long userId, Integer isPrivate, Integer isSelected,
+                                     Long size, LocalDateTime createTime,
+                                     Long userId, Integer isSelected,
                                      List<String> tags) {
         return PictureVO.builder()
                 .id(id)
@@ -84,10 +79,8 @@ public class PictureVO {
                 .width(width)
                 .height(height)
                 .size(size)
-                .status(status)
                 .createTime(createTime)
                 .userId(userId)
-                .isPrivate(isPrivate)
                 .isSelected(isSelected)
                 .tags(tags)
                 .build();

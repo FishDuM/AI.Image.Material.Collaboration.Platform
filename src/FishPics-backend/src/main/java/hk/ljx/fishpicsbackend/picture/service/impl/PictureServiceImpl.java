@@ -74,12 +74,8 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     @Resource
     private DistributedLockService distributedLockService;
 
-    /** 图片名称最大长度 */
     private static final int MAX_PICTURE_NAME_LENGTH = 100;
-    /** 图片简介最大长度 */
     private static final int MAX_PICTURE_INTRO_LENGTH = 500;
-
-    // ==================== 上传相关 → 委托 PictureUploadManager ====================
 
     @Override
     public String uploadAvatar(MultipartFile file, Long id) {
@@ -113,19 +109,15 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         return pictureUploadManager.mergeChunks(request);
     }
 
-    // ==================== 查询相关 ====================
-
     @Override
     public IPage<PictureVO> getPictureList(PictureQueryRequest pictureQueryRequest) {
         LambdaQueryWrapper<Picture> queryWrapper = new LambdaQueryWrapper<Picture>()
-                .eq(Picture::getStatus, STATUS_APPROVED)
-                .eq(Picture::getIsPrivate, PRIVATE_PUBLIC)
+                .eq(Picture::getIsSelected, SELECTED_FEATURED)
                 .isNotNull(Picture::getUrl)
                 .ne(Picture::getUrl, "")
                 .orderByDesc(Picture::getCreateTime);
 
-        if (StrUtil.isNotBlank(pictureQueryRequest.getTag())
-                && !"热门".equals(pictureQueryRequest.getTag())) {
+        if (StrUtil.isNotBlank(pictureQueryRequest.getTag())) {
             List<Long> pictureIdsWithTag = pictureTagManager.findPictureIdsByTag(pictureQueryRequest.getTag());
             if (pictureIdsWithTag.isEmpty()) {
                 Page<Picture> emptyPage = new Page<>(pictureQueryRequest.getCurrent(), pictureQueryRequest.getPageSize());
@@ -150,18 +142,9 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 .ne(Picture::getUrl, "")
                 .orderByDesc(Picture::getCreateTime);
 
-        Integer status = dto.getStatus();
-        if (status != null) {
-            if (status == ADMIN_FILTER_FEATURED) {
-                queryWrapper.eq(Picture::getIsPrivate, PRIVATE_PUBLIC)
-                        .eq(Picture::getIsSelected, SELECTED_FEATURED)
-                        .eq(Picture::getStatus, STATUS_APPROVED);
-            } else if (status == ADMIN_FILTER_FEATURED_PENDING) {
-                queryWrapper.eq(Picture::getIsSelected, SELECTED_PENDING)
-                        .in(Picture::getStatus, STATUS_DISABLED, STATUS_APPROVED);
-            } else {
-                queryWrapper.eq(Picture::getStatus, status);
-            }
+        Integer selected = dto.getSelected();
+        if (selected != null) {
+            queryWrapper.eq(Picture::getIsSelected, selected);
         }
 
         Page<Picture> page = new Page<>(dto.getCurrent(), dto.getPageSize());
@@ -174,24 +157,17 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 p.getWidth(),
                 p.getHeight(),
                 p.getSize(),
-                p.getStatus(),
                 p.getCreateTime(),
                 p.getUserId(),
-                p.getIsPrivate(),
                 p.getIsSelected(),
                 tagsMap.getOrDefault(p.getId(), Collections.emptyList())));
     }
 
-    // ==================== 编辑/审核/删除 ====================
-
     @Override
-    public void reviewPicture(Long pictureId, Integer status, Integer selected) {
+    public void reviewPicture(Long pictureId, Integer selected) {
         ExcUtils.throwIfTrue(pictureId == null, "图片id不能为空");
         Picture picture = pictureMapper.selectById(pictureId);
         ExcUtils.throwIfTrue(picture == null, "图片不存在");
-        if (status != null) {
-            picture.setStatus(status);
-        }
         if (selected != null) {
             ExcUtils.throwIfTrue((selected != SELECTED_NORMAL && selected != SELECTED_FEATURED), "精选值无效");
             if (selected == SELECTED_NORMAL && ExcUtils.eq(picture.getIsSelected(), SELECTED_PENDING)) {
@@ -294,9 +270,17 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
     @Override
     public IPage<PictureVO> getRecommendPictures(PageRequest pageRequest, Long userId) {
-        PictureQueryRequest query = new PictureQueryRequest();
-        query.setCurrent(pageRequest.getCurrent());
-        query.setPageSize(pageRequest.getPageSize());
-        return getPictureList(query);
+        LambdaQueryWrapper<Picture> queryWrapper = new LambdaQueryWrapper<Picture>()
+                .eq(Picture::getIsSelected, SELECTED_FEATURED)
+                .isNotNull(Picture::getUrl)
+                .ne(Picture::getUrl, "")
+                .orderByDesc(Picture::getCreateTime);
+
+        Page<Picture> page = new Page<>(pageRequest.getCurrent(), pageRequest.getPageSize());
+        IPage<Picture> picturePage = pictureMapper.selectPage(page, queryWrapper);
+        List<Long> pagePictureIds = picturePage.getRecords().stream().map(Picture::getId).collect(Collectors.toList());
+        Map<Long, List<String>> tagsMap = pictureTagManager.batchLoadTags(pagePictureIds);
+        return picturePage.convert(p -> PictureVO.ofList(p.getId(), p.getUrl(),
+                tagsMap.getOrDefault(p.getId(), Collections.emptyList())));
     }
 }

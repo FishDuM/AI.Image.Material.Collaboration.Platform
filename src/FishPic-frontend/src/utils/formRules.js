@@ -4,22 +4,22 @@ export const usernameRules = [
   { max: 30, message: '账号最多 30 个字符' },
 ]
 
-export const passwordRules = [
-  { required: true, message: '请输入密码' },
+const PASSWORD_MIN_MAX = [
   { min: 8, message: '密码至少 8 个字符' },
   { max: 32, message: '密码最多 32 个字符' },
+]
+
+export const passwordRules = [
+  { required: true, message: '请输入密码' },
+  ...PASSWORD_MIN_MAX,
 ]
 
 export const newPasswordRules = [
   { required: true, message: '请输入新密码' },
-  { min: 8, message: '密码至少 8 个字符' },
-  { max: 32, message: '密码最多 32 个字符' },
+  ...PASSWORD_MIN_MAX,
 ]
 
-export const optionalPasswordRules = [
-  { min: 8, message: '密码至少 8 个字符' },
-  { max: 32, message: '密码最多 32 个字符' },
-]
+export const optionalPasswordRules = [...PASSWORD_MIN_MAX]
 
 export const originalPasswordRules = [
   { required: true, message: '请输入原始密码' },

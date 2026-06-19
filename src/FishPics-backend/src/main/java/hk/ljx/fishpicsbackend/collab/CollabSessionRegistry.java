@@ -153,17 +153,15 @@ public class CollabSessionRegistry {
         Map<Long, SessionInfo> spaceSessions = sessionsBySpace.get(spaceId);
         if (spaceSessions == null) return false;
 
-        SessionInfo info = spaceSessions.remove(userId);
+        SessionInfo info = spaceSessions.get(userId);
         if (info == null) return false;
 
+        removeSession(spaceId, userId, info.getSessionId());
         closeSession(info.getSession(), reason);
 
         Long pictureId = stateStore.clearLockByUserInSpace(userId, spaceId);
         if (pictureId != null) {
             clearPictureState(spaceId, pictureId);
-        }
-        if (spaceSessions.isEmpty()) {
-            sessionsBySpace.remove(spaceId);
         }
         return true;
     }

@@ -41,7 +41,7 @@ public class GlobalExceptionHandler {
         return wrapRaw(Response.fail(be));
     }
 
-    // DashScope 调用失败，需要区分内容审核和真正的 API 错误
+    // 区分内容审核失败和真正的 API 错误
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<Response<?>> handleDashScopeError(ApiException e) {
         log.error("DashScope API exception", e);
@@ -116,7 +116,6 @@ public class GlobalExceptionHandler {
         return wrapRaw(Response.fail(new BaseException(ExceptionCode.NOT_FOUND, "接口不存在")));
     }
 
-    // 兜底：没被上面捕获的异常都走这里
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Response<?>> handleUnknown(Exception e, HttpServletRequest request) {
         log.error("未处理异常, uri={}", request.getRequestURI(), e);

@@ -32,7 +32,6 @@ function UpgradeContent({ onConfirm, onCancel, cancelButtonText }) {
   const [selectedPlan, setSelectedPlan] = useState(null)
 
   const handleConfirm = () => {
-    if (!selectedPlan) return
     if (onConfirm) {
       onConfirm(selectedPlan)
     }

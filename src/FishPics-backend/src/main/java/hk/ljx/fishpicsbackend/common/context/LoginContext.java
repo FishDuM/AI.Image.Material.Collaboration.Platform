@@ -5,7 +5,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.io.Serializable;
 import java.util.List;
 import java.util.Map;
 
@@ -17,33 +16,17 @@ import java.util.Map;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class LoginContext implements Serializable {
+public class LoginContext {
 
-    private static final long serialVersionUID = 1L;
-
-    /**
-     * 用户ID
-     */
     private Long userId;
 
-    /**
-     * 用户名
-     */
     private String username;
 
-    /**
-     * 昵称
-     */
     private String nickname;
 
-    /**
-     * 头像URL
-     */
     private String avatar;
 
-    /**
-     * 用户状态：1=正常，0=禁用
-     */
+    /** 用户状态：1=正常，0=禁用 */
     private Integer status;
 
     /**
@@ -66,12 +49,6 @@ public class LoginContext implements Serializable {
      */
     private List<String> vipPerms;
 
-    /**
-     * 系统角色ID（null 表示不是系统角色）
-     */
-    /**
-     * 系统权限列表
-     */
     private List<String> systemPerms;
 
     /**
@@ -87,54 +64,28 @@ public class LoginContext implements Serializable {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    public static class TeamPerm implements Serializable {
+    public static class TeamPerm {
 
-        private static final long serialVersionUID = 1L;
-
-        /**
-         * 团队角色ID
-         */
         private Integer roleId;
 
-        /**
-         * 团队角色名称
-         */
         private String roleName;
 
-        /**
-         * 团队权限列表
-         */
         private List<String> perms;
     }
 
-    /**
-     * 判断是否为管理员（Role.ADMIN）
-     */
     public boolean isAdmin() {
         return Boolean.TRUE.equals(isAdmin);
     }
 
-    /**
-     * 判断是否为系统超管（保留兼容性）
-     */
-    /**
-     * 判断是否拥有指定系统权限
-     */
     public boolean hasSystemPerm(String perm) {
         return isAdmin() || (systemPerms != null && systemPerms.contains(perm));
     }
 
-    /**
-     * 判断是否在指定团队中
-     */
     public boolean inTeam(Long spaceId) {
         if (spaceId == null) return false;
         return isAdmin() || (teams != null && teams.containsKey(String.valueOf(spaceId)));
     }
 
-    /**
-     * 判断是否拥有指定团队权限
-     */
     public boolean hasTeamPerm(Long spaceId, String perm) {
         if (isAdmin()) {
             return true;
@@ -149,9 +100,6 @@ public class LoginContext implements Serializable {
         return teamPerm.getPerms() != null && teamPerm.getPerms().contains(perm);
     }
 
-    /**
-     * 获取指定团队的角色ID
-     */
     public Integer getTeamRoleId(Long spaceId) {
         if (isAdmin()) {
             return 1;
@@ -163,9 +111,6 @@ public class LoginContext implements Serializable {
         return teamPerm != null ? teamPerm.getRoleId() : null;
     }
 
-    /**
-     * 判断是否拥有指定 VIP 权限
-     */
     public boolean hasVipPerm(String perm) {
         return vipPerms != null && vipPerms.contains(perm);
     }

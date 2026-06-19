@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
 import { Alert, App, Button, Checkbox, Empty, Modal, Spin, Tabs, Tag } from 'antd'
 import { LockOutlined, SaveOutlined, TeamOutlined } from '@ant-design/icons'
-import { formatStorage } from '../../utils/constants'
-import { SPACE_TYPE_COLOR, SPACE_TYPE_MAP, useSaveToSpace } from '../../hooks/useSaveToSpace'
+import { formatStorage, SPACE_TYPE_COLOR, SPACE_TYPE_MAP } from '../../utils/constants'
+import { useSaveToSpace } from '../../hooks/useSaveToSpace'
 
 function SaveToSpaceModal({ open, onClose, imageUrl }) {
   const { message } = App.useApp()

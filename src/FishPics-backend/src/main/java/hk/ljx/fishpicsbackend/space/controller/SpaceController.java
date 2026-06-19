@@ -32,12 +32,6 @@ public class SpaceController {
     @Resource
     private SpaceService spaceService;
 
-    /**
-     * 创建空间
-     * 
-     * @param createSpace 创建空间请求体
-     * @return 创建成功返回true
-     */
     @RequireLogin
     @AuditLog(module = "空间管理", operation = "创建空间")
     @PostMapping("/create")
@@ -46,12 +40,6 @@ public class SpaceController {
         return Response.ok(spaceService.createSpace(createSpace, user));
     }
 
-    /**
-     * 获取当前用户的空间列表
-     *
-     * @param type 空间类型（0-私人空间，1-团队空间）
-     * @return 空间列表
-     */
     @RequireLogin
     @GetMapping("/list")
     public Response<List<SpaceVO>> listSpace(@RequestParam("type") Integer type) {
@@ -59,25 +47,12 @@ public class SpaceController {
         return Response.ok(spaceService.listSpace(type));
     }
 
-    /**
-     * 获取单个空间详情
-     *
-     * @param id 空间ID
-     * @return 空间详情
-     */
     @RequireLogin
     @GetMapping("/getSpace")
     public Response<SpaceVO> getSpace(@RequestParam("id") Long id) {
-        ExcUtils.throwIfTrue(id == null, ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
         return Response.ok(spaceService.getSpace(id));
     }
 
-    /**
-     * 更新空间信息
-     *
-     * @param updateSpace 更新请求体
-     * @return 更新成功返回true
-     */
     @RequireLogin
     @AuditLog(module = "空间管理", operation = "更新空间")
     @PostMapping("/update")
@@ -85,12 +60,6 @@ public class SpaceController {
         return Response.ok(spaceService.updateSpace(updateSpace));
     }
 
-    /**
-     * 获取空间图片列表（分页）
-     *
-     * @param spacePictureList 查询请求体
-     * @return 图片分页结果
-     */
     @RequireLogin
     @PostMapping("/pictureList")
     public Response<IPage<PictureVO>> pictureList(@Valid @RequestBody SpacePictureListRequest spacePictureList) {
@@ -128,7 +97,6 @@ public class SpaceController {
     @RequireLogin
     @GetMapping("/team/members")
     public Response<List<SpaceMemberVO>> teamMemberList(@RequestParam("spaceId") Long spaceId) {
-        ExcUtils.throwIfTrue(spaceId == null, ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
         return Response.ok(spaceService.teamMemberList(spaceId));
     }
 

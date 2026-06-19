@@ -44,9 +44,6 @@ import java.io.InputStream;
 import java.util.List;
 import java.util.function.Supplier;
 
-import static hk.ljx.fishpicsbackend.common.constants.SpaceConstants.*;
-import static hk.ljx.fishpicsbackend.picture.constants.PictureConstants.*;
-
 /**
  * 图片上传逻辑（直传、URL上传、头像上传、分片上传委托）
  * 从 PictureServiceImpl 拆分，降低主服务复杂度
@@ -82,6 +79,9 @@ public class PictureUploadManager {
     private SpaceWritePermissionChecker spaceWritePermissionChecker;
 
     @Resource
+    private MultipartUploadSupport multipartUploadSupport;
+
+    @Resource
     private RedisCacheManager cacheManager;
 
     /** 头像文件大小限制 5MB */
@@ -95,14 +95,9 @@ public class PictureUploadManager {
         ExcUtils.throwIfTrue(!userLogin.getId().equals(id) && (ctx == null || !ctx.hasSystemPerm("system:user:manage")), "没有权限");
         ExcUtils.throwIfTrue(FileTypeUtils.getValidFileType(file) == null, ExceptionCode.PARAMETER_ERROR, "不支持的文件类型");
         ExcUtils.throwIfTrue(file.getSize() > MAX_AVATAR_SIZE, ExceptionCode.PARAMETER_ERROR, "头像大小不能超过5MB");
-        User user;
-        if (id != null && !id.equals(userLogin.getId())) {
-            user = userService.getById(id);
-            ExcUtils.throwIfTrue(user == null, "该用户不存在");
-        } else {
-            user = userService.getById(userLogin.getId());
-            ExcUtils.throwIfTrue(user == null, "用户不存在");
-        }
+        Long targetId = (id != null && !id.equals(userLogin.getId())) ? id : userLogin.getId();
+        User user = userService.getById(targetId);
+        ExcUtils.throwIfTrue(user == null, "用户不存在");
         String url = cosService.uploadAndGetImageUrl(file);
         String oldAvatar = user.getAvatar();
         user.setAvatar(url);
@@ -132,11 +127,11 @@ public class PictureUploadManager {
         User userLogin = LoginContextHelper.requireUser();
         Long userId = userLogin.getId();
 
-        long maxSize = getMaxUploadSize(userLogin.getLevel());
+        long maxSize = multipartUploadSupport.getMaxUploadSize(userLogin.getLevel());
         ExcUtils.throwIfTrue(file.getSize() > maxSize,
                 "上传图片大小不能超过" + FileUtil.readableFileSize(maxSize));
         ExcUtils.throwIfTrue(file.getSize() > DIRECT_UPLOAD_LIMIT,
-                "文件超过 100MB,请使用分片上传(前端应自动走 chunked 路径)");
+                "文件超过大小限制，请使用分片上传");
         String validFileType = FileTypeUtils.getValidFileType(file);
         ExcUtils.throwIfTrue(validFileType == null, "上传文件格式不正确");
         String md5;
@@ -155,7 +150,7 @@ public class PictureUploadManager {
         Long userId = userLogin.getId();
         ExcUtils.throwIfTrue(cn.hutool.core.util.StrUtil.isBlank(url), "图片URL不能为空");
 
-        long maxSize = getMaxUploadSize(userLogin.getLevel());
+        long maxSize = multipartUploadSupport.getMaxUploadSize(userLogin.getLevel());
         File tempFile = DownloadUtils.download(url, maxSize);
         try {
             try (FileInputStream fis = new FileInputStream(tempFile)) {
@@ -193,8 +188,6 @@ public class PictureUploadManager {
         return multipartUploadManager.mergeChunks(request);
     }
 
-    // ==================== 内部方法 ====================
-
     private Picture doProcessUpload(Supplier<String> cosUploader, long fileSize, String md5,
                                      Long userId, Long targetSpaceId) {
         FileResource existingResource = fileResourceService.findByMd5AndSize(md5, fileSize);
@@ -217,11 +210,7 @@ public class PictureUploadManager {
         picture.setUserId(userId);
         picture.setResourceId(resource.getId());
         if (picture.getSize() == null && pictureMessage.getSize() != null) {
-            try {
-                picture.setSize(Long.parseLong(pictureMessage.getSize()));
-            } catch (NumberFormatException e) {
-                log.warn("图片大小解析失败: {}", pictureMessage.getSize());
-            }
+            picture.setSize(pictureMessage.getSize());
         }
         ExcUtils.throwIfTrue(picture.getSize() == null, ExceptionCode.INTERNAL_SERVER_ERROR, "获取图片大小失败");
 
@@ -246,7 +235,6 @@ public class PictureUploadManager {
             throw new BaseException(ExceptionCode.PARAMETER_ERROR, "空间容量不足");
         }
         picture.setSpaceId(space.getId());
-        picture.setStatus(resolveInitialPictureStatus());
         try {
             ExcUtils.throwIfTrue(pictureMapper.insert(picture) != 1, "上传失败，数据库错误");
         } catch (org.springframework.dao.DuplicateKeyException e) {
@@ -305,21 +293,4 @@ public class PictureUploadManager {
         cacheManager.getUserPermCache().evict(String.valueOf(user.getId()));
     }
 
-    private long getMaxUploadSize(Integer level) {
-        if (level == null || level <= 0) {
-            return UPLOAD_MAX_SIZE_NORMAL;
-        }
-        return switch (level) {
-            case 1 -> UPLOAD_MAX_SIZE_VIP;
-            case 2 -> UPLOAD_MAX_SIZE_SVIP;
-            default -> UPLOAD_MAX_SIZE_SVIP;
-        };
-    }
-
-    private int resolveInitialPictureStatus() {
-        LoginContext context = UserHolder.getLoginContext();
-        return context != null && context.hasSystemPerm("system:user:manage")
-                ? STATUS_APPROVED
-                : STATUS_PENDING_REVIEW;
-    }
 }

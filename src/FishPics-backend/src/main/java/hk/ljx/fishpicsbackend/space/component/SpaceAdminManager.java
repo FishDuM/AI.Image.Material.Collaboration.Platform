@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import hk.ljx.fishpicsbackend.collab.CollabSessionRegistry;
+import hk.ljx.fishpicsbackend.common.constants.SpaceConstants;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
@@ -42,10 +43,6 @@ import java.util.stream.Collectors;
 @Slf4j
 @Component
 public class SpaceAdminManager {
-
-    private static final int TEAM_TYPE = 1;
-    private static final int STATUS_DISABLED = 0;
-    private static final int STATUS_ENABLED = 1;
     @Resource
     private SpaceMapper spaceMapper;
 
@@ -88,7 +85,7 @@ public class SpaceAdminManager {
 
         List<SpaceVO> records = spaces.stream()
                 .map(space -> {
-                    List<SpaceTeamMember> teamMembers = ExcUtils.eq(space.getType(), TEAM_TYPE)
+                    List<SpaceTeamMember> teamMembers = ExcUtils.eq(space.getType(), SpaceConstants.SPACE_TYPE_TEAM)
                             ? membersBySpaceId.getOrDefault(space.getId(), Collections.emptyList())
                             : null;
                     return spaceVOAssembler.build(space, userMap, pictureCountMap, teamMembers,
@@ -146,7 +143,7 @@ public class SpaceAdminManager {
 
     public Boolean setStatus(Long id, Integer status) {
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(id), ExceptionCode.PARAMETER_ERROR, "空间ID不能为空");
-        ExcUtils.throwIfTrue(status == null || (status != STATUS_DISABLED && status != STATUS_ENABLED),
+        ExcUtils.throwIfTrue(status == null || (status != SpaceConstants.SPACE_STATUS_DISABLED && status != SpaceConstants.SPACE_STATUS_ENABLED),
                 ExceptionCode.PARAMETER_ERROR, "无效的状态值");
         Space space = spaceMapper.selectById(id);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
@@ -154,7 +151,7 @@ public class SpaceAdminManager {
         int updated = spaceMapper.updateById(space);
         ExcUtils.throwIfTrue(updated <= 0, ExceptionCode.DATABASE_ERROR, "更新失败");
 
-        if (ExcUtils.eq(status, STATUS_DISABLED)) {
+        if (ExcUtils.eq(status, SpaceConstants.SPACE_STATUS_DISABLED)) {
             disconnectSpaceNow(id, "空间已被禁用");
         }
         return true;
@@ -211,12 +208,6 @@ public class SpaceAdminManager {
         return userMapper.selectByIds(userIds).stream()
                 .collect(Collectors.toMap(User::getId, user -> user));
     }
-
-
-
-
-
-
 
     private void releasePictureResources(List<Picture> pictures) {
         Set<Long> resourceIds = pictures.stream()

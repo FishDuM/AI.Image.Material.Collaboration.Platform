@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { App as AntApp, Table, Tag, Space, Button, Card, Typography, Avatar, Input, Row, Col, Form, Select, Modal, Upload } from 'antd'
 import { EditOutlined, SearchOutlined, ReloadOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons'
 import { adminEditUser, adminListUsers, adminSetUserStatus, getAdminUser } from '../api'
-import { beforeUpload } from '../utils/upload'
-import { PAGINATION_LOCALE } from '../utils/constants'
+import { createBeforeUpload } from '../utils/upload'
+import { PAGINATION_LOCALE, formatDateTime } from '../utils/constants'
 import { emailRules, optionalPasswordRules, phoneRules, usernameRules } from '../utils/formRules'
 import { useAdminGuard } from '../hooks/useAdminGuard'
 import { useAvatarUpload } from '../hooks/useAvatarUpload'
+import { LEVEL_TAG_MAP, LEVEL_TAG_COLOR, ADMIN_ROLE_TAG } from '../utils/constants'
 import './UserManagement.css'
 
 const { Title } = Typography
@@ -22,32 +23,9 @@ const ROLE_OPTIONS = [
   { value: 1, label: '管理员' },
 ]
 
-function formatDateTime(value) {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '-'
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  })
-}
-
-import { LEVEL_TAG_MAP, LEVEL_TAG_COLOR, ADMIN_ROLE_TAG } from '../utils/constants'
-
-function renderLevelTag(level, roleId) {
-  if (roleId === 1) {
-    return <Tag color={ADMIN_ROLE_TAG.color}>{ADMIN_ROLE_TAG.text}</Tag>
-  }
-  const lvl = level ?? 0
-  return <Tag color={LEVEL_TAG_COLOR[lvl] || 'default'}>{LEVEL_TAG_MAP[lvl] || '普通'}</Tag>
-}
-
 function UserManagement() {
   const { message, modal } = AntApp.useApp()
+  const beforeUpload = createBeforeUpload(message)
   const { userInfo } = useAdminGuard('system:user:manage')
   const [loading, setLoading] = useState(false)
   const [users, setUsers] = useState([])
@@ -248,7 +226,9 @@ function UserManagement() {
       title: '等级',
       dataIndex: 'level',
       key: 'level',
-      render: (level, record) => renderLevelTag(level, record.roleId),
+      render: (level, record) => record.roleId === 1
+        ? <Tag color={ADMIN_ROLE_TAG.color}>{ADMIN_ROLE_TAG.text}</Tag>
+        : <Tag color={LEVEL_TAG_COLOR[level ?? 0] || 'default'}>{LEVEL_TAG_MAP[level ?? 0] || '普通'}</Tag>,
     },
     {
       title: '状态',
@@ -414,7 +394,6 @@ function UserManagement() {
         footer={null}
         centered
         className="edit-user-modal"
-        destroyOnHidden
       >
         <Form
           form={editForm}

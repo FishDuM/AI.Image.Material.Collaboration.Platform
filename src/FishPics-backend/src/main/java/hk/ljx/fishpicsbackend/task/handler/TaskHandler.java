@@ -8,5 +8,5 @@ public interface TaskHandler {
 
     void execute(Task task) throws Exception;
 
-    void persist(Task task);
+    default void persist(Task task) {}
 }
