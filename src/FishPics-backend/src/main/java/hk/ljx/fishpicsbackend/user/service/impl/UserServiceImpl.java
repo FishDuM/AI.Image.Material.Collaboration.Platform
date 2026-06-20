@@ -107,6 +107,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     @Override
+    public UserVO adminGetUserDetail(Long userId) {
+        return userQueryManager.adminGetUserDetail(userId);
+    }
+
+    @Override
     public UserVO getCurrentUserVO() {
         return userQueryManager.getCurrentUserVO();
     }

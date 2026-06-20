@@ -119,8 +119,7 @@ public class TaskProcessor {
                         .eq(Task::getTaskId, taskId)
                         .eq(Task::getStatus, "PROCESSING")
                         .apply("update_time < DATE_SUB(NOW(), INTERVAL 5 MINUTE)")
-                        .set(Task::getUpdateTime, LocalDateTime.now())
-                        .set(Task::getRetryCount, 0));
+                        .set(Task::getUpdateTime, LocalDateTime.now()));
         if (reclaimed == 0) {
             log.warn("task re-claim failed, skipping: taskId={}", taskId);
             return false;
@@ -145,7 +144,8 @@ public class TaskProcessor {
                                 .eq(Task::getTaskId, task.getTaskId())
                                 .eq(Task::getStatus, "PROCESSING")
                                 .set(Task::getStatus, "DONE")
-                                .set(Task::getResult, task.getResult()));
+                                .set(Task::getResult, task.getResult())
+                                .set(Task::getErrorMsg, null));
                 if (rows == 0) {
                     throw new IllegalStateException("task status changed before commit, taskId=" + task.getTaskId());
                 }
@@ -154,11 +154,17 @@ public class TaskProcessor {
             log.info("task done: taskId={}, bizType={}", task.getTaskId(), task.getBizType());
             sseEmitterRegistry.completeWithResult(task.getTaskId(), task.getResult());
         } catch (Exception e) {
-            handleFailure(task, e);
+            boolean permanently = handleFailure(task, e);
+            if (permanently) {
+                handler.onFailed(task);
+            }
         }
     }
 
-    private void handleFailure(Task task, Exception e) {
+    /**
+     * @return true 表示任务已永久失败，false 表示已安排重试
+     */
+    private boolean handleFailure(Task task, Exception e) {
         String errorMsg = friendlyError(e);
         int newRetryCount = (task.getRetryCount() == null ? 0 : task.getRetryCount()) + 1;
 
@@ -173,14 +179,15 @@ public class TaskProcessor {
                         .execute(() -> process(task.getTaskId()));
             } catch (RejectedExecutionException rejected) {
                 markFailed(task, "任务重试调度失败，请稍后重新提交", true);
-                return;
+                return true;
             }
             log.warn("task retry {}/{} after {}s: taskId={}",
                     newRetryCount, MAX_RETRY_COUNT, delaySec, task.getTaskId(), e);
-            return;
+            return false;
         }
 
         markFailed(task, errorMsg, true);
+        return true;
     }
 
     private boolean moveBackToPending(Task task, String errorMsg, int retryCount) {

@@ -7,6 +7,7 @@ import com.alibaba.dashscope.aigc.multimodalconversation.MultiModalConversationR
 import com.alibaba.dashscope.common.MultiModalMessage;
 import com.alibaba.dashscope.common.Role;
 import com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeConnectionProperties;
+import hk.ljx.fishpicsbackend.ai.component.AiQuotaManager;
 import hk.ljx.fishpicsbackend.ai.dto.AiDrawPictureDTO;
 import hk.ljx.fishpicsbackend.common.enums.PicturePromptEnum;
 import hk.ljx.fishpicsbackend.common.enums.PictureSizeEnum;
@@ -39,6 +40,9 @@ public class AiDrawTaskHandler implements TaskHandler {
 
     @Resource
     private DashScopeConnectionProperties dashScopeConnectionProperties;
+
+    @Resource
+    private AiQuotaManager aiQuotaManager;
 
     @Override
     public String getBizType() {
@@ -111,6 +115,17 @@ public class AiDrawTaskHandler implements TaskHandler {
         log.info("ai draw success: {}", url);
 
         task.setResult(url);
+    }
+
+    @Override
+    public void onFailed(Task task) {
+        if (task.getUserId() != null) {
+            try {
+                aiQuotaManager.refund("draw", task.getUserId());
+            } catch (Exception e) {
+                log.warn("配额退还失败: taskId={}, err={}", task.getTaskId(), e.getMessage());
+            }
+        }
     }
 
 }

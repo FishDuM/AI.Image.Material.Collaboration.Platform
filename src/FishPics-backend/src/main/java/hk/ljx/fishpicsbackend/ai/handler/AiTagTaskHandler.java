@@ -4,6 +4,7 @@ import cn.hutool.json.JSONUtil;
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import hk.ljx.fishpicsbackend.ai.component.AiQuotaManager;
 import hk.ljx.fishpicsbackend.ai.vo.AiPictureMessage;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
@@ -55,6 +56,9 @@ public class AiTagTaskHandler implements TaskHandler {
     @Resource
     @Qualifier("aiTaskExecutor")
     private Executor aiTaskExecutor;
+
+    @Resource
+    private AiQuotaManager aiQuotaManager;
 
     private static final String TAG_PROMPT = "你需要生成一个图片名称，长度不超过6个汉字。你需要生成一个图片描述，长度不超过100个汉字。你可以根据标签：'人物、动物、植物、美食、风景、建筑、物品、服饰、数码、家居、插画、二次元、实拍、文档、表情包'来描述图片的内容，最多选择不超过3个，最少也要有1个。";
 
@@ -204,5 +208,16 @@ public class AiTagTaskHandler implements TaskHandler {
             return value;
         }
         return value.substring(0, maxLength);
+    }
+
+    @Override
+    public void onFailed(Task task) {
+        if (task.getUserId() != null) {
+            try {
+                aiQuotaManager.refund("tag", task.getUserId());
+            } catch (Exception e) {
+                log.warn("配额退还失败: taskId={}, err={}", task.getTaskId(), e.getMessage());
+            }
+        }
     }
 }

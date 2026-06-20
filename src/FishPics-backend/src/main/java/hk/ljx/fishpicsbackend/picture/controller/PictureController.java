@@ -57,7 +57,6 @@ public class PictureController {
         return Response.ok(pictureService.uploadAvatar(file, actualTargetUserId));
     }
 
-    // targetSpaceId 为 null 时默认上传至私人空间
     @RequireLogin
     @AuditLog(module = "图片管理", operation = "上传图片")
     @PostMapping("/upload")
@@ -115,9 +114,6 @@ public class PictureController {
         return Response.ok(true);
     }
 
-    /**
-     * 协同编辑：替换图片文件（前端发送变换后的图片 blob，后端上传 COS + 更新记录）
-     */
     @RequireLogin
     @PostMapping("/replace")
     public Response<PictureVO> replacePictureFile(@RequestParam("file") MultipartFile file,

@@ -25,9 +25,7 @@ public class UserVO {
     private String email;
     private String phone;
 
-    // 0=普通 1=VIP 2=SVIP 3=管理员
     private Integer level;
-    // 1=正常 0=禁用
     private Integer status;
 
     private String role;
@@ -85,7 +83,6 @@ public class UserVO {
                 .build();
     }
 
-    // 管理端，带脱敏
     public static UserVO ofAdmin(Long id, String username, String nickname, String avatar,
                                   String email, String phone, Integer status, Integer level,
                                   Integer roleId, LocalDateTime createTime, List<Long> roleIds) {
@@ -121,6 +118,25 @@ public class UserVO {
                                   String email, String phone, Integer status, Integer level,
                                   Integer roleId, List<Long> roleIds) {
         return ofAdmin(id, username, nickname, avatar, email, phone, status, level, roleId, null, roleIds);
+    }
+
+    public static UserVO ofAdmin(Long id, String username, String nickname, String avatar,
+                                  String email, String phone, Integer status, Integer level,
+                                  Integer roleId, LocalDateTime createTime, List<Long> roleIds,
+                                  boolean maskSensitive) {
+        return UserVO.builder()
+                .id(id)
+                .username(username)
+                .nickname(nickname)
+                .avatar(avatar)
+                .email(maskSensitive ? maskEmail(email) : email)
+                .phone(maskSensitive ? maskPhone(phone) : phone)
+                .status(status)
+                .level(level)
+                .roleId(roleId)
+                .createTime(createTime)
+                .roleIds(roleIds)
+                .build();
     }
 
     // 搜索结果

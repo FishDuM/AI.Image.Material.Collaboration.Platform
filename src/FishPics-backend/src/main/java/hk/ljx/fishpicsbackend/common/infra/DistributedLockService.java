@@ -17,10 +17,10 @@ public class DistributedLockService {
         this.redissonClient = redissonClient;
     }
 
-    public boolean tryLock(String key, long ttlSeconds) {
+    public boolean tryLock(String key) {
         RLock lock = redissonClient.getLock(key);
         try {
-            return lock.tryLock(0, ttlSeconds, TimeUnit.SECONDS);
+            return lock.tryLock(0, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return false;

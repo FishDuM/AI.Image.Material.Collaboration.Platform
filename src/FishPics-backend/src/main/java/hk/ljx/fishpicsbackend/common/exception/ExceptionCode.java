@@ -28,6 +28,13 @@ public enum ExceptionCode {
         this.message = message;
     }
 
+    public static ExceptionCode fromCode(int code) {
+        for (ExceptionCode ec : values()) {
+            if (ec.code == code) return ec;
+        }
+        return INTERNAL_SERVER_ERROR;
+    }
+
     public static HttpStatus toHttpStatus(int code) {
         if (code == 1) {
             return HttpStatus.OK;

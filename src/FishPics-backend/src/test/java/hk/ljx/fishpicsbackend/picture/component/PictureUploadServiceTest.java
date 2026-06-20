@@ -25,15 +25,15 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
- * PictureUploadManager 单元测试
+ * PictureUploadService 单元测试
  * 聚焦参数校验和权限检查逻辑
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
-class PictureUploadManagerTest {
+class PictureUploadServiceTest {
 
     @InjectMocks
-    private PictureUploadManager uploadManager;
+    private PictureUploadService uploadService;
 
     @Mock
     private CosService cosService;
@@ -45,8 +45,6 @@ class PictureUploadManagerTest {
     private UserService userService;
     @Mock
     private FileResourceService fileResourceService;
-    @Mock
-    private MultipartUploadManager multipartUploadManager;
     @Mock
     private SpaceQuotaManager quotaManager;
     @Mock
@@ -91,7 +89,7 @@ class PictureUploadManagerTest {
     void uploadAvatar_notLoggedIn_throws() {
         UserHolder.removeLoginContext();
         MultipartFile file = mock(MultipartFile.class);
-        assertThrows(BaseException.class, () -> uploadManager.uploadAvatar(file, 1L));
+        assertThrows(BaseException.class, () -> uploadService.uploadAvatar(file, 1L));
     }
 
     @Test
@@ -102,7 +100,7 @@ class PictureUploadManagerTest {
         when(file.getOriginalFilename()).thenReturn("big.jpg");
         when(file.getContentType()).thenReturn("image/jpeg");
 
-        assertThrows(BaseException.class, () -> uploadManager.uploadAvatar(file, 1L));
+        assertThrows(BaseException.class, () -> uploadService.uploadAvatar(file, 1L));
     }
 
     @Test
@@ -113,7 +111,7 @@ class PictureUploadManagerTest {
         when(file.getOriginalFilename()).thenReturn("test.exe");
         when(file.getContentType()).thenReturn("application/octet-stream");
 
-        assertThrows(BaseException.class, () -> uploadManager.uploadAvatar(file, 1L));
+        assertThrows(BaseException.class, () -> uploadService.uploadAvatar(file, 1L));
     }
 
     @Test
@@ -124,9 +122,8 @@ class PictureUploadManagerTest {
         when(file.getOriginalFilename()).thenReturn("test.jpg");
         when(file.getContentType()).thenReturn("image/jpeg");
 
-        // 尝试修改 userId=999 的头像，但当前用户不是管理员
         BaseException ex = assertThrows(BaseException.class,
-                () -> uploadManager.uploadAvatar(file, 999L));
+                () -> uploadService.uploadAvatar(file, 999L));
         assertTrue(ex.getMessage().contains("权限"));
     }
 
@@ -137,41 +134,41 @@ class PictureUploadManagerTest {
     void uploadPicture_notLoggedIn_throws() {
         UserHolder.removeLoginContext();
         MultipartFile file = mock(MultipartFile.class);
-        assertThrows(BaseException.class, () -> uploadManager.uploadPicture(file, null));
+        assertThrows(BaseException.class, () -> uploadService.uploadPicture(file, null));
     }
 
     @Test
     @DisplayName("uploadPicture - 普通用户文件超过等级限制应抛异常")
     void uploadPicture_exceedsLevelLimit_throws() {
-        setLoginUser(1L, 0); // 普通用户
+        setLoginUser(1L, 0);
         MultipartFile file = mock(MultipartFile.class);
-        when(file.getSize()).thenReturn(60L * 1024 * 1024); // 60MB > 普通用户限制
+        when(file.getSize()).thenReturn(60L * 1024 * 1024);
         when(file.getOriginalFilename()).thenReturn("big.jpg");
 
-        assertThrows(BaseException.class, () -> uploadManager.uploadPicture(file, null));
+        assertThrows(BaseException.class, () -> uploadService.uploadPicture(file, null));
     }
 
     @Test
     @DisplayName("uploadPicture - 文件超过 100MB 直传限制应抛异常")
     void uploadPicture_exceedsDirectLimit_throws() {
-        setLoginUser(1L, 2); // SVIP
+        setLoginUser(1L, 2);
         MultipartFile file = mock(MultipartFile.class);
-        when(file.getSize()).thenReturn(150L * 1024 * 1024); // 150MB > 100MB
+        when(file.getSize()).thenReturn(150L * 1024 * 1024);
         when(file.getOriginalFilename()).thenReturn("huge.jpg");
 
-        assertThrows(BaseException.class, () -> uploadManager.uploadPicture(file, null));
+        assertThrows(BaseException.class, () -> uploadService.uploadPicture(file, null));
     }
 
     @Test
     @DisplayName("uploadPicture - 不支持的文件格式应抛异常")
     void uploadPicture_invalidFormat_throws() {
-        setLoginUser(1L, 1); // VIP
+        setLoginUser(1L, 1);
         MultipartFile file = mock(MultipartFile.class);
         when(file.getSize()).thenReturn(1024L);
         when(file.getOriginalFilename()).thenReturn("test.exe");
         when(file.getContentType()).thenReturn("application/octet-stream");
 
-        assertThrows(BaseException.class, () -> uploadManager.uploadPicture(file, null));
+        assertThrows(BaseException.class, () -> uploadService.uploadPicture(file, null));
     }
 
 }

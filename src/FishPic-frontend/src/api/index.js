@@ -132,6 +132,7 @@ export const getUser = (config = {}) => api.get('/user/getUser', config)
 export const getUserProfile = (userId, config = {}) => api.get('/user/profile', { params: { userId }, ...config })
 
 export const getAdminUser = (userId, config = {}) => api.post('/user/admin/getUser', { userId }, config)
+export const getAdminUserDetail = (userId, config = {}) => api.post('/user/admin/getUserDetail', { userId }, config)
 export const adminListUsers = (data) => api.post('/user/admin/userList', data)
 export const adminSetUserStatus = (userId) => api.post('/user/admin/setStatus', { userId })
 export const adminEditUser = (data) => api.post('/user/admin/editUser', data)

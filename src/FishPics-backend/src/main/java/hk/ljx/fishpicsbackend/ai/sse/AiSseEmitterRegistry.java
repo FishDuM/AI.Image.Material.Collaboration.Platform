@@ -30,8 +30,8 @@ public class AiSseEmitterRegistry {
             try {
                 emitter.send(SseEmitter.event()
                         .name("result")
-                        .data(Map.of("taskId", taskId, "status", "FAILED",
-                                "errorMsg", "等待超时，请重试")));
+                        .data(Map.of("taskId", taskId, "status", "TIMEOUT",
+                                "errorMsg", "任务处理中，请稍后查看结果")));
                 // 不调用 emitter.complete()，避免触发 onCompletion 回调导致重入误删
             } catch (Exception ignored) {}
             log.debug("[SSE] emitter timeout: taskId={}", taskId);
@@ -68,6 +68,7 @@ public class AiSseEmitterRegistry {
             emitter.complete();
         } catch (IOException e) {
             log.debug("[SSE] send final event failed: taskId={}", taskId);
+            emitter.complete();
         }
     }
 }

@@ -19,7 +19,6 @@ public interface PictureService extends IService<Picture> {
 
     String uploadAvatar(MultipartFile file, Long id);
 
-    // targetSpaceId 为 null 时默认上传到私人空间
     Picture uploadPicture(MultipartFile file, Long targetSpaceId);
 
     Picture savePictureByUrl(String url, Long targetSpaceId);
@@ -36,14 +35,12 @@ public interface PictureService extends IService<Picture> {
 
     PictureVO getPictureEditMessage(Long id);
 
-    // 协同编辑替换图片：传新文件到 COS，更新记录，删旧文件
     PictureVO replacePictureFile(Long pictureId, MultipartFile file);
 
     PictureVO replacePictureFile(Long pictureId, MultipartFile file, boolean requireCollabLock);
 
     IPage<PictureVO> getRecommendPictures(PageRequest pageRequest, Long userId);
 
-    // 秒传校验
     CheckUploadVO checkUpload(CheckUploadRequest request);
 
     UploadChunkVO uploadChunk(MultipartFile file, String md5, Integer chunkIndex);

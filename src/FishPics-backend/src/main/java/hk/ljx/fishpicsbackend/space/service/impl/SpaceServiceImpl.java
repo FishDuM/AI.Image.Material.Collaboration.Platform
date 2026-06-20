@@ -10,12 +10,12 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.cache.RedisCacheManager;
-import hk.ljx.fishpicsbackend.common.enums.Role;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.infra.DistributedLockService;
 import hk.ljx.fishpicsbackend.common.utils.LoginContextHelper;
+import hk.ljx.fishpicsbackend.common.utils.XssSanitizer;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
@@ -43,6 +43,8 @@ import hk.ljx.fishpicsbackend.space.dto.TeamChangeRoleRequest;
 import hk.ljx.fishpicsbackend.mapper.SpaceTeamMemberMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import lombok.extern.slf4j.Slf4j;
 
 import jakarta.annotation.Resource;
@@ -99,19 +101,19 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         ExcUtils.throwIfTrue(user == null || user.getId() == null, "用户不存在");
 
         Integer level = user.getLevel() != null ? user.getLevel() : 0;
-        if (Role.isAdmin(user.getRole())) {
-            level = Math.max(level, 2);
-        }
 
         // 加 per-user 分布式锁防止 check-then-act 竞态
         String privateLockKey = ExcUtils.eq(type, SPACE_TYPE_PRIVATE)
                 ? "LOCK:SPACE:CREATE:PRIVATE:" + user.getId() : null;
         String teamLockKey = ExcUtils.eq(type, SPACE_TYPE_TEAM)
                 ? "LOCK:SPACE:CREATE:TEAM:" + user.getId() : null;
-        if (privateLockKey != null && !distributedLockService.tryLock(privateLockKey, 5)) {
+        if (privateLockKey != null && !distributedLockService.tryLock(privateLockKey)) {
             throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "其他请求正在创建您的私人空间,请稍后再试");
         }
-        if (teamLockKey != null && !distributedLockService.tryLock(teamLockKey, 5)) {
+        if (teamLockKey != null && !distributedLockService.tryLock(teamLockKey)) {
+            if (privateLockKey != null) {
+                try { distributedLockService.unlock(privateLockKey); } catch (Exception e) { log.warn("释放私有空间创建锁失败: {}", e.getMessage()); }
+            }
             throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "其他请求正在创建团队空间,请稍后再试");
         }
         try {
@@ -145,8 +147,8 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
             // 团队空间
             space.setStorageSize(getTeamStorageSize(level));
         }
-        space.setName(name);
-        space.setIntroduction(introduction);
+        space.setName(XssSanitizer.clean(name));
+        space.setIntroduction(XssSanitizer.cleanRelaxed(introduction));
         space.setType(type);
         space.setUserId(user.getId());
         int insert = baseMapper.insert(space);
@@ -160,14 +162,30 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
             spaceTeamMemberMapper.insert(teamMember);
             evictUserPermCacheAfterCommit(user.getId());
         }
+        // 事务提交后再释放锁，防止其他线程在事务未提交时读到旧数据
+        String finalPrivateLockKey = privateLockKey;
+        String finalTeamLockKey = teamLockKey;
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                if (finalPrivateLockKey != null) {
+                    try { distributedLockService.unlock(finalPrivateLockKey); } catch (Exception e) { log.warn("释放私有空间创建锁失败: {}", e.getMessage()); }
+                }
+                if (finalTeamLockKey != null) {
+                    try { distributedLockService.unlock(finalTeamLockKey); } catch (Exception e) { log.warn("释放团队空间创建锁失败: {}", e.getMessage()); }
+                }
+            }
+        });
         return true;
-        } finally {
+        } catch (Exception e) {
+            // 异常时事务会回滚，也需要释放锁
             if (privateLockKey != null) {
-                try { distributedLockService.unlock(privateLockKey); } catch (Exception e) { log.warn("释放私有空间创建锁失败: {}", e.getMessage()); }
+                try { distributedLockService.unlock(privateLockKey); } catch (Exception ex) { log.warn("释放私有空间创建锁失败: {}", ex.getMessage()); }
             }
             if (teamLockKey != null) {
-                try { distributedLockService.unlock(teamLockKey); } catch (Exception e) { log.warn("释放团队空间创建锁失败: {}", e.getMessage()); }
+                try { distributedLockService.unlock(teamLockKey); } catch (Exception ex) { log.warn("释放团队空间创建锁失败: {}", ex.getMessage()); }
             }
+            throw e;
         }
     }
 
@@ -288,8 +306,8 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         spacePermissionChecker.checkUpdateSpace(space, user);
         Space updateObj = new Space();
         updateObj.setId(id);
-        updateObj.setName(name);
-        updateObj.setIntroduction(introduction);
+        updateObj.setName(XssSanitizer.clean(name));
+        updateObj.setIntroduction(XssSanitizer.cleanRelaxed(introduction));
         updateObj.setVersion(space.getVersion());
         int update = baseMapper.updateById(updateObj);
         ExcUtils.throwIfTrue(update <= 0, ExceptionCode.PARAMETER_ERROR, "更新空间信息失败");
@@ -300,7 +318,7 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
     public IPage<PictureVO> pictureList(SpacePictureListRequest spacePictureList) {
         Long spaceId = spacePictureList.getSpaceId();
         int current = spacePictureList.getCurrent();
-        int pageSize = spacePictureList.getPageSize();
+        int pageSize = Math.min(Math.max(spacePictureList.getPageSize(), 1), 100);
         String sortField = spacePictureList.getSortField();
         String sortOrder = spacePictureList.getSortOrder();
 

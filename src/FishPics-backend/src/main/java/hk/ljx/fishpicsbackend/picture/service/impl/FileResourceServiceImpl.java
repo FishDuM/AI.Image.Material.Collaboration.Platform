@@ -74,15 +74,11 @@ public class FileResourceServiceImpl extends ServiceImpl<FileResourceMapper, Fil
     @Override
     @Transactional(rollbackFor = Exception.class)
     public int incrementRefCount(Long resourceId) {
-        boolean updated = update(new LambdaUpdateWrapper<FileResource>()
+        update(new LambdaUpdateWrapper<FileResource>()
                 .eq(FileResource::getId, resourceId)
                 .setSql("ref_count = ref_count + 1"));
-        if (!updated) {
-            return -1;
-        }
-
-        FileResource resource = getById(resourceId);
-        return resource != null ? resource.getRefCount() : -1;
+        FileResource refreshed = getById(resourceId);
+        return refreshed != null ? refreshed.getRefCount() : -1;
     }
 
     @Override
@@ -92,34 +88,32 @@ public class FileResourceServiceImpl extends ServiceImpl<FileResourceMapper, Fil
         if (resource == null) {
             return -1;
         }
+        if (resource.getRefCount() <= 0) {
+            return 0;
+        }
 
-        boolean updated = update(new LambdaUpdateWrapper<FileResource>()
+        update(new LambdaUpdateWrapper<FileResource>()
                 .eq(FileResource::getId, resourceId)
                 .gt(FileResource::getRefCount, 0)
                 .setSql("ref_count = ref_count - 1"));
-        if (!updated) {
+
+        FileResource refreshed = getById(resourceId);
+        if (refreshed == null) {
             return -1;
         }
 
-        FileResource latest = getById(resourceId);
-        if (latest == null) {
-            return -1;
-        }
-
-        if (latest.getRefCount() <= 0) {
+        if (refreshed.getRefCount() == 0) {
+            // 用条件删除防止并发场景下误删（另一个线程可能已重新 +1）
             boolean removed = remove(new LambdaQueryWrapper<FileResource>()
                     .eq(FileResource::getId, resourceId)
                     .le(FileResource::getRefCount, 0));
             if (removed) {
-                registerCosCleanup(resource.getCosKey());
+                registerCosCleanup(refreshed.getCosKey());
                 return 0;
             }
-
-            FileResource refreshed = getById(resourceId);
-            return refreshed != null ? refreshed.getRefCount() : -1;
         }
 
-        return latest.getRefCount();
+        return refreshed.getRefCount();
     }
 
     private void registerCosCleanup(String cosKey) {

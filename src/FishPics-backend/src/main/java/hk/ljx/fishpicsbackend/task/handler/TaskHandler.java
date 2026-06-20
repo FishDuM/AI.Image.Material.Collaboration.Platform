@@ -9,4 +9,6 @@ public interface TaskHandler {
     void execute(Task task) throws Exception;
 
     default void persist(Task task) {}
+
+    default void onFailed(Task task) {}
 }

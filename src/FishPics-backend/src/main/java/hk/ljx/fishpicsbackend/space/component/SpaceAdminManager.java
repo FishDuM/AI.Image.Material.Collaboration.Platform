@@ -4,19 +4,23 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.util.ObjectUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import hk.ljx.fishpicsbackend.collab.CollabSessionRegistry;
 import hk.ljx.fishpicsbackend.common.constants.SpaceConstants;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
+import hk.ljx.fishpicsbackend.common.utils.XssSanitizer;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.mapper.PictureShareMapper;
+import hk.ljx.fishpicsbackend.mapper.PictureShareItemMapper;
 import hk.ljx.fishpicsbackend.mapper.SpaceMapper;
 import hk.ljx.fishpicsbackend.mapper.SpaceTeamMemberMapper;
 import hk.ljx.fishpicsbackend.mapper.UserMapper;
 import hk.ljx.fishpicsbackend.picture.entity.Picture;
 import hk.ljx.fishpicsbackend.picture.entity.PictureShare;
+import hk.ljx.fishpicsbackend.picture.entity.PictureShareItem;
 import hk.ljx.fishpicsbackend.picture.service.FileResourceService;
 import hk.ljx.fishpicsbackend.space.dto.SpaceAdminUpdateRequest;
 import hk.ljx.fishpicsbackend.space.dto.SpaceQueryWrapper;
@@ -56,6 +60,9 @@ public class SpaceAdminManager {
     private PictureShareMapper pictureShareMapper;
 
     @Resource
+    private PictureShareItemMapper pictureShareItemMapper;
+
+    @Resource
     private PictureMapper pictureMapper;
 
     @Resource
@@ -69,7 +76,8 @@ public class SpaceAdminManager {
 
     public IPage<SpaceVO> list(SpaceQueryWrapper request) {
         QueryWrapper<Space> queryWrapper = buildQueryWrapper(request);
-        Page<Space> page = new Page<>(request.getCurrent(), request.getPageSize());
+        int pageSize = Math.min(Math.max(request.getPageSize(), 1), 100);
+        Page<Space> page = new Page<>(request.getCurrent(), pageSize);
         Page<Space> spacePage = spaceMapper.selectPage(page, queryWrapper);
         List<Space> spaces = spacePage.getRecords();
         if (CollUtil.isEmpty(spaces)) {
@@ -107,10 +115,10 @@ public class SpaceAdminManager {
         Space updateObj = new Space();
         updateObj.setId(id);
         if (request.getName() != null) {
-            updateObj.setName(request.getName());
+            updateObj.setName(XssSanitizer.clean(request.getName()));
         }
         if (request.getIntroduction() != null) {
-            updateObj.setIntroduction(request.getIntroduction());
+            updateObj.setIntroduction(XssSanitizer.cleanRelaxed(request.getIntroduction()));
         }
         if (request.getLevel() != null) {
             updateObj.setLevel(request.getLevel());
@@ -147,8 +155,10 @@ public class SpaceAdminManager {
                 ExceptionCode.PARAMETER_ERROR, "无效的状态值");
         Space space = spaceMapper.selectById(id);
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
-        space.setStatus(status);
-        int updated = spaceMapper.updateById(space);
+        int updated = spaceMapper.update(null,
+                new LambdaUpdateWrapper<Space>()
+                        .eq(Space::getId, id)
+                        .set(Space::getStatus, status));
         ExcUtils.throwIfTrue(updated <= 0, ExceptionCode.DATABASE_ERROR, "更新失败");
 
         if (ExcUtils.eq(status, SpaceConstants.SPACE_STATUS_DISABLED)) {
@@ -210,16 +220,10 @@ public class SpaceAdminManager {
     }
 
     private void releasePictureResources(List<Picture> pictures) {
-        Set<Long> resourceIds = pictures.stream()
-                .map(Picture::getResourceId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        for (Long resourceId : resourceIds) {
-            try {
-                fileResourceService.decrementRefCount(resourceId);
-            } catch (Exception e) {
-                log.warn("[SpaceAdminManager] failed to release picture resource: resourceId={}", resourceId, e);
-            }
+        for (Picture picture : pictures) {
+            Long resourceId = picture.getResourceId();
+            if (resourceId == null) continue;
+            fileResourceService.decrementRefCount(resourceId);
         }
     }
 
@@ -229,9 +233,13 @@ public class SpaceAdminManager {
                     .map(Picture::getId)
                     .filter(Objects::nonNull)
                     .toList();
-            int deleted = pictureIds.isEmpty() ? 0 : pictureShareMapper.delete(
+            if (pictureIds.isEmpty()) return;
+            // 先删 PictureShareItem，再删 PictureShare（和 PictureDeleteManager.deleteRelations 一致）
+            int shareItemCount = pictureShareItemMapper.delete(
+                    new LambdaQueryWrapper<PictureShareItem>().in(PictureShareItem::getPictureId, pictureIds));
+            int deleted = pictureShareMapper.delete(
                     new LambdaQueryWrapper<PictureShare>().in(PictureShare::getPictureId, pictureIds));
-            log.info("[SpaceAdminManager] deleted picture shares: spaceId={}, count={}", spaceId, deleted);
+            log.info("[SpaceAdminManager] deleted picture shares: spaceId={}, shareItems={}, shares={}", spaceId, shareItemCount, deleted);
         } catch (Exception e) {
             log.warn("[SpaceAdminManager] failed to delete picture shares: spaceId={}", spaceId, e);
         }

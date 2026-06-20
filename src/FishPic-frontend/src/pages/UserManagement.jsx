@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { App as AntApp, Table, Tag, Space, Button, Card, Typography, Avatar, Input, Row, Col, Form, Select, Modal, Upload } from 'antd'
 import { EditOutlined, SearchOutlined, ReloadOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons'
-import { adminEditUser, adminListUsers, adminSetUserStatus, getAdminUser } from '../api'
+import { adminEditUser, adminListUsers, adminSetUserStatus, getAdminUserDetail } from '../api'
 import { createBeforeUpload } from '../utils/upload'
 import { PAGINATION_LOCALE, formatDateTime } from '../utils/constants'
 import { emailRules, optionalPasswordRules, phoneRules, usernameRules } from '../utils/formRules'
@@ -134,7 +134,7 @@ function UserManagement() {
 
   const handleEdit = async (record) => {
     try {
-      const data = await getAdminUser(record.id)
+      const data = await getAdminUserDetail(record.id)
       setEditingUser(data)
       setIsModalOpen(true)
     } catch (error) {
@@ -148,9 +148,9 @@ function UserManagement() {
         id: editingUser.id,
         username: values.username,
         password: values.password || null,
+        nickname: values.nickname || null,
         email: values.email || null,
         phone: values.phone || null,
-        nickname: values.nickname || null,
         level: values.level,
         role: values.role,
       })

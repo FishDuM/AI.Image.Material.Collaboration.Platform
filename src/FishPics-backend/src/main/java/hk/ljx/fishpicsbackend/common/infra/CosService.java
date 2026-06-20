@@ -57,8 +57,7 @@ public class CosService {
             PutObjectResult result = cosClient.putObject(bucket, key, inputStream, metadata);
             ExcUtils.throwIfTrue(result == null, "上传文件失败");
         } catch (Exception e) {
-            log.error("上传文件失败", e);
-            ExcUtils.error(ExceptionCode.INTERNAL_SERVER_ERROR, "上传文件失败");
+            throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "上传文件失败", e);
         }
         return key;
     }
@@ -78,8 +77,7 @@ public class CosService {
             );
             ExcUtils.throwIfTrue(result == null, "上传文件失败");
         } catch (Exception e) {
-            log.error("上传文件失败", e);
-            ExcUtils.error(ExceptionCode.INTERNAL_SERVER_ERROR, "上传文件失败");
+            throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "上传文件失败", e);
         }
         return key;
     }
@@ -143,47 +141,12 @@ public class CosService {
         PictureMetadata metadata = new PictureMetadata();
 
         try {
-            // 优先使用 imageInfo 查询参数，只返回 JSON 元数据，不下载完整图片
-            GetObjectRequest getObj = new GetObjectRequest(bucket, key);
-            getObj.putCustomQueryParameter("imageInfo", null);
-            COSObject cosObject = cosClient.getObject(getObj);
-            if (cosObject == null) {
-                throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "COS 返回为空: " + key);
-            }
-
-            try (COSObjectInputStream inputStream = cosObject.getObjectContent()) {
-                String imageInfoJson = IoUtil.readUtf8(inputStream);
-                Map<String, Object> imageInfo = JSONUtil.parseObj(imageInfoJson);
-                metadata.setWidth(String.valueOf(imageInfo.get("width")));
-                metadata.setHeight(String.valueOf(imageInfo.get("height")));
-                Object sizeVal = imageInfo.get("size");
-                if (sizeVal instanceof Number) {
-                    metadata.setSize(((Number) sizeVal).longValue());
-                } else if (sizeVal instanceof String) {
-                    try {
-                        metadata.setSize(Long.parseLong((String) sizeVal));
-                    } catch (NumberFormatException ignored) {
-                        // size 字符串无法解析，后续降级处理
-                    }
-                }
-            }
+            fetchImageInfo(key, metadata);
         } catch (BaseException e) {
             throw e;
         } catch (Exception e) {
-            // 降级：仅获取文件大小（不下载文件内容）
             log.warn("获取图片元数据失败，降级为仅获取文件大小: key={}", key, e);
-            try {
-                ObjectMetadata objectMetadata = cosClient.getObjectMetadata(bucket, key);
-                if (objectMetadata == null) {
-                    throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "COS 文件不存在: " + key);
-                }
-                metadata.setSize(objectMetadata.getContentLength());
-            } catch (BaseException be) {
-                throw be;
-            } catch (Exception ex) {
-                log.error("获取图片信息最终失败: key={}", key, ex);
-                throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "获取图片信息失败");
-            }
+            fetchFileSizeOnly(key, metadata);
         }
 
         // imageInfo 成功但 size 仍为空时，降级用 getObjectMetadata 补充
@@ -204,6 +167,47 @@ public class CosService {
         metadata.setUrl(this.getImageUrl(key));
         metadata.setPictureName(nameParts[0]);
         return metadata;
+    }
+
+    private void fetchImageInfo(String key, PictureMetadata metadata) throws Exception {
+        GetObjectRequest getObj = new GetObjectRequest(bucket, key);
+        getObj.putCustomQueryParameter("imageInfo", null);
+        COSObject cosObject = cosClient.getObject(getObj);
+        if (cosObject == null) {
+            throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "COS 返回为空: " + key);
+        }
+
+        try (COSObjectInputStream inputStream = cosObject.getObjectContent()) {
+            String imageInfoJson = IoUtil.readUtf8(inputStream);
+            Map<String, Object> imageInfo = JSONUtil.parseObj(imageInfoJson);
+            metadata.setWidth(String.valueOf(imageInfo.get("width")));
+            metadata.setHeight(String.valueOf(imageInfo.get("height")));
+            Object sizeVal = imageInfo.get("size");
+            if (sizeVal instanceof Number) {
+                metadata.setSize(((Number) sizeVal).longValue());
+            } else if (sizeVal instanceof String) {
+                try {
+                    metadata.setSize(Long.parseLong((String) sizeVal));
+                } catch (NumberFormatException ignored) {
+                    // size 字符串无法解析，后续降级处理
+                }
+            }
+        }
+    }
+
+    private void fetchFileSizeOnly(String key, PictureMetadata metadata) {
+        try {
+            ObjectMetadata objectMetadata = cosClient.getObjectMetadata(bucket, key);
+            if (objectMetadata == null) {
+                throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "COS 文件不存在: " + key);
+            }
+            metadata.setSize(objectMetadata.getContentLength());
+        } catch (BaseException be) {
+            throw be;
+        } catch (Exception ex) {
+            log.error("获取图片信息最终失败: key={}", key, ex);
+            throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "获取图片信息失败");
+        }
     }
 
     // ==================== 预签名 URL ====================

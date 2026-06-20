@@ -99,7 +99,19 @@ public class AiController {
         }
 
         // 还在处理，注册 SSE 等结果推送
-        return sseEmitterRegistry.register(taskId);
+        SseEmitter emitter = sseEmitterRegistry.register(taskId);
+
+        // 注册后再检查一次，关闭状态查询与注册之间的 TOCTOU 窗口
+        Task recheck = aiService.getTaskByTaskId(taskId);
+        if (recheck != null) {
+            if ("DONE".equals(recheck.getStatus())) {
+                sseEmitterRegistry.completeWithResult(taskId, recheck.getResult());
+            } else if ("FAILED".equals(recheck.getStatus())) {
+                sseEmitterRegistry.completeWithError(taskId, recheck.getErrorMsg());
+            }
+        }
+
+        return emitter;
     }
 
     @RequireLogin

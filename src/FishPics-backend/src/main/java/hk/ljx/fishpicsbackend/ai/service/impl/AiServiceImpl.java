@@ -329,7 +329,7 @@ public class AiServiceImpl implements AiService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean updateAdminConfig(AiConfigDTO configDTO) {
-        boolean locked = distributedLockService.tryLock(CONFIG_LOCK_KEY, 10);
+        boolean locked = distributedLockService.tryLock(CONFIG_LOCK_KEY);
         ExcUtils.throwIfTrue(!locked, ExceptionCode.CONFLICT, "配置正在更新，请稍后重试");
         try {
             List<PicSystem> records = picSystemMapper.selectList(

@@ -18,20 +18,13 @@ public final class PermissionUtils {
 
     public static LoginContext buildLoginContext(User user, List<SpaceTeamMember> teamMemberships) {
         boolean isAdmin = Role.isAdmin(user.getRole());
-        List<String> systemPerms;
-        List<String> vipPerms;
-        if (isAdmin) {
-            systemPerms = List.of("system:user:manage", "system:team:manage", "system:ai:manage", "system:log:manage", "system:config");
-            vipPerms = List.of("space:create", "space:manage", "picture:upload", "picture:manage");
-        } else {
-            List<String> permissions = getPermissionsByLevel(user.getLevel(), user.getRole());
-            systemPerms = permissions.stream()
-                    .filter(permission -> permission.startsWith("system:"))
-                    .collect(Collectors.toList());
-            vipPerms = permissions.stream()
-                    .filter(permission -> !permission.startsWith("system:"))
-                    .collect(Collectors.toList());
-        }
+        List<String> permissions = getPermissionsByLevel(user.getLevel(), user.getRole());
+        List<String> systemPerms = permissions.stream()
+                .filter(permission -> permission.startsWith("system:"))
+                .collect(Collectors.toList());
+        List<String> vipPerms = permissions.stream()
+                .filter(permission -> !permission.startsWith("system:"))
+                .collect(Collectors.toList());
 
         Map<String, LoginContext.TeamPerm> teams = null;
         if (teamMemberships != null && !teamMemberships.isEmpty()) {
@@ -88,13 +81,8 @@ public final class PermissionUtils {
             permissions.add("system:ai:manage");
             permissions.add("system:log:manage");
             permissions.add("system:config");
-            permissions.add("space:create");
-            permissions.add("space:manage");
-            permissions.add("picture:upload");
-            permissions.add("picture:manage");
-            return permissions;
         }
-        // 业务等级权限由 level 决定
+        // 业务等级权限由 level 决定（管理员也不例外）
         if (level == null) level = 0;
         permissions.add("space:create");
         permissions.add("picture:upload");

@@ -4,6 +4,7 @@ import hk.ljx.fishpicsbackend.picture.entity.Picture;
 import cn.hutool.core.util.ObjUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -24,7 +25,7 @@ import hk.ljx.fishpicsbackend.picture.dto.PictureUpdateRequest;
 import hk.ljx.fishpicsbackend.picture.component.PictureDeleteManager;
 import hk.ljx.fishpicsbackend.picture.component.PictureReplaceManager;
 import hk.ljx.fishpicsbackend.picture.component.PictureTagManager;
-import hk.ljx.fishpicsbackend.picture.component.PictureUploadManager;
+import hk.ljx.fishpicsbackend.picture.component.PictureUploadService;
 import hk.ljx.fishpicsbackend.picture.service.PictureService;
 import hk.ljx.fishpicsbackend.picture.vo.CheckUploadVO;
 import hk.ljx.fishpicsbackend.picture.vo.PictureVO;
@@ -57,7 +58,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     private UserService userService;
 
     @Resource
-    private PictureUploadManager pictureUploadManager;
+    private PictureUploadService pictureUploadService;
 
     @Resource
     private PictureDeleteManager pictureDeleteManager;
@@ -79,34 +80,34 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
 
     @Override
     public String uploadAvatar(MultipartFile file, Long id) {
-        return pictureUploadManager.uploadAvatar(file, id);
+        return pictureUploadService.uploadAvatar(file, id);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Picture uploadPicture(MultipartFile file, Long targetSpaceId) {
-        return pictureUploadManager.uploadPicture(file, targetSpaceId);
+        return pictureUploadService.uploadPicture(file, targetSpaceId);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Picture savePictureByUrl(String url, Long targetSpaceId) {
-        return pictureUploadManager.savePictureByUrl(url, targetSpaceId);
+        return pictureUploadService.savePictureByUrl(url, targetSpaceId);
     }
 
     @Override
     public CheckUploadVO checkUpload(CheckUploadRequest request) {
-        return pictureUploadManager.checkUpload(request);
+        return pictureUploadService.checkUpload(request);
     }
 
     @Override
     public UploadChunkVO uploadChunk(MultipartFile file, String md5, Integer chunkIndex) {
-        return pictureUploadManager.uploadChunk(file, md5, chunkIndex);
+        return pictureUploadService.uploadChunk(file, md5, chunkIndex);
     }
 
     @Override
     public PictureVO mergeChunks(MergeChunksRequest request) {
-        return pictureUploadManager.mergeChunks(request);
+        return pictureUploadService.mergeChunks(request);
     }
 
     @Override
@@ -127,7 +128,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             queryWrapper.in(Picture::getId, pictureIdsWithTag);
         }
 
-        Page<Picture> page = new Page<>(pictureQueryRequest.getCurrent(), pictureQueryRequest.getPageSize());
+        Page<Picture> page = new Page<>(pictureQueryRequest.getCurrent(), Math.min(Math.max(pictureQueryRequest.getPageSize(), 1), 100));
         IPage<Picture> picturePage = pictureMapper.selectPage(page, queryWrapper);
         List<Long> pagePictureIds = picturePage.getRecords().stream().map(Picture::getId).collect(Collectors.toList());
         Map<Long, List<String>> tagsMap = pictureTagManager.batchLoadTags(pagePictureIds);
@@ -147,7 +148,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
             queryWrapper.eq(Picture::getIsSelected, selected);
         }
 
-        Page<Picture> page = new Page<>(dto.getCurrent(), dto.getPageSize());
+        Page<Picture> page = new Page<>(dto.getCurrent(), Math.min(Math.max(dto.getPageSize(), 1), 100));
         IPage<Picture> picturePage = pictureMapper.selectPage(page, queryWrapper);
         List<Long> pagePictureIds = picturePage.getRecords().stream().map(Picture::getId).collect(Collectors.toList());
         Map<Long, List<String>> tagsMap = pictureTagManager.batchLoadTags(pagePictureIds);
@@ -170,13 +171,12 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         ExcUtils.throwIfTrue(picture == null, "图片不存在");
         if (selected != null) {
             ExcUtils.throwIfTrue((selected != SELECTED_NORMAL && selected != SELECTED_FEATURED), "精选值无效");
-            if (selected == SELECTED_NORMAL && ExcUtils.eq(picture.getIsSelected(), SELECTED_PENDING)) {
-                picture.setIsSelected(SELECTED_NORMAL);
-            } else {
-                picture.setIsSelected(selected);
-            }
+            int targetValue = (selected == SELECTED_NORMAL && ExcUtils.eq(picture.getIsSelected(), SELECTED_PENDING))
+                    ? SELECTED_NORMAL : selected;
+            ExcUtils.throwIfTrue(pictureMapper.update(null, new LambdaUpdateWrapper<Picture>()
+                    .eq(Picture::getId, pictureId)
+                    .set(Picture::getIsSelected, targetValue)) != 1, "审核更新失败");
         }
-        ExcUtils.throwIfTrue(pictureMapper.updateById(picture) != 1, "审核更新失败");
     }
 
     @Override
@@ -193,18 +193,20 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
         ExcUtils.throwIfTrue(picture == null || picture.getUserId() == null, ExceptionCode.NOT_FOUND, "图片不存在");
         PicturePermissionUtil.checkWrite(picture, "编辑", spaceTeamMemberMapper);
 
-        request.setUrl(null);
         Long pictureId = request.getId();
         Integer isSelected = request.getIsSelected();
         if (isSelected != null) {
             if (isSelected == SELECTED_FEATURED) {
                 ExcUtils.throwIfTrue(ExcUtils.eq(picture.getIsSelected(), SELECTED_FEATURED),
                         ExceptionCode.PARAMETER_ERROR, "该图片已经是精选");
-                picture.setIsSelected(SELECTED_PENDING);
+                pictureMapper.update(null, new LambdaUpdateWrapper<Picture>()
+                        .eq(Picture::getId, pictureId)
+                        .set(Picture::getIsSelected, SELECTED_PENDING));
             } else if (isSelected == SELECTED_NORMAL) {
-                picture.setIsSelected(SELECTED_NORMAL);
+                pictureMapper.update(null, new LambdaUpdateWrapper<Picture>()
+                        .eq(Picture::getId, pictureId)
+                        .set(Picture::getIsSelected, SELECTED_NORMAL));
             }
-            pictureMapper.updateById(picture);
             return;
         }
 
@@ -239,7 +241,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     public PictureVO replacePictureFile(Long pictureId, MultipartFile file, boolean requireCollabLock) {
         ExcUtils.throwIfTrue(pictureId == null, "图片ID不能为空");
         String lockKey = "lock:replace-picture:" + pictureId;
-        if (!distributedLockService.tryLock(lockKey, 30)) {
+        if (!distributedLockService.tryLock(lockKey)) {
             throw new hk.ljx.fishpicsbackend.common.exception.BaseException(ExceptionCode.CONFLICT, "图片正在替换，请稍后重试");
         }
         try {

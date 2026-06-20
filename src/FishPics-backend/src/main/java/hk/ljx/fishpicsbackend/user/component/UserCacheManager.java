@@ -38,7 +38,7 @@ public class UserCacheManager {
                     new LambdaQueryWrapper<SpaceTeamMember>()
                             .eq(SpaceTeamMember::getUserId, user.getId()));
         } catch (Exception e) {
-            log.warn("[UserCacheManager] load team memberships failed: userId={}", user.getId(), e);
+            log.error("[UserCacheManager] load team memberships failed, user will have degraded permissions: userId={}", user.getId(), e);
         }
         LoginContext loginContext = PermissionUtils.buildLoginContext(user, teamMembers);
         cacheManager.getUserPermCache().put(String.valueOf(user.getId()), loginContext);

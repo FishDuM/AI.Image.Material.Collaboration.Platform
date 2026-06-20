@@ -25,8 +25,8 @@ public class JwtUtils {
     @Value("${jwt.secret}")
     private String secret;
 
-    private static final long JWT_EXPIRE_MS = 30 * 60 * 1000L;
-    private static final long RENEW_THRESHOLD_MS = 15 * 60 * 1000L;
+    private static final long JWT_EXPIRE_MS = 7 * 24 * 60 * 60 * 1000L;       // 7 天
+    private static final long RENEW_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000L;  // 3 天
 
     private static final String JWT_BLACKLIST_PREFIX = RedisConstants.JWT_BLACKLIST_KEY;
     public static final String ISSUED_AT_MS_CLAIM = "iatMs";

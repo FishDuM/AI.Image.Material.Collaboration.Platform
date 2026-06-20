@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import hk.ljx.fishpicsbackend.collab.CollabSessionRegistry;
 import hk.ljx.fishpicsbackend.common.cache.RedisCacheManager;
 import hk.ljx.fishpicsbackend.common.constants.SpaceConstants;
+import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.utils.LoginContextHelper;
@@ -111,7 +112,11 @@ public class SpaceTeamMemberManager {
         teamMember.setSpaceId(spaceId);
         teamMember.setUserId(userId);
         teamMember.setRoleId(roleId.intValue());
-        spaceTeamMemberMapper.insert(teamMember);
+        try {
+            spaceTeamMemberMapper.insert(teamMember);
+        } catch (org.springframework.dao.DuplicateKeyException e) {
+            throw new BaseException(ExceptionCode.PARAMETER_ERROR, "该用户已经是团队成员");
+        }
         evictUserPermCacheAfterCommit(userId);
         return true;
     }

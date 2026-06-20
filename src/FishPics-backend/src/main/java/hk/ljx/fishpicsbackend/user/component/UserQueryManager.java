@@ -95,6 +95,25 @@ public class UserQueryManager {
         return toAdminVO(user);
     }
 
+    public UserVO adminGetUserDetail(Long userId) {
+        User user = userMapper.selectById(userId);
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(user) || user.getId() == null, ExceptionCode.NOT_FOUND, "用户不存在");
+        return UserVO.ofAdmin(
+                user.getId(),
+                user.getUsername(),
+                user.getNickname(),
+                user.getAvatar(),
+                user.getEmail(),
+                user.getPhone(),
+                user.getStatus(),
+                user.getLevel(),
+                user.getRole(),
+                user.getCreateTime(),
+                null,
+                false
+        );
+    }
+
     public UserVO getCurrentUserVO() {
         LoginContext ctx = LoginContextHelper.requireLoginContext();
         List<String> allPerms = new ArrayList<>(

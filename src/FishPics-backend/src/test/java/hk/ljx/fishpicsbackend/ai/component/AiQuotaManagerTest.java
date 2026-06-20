@@ -4,6 +4,7 @@ import hk.ljx.fishpicsbackend.ai.dto.AiConfigDTO;
 import hk.ljx.fishpicsbackend.common.cache.RedisCacheManager;
 import hk.ljx.fishpicsbackend.common.cache.RedisTtlCache;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
+import hk.ljx.fishpicsbackend.common.infra.RedisAtomicOps;
 import hk.ljx.fishpicsbackend.mapper.PicSystemMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -18,7 +19,6 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
 import java.util.Collections;
-import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -42,6 +42,9 @@ class AiQuotaManagerTest {
 
     @Mock
     private PicSystemMapper picSystemMapper;
+
+    @Mock
+    private RedisAtomicOps redisAtomicOps;
 
     @Mock
     private RedisTtlCache sysConfigCache;
@@ -82,25 +85,23 @@ class AiQuotaManagerTest {
     // ==================== VIP 标注配额 ====================
 
     @Test
-    @DisplayName("VIP 标注 - 首次使用应成功并设置 TTL")
+    @DisplayName("VIP 标注 - 首次使用应成功")
     void checkAndConsume_vipTag_firstUse_success() {
-        when(valueOps.increment(anyString())).thenReturn(1L);
+        when(redisAtomicOps.incrWithCheckAndRollback(anyString(), anyLong(), eq(1000L))).thenReturn(1L);
 
         int remaining = aiQuotaManager.checkAndConsume("tag", 100L, 1);
 
         assertEquals(999, remaining); // 默认 1000 - 1
-        verify(stringRedisTemplate).expire(anyString(), eq(40L), any());
     }
 
     @Test
-    @DisplayName("VIP 标注 - 第二次使用不应设置 TTL")
+    @DisplayName("VIP 标注 - 第二次使用应返回剩余配额")
     void checkAndConsume_vipTag_secondUse_noTtlSet() {
-        when(valueOps.increment(anyString())).thenReturn(2L);
+        when(redisAtomicOps.incrWithCheckAndRollback(anyString(), anyLong(), eq(1000L))).thenReturn(2L);
 
         int remaining = aiQuotaManager.checkAndConsume("tag", 100L, 1);
 
         assertEquals(998, remaining);
-        verify(stringRedisTemplate, never()).expire(anyString(), anyLong(), any());
     }
 
     // ==================== VIP 生图配额 ====================
@@ -108,7 +109,7 @@ class AiQuotaManagerTest {
     @Test
     @DisplayName("VIP 生图 - 正常消耗")
     void checkAndConsume_vipDraw_success() {
-        when(valueOps.increment(anyString())).thenReturn(1L);
+        when(redisAtomicOps.incrWithCheckAndRollback(anyString(), anyLong(), eq(50L))).thenReturn(1L);
 
         int remaining = aiQuotaManager.checkAndConsume("draw", 100L, 1);
 
@@ -120,7 +121,7 @@ class AiQuotaManagerTest {
     @Test
     @DisplayName("SVIP 标注 - 使用默认配额 5000")
     void checkAndConsume_svipTag_defaultQuota() {
-        when(valueOps.increment(anyString())).thenReturn(1L);
+        when(redisAtomicOps.incrWithCheckAndRollback(anyString(), anyLong(), eq(5000L))).thenReturn(1L);
 
         int remaining = aiQuotaManager.checkAndConsume("tag", 100L, 2);
 
@@ -130,7 +131,7 @@ class AiQuotaManagerTest {
     @Test
     @DisplayName("SVIP 生图 - 使用默认配额 200")
     void checkAndConsume_svipDraw_defaultQuota() {
-        when(valueOps.increment(anyString())).thenReturn(1L);
+        when(redisAtomicOps.incrWithCheckAndRollback(anyString(), anyLong(), eq(200L))).thenReturn(1L);
 
         int remaining = aiQuotaManager.checkAndConsume("draw", 100L, 2);
 
@@ -147,7 +148,7 @@ class AiQuotaManagerTest {
         config.setVipTagQuota(500);
         mockConfig(config);
 
-        when(valueOps.increment(anyString())).thenReturn(1L);
+        when(redisAtomicOps.incrWithCheckAndRollback(anyString(), anyLong(), eq(30L))).thenReturn(1L);
 
         int remaining = aiQuotaManager.checkAndConsume("draw", 100L, 1);
 
@@ -157,15 +158,14 @@ class AiQuotaManagerTest {
     // ==================== 超限回滚 ====================
 
     @Test
-    @DisplayName("超限 - 应回滚计数并抛异常")
+    @DisplayName("超限 - Lua 脚本返回 -1 应抛异常")
     void checkAndConsume_exceeded_rollbackAndThrow() {
-        when(valueOps.increment(anyString())).thenReturn(51L); // 超过默认 VIP draw 50
+        when(redisAtomicOps.incrWithCheckAndRollback(anyString(), anyLong(), eq(50L))).thenReturn(-1L);
 
         BaseException ex = assertThrows(BaseException.class,
                 () -> aiQuotaManager.checkAndConsume("draw", 100L, 1));
 
         assertTrue(ex.getMessage().contains("额度已用完"));
-        verify(valueOps).decrement(anyString()); // 回滚
     }
 
     // ==================== getRemaining ====================

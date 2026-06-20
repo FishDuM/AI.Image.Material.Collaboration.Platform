@@ -19,7 +19,6 @@ import hk.ljx.fishpicsbackend.system.dto.AddSysMarqueeRequest;
 import hk.ljx.fishpicsbackend.system.dto.AddSysPicTypeRequest;
 import hk.ljx.fishpicsbackend.system.service.PicSystemService;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.annotation.Resource;
 import java.util.ArrayList;
@@ -68,7 +67,6 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public void addTypeList(AddSysPicTypeRequest addSysPicType) {
         ExcUtils.throwIfTrue(addSysPicType.getValue() == null || addSysPicType.getValue().isEmpty(), ExceptionCode.PARAMETER_ERROR, "标签不能为空");
         // 管理员输入的标签值过 XSS 清理后再入库
@@ -146,7 +144,7 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
 
     // 加锁、查现有、去重合并/新建、更新、清缓存
     private void upsertConfigList(String lockKey, String configKey, List<String> newItems, boolean dedup) {
-        if (!distributedLockService.tryLock(lockKey, 30)) {
+        if (!distributedLockService.tryLock(lockKey)) {
             throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "其他节点正在修改,请稍后再试");
         }
         try {
@@ -178,7 +176,7 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
 
     // 加锁、查现有、移除、更新、清缓存
     private void removeFromConfigList(String lockKey, String configKey, String itemToRemove) {
-        if (!distributedLockService.tryLock(lockKey, 30)) {
+        if (!distributedLockService.tryLock(lockKey)) {
             throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "其他节点正在修改,请稍后再试");
         }
         try {

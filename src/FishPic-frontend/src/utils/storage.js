@@ -1,8 +1,5 @@
 const USER_KEY = 'fishpics_user_info'
-// LEGACY: 从 localStorage 迁移到 sessionStorage，key 名相同但存储位置不同
-const LEGACY_TOKEN_KEY = 'fishpics_auth_token'
 const TOKEN_KEY = 'fishpics_auth_token'
-const LEGACY_ENC_KEY_STORAGE = 'fishpics_enc_key'
 
 const SAFE_USER_FIELDS = ['id', 'username', 'nickname', 'avatar', 'level', 'roleId', 'permissions']
 
@@ -36,7 +33,6 @@ export const saveUserInfo = (userInfo) => {
     cachedAt = Date.now()
     sessionStorage.setItem(USER_KEY, JSON.stringify(safe))
     localStorage.removeItem(USER_KEY)
-    sessionStorage.removeItem(LEGACY_ENC_KEY_STORAGE)
   } catch (error) {
     console.error('保存用户信息失败', error)
   }
@@ -72,7 +68,6 @@ export const removeUserInfo = () => {
     cachedAt = 0
     sessionStorage.removeItem(USER_KEY)
     localStorage.removeItem(USER_KEY)
-    sessionStorage.removeItem(LEGACY_ENC_KEY_STORAGE)
   } catch (error) {
     console.error('清除用户信息失败', error)
   }
@@ -80,8 +75,7 @@ export const removeUserInfo = () => {
 
 export const saveToken = (token) => {
   try {
-    sessionStorage.setItem(TOKEN_KEY, token)
-    localStorage.removeItem(LEGACY_TOKEN_KEY)
+    localStorage.setItem(TOKEN_KEY, token)
   } catch (error) {
     console.error('保存Token失败', error)
   }
@@ -89,7 +83,7 @@ export const saveToken = (token) => {
 
 export const getToken = () => {
   try {
-    return sessionStorage.getItem(TOKEN_KEY)
+    return localStorage.getItem(TOKEN_KEY)
   } catch (error) {
     console.error('读取Token失败', error)
     return null
@@ -98,8 +92,7 @@ export const getToken = () => {
 
 export const removeToken = () => {
   try {
-    sessionStorage.removeItem(TOKEN_KEY)
-    localStorage.removeItem(LEGACY_TOKEN_KEY)
+    localStorage.removeItem(TOKEN_KEY)
   } catch (error) {
     console.error('清除Token失败', error)
   }

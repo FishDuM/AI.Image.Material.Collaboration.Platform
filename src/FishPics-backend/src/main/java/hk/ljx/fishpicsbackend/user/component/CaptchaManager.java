@@ -5,7 +5,6 @@ import cn.hutool.captcha.CircleCaptcha;
 import hk.ljx.fishpicsbackend.common.constants.RedisConstants;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
-import hk.ljx.fishpicsbackend.common.infra.RedisAtomicOps;
 import jakarta.annotation.Resource;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
@@ -18,9 +17,6 @@ public class CaptchaManager {
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
-
-    @Resource
-    private RedisAtomicOps redisAtomicOps;
 
     public String getCheckCode(String redisKey, Integer len, Integer minute) {
         int actualLen = len == null ? 4 : len;
@@ -42,8 +38,9 @@ public class CaptchaManager {
     }
 
     private void verifyAndConsume(String redisKey, String checkCode) {
-        String cachedCode = redisAtomicOps.getAndDelete(redisKey);
+        String cachedCode = stringRedisTemplate.opsForValue().get(redisKey);
         ExcUtils.throwIfTrue(cachedCode == null || !checkCode.equalsIgnoreCase(cachedCode),
                 ExceptionCode.PARAMETER_ERROR, "验证码错误");
+        stringRedisTemplate.delete(redisKey);
     }
 }

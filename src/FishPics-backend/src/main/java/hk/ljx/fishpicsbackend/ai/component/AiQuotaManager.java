@@ -7,6 +7,7 @@ import hk.ljx.fishpicsbackend.common.cache.RedisCacheManager;
 import hk.ljx.fishpicsbackend.common.constants.SysConstants;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
+import hk.ljx.fishpicsbackend.common.infra.RedisAtomicOps;
 import hk.ljx.fishpicsbackend.mapper.PicSystemMapper;
 import hk.ljx.fishpicsbackend.system.entity.PicSystem;
 import jakarta.annotation.Resource;
@@ -17,8 +18,6 @@ import org.springframework.stereotype.Component;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 
 /**
  * AI 月度配额管理
@@ -35,10 +34,26 @@ public class AiQuotaManager {
     private RedisCacheManager cacheManager;
 
     @Resource
+    private RedisAtomicOps redisAtomicOps;
+
+    @Resource
     private PicSystemMapper picSystemMapper;
 
     private static final String QUOTA_KEY_PREFIX = "AI:QUOTA:";
     private static final DateTimeFormatter MONTH_FMT = DateTimeFormatter.ofPattern("yyyyMM");
+
+    /**
+     * 任务永久失败时退还配额
+     */
+    public void refund(String feature, Long userId) {
+        String monthKey = YearMonth.now().format(MONTH_FMT);
+        String redisKey = QUOTA_KEY_PREFIX + feature.toUpperCase() + ":" + userId + ":" + monthKey;
+        Long val = stringRedisTemplate.opsForValue().decrement(redisKey);
+        if (val != null && val < 0) {
+            stringRedisTemplate.delete(redisKey);
+        }
+        log.debug("AI配额退还: userId={}, feature={}", userId, feature);
+    }
 
     // feature: "tag" 或 "draw"，level: 0=普通 1=VIP 2=SVIP
     public int checkAndConsume(String feature, Long userId, Integer level) {
@@ -54,20 +69,14 @@ public class AiQuotaManager {
         String monthKey = YearMonth.now().format(MONTH_FMT);
         String redisKey = QUOTA_KEY_PREFIX + feature.toUpperCase() + ":" + userId + ":" + monthKey;
 
-        Long used = stringRedisTemplate.opsForValue().increment(redisKey);
-        // 首次写入设置 TTL 40 天（覆盖最长月份，下月初自动清理）
-        if (used != null && used == 1) {
-            stringRedisTemplate.expire(redisKey, 40, TimeUnit.DAYS);
-        }
-
-        if (used != null && used > limit) {
-            // 超限回滚
-            stringRedisTemplate.opsForValue().decrement(redisKey);
+        // 原子 INCR + 超限检查 + 回滚（Lua 脚本保证原子性）
+        long used = redisAtomicOps.incrWithCheckAndRollback(redisKey, 40 * 24 * 3600, limit);
+        if (used < 0) {
             throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS,
                     "本月" + featureName(feature) + "额度已用完（" + limit + "次/月）");
         }
 
-        int remaining = limit - (used != null ? used.intValue() : 0);
+        int remaining = limit - (int) used;
         log.debug("AI配额消耗: userId={}, feature={}, used={}, limit={}, remaining={}",
                 userId, feature, used, limit, remaining);
         return remaining;

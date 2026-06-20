@@ -124,8 +124,9 @@ public class PictureReplaceManager {
             return 0L;
         }
         Space space = spaceMapper.selectById(spaceId);
-        if (space == null || quotaManager.reserve(space, sizeDiff)) {
-            return space == null ? 0L : sizeDiff;
+        ExcUtils.throwIfTrue(space == null, ExceptionCode.NOT_FOUND, "图片所属空间不存在");
+        if (quotaManager.reserve(space, sizeDiff)) {
+            return sizeDiff;
         }
         rollbackReplacementResource(newResource, newCosKey, 0L, null);
         throw new BaseException(ExceptionCode.PARAMETER_ERROR, "空间容量不足,无法保存");

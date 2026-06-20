@@ -28,7 +28,6 @@ public class PictureVO {
     private Long size;
     private String type;
 
-    // 0=普通 1=精选 2=申请中
     @JsonProperty("isSelected")
     private Integer isSelected;
 
@@ -39,7 +38,6 @@ public class PictureVO {
 
     // ---- 工厂方法 ----
 
-    // 列表页只返回 id + url + tags
     public static PictureVO ofList(Long id, String url, List<String> tags) {
         return PictureVO.builder()
                 .id(id)
@@ -48,7 +46,6 @@ public class PictureVO {
                 .build();
     }
 
-    // 编辑页
     public static PictureVO ofDetail(Long id, String url, String pictureName,
                                       String introduction, List<String> tags) {
         return PictureVO.builder()
@@ -60,7 +57,6 @@ public class PictureVO {
                 .build();
     }
 
-    // 上传完成返回
     public static PictureVO ofUpload(Long id, String url) {
         return PictureVO.builder()
                 .id(id)
@@ -68,7 +64,6 @@ public class PictureVO {
                 .build();
     }
 
-    // 管理端，带完整信息
     public static PictureVO ofAdmin(Long id, String url, String width, String height,
                                      Long size, LocalDateTime createTime,
                                      Long userId, Integer isSelected,

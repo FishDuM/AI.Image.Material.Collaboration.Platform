@@ -34,7 +34,7 @@ public class TaskDispatchCompensator {
     private List<Task> selectPendingTasks() {
         return taskService.lambdaQuery()
                 .eq(Task::getStatus, "PENDING")
-                .lt(Task::getCreateTime, LocalDateTime.now().minus(Duration.ofMillis(PENDING_DELAY_MS)))
+                .lt(Task::getUpdateTime, LocalDateTime.now().minus(Duration.ofMillis(PENDING_DELAY_MS)))
                 .orderByAsc(Task::getId)
                 .last("LIMIT " + BATCH_SIZE)
                 .list();

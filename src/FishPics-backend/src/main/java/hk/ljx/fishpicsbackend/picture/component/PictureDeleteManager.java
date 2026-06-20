@@ -152,14 +152,9 @@ public class PictureDeleteManager {
         List<String> legacyCosUrls = new ArrayList<>();
         for (Picture picture : pictures) {
             if (picture.getResourceId() != null) {
-                try {
-                    int newCount = fileResourceService.decrementRefCount(picture.getResourceId());
-                    if (newCount == 0) {
-                        log.info("picture resource ref_count reached zero: resourceId={}", picture.getResourceId());
-                    }
-                } catch (Exception e) {
-                    log.warn("failed to release picture resource: pictureId={}, resourceId={}",
-                            picture.getId(), picture.getResourceId(), e);
+                int newCount = fileResourceService.decrementRefCount(picture.getResourceId());
+                if (newCount == 0) {
+                    log.info("picture resource ref_count reached zero: resourceId={}", picture.getResourceId());
                 }
             } else {
                 legacyCosUrls.add(picture.getUrl());

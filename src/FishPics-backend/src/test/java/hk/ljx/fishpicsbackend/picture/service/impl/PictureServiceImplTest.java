@@ -53,7 +53,7 @@ class PictureServiceImplTest {
     private UserService userService;
 
     @Mock
-    private PictureUploadManager pictureUploadManager;
+    private PictureUploadService pictureUploadService;
 
     @Mock
     private PictureDeleteManager pictureDeleteManager;
@@ -134,24 +134,22 @@ class PictureServiceImplTest {
     }
 
     @Test
-    @DisplayName("getPictureList - tag 过滤为 '热门' 时不应走子查询")
-    void getPictureList_hotTag_noSubquery() {
+    @DisplayName("getPictureList - tag 过滤应走子查询")
+    void getPictureList_withTag_usesSubquery() {
         PictureQueryRequest request = new PictureQueryRequest();
         request.setCurrent(1);
         request.setPageSize(10);
-        request.setTag("热门");
+        request.setTag("风景");
 
         Page<Picture> emptyPage = new Page<>(1, 10);
         emptyPage.setRecords(Collections.emptyList());
 
-        when(pictureMapper.selectPage(any(Page.class), any(LambdaQueryWrapper.class)))
-                .thenReturn(emptyPage);
-        when(pictureTagManager.batchLoadTags(anyList())).thenReturn(Collections.emptyMap());
+        when(pictureTagManager.findPictureIdsByTag("风景")).thenReturn(Collections.emptyList());
 
         IPage<PictureVO> result = pictureService.getPictureList(request);
 
         assertNotNull(result);
-        verify(pictureTagManager, never()).findPictureIdsByTag(anyString());
+        verify(pictureTagManager).findPictureIdsByTag("风景");
     }
 
     @Test
@@ -175,12 +173,12 @@ class PictureServiceImplTest {
     // ==================== getAdminPictureList ====================
 
     @Test
-    @DisplayName("getAdminPictureList - status=4 应筛选已精选图片")
-    void getAdminPictureList_status4_filtersFeatured() {
+    @DisplayName("getAdminPictureList - selected=1 应筛选已精选图片")
+    void getAdminPictureList_selected1_filtersFeatured() {
         AdminPictureListDTO dto = new AdminPictureListDTO();
         dto.setCurrent(1);
         dto.setPageSize(10);
-        dto.setStatus(4);
+        dto.setSelected(1);
 
         Page<Picture> emptyPage = new Page<>(1, 10);
         emptyPage.setRecords(Collections.emptyList());
@@ -196,12 +194,12 @@ class PictureServiceImplTest {
     }
 
     @Test
-    @DisplayName("getAdminPictureList - status=5 应筛选精选待审核")
-    void getAdminPictureList_status5_filtersPendingFeatured() {
+    @DisplayName("getAdminPictureList - selected=2 应筛选精选待审核")
+    void getAdminPictureList_selected2_filtersPendingFeatured() {
         AdminPictureListDTO dto = new AdminPictureListDTO();
         dto.setCurrent(1);
         dto.setPageSize(10);
-        dto.setStatus(5);
+        dto.setSelected(2);
 
         Page<Picture> emptyPage = new Page<>(1, 10);
         emptyPage.setRecords(Collections.emptyList());
@@ -220,29 +218,29 @@ class PictureServiceImplTest {
     @Test
     @DisplayName("reviewPicture - pictureId 为 null 时应抛异常")
     void reviewPicture_nullId_throws() {
-        assertThrows(BaseException.class, () -> pictureService.reviewPicture(null, 1, null));
+        assertThrows(BaseException.class, () -> pictureService.reviewPicture(null, 1));
     }
 
     @Test
     @DisplayName("reviewPicture - 图片不存在时应抛异常")
     void reviewPicture_notFound_throws() {
         when(pictureMapper.selectById(999L)).thenReturn(null);
-        assertThrows(BaseException.class, () -> pictureService.reviewPicture(999L, 1, null));
+        assertThrows(BaseException.class, () -> pictureService.reviewPicture(999L, 1));
     }
 
     @Test
-    @DisplayName("reviewPicture - 更新状态应成功")
-    void reviewPicture_updateStatus_success() {
+    @DisplayName("reviewPicture - 设为精选应成功")
+    void reviewPicture_setFeatured_success() {
         Picture pic = new Picture();
         pic.setId(1L);
-        pic.setStatus(2); // 待审核
+        pic.setIsSelected(0);
 
         when(pictureMapper.selectById(1L)).thenReturn(pic);
         when(pictureMapper.updateById(any(Picture.class))).thenReturn(1);
 
-        pictureService.reviewPicture(1L, 1, null);
+        pictureService.reviewPicture(1L, 1);
 
-        assertEquals(1, pic.getStatus());
+        assertEquals(1, pic.getIsSelected());
         verify(pictureMapper).updateById(pic);
     }
 
@@ -255,7 +253,7 @@ class PictureServiceImplTest {
 
         when(pictureMapper.selectById(1L)).thenReturn(pic);
 
-        assertThrows(BaseException.class, () -> pictureService.reviewPicture(1L, null, 3));
+        assertThrows(BaseException.class, () -> pictureService.reviewPicture(1L, 3));
     }
 
     // ==================== updatePicture ====================
@@ -302,11 +300,11 @@ class PictureServiceImplTest {
     @DisplayName("uploadAvatar - 应委托给 PictureUploadManager")
     void uploadAvatar_delegatesToManager() {
         var mockFile = mock(org.springframework.web.multipart.MultipartFile.class);
-        when(pictureUploadManager.uploadAvatar(mockFile, 1L)).thenReturn("http://url");
+        when(pictureUploadService.uploadAvatar(mockFile, 1L)).thenReturn("http://url");
 
         String result = pictureService.uploadAvatar(mockFile, 1L);
         assertEquals("http://url", result);
-        verify(pictureUploadManager).uploadAvatar(mockFile, 1L);
+        verify(pictureUploadService).uploadAvatar(mockFile, 1L);
     }
 
     @Test
@@ -314,7 +312,7 @@ class PictureServiceImplTest {
     void checkUpload_delegatesToManager() {
         var request = new hk.ljx.fishpicsbackend.picture.dto.CheckUploadRequest();
         var vo = new hk.ljx.fishpicsbackend.picture.vo.CheckUploadVO();
-        when(pictureUploadManager.checkUpload(request)).thenReturn(vo);
+        when(pictureUploadService.checkUpload(request)).thenReturn(vo);
 
         assertSame(vo, pictureService.checkUpload(request));
     }

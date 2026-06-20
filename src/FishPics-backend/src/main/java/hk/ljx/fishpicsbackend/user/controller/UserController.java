@@ -150,6 +150,13 @@ public class UserController {
     }
 
     @RequireAdmin
+    @PostMapping("/admin/getUserDetail")
+    public Response<UserVO> adminGetUserDetail(@Valid @RequestBody UserIdRequest userIdRequest) {
+        Long userId = userIdRequest.getUserId();
+        return Response.ok(userService.adminGetUserDetail(userId));
+    }
+
+    @RequireAdmin
     @PostMapping("/admin/userList")
     public Response<IPage<UserVO>> getUserList(@Valid @RequestBody UserQueryWrapper userQueryWrapper) {
         ExcUtils.throwIfTrue(ObjectUtil.isEmpty(userQueryWrapper), ExceptionCode.PARAMETER_ERROR);

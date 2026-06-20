@@ -12,6 +12,12 @@ public interface UserConstants {
     int PASSWORD_MIN_LENGTH = 8;
     int PASSWORD_MAX_LENGTH = 32;
 
+    // 账号/昵称长度
+    int USERNAME_MIN_LENGTH = 6;
+    int USERNAME_MAX_LENGTH = 30;
+    int NICKNAME_MIN_LENGTH = 1;
+    int NICKNAME_MAX_LENGTH = 30;
+
     // 个人信息类
     String DEFAULT_NICK_NAME = "小鱼籽_";
 

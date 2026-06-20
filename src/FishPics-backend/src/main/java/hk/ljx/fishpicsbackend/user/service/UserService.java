@@ -38,8 +38,9 @@ public interface UserService extends IService<User> {
     // 改了昵称/头像后调一下，刷新 Redis 缓存
     void refreshUserInfoCache(User user);
 
-    // 管理端查询用户详情（带脱敏）
     UserVO adminGetUser(Long userId);
+
+    UserVO adminGetUserDetail(Long userId);
 
     // 从 LoginContext 构建当前用户 VO（合并系统权限+VIP权限）
     UserVO getCurrentUserVO();
