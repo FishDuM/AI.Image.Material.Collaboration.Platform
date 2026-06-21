@@ -7,6 +7,7 @@ export function downloadFile(url, filename = 'image') {
   link.click()
   document.body.removeChild(link)
   if (url.startsWith('blob:')) {
-    window.URL.revokeObjectURL(url)
+    // Delay revoke to ensure the browser has time to start the download
+    setTimeout(() => window.URL.revokeObjectURL(url), 1000)
   }
 }

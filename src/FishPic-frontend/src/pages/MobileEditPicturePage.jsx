@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useContext } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Form, Input, Select, Button, message } from 'antd'
+import { Form, Input, Select, Button, App } from 'antd'
 import MobilePageWrapper from '../components/MobilePageWrapper'
 import { updatePicture, getPictureEditMessage, submitAiTag } from '../api'
 import { useSystemTypes } from '../hooks/useSystemTypes'
@@ -13,6 +13,7 @@ export default function MobileEditPicturePage() {
   const navigate = useNavigate()
   const [form] = Form.useForm()
   const [loading, setLoading] = useState(false)
+  const { message } = App.useApp()
   const systemTags = useSystemTypes()
   const { userInfo } = useContext(AuthContext)
 

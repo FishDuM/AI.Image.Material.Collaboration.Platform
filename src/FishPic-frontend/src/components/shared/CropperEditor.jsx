@@ -11,6 +11,7 @@ const CropperEditor = forwardRef(function CropperEditor(
   const imgRef = useRef(null)
   const cropperRef = useRef(null)
   const [ready, setReady] = useState(false)
+  const [loadError, setLoadError] = useState(false)
 
   const destroyCropper = useCallback(() => {
     cropperRef.current?.destroy()
@@ -25,11 +26,14 @@ const CropperEditor = forwardRef(function CropperEditor(
   useEffect(() => {
     if (!src) {
       destroyCropper()
+      setLoadError(false)
       return
     }
 
     const img = imgRef.current
     if (!img) return
+
+    setLoadError(false)
 
     const init = () => {
       destroyCropper()
@@ -44,14 +48,25 @@ const CropperEditor = forwardRef(function CropperEditor(
       onReady?.()
     }
 
+    const handleError = () => {
+      setLoadError(true)
+      setReady(false)
+    }
+
     if (img.complete) {
-      init()
+      if (img.naturalWidth > 0) {
+        init()
+      } else {
+        handleError()
+      }
     } else {
       img.addEventListener('load', init)
+      img.addEventListener('error', handleError)
     }
 
     return () => {
       img.removeEventListener('load', init)
+      img.removeEventListener('error', handleError)
       destroyCropper()
     }
   }, [src, aspectRatio, destroyCropper, onReady])
@@ -68,7 +83,11 @@ const CropperEditor = forwardRef(function CropperEditor(
     <>
       <div className="image-cropper-container">
         {src ? (
-          <img ref={imgRef} src={src} alt="裁剪预览" />
+          loadError ? (
+            <div className="image-cropper-loading" style={{ color: '#ff4d4f' }}>图片加载失败</div>
+          ) : (
+            <img ref={imgRef} src={src} alt="裁剪预览" />
+          )
         ) : (
           <div className="image-cropper-loading">加载中...</div>
         )}

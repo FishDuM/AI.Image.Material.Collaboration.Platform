@@ -320,17 +320,17 @@ export default function CollaborativeCanvas({ open, imageUrl, pictureId, spaceId
         const cctx = cropped.getContext('2d')
         cctx.drawImage(img, cropData.x, cropData.y, cropData.w, cropData.h, 0, 0, cropData.w, cropData.h)
         // 2. 对裁剪结果做旋转+缩放
-        const radians = (rotation * Math.PI) / 180
-        const cos = Math.abs(Math.cos(radians)), sin = Math.abs(Math.sin(radians))
-        const rotW = Math.ceil(cropData.w * cos + cropData.h * sin)
-        const rotH = Math.ceil(cropData.w * sin + cropData.h * cos)
-        const canvas = document.createElement('canvas')
-        canvas.width = Math.ceil(rotW * scale); canvas.height = Math.ceil(rotH * scale)
-        const ctx = canvas.getContext('2d')
-        ctx.translate(canvas.width / 2, canvas.height / 2)
-        ctx.rotate(radians); ctx.scale(scale, scale)
-        ctx.drawImage(cropped, -cropData.w / 2, -cropData.h / 2)
-        finalCanvas = canvas
+        const cropRadians = (rotation * Math.PI) / 180
+        const cropCos = Math.abs(Math.cos(cropRadians)), cropSin = Math.abs(Math.sin(cropRadians))
+        const cropRotW = Math.ceil(cropData.w * cropCos + cropData.h * cropSin)
+        const cropRotH = Math.ceil(cropData.w * cropSin + cropData.h * cropCos)
+        const cropCanvas = document.createElement('canvas')
+        cropCanvas.width = Math.ceil(cropRotW * scale); cropCanvas.height = Math.ceil(cropRotH * scale)
+        const cropCtx = cropCanvas.getContext('2d')
+        cropCtx.translate(cropCanvas.width / 2, cropCanvas.height / 2)
+        cropCtx.rotate(cropRadians); cropCtx.scale(scale, scale)
+        cropCtx.drawImage(cropped, -cropData.w / 2, -cropData.h / 2)
+        finalCanvas = cropCanvas
       } else {
         finalCanvas = canvas
       }
