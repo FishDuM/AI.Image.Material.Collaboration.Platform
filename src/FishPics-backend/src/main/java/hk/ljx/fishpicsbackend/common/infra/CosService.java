@@ -106,13 +106,10 @@ public class CosService {
         }
     }
 
-    // 校验 URL host 必须是当前 bucket，防止误删别的 bucket
     public void deletePictureByUrl(String allUrl) {
         ExcUtils.throwIfTrue(allUrl == null || allUrl.isEmpty(), "文件URL不能为空");
-        // 使用 URI 解析提取路径，避免依赖配置 URL 的精确格式
         try {
             java.net.URI uri = java.net.URI.create(allUrl);
-            // host 必须等于当前配置的 bucket 域名
             String host = uri.getHost();
             String configuredUrl = (this.url != null && !this.url.isBlank()) ? this.url : null;
             String expectedHost1 = bucket + ".cos." + region + ".myqcloud.com";
@@ -136,7 +133,6 @@ public class CosService {
         }
     }
 
-    // 优先用 imageInfo 查元数据，失败则降级只拿文件大小
     public PictureMetadata getPictureMetadata(String key) {
         PictureMetadata metadata = new PictureMetadata();
 
@@ -149,7 +145,6 @@ public class CosService {
             fetchFileSizeOnly(key, metadata);
         }
 
-        // imageInfo 成功但 size 仍为空时，降级用 getObjectMetadata 补充
         if (metadata.getSize() == null) {
             try {
                 ObjectMetadata objectMetadata = cosClient.getObjectMetadata(bucket, key);
@@ -210,8 +205,6 @@ public class CosService {
         }
     }
 
-    // ==================== 预签名 URL ====================
-
     public String getPresignedUrl(String key, int expirationSeconds) {
         requireKey(key);
         Date expiration = new Date(System.currentTimeMillis() + expirationSeconds * 1000L);
@@ -221,8 +214,6 @@ public class CosService {
         URL presignedUrl = cosClient.generatePresignedUrl(request);
         return presignedUrl.toString();
     }
-
-    // ==================== 分片上传方法 ====================
 
     public byte[] getObjectBytes(String key) {
         requireKey(key);
@@ -273,7 +264,6 @@ public class CosService {
         cosClient.completeMultipartUpload(request);
     }
 
-    // COS 会自动清理未完成的分片上传，这里主动调一下
     public void abortMultipartUpload(String cosKey, String uploadId) {
         try {
             AbortMultipartUploadRequest request = new AbortMultipartUploadRequest(bucket, cosKey, uploadId);

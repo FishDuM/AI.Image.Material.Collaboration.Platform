@@ -55,7 +55,7 @@ public class TaskProcessor {
         try {
             CompletableFuture.runAsync(() -> process(taskId), taskExecutor)
                     .exceptionally(e -> {
-                        log.error("task processor crashed: taskId={}", taskId, e);
+                        log.error("任务处理器崩溃: taskId={}", taskId, e);
                         if (e instanceof RejectedExecutionException
                                 || e.getCause() instanceof RejectedExecutionException) {
                             markFailedByTaskId(taskId, "任务调度线程池繁忙，请稍后重试");
@@ -74,7 +74,7 @@ public class TaskProcessor {
 
         Task task = taskMapper.selectOne(new LambdaQueryWrapper<Task>().eq(Task::getTaskId, taskId));
         if (task == null) {
-            log.warn("task disappeared after claim: taskId={}", taskId);
+            log.warn("任务认领后消失: taskId={}", taskId);
             return;
         }
 
@@ -94,15 +94,15 @@ public class TaskProcessor {
 
         Task task = taskMapper.selectOne(new LambdaQueryWrapper<Task>().eq(Task::getTaskId, taskId));
         if (task == null) {
-            log.warn("task not found: taskId={}", taskId);
+            log.warn("任务不存在: taskId={}", taskId);
             return false;
         }
         if ("DONE".equals(task.getStatus())) {
-            log.debug("task already done, skipping: taskId={}", taskId);
+            log.debug("任务已完成, 跳过: taskId={}", taskId);
             return false;
         }
         if (!"PROCESSING".equals(task.getStatus())) {
-            log.warn("task in unexpected status '{}', skipping: taskId={}", task.getStatus(), taskId);
+            log.warn("任务状态异常 '{}', 跳过: taskId={}", task.getStatus(), taskId);
             return false;
         }
 
@@ -110,7 +110,7 @@ public class TaskProcessor {
                 ? ChronoUnit.MILLIS.between(task.getUpdateTime(), LocalDateTime.now())
                 : Long.MAX_VALUE;
         if (elapsed < STUCK_PROCESSING_MS) {
-            log.debug("task is processing, skipping: taskId={}, elapsed={}ms", taskId, elapsed);
+            log.debug("任务处理中, 跳过: taskId={}, elapsed={}ms", taskId, elapsed);
             return false;
         }
 
@@ -121,10 +121,10 @@ public class TaskProcessor {
                         .apply("update_time < DATE_SUB(NOW(), INTERVAL 5 MINUTE)")
                         .set(Task::getUpdateTime, LocalDateTime.now()));
         if (reclaimed == 0) {
-            log.warn("task re-claim failed, skipping: taskId={}", taskId);
+            log.warn("任务重新认领失败, 跳过: taskId={}", taskId);
             return false;
         }
-        log.warn("reclaimed stuck task: taskId={}", taskId);
+        log.warn("重新认领卡住的任务: taskId={}", taskId);
         return true;
     }
 
@@ -151,7 +151,7 @@ public class TaskProcessor {
                 }
             });
 
-            log.info("task done: taskId={}, bizType={}", task.getTaskId(), task.getBizType());
+            log.info("任务完成: taskId={}, bizType={}", task.getTaskId(), task.getBizType());
             sseEmitterRegistry.completeWithResult(task.getTaskId(), task.getResult());
         } catch (Exception e) {
             boolean permanently = handleFailure(task, e);
@@ -181,7 +181,7 @@ public class TaskProcessor {
                 markFailed(task, "任务重试调度失败，请稍后重新提交", true);
                 return true;
             }
-            log.warn("task retry {}/{} after {}s: taskId={}",
+            log.warn("任务重试 {}/{} 在 {}s 后: taskId={}",
                     newRetryCount, MAX_RETRY_COUNT, delaySec, task.getTaskId(), e);
             return false;
         }
@@ -199,7 +199,7 @@ public class TaskProcessor {
                         .set(Task::getRetryCount, retryCount)
                         .set(Task::getErrorMsg, errorMsg));
         if (rows == 0) {
-            log.warn("task retry CAS failed: taskId={}", task.getTaskId());
+            log.warn("任务重试 CAS 失败: taskId={}", task.getTaskId());
             return false;
         }
         return true;
@@ -214,10 +214,10 @@ public class TaskProcessor {
                         .set(Task::getErrorMsg, errorMsg)
                         .set(Task::getRetryCount, (task.getRetryCount() == null ? 0 : task.getRetryCount()) + 1));
         if (rows == 0) {
-            log.warn("task FAILED mark skipped: taskId={}", task.getTaskId());
+            log.warn("任务失败标记跳过: taskId={}", task.getTaskId());
             return;
         }
-        log.error("task FAILED: taskId={}, errorMsg={}", task.getTaskId(), errorMsg);
+        log.error("任务失败: taskId={}, errorMsg={}", task.getTaskId(), errorMsg);
         if (notifySse) {
             sseEmitterRegistry.completeWithError(task.getTaskId(), errorMsg);
         }

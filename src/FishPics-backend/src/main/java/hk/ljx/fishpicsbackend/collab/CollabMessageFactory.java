@@ -5,9 +5,6 @@ import cn.hutool.json.JSONUtil;
 
 import java.util.Map;
 
-/**
- * Builds outbound WebSocket messages for the collaboration protocol.
- */
 public final class CollabMessageFactory {
 
     private CollabMessageFactory() {

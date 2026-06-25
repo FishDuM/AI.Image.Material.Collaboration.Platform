@@ -22,20 +22,17 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  */
 @Slf4j
 @Service
-public class FileResourceServiceImpl extends ServiceImpl<FileResourceMapper, FileResource>
-        implements FileResourceService {
+public class FileResourceServiceImpl extends ServiceImpl<FileResourceMapper, FileResource> implements FileResourceService {
 
     @Resource
     private CosService cosService;
 
-    @Override
     public FileResource findByMd5AndSize(String md5, Long size) {
         return getOne(new LambdaQueryWrapper<FileResource>()
                 .eq(FileResource::getMd5, md5)
                 .eq(FileResource::getSize, size));
     }
 
-    @Override
     @Transactional(rollbackFor = Exception.class)
     public FileResource addResource(String md5, Long size, String cosKey) {
         FileResource resource = findByMd5AndSize(md5, size);
@@ -55,7 +52,7 @@ public class FileResourceServiceImpl extends ServiceImpl<FileResourceMapper, Fil
                 return resource;
             }
         } catch (DuplicateKeyException e) {
-            log.info("[FileResource] concurrent insert hit unique key, retry increment: md5={}, size={}", md5, size);
+            log.info("[FileResource] 并发插入命中唯一键，重试递增引用: md5={}, size={}", md5, size);
             return incrementExistingResource(md5, size);
         }
 
@@ -71,7 +68,6 @@ public class FileResourceServiceImpl extends ServiceImpl<FileResourceMapper, Fil
         return getById(existing.getId());
     }
 
-    @Override
     @Transactional(rollbackFor = Exception.class)
     public int incrementRefCount(Long resourceId) {
         update(new LambdaUpdateWrapper<FileResource>()
@@ -81,7 +77,6 @@ public class FileResourceServiceImpl extends ServiceImpl<FileResourceMapper, Fil
         return refreshed != null ? refreshed.getRefCount() : -1;
     }
 
-    @Override
     @Transactional(rollbackFor = Exception.class)
     public int decrementRefCount(Long resourceId) {
         FileResource resource = getById(resourceId);
@@ -103,7 +98,6 @@ public class FileResourceServiceImpl extends ServiceImpl<FileResourceMapper, Fil
         }
 
         if (refreshed.getRefCount() == 0) {
-            // 用条件删除防止并发场景下误删（另一个线程可能已重新 +1）
             boolean removed = remove(new LambdaQueryWrapper<FileResource>()
                     .eq(FileResource::getId, resourceId)
                     .le(FileResource::getRefCount, 0));
@@ -122,9 +116,9 @@ public class FileResourceServiceImpl extends ServiceImpl<FileResourceMapper, Fil
             public void afterCommit() {
                 try {
                     cosService.deletePicture(cosKey);
-                    log.info("COS file deleted: cosKey={}", cosKey);
+                    log.info("COS 文件已删除: cosKey={}", cosKey);
                 } catch (Exception e) {
-                    log.error("Failed to delete COS file: cosKey={}", cosKey, e);
+                    log.error("删除 COS 文件失败: cosKey={}", cosKey, e);
                 }
             }
         });

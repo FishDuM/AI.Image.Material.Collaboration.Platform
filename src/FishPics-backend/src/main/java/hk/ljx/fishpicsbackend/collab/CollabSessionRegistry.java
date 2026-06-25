@@ -43,6 +43,7 @@ public class CollabSessionRegistry {
         private String nickname;
         private Long spaceId;
         private Long pictureId;
+        private String sessionId;
     }
 
     public void addSession(Long spaceId, Long userId, WebSocketSession session, String nickname, String avatar) {
@@ -53,20 +54,20 @@ public class CollabSessionRegistry {
                     }
                     return new SessionInfo(session, nickname, avatar, session.getId());
                 });
-        log.debug("[Collab] session added: space={}, user={}", spaceId, userId);
+        log.debug("[Collab] 会话已添加: space={}, user={}", spaceId, userId);
     }
 
     public void removeSession(Long spaceId, Long userId, String sessionId) {
         sessionsBySpace.computeIfPresent(spaceId, (key, spaceSessions) -> {
             SessionInfo existing = spaceSessions.get(userId);
             if (sessionId != null && existing != null && !sessionId.equals(existing.getSessionId())) {
-                log.debug("[Collab] skip stale session remove: space={}, user={}", spaceId, userId);
+                log.debug("[Collab] 跳过过期 session 移除: space={}, user={}", spaceId, userId);
                 return spaceSessions;
             }
             spaceSessions.remove(userId);
             return spaceSessions.isEmpty() ? null : spaceSessions;
         });
-        log.debug("[Collab] session removed: space={}, user={}", spaceId, userId);
+        log.debug("[Collab] 会话已移除: space={}, user={}", spaceId, userId);
     }
 
     public Set<Long> getOnlineUserIds(Long spaceId) {
@@ -107,17 +108,46 @@ public class CollabSessionRegistry {
 
     private void sendSafe(WebSocketSession session, TextMessage message, Long spaceId, Long userId) {
         try {
-            if (!session.isOpen()) return;
+            if (!session.isOpen()) {
+                cleanupDeadSession(spaceId, userId, session);
+                return;
+            }
             synchronized (session) {
                 session.sendMessage(message);
             }
         } catch (IOException e) {
-            log.warn("[Collab] send message failed: space={}, user={}", spaceId, userId, e);
+            log.warn("[Collab] 发送消息失败，清理连接: space={}, user={}", spaceId, userId, e);
+            removeSession(spaceId, userId, getSessionId(session));
+            try { session.close(CloseStatus.GOING_AWAY.withReason("send failed")); } catch (Exception ignored) {}
         }
     }
 
+    private String getSessionId(WebSocketSession session) {
+        try {
+            return session.getId();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void cleanupDeadSession(Long spaceId, Long userId, WebSocketSession session) {
+        Map<Long, SessionInfo> spaceSessions = sessionsBySpace.get(spaceId);
+        if (spaceSessions == null) return;
+        SessionInfo info = spaceSessions.get(userId);
+        if (info != null && info.getSession().equals(session)) {
+            spaceSessions.remove(userId);
+            if (spaceSessions.isEmpty()) {
+                sessionsBySpace.remove(spaceId);
+            }
+        }
+    }
+
+    public List<LockInfo> getSpaceLocks(Long spaceId) {
+        return stateStore.getAllLocks(spaceId);
+    }
+
     public boolean tryAcquireEditLock(Long spaceId, Long pictureId, Long userId, String nickname) {
-        LockInfo newLock = new LockInfo(userId, nickname == null ? "" : nickname, spaceId, pictureId);
+        LockInfo newLock = new LockInfo(userId, nickname == null ? "" : nickname, spaceId, pictureId, "");
         return stateStore.tryAcquireLock(spaceId, newLock);
     }
 
@@ -125,16 +155,16 @@ public class CollabSessionRegistry {
         return stateStore.releaseLock(spaceId, pictureId, userId);
     }
 
-    public LockInfo getSpaceLock(Long spaceId) {
-        return stateStore.getLock(spaceId);
+    public LockInfo getSpaceLock(Long spaceId, Long pictureId) {
+        return stateStore.getLock(spaceId, pictureId);
     }
 
     public boolean isEditLockHolder(Long spaceId, Long pictureId, Long userId) {
         return stateStore.isLockHolder(spaceId, pictureId, userId);
     }
 
-    public Long clearLockByUserInSpace(Long userId, Long spaceId) {
-        return stateStore.clearLockByUserInSpace(userId, spaceId);
+    public List<Long> clearLocksByUserInSpace(Long userId, Long spaceId) {
+        return stateStore.clearLocksByUserInSpace(userId, spaceId);
     }
 
     public void updatePictureState(Long spaceId, Long pictureId, String stateJson) {
@@ -159,9 +189,9 @@ public class CollabSessionRegistry {
         removeSession(spaceId, userId, info.getSessionId());
         closeSession(info.getSession(), reason);
 
-        Long pictureId = stateStore.clearLockByUserInSpace(userId, spaceId);
-        if (pictureId != null) {
-            clearPictureState(spaceId, pictureId);
+        List<Long> pictureIds = stateStore.clearLocksByUserInSpace(userId, spaceId);
+        for (Long picId : pictureIds) {
+            clearPictureState(spaceId, picId);
         }
         return true;
     }
@@ -172,7 +202,7 @@ public class CollabSessionRegistry {
                 session.close(CloseStatus.GOING_AWAY.withReason(reason));
             }
         } catch (IOException e) {
-            log.warn("[Collab] close session failed: session={}", session.getId(), e);
+            log.warn("[Collab] 关闭 session 失败: session={}", session.getId(), e);
         }
     }
 

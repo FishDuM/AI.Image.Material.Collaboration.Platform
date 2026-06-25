@@ -20,14 +20,8 @@ public interface AiService {
 
     String getDownloadImageUrl(String taskId);
 
-    /**
-     * 暴露到 Service 层，让其他端点能查 AiConfig 开关
-     */
     boolean isFeatureEnabled(String fieldName);
 
-    /**
-     * 按 taskId 查询任务（供 SSE 等跨方法场景使用）
-     */
     Task getTaskByTaskId(String taskId);
 
     IPage<AiTaskVO> getAdminTasks(AiTaskQueryDTO queryDTO);

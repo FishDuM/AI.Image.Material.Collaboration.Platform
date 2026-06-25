@@ -1,6 +1,7 @@
 package hk.ljx.fishpicsbackend.space.component;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import hk.ljx.fishpicsbackend.common.cache.RedisCacheManager;
 import hk.ljx.fishpicsbackend.common.enums.Role;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
@@ -22,6 +23,9 @@ public class SpacePermissionChecker {
     @Resource
     private SpaceTeamMemberMapper spaceTeamMemberMapper;
 
+    @Resource
+    private RedisCacheManager cacheManager;
+
     public boolean isTeamSpace(Space space) {
         return space != null && ExcUtils.eq(space.getType(), SPACE_TYPE_TEAM);
     }
@@ -30,12 +34,19 @@ public class SpacePermissionChecker {
         if (spaceId == null || userId == null) {
             return false;
         }
+        String key = spaceId + ":" + userId + ":owner";
+        Boolean cached = cacheManager.getTeamMemberCache().get(key, Boolean.class);
+        if (cached != null) {
+            return cached;
+        }
         SpaceTeamMember member = spaceTeamMemberMapper.selectOne(
                 new LambdaQueryWrapper<SpaceTeamMember>()
                         .eq(SpaceTeamMember::getSpaceId, spaceId)
                         .eq(SpaceTeamMember::getUserId, userId)
                         .eq(SpaceTeamMember::getRoleId, TeamMemberRole.OWNER.code()));
-        return member != null;
+        boolean isOwner = member != null;
+        cacheManager.getTeamMemberCache().put(key, isOwner);
+        return isOwner;
     }
 
     public boolean canAccess(Space space, Long userId) {
@@ -78,10 +89,17 @@ public class SpacePermissionChecker {
     }
 
     private boolean isMember(Long spaceId, Long userId) {
+        String key = spaceId + ":" + userId + ":member";
+        Boolean cached = cacheManager.getTeamMemberCache().get(key, Boolean.class);
+        if (cached != null) {
+            return cached;
+        }
         Long memberCount = spaceTeamMemberMapper.selectCount(
                 new LambdaQueryWrapper<SpaceTeamMember>()
                         .eq(SpaceTeamMember::getSpaceId, spaceId)
                         .eq(SpaceTeamMember::getUserId, userId));
-        return memberCount != null && memberCount > 0;
+        boolean isMember = memberCount != null && memberCount > 0;
+        cacheManager.getTeamMemberCache().put(key, isMember);
+        return isMember;
     }
 }

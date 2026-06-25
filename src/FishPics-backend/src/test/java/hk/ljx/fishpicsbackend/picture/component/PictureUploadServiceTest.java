@@ -5,7 +5,7 @@ import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.infra.CosService;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
-import hk.ljx.fishpicsbackend.picture.service.FileResourceService;
+import hk.ljx.fishpicsbackend.picture.service.impl.FileResourceServiceImpl;
 import hk.ljx.fishpicsbackend.space.service.SpaceService;
 import hk.ljx.fishpicsbackend.user.entity.User;
 import hk.ljx.fishpicsbackend.user.service.UserService;
@@ -44,7 +44,7 @@ class PictureUploadServiceTest {
     @Mock
     private UserService userService;
     @Mock
-    private FileResourceService fileResourceService;
+    private FileResourceServiceImpl fileResourceService;
     @Mock
     private SpaceQuotaManager quotaManager;
     @Mock

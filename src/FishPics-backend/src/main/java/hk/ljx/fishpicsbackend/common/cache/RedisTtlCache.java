@@ -29,7 +29,7 @@ public class RedisTtlCache {
         try {
             return JSONUtil.toBean(json, valueType);
         } catch (RuntimeException e) {
-            log.warn("Redis cache read failed, cacheName={}, key={}", cacheName, key, e);
+            log.warn("Redis 缓存读取失败: cacheName={}, key={}", cacheName, key, e);
             evict(key);
             return null;
         }
@@ -43,7 +43,7 @@ public class RedisTtlCache {
         try {
             return JSONUtil.toList(json, itemType);
         } catch (RuntimeException e) {
-            log.warn("Redis cache list read failed, cacheName={}, key={}", cacheName, key, e);
+            log.warn("Redis 缓存列表读取失败: cacheName={}, key={}", cacheName, key, e);
             evict(key);
             return null;
         }
@@ -61,7 +61,7 @@ public class RedisTtlCache {
         try {
             redis.opsForValue().set(buildRedisKey(key), JSONUtil.toJsonStr(value), timeout, unit);
         } catch (RuntimeException e) {
-            log.warn("Redis cache write failed, cacheName={}, key={}", cacheName, key, e);
+            log.warn("Redis 缓存写入失败: cacheName={}, key={}", cacheName, key, e);
         }
     }
 
@@ -69,7 +69,7 @@ public class RedisTtlCache {
         try {
             redis.delete(buildRedisKey(key));
         } catch (RuntimeException e) {
-            log.warn("Redis cache evict failed, cacheName={}, key={}", cacheName, key, e);
+            log.warn("Redis 缓存驱逐失败: cacheName={}, key={}", cacheName, key, e);
         }
     }
 
@@ -77,7 +77,7 @@ public class RedisTtlCache {
         try {
             return redis.opsForValue().get(buildRedisKey(key));
         } catch (RuntimeException e) {
-            log.warn("Redis cache get failed, cacheName={}, key={}", cacheName, key, e);
+            log.warn("Redis 缓存获取失败: cacheName={}, key={}", cacheName, key, e);
             return null;
         }
     }

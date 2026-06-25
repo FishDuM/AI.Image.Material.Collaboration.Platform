@@ -19,10 +19,6 @@ import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-/**
- * AI 月度配额管理
- * 配额上限存数据库 (AiConfigDTO)，已用次数存 Redis 月度 key
- */
 @Slf4j
 @Component
 public class AiQuotaManager {
@@ -42,9 +38,6 @@ public class AiQuotaManager {
     private static final String QUOTA_KEY_PREFIX = "AI:QUOTA:";
     private static final DateTimeFormatter MONTH_FMT = DateTimeFormatter.ofPattern("yyyyMM");
 
-    /**
-     * 任务永久失败时退还配额
-     */
     public void refund(String feature, Long userId) {
         String monthKey = YearMonth.now().format(MONTH_FMT);
         String redisKey = QUOTA_KEY_PREFIX + feature.toUpperCase() + ":" + userId + ":" + monthKey;
@@ -69,7 +62,6 @@ public class AiQuotaManager {
         String monthKey = YearMonth.now().format(MONTH_FMT);
         String redisKey = QUOTA_KEY_PREFIX + feature.toUpperCase() + ":" + userId + ":" + monthKey;
 
-        // 原子 INCR + 超限检查 + 回滚（Lua 脚本保证原子性）
         long used = redisAtomicOps.incrWithCheckAndRollback(redisKey, 40 * 24 * 3600, limit);
         if (used < 0) {
             throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS,
@@ -82,9 +74,6 @@ public class AiQuotaManager {
         return remaining;
     }
 
-    /**
-     * 查询本月剩余配额（不消费）
-     */
     public int getRemaining(String feature, Long userId, Integer level) {
         if (level == null || level <= 0) return 0;
         int limit = getQuotaLimit(level, feature);
@@ -110,10 +99,6 @@ public class AiQuotaManager {
         };
     }
 
-    /**
-     * 加载 AI 配置（公共方法）：先查 Redis 缓存，再查数据库，解析 JSON。
-     * 无配置记录时返回 null。
-     */
     public AiConfigDTO loadRawConfig() {
         AiConfigDTO config = cacheManager.getSysConfigCache().get(SysConstants.AI_CONFIG_KEY, AiConfigDTO.class);
         if (config != null) return config;

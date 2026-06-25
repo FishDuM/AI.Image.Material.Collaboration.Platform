@@ -20,11 +20,11 @@ import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.infra.DistributedLockService;
+import hk.ljx.fishpicsbackend.common.utils.LoginContextHelper;
 import hk.ljx.fishpicsbackend.mapper.PicSystemMapper;
 import hk.ljx.fishpicsbackend.system.entity.PicSystem;
 import hk.ljx.fishpicsbackend.task.entity.Task;
 import hk.ljx.fishpicsbackend.task.service.TaskService;
-import hk.ljx.fishpicsbackend.common.utils.LoginContextHelper;
 import hk.ljx.fishpicsbackend.picture.entity.Picture;
 import hk.ljx.fishpicsbackend.picture.service.PictureService;
 import hk.ljx.fishpicsbackend.user.entity.User;
@@ -35,6 +35,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -78,29 +79,33 @@ public class AiServiceImpl implements AiService {
     @Resource
     private RedisCacheManager cacheManager;
 
-    @Override
     public String submitTagTask(Long pictureId) {
         User user = LoginContextHelper.requireUser();
 
-        // 鉴权（图片归属 + 私密图）先于配额检查，避免攻击者用任意 pictureId 消耗自己配额
         Picture picture = pictureService.getById(pictureId);
         ExcUtils.throwIfTrue(picture == null, "图片不存在");
         ExcUtils.throwIfTrue(picture.getUserId() == null, "图片数据异常");
         ExcUtils.throwIfTrue(!user.getId().equals(picture.getUserId()), ExceptionCode.FORBIDDEN, "只能对自己的图片触发 AI 标签识别");
 
+        // 先扣配额，再创建任务，避免配额不足时任务已提交执行
         aiQuotaManager.checkAndConsume("tag", user.getId(), user.getLevel());
 
-        // 防双击/重试导致重复提交任务
         String dedupKey = "AI:SUBMIT:TAG:" + user.getId() + ":" + pictureId;
         Boolean firstTime = stringRedisTemplate.opsForValue().setIfAbsent(dedupKey, "1", 30, TimeUnit.SECONDS);
         if (Boolean.FALSE.equals(firstTime)) {
+            aiQuotaManager.refund("tag", user.getId());
             throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "该图片的 AI 任务正在处理中,请稍后再试");
         }
 
-        return taskService.submitTask("ai_tag", String.valueOf(pictureId), null, user.getId());
+        try {
+            return taskService.submitTask("ai_tag", String.valueOf(pictureId), null, user.getId());
+        } catch (Exception e) {
+            stringRedisTemplate.delete(dedupKey);
+            aiQuotaManager.refund("tag", user.getId());
+            throw e;
+        }
     }
 
-    @Override
     public Task getTagResult(String taskId) {
         Task task = taskService.getTaskByTaskId(taskId);
         ExcUtils.throwIfTrue(task == null, ExceptionCode.NOT_FOUND, "任务不存在");
@@ -110,7 +115,6 @@ public class AiServiceImpl implements AiService {
         return task;
     }
 
-    @Override
     public String submitDrawTask(AiDrawPictureDTO drawPictureDTO, Long userId) {
         ExcUtils.throwIfTrue(drawPictureDTO == null || drawPictureDTO.getDescription() == null,
                 "画面描述不能为空");
@@ -124,6 +128,7 @@ public class AiServiceImpl implements AiService {
                 ExceptionCode.FORBIDDEN, "用户身份不匹配");
         int level = user.getLevel() != null ? user.getLevel() : 0;
 
+        // 先扣配额，再创建任务，避免配额不足时任务已提交执行
         aiQuotaManager.checkAndConsume("draw", userId, level);
 
         String dedupInput = description
@@ -134,6 +139,7 @@ public class AiServiceImpl implements AiService {
         String dedupKey = "AI:SUBMIT:DRAW:" + userId + ":" + descHash;
         Boolean firstTime = stringRedisTemplate.opsForValue().setIfAbsent(dedupKey, "1", 200, TimeUnit.SECONDS);
         if (Boolean.FALSE.equals(firstTime)) {
+            aiQuotaManager.refund("draw", userId);
             throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "相同描述的绘图任务正在处理中,请稍后再试");
         }
 
@@ -141,7 +147,17 @@ public class AiServiceImpl implements AiService {
         ExcUtils.throwIfTrue(apikey == null || apikey.isBlank(),
                 ExceptionCode.SERVICE_UNAVAILABLE, "AI服务未配置，无法提交任务");
         String paramJson = JSONUtil.toJsonStr(drawPictureDTO);
-        return taskService.submitTask("ai_draw", null, paramJson, userId);
+
+        String taskId;
+        try {
+            taskId = taskService.submitTask("ai_draw", null, paramJson, userId);
+        } catch (Exception e) {
+            stringRedisTemplate.delete(dedupKey);
+            aiQuotaManager.refund("draw", userId);
+            throw e;
+        }
+
+        return taskId;
     }
 
     private void normalizeDrawOptions(AiDrawPictureDTO drawPictureDTO) {
@@ -171,18 +187,15 @@ public class AiServiceImpl implements AiService {
         }
     }
 
-    @Override
     public Task getDrawResult(String taskId) {
         Task task = taskService.getTaskByTaskId(taskId);
         ExcUtils.throwIfTrue(task == null, ExceptionCode.NOT_FOUND, "任务不存在");
-        // 加 user 校验，防暴力枚举 UUID 偷他人结果
         User user = LoginContextHelper.requireUser();
         ExcUtils.throwIfTrue(!user.getId().equals(task.getUserId()),
                 ExceptionCode.FORBIDDEN, "无权查看此任务");
         return task;
     }
 
-    @Override
     public String getDownloadImageUrl(String taskId) {
         Task task = taskService.getTaskByTaskId(taskId);
         ExcUtils.throwIfTrue(task == null, ExceptionCode.NOT_FOUND, "任务不存在");
@@ -195,14 +208,10 @@ public class AiServiceImpl implements AiService {
         return task.getResult();
     }
 
-    // 无配置/null = 全开；editingEnabled 默认 false（还没实现对应端点）
-    // 缓存复用 sysConfigCache
-    @Override
     public boolean isFeatureEnabled(String fieldName) {
         try {
             AiConfigDTO config = loadAiConfig();
             if (config == null) {
-                // 无配置:tagging/generation/recommendation 默认开,editing 默认关
                 return !FIELD_EDITING.equals(fieldName);
             }
             switch (fieldName) {
@@ -213,17 +222,15 @@ public class AiServiceImpl implements AiService {
                 default: return true;
             }
         } catch (Exception e) {
-            log.warn("[AI] isFeatureEnabled check failed for {}, defaulting to false: {}", fieldName, e.getMessage());
+            log.warn("[AI] isFeatureEnabled 检查失败 {}, 默认返回 false: {}", fieldName, e.getMessage());
             return false;
         }
     }
 
-    @Override
     public Task getTaskByTaskId(String taskId) {
         return taskService.getTaskByTaskId(taskId);
     }
 
-    @Override
     public IPage<AiTaskVO> getAdminTasks(AiTaskQueryDTO queryDTO) {
         int current = Math.max(queryDTO.getCurrent(), 1);
         int pageSize = Math.min(Math.max(queryDTO.getPageSize(), 1), 100);
@@ -252,7 +259,7 @@ public class AiServiceImpl implements AiService {
         }
 
         wrapper.orderByDesc(Task::getCreateTime);
-        IPage<Task> taskPage = taskService.getBaseMapper().selectPage(page, wrapper);
+        IPage<Task> taskPage = taskService.page(page, wrapper);
 
         List<AiTaskVO> voList = new ArrayList<>();
         for (Task task : taskPage.getRecords()) {
@@ -281,11 +288,9 @@ public class AiServiceImpl implements AiService {
         return result;
     }
 
-    @Override
     public AiStatsVO getAdminStats() {
-        // 单条 SQL 聚合查询，避免 5 次独立 count
-        List<Map<String, Object>> rows = taskService.getBaseMapper().selectMaps(
-                new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<Task>()
+        List<Map<String, Object>> rows = taskService.selectMaps(
+                new QueryWrapper<Task>()
                         .select("status",
                                 "COUNT(*) AS cnt",
                                 "SUM(CASE WHEN biz_type='ai_tag' THEN 1 ELSE 0 END) AS tag_cnt",
@@ -316,7 +321,6 @@ public class AiServiceImpl implements AiService {
         return stats;
     }
 
-    @Override
     public AiConfigDTO getAdminConfig() {
         AiConfigDTO config = loadAiConfig();
         return config != null ? config : defaultConfig();
@@ -326,7 +330,6 @@ public class AiServiceImpl implements AiService {
         return aiQuotaManager.loadRawConfig();
     }
 
-    @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean updateAdminConfig(AiConfigDTO configDTO) {
         boolean locked = distributedLockService.tryLock(CONFIG_LOCK_KEY);
@@ -381,7 +384,7 @@ public class AiServiceImpl implements AiService {
         try {
             return Long.parseLong(bizId);
         } catch (NumberFormatException e) {
-            log.warn("invalid AI task bizId: {}", bizId);
+            log.warn("AI 任务 bizId 无效: {}", bizId);
             return null;
         }
     }

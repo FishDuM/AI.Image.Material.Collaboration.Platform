@@ -90,7 +90,7 @@ public class PictureReplaceManager {
         decrementOldResource(oldResourceId);
         broadcastFileReplacedAfterCommit(picture.getSpaceId(), pictureId, user);
 
-        log.info("picture file replaced: pictureId={}, oldUrl={}, newUrl={}", pictureId, oldUrl, picture.getUrl());
+        log.info("图片文件已替换: pictureId={}, oldUrl={}, newUrl={}", pictureId, oldUrl, picture.getUrl());
         return buildResult(pictureId, picture.getUrl());
     }
 
@@ -156,7 +156,7 @@ public class PictureReplaceManager {
         try {
             fileResourceService.decrementRefCount(oldResourceId);
         } catch (Exception e) {
-            log.warn("old picture resource rollback failed: resourceId={}", oldResourceId, e);
+            log.warn("旧图片资源回滚失败: resourceId={}", oldResourceId, e);
         }
     }
 
@@ -165,14 +165,14 @@ public class PictureReplaceManager {
             try {
                 cosService.deletePicture(newCosKey);
             } catch (Exception ex) {
-                log.warn("replace COS rollback failed: {}", newCosKey, ex);
+                log.warn("替换 COS 回滚失败: {}", newCosKey, ex);
             }
         }
         if (newResource != null) {
             try {
                 fileResourceService.decrementRefCount(newResource.getId());
             } catch (Exception ex) {
-                log.warn("replace ref_count rollback failed: resourceId={}", newResource.getId(), ex);
+                log.warn("替换引用计数回滚失败: resourceId={}", newResource.getId(), ex);
             }
         }
         if (sizeDiff > 0 && spaceId != null) {
@@ -181,7 +181,7 @@ public class PictureReplaceManager {
                 try {
                     quotaManager.release(space, sizeDiff);
                 } catch (Exception ex) {
-                    log.warn("replace quota rollback failed: space={}, sizeDiff={}", spaceId, sizeDiff, ex);
+                    log.warn("替换配额回滚失败: space={}, sizeDiff={}", spaceId, sizeDiff, ex);
                 }
             }
         }
@@ -202,7 +202,7 @@ public class PictureReplaceManager {
                                             pictureId, user.getId(), user.getNickname())));
                     collabSessionRegistry.clearPictureState(spaceId, pictureId);
                 } catch (Exception e) {
-                    log.warn("[replacePictureFile] failed to broadcast file-replaced: pictureId={}", pictureId, e);
+                    log.warn("[replacePictureFile] 广播文件替换消息失败: pictureId={}", pictureId, e);
                 }
             }
         });

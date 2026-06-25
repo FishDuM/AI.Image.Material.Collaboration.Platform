@@ -144,9 +144,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 .orderByDesc(Picture::getCreateTime);
 
         Integer selected = dto.getSelected();
-        if (selected != null) {
-            queryWrapper.eq(Picture::getIsSelected, selected);
-        }
+        queryWrapper.eq(selected != null, Picture::getIsSelected, selected);
 
         Page<Picture> page = new Page<>(dto.getCurrent(), Math.min(Math.max(dto.getPageSize(), 1), 100));
         IPage<Picture> picturePage = pictureMapper.selectPage(page, queryWrapper);
@@ -165,6 +163,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void reviewPicture(Long pictureId, Integer selected) {
         ExcUtils.throwIfTrue(pictureId == null, "图片id不能为空");
         Picture picture = pictureMapper.selectById(pictureId);
@@ -185,6 +184,7 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void updatePicture(PictureUpdateRequest request) {
         Long id = request.getId();
         ExcUtils.throwIfTrue(ObjUtil.isEmpty(id), "图片id不能为空");
@@ -202,12 +202,14 @@ public class PictureServiceImpl extends ServiceImpl<PictureMapper, Picture>
                 pictureMapper.update(null, new LambdaUpdateWrapper<Picture>()
                         .eq(Picture::getId, pictureId)
                         .set(Picture::getIsSelected, SELECTED_PENDING));
+                return;
             } else if (isSelected == SELECTED_NORMAL) {
                 pictureMapper.update(null, new LambdaUpdateWrapper<Picture>()
                         .eq(Picture::getId, pictureId)
                         .set(Picture::getIsSelected, SELECTED_NORMAL));
+                return;
             }
-            return;
+            // 非预期的 isSelected 值，忽略并继续处理其他字段
         }
 
         String pictureName = request.getPictureName();

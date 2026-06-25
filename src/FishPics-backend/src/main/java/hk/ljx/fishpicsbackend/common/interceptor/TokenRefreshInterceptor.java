@@ -111,9 +111,9 @@ public class TokenRefreshInterceptor implements HandlerInterceptor {
         try {
             return isTokenInvalidated(userId, jwt);
         } catch (Exception e) {
-            log.warn("[TokenRefresh] check token invalidation failed, allow request: userId={}, err={}",
+            log.error("[TokenRefresh] 检查 token 失效失败(Redis 故障)，拒绝请求: userId={}, err={}",
                     userId, e.getMessage());
-            return false;
+            return true;
         }
     }
 
@@ -123,9 +123,9 @@ public class TokenRefreshInterceptor implements HandlerInterceptor {
                     .isMember(RedisConstants.BANNED_USERS_KEY, userId.toString());
             return Boolean.TRUE.equals(banned);
         } catch (Exception e) {
-            log.warn("[TokenRefresh] check banned user failed, allow request: userId={}, err={}",
+            log.error("[TokenRefresh] 检查封禁用户失败(Redis 故障)，拒绝请求: userId={}, err={}",
                     userId, e.getMessage());
-            return false;
+            return true;
         }
     }
 
@@ -166,7 +166,7 @@ public class TokenRefreshInterceptor implements HandlerInterceptor {
             return spaceTeamMemberMapper.selectList(
                     new LambdaQueryWrapper<SpaceTeamMember>().eq(SpaceTeamMember::getUserId, userId));
         } catch (Exception e) {
-            log.warn("[TokenRefresh] load team membership failed, fallback to empty permissions: userId={}", userId, e);
+            log.warn("[TokenRefresh] 加载团队成员失败，降级为空权限: userId={}", userId, e);
             return List.of();
         }
     }
@@ -206,7 +206,7 @@ public class TokenRefreshInterceptor implements HandlerInterceptor {
             long invalidBefore = Long.parseLong(invalidBeforeValue);
             return getIssuedAtMillis(claims) <= invalidBefore;
         } catch (NumberFormatException e) {
-            log.error("USER_TOKEN_INVALID_BEFORE value is broken, reject token: userId={}, value={}",
+            log.error("USER_TOKEN_INVALID_BEFORE 值损坏，拒绝 token: userId={}, value={}",
                     userId, invalidBeforeValue);
             return true;
         }

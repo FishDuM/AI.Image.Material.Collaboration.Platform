@@ -26,35 +26,18 @@ public class LoginContext {
 
     private String avatar;
 
-    /** 用户状态：1=正常，0=禁用 */
     private Integer status;
 
-    /**
-     * 用户等级：0=普通，1=VIP，2=SVIP
-     */
     private Integer level;
 
-    /**
-     * 用户角色：0=普通，1=管理员
-     */
     private Integer role;
 
-    /**
-     * 是否是管理员（Role.ADMIN）
-     */
     private Boolean isAdmin;
 
-    /**
-     * VIP 专属权限（由 level 自动生成，不手动分配）
-     */
     private List<String> vipPerms;
 
     private List<String> systemPerms;
 
-    /**
-     * 团队权限映射：key=spaceId(String), value=团队权限信息
-     * 注意：使用 String key 而非 Long，确保 Redis JSON 序列化/反序列化安全
-     */
     private Map<String, TeamPerm> teams;
 
     /**

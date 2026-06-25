@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Table, Card, Typography, Button, Tag, Space, Select, Tabs, Statistic, Row, Col, Switch, message as antMsg } from 'antd'
+import { Table, Card, Typography, Button, Tag, Space, Select, Tabs, Statistic, Row, Col, Switch, InputNumber, message as antMsg } from 'antd'
 import { ReloadOutlined, RobotOutlined, CheckCircleOutlined, CloseCircleOutlined, SyncOutlined, BarChartOutlined, SettingOutlined, UnorderedListOutlined } from '@ant-design/icons'
 import { getAiTasks, getAiStats, getAiConfig, updateAiConfig } from '../api'
 import { CHART_COLORS, PAGINATION_LOCALE, formatDateTime } from '../utils/constants'
@@ -10,9 +10,7 @@ const { Title } = Typography
 
 const TYPE_MAP = {
   0: { color: 'blue', text: '自动标注' },
-  1: { color: 'purple', text: '图片编辑' },
   2: { color: 'cyan', text: '图片生成' },
-  3: { color: 'geekblue', text: '推荐' },
 }
 
 const STATUS_MAP = {
@@ -24,9 +22,7 @@ const STATUS_MAP = {
 const TYPE_OPTIONS = [
   { value: undefined, label: '全部类型' },
   { value: 0, label: '自动标注' },
-  { value: 1, label: '图片编辑' },
   { value: 2, label: '图片生成' },
-  { value: 3, label: '推荐' },
 ]
 
 const STATUS_OPTIONS = [
@@ -287,6 +283,54 @@ function AIManagement() {
                   <div className="ai-config-desc">允许用户使用 AI 图片推荐功能</div>
                 </div>
                 <Switch checked={config.recommendationEnabled} loading={configSaving} onChange={(val) => handleConfigChange('recommendationEnabled', val)} />
+              </div>
+              <div className="ai-config-divider" />
+              <div className="ai-config-section-title">月度额度配置</div>
+              <div className="ai-config-quota-grid">
+                <div className="ai-config-quota-item">
+                  <div className="ai-config-label">VIP 标注配额</div>
+                  <div className="ai-config-desc">VIP 用户每月可使用的 AI 标注次数</div>
+                  <InputNumber
+                    min={0} max={999999}
+                    value={config.vipTagQuota}
+                    onChange={(val) => handleConfigChange('vipTagQuota', val)}
+                    disabled={configSaving}
+                    style={{ width: 160 }}
+                  />
+                </div>
+                <div className="ai-config-quota-item">
+                  <div className="ai-config-label">VIP 生图配额</div>
+                  <div className="ai-config-desc">VIP 用户每月可使用的 AI 生图次数</div>
+                  <InputNumber
+                    min={0} max={999999}
+                    value={config.vipDrawQuota}
+                    onChange={(val) => handleConfigChange('vipDrawQuota', val)}
+                    disabled={configSaving}
+                    style={{ width: 160 }}
+                  />
+                </div>
+                <div className="ai-config-quota-item">
+                  <div className="ai-config-label">SVIP 标注配额</div>
+                  <div className="ai-config-desc">SVIP 用户每月可使用的 AI 标注次数</div>
+                  <InputNumber
+                    min={0} max={999999}
+                    value={config.svipTagQuota}
+                    onChange={(val) => handleConfigChange('svipTagQuota', val)}
+                    disabled={configSaving}
+                    style={{ width: 160 }}
+                  />
+                </div>
+                <div className="ai-config-quota-item">
+                  <div className="ai-config-label">SVIP 生图配额</div>
+                  <div className="ai-config-desc">SVIP 用户每月可使用的 AI 生图次数</div>
+                  <InputNumber
+                    min={0} max={999999}
+                    value={config.svipDrawQuota}
+                    onChange={(val) => handleConfigChange('svipDrawQuota', val)}
+                    disabled={configSaving}
+                    style={{ width: 160 }}
+                  />
+                </div>
               </div>
             </div>
           )}

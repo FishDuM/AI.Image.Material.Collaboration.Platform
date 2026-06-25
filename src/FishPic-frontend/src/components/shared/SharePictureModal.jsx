@@ -1,4 +1,4 @@
-import { Button, Form, Input, Modal, Select } from 'antd'
+import { Button, Form, Input, InputNumber, Modal, Select } from 'antd'
 
 const expireOptions = [
   { value: 1, label: '1 天' },
@@ -35,6 +35,9 @@ function SharePictureModal({
           </Form.Item>
           <Form.Item name="allowDownload" label="权限">
             <Select options={permissionOptions} />
+          </Form.Item>
+          <Form.Item name="maxViewCount" label="最大查看次数">
+            <InputNumber min={1} max={1000} placeholder="不限" style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
             <Button onClick={onClose} style={{ marginRight: 8 }}>取消</Button>

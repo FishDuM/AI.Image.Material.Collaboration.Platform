@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import hk.ljx.fishpicsbackend.collab.CollabSessionRegistry;
+import hk.ljx.fishpicsbackend.common.cache.RedisCacheManager;
 import hk.ljx.fishpicsbackend.common.constants.SpaceConstants;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
@@ -71,8 +72,11 @@ public class SpaceAdminManager {
     @Resource
     private CollabSessionRegistry collabSessionRegistry;
 
-    @Resource
+        @Resource
     private SpaceVOAssembler spaceVOAssembler;
+
+    @Resource
+    private RedisCacheManager cacheManager;
 
     public IPage<SpaceVO> list(SpaceQueryWrapper request) {
         QueryWrapper<Space> queryWrapper = buildQueryWrapper(request);
@@ -128,6 +132,7 @@ public class SpaceAdminManager {
         }
         int updated = spaceMapper.updateById(updateObj);
         ExcUtils.throwIfTrue(updated <= 0, ExceptionCode.DATABASE_ERROR, "更新失败");
+        cacheManager.getSpaceDetailCache().evict(String.valueOf(id));
         return true;
     }
 
@@ -146,6 +151,7 @@ public class SpaceAdminManager {
         pictureMapper.delete(new LambdaQueryWrapper<Picture>().eq(Picture::getSpaceId, id));
         int deleted = spaceMapper.deleteById(id);
         ExcUtils.throwIfTrue(deleted <= 0, ExceptionCode.DATABASE_ERROR, "删除失败");
+        cacheManager.getSpaceDetailCache().evict(String.valueOf(id));
         return true;
     }
 
@@ -160,6 +166,7 @@ public class SpaceAdminManager {
                         .eq(Space::getId, id)
                         .set(Space::getStatus, status));
         ExcUtils.throwIfTrue(updated <= 0, ExceptionCode.DATABASE_ERROR, "更新失败");
+        cacheManager.getSpaceDetailCache().evict(String.valueOf(id));
 
         if (ExcUtils.eq(status, SpaceConstants.SPACE_STATUS_DISABLED)) {
             disconnectSpaceNow(id, "空间已被禁用");
@@ -171,27 +178,14 @@ public class SpaceAdminManager {
         Set<String> allowedSortFields = Set.of("id", "introduction", "type", "user_id", "storage_size",
                 "level", "name", "size", "create_time", "update_time");
         QueryWrapper<Space> queryWrapper = new QueryWrapper<>();
-        if (!ObjectUtil.isEmpty(request.getId())) {
-            queryWrapper.eq("id", request.getId());
-        }
-        if (!ObjectUtil.isEmpty(request.getIntroduction())) {
-            queryWrapper.eq("introduction", request.getIntroduction());
-        }
-        if (!ObjectUtil.isEmpty(request.getType())) {
-            queryWrapper.eq("type", request.getType());
-        }
-        if (!ObjectUtil.isEmpty(request.getUserId())) {
-            queryWrapper.eq("user_id", request.getUserId());
-        }
-        if (!ObjectUtil.isEmpty(request.getStorageSize())) {
-            queryWrapper.eq("storage_size", request.getStorageSize());
-        }
-        if (!ObjectUtil.isEmpty(request.getLevel())) {
-            queryWrapper.eq("level", request.getLevel());
-        }
-        if (!ObjectUtil.isEmpty(request.getName())) {
-            queryWrapper.eq("name", request.getName());
-        }
+        queryWrapper
+                .eq(!ObjectUtil.isEmpty(request.getId()), "id", request.getId())
+                .eq(!ObjectUtil.isEmpty(request.getIntroduction()), "introduction", request.getIntroduction())
+                .eq(!ObjectUtil.isEmpty(request.getType()), "type", request.getType())
+                .eq(!ObjectUtil.isEmpty(request.getUserId()), "user_id", request.getUserId())
+                .eq(!ObjectUtil.isEmpty(request.getStorageSize()), "storage_size", request.getStorageSize())
+                .eq(!ObjectUtil.isEmpty(request.getLevel()), "level", request.getLevel())
+                .eq(!ObjectUtil.isEmpty(request.getName()), "name", request.getName());
         String sortField = request.getSortField();
         queryWrapper.orderBy(sortField != null && allowedSortFields.contains(sortField),
                 "ascend".equals(request.getSortOrder()), sortField);
@@ -239,9 +233,9 @@ public class SpaceAdminManager {
                     new LambdaQueryWrapper<PictureShareItem>().in(PictureShareItem::getPictureId, pictureIds));
             int deleted = pictureShareMapper.delete(
                     new LambdaQueryWrapper<PictureShare>().in(PictureShare::getPictureId, pictureIds));
-            log.info("[SpaceAdminManager] deleted picture shares: spaceId={}, shareItems={}, shares={}", spaceId, shareItemCount, deleted);
+            log.info("[SpaceAdminManager] 已删除图片分享: spaceId={}, shareItems={}, shares={}", spaceId, shareItemCount, deleted);
         } catch (Exception e) {
-            log.warn("[SpaceAdminManager] failed to delete picture shares: spaceId={}", spaceId, e);
+            log.warn("[SpaceAdminManager] 删除图片分享失败: spaceId={}", spaceId, e);
         }
     }
 
@@ -261,10 +255,10 @@ public class SpaceAdminManager {
                 collabSessionRegistry.disconnectUserInSpace(userId, spaceId, reason);
             }
             collabSessionRegistry.clearAllPictureStates(spaceId);
-            log.info("[SpaceAdminManager] disconnected space sessions: spaceId={}, affectedUsers={}",
+            log.info("[SpaceAdminManager] 断开空间会话: spaceId={}, affectedUsers={}",
                     spaceId, onlineUserIds.size());
         } catch (Exception e) {
-            log.warn("[SpaceAdminManager] failed to disconnect space sessions: spaceId={}", spaceId, e);
+            log.warn("[SpaceAdminManager] 断开空间会话失败: spaceId={}", spaceId, e);
         }
     }
 }

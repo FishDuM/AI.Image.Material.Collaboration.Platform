@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
+import hk.ljx.fishpicsbackend.common.cache.RedisCacheManager;
 import hk.ljx.fishpicsbackend.common.infra.RedisAtomicOps;
 import hk.ljx.fishpicsbackend.common.utils.DownloadUtils;
 import hk.ljx.fishpicsbackend.common.utils.IpUtils;
@@ -68,10 +69,12 @@ public class ShareServiceImpl implements ShareService {
     @Resource
     private RedisAtomicOps redisAtomicOps;
 
-    @Resource
+        @Resource
     private SpacePermissionChecker spacePermissionChecker;
 
-    @Override
+    @Resource
+    private RedisCacheManager cacheManager;
+
     @Transactional(rollbackFor = Exception.class)
     public String createShare(List<Long> pictureIds, Long userId, int expireDays,
                               int allowDownload, Integer maxViewCount) {
@@ -117,7 +120,7 @@ public class ShareServiceImpl implements ShareService {
             pictureShareItemMapper.insert(item);
         }
 
-        log.info("create share pictureIds={}, userId={}, token={}****, count={}, maxView={}",
+        log.info("创建分享 pictureIds={}, userId={}, token={}****, count={}, maxView={}",
                 pictureIds, userId, shareToken.substring(0, 8), pictureIds.size(), actualMaxView);
         return shareToken;
     }
@@ -134,8 +137,7 @@ public class ShareServiceImpl implements ShareService {
         return token == null ? null : DigestUtil.sha256Hex(token);
     }
 
-    @Override
-    public ShareInfoVO getShareInfo(String shareToken) {
+public ShareInfoVO getShareInfo(String shareToken) {
         ShareResolved resolved = resolveShare(shareToken);
         PictureShare share = resolved.share();
         List<Picture> pictures = resolvePictures(share);
@@ -159,21 +161,18 @@ public class ShareServiceImpl implements ShareService {
         return new ShareInfoVO(share.getExpireTime(), share.getAllowDownload(), pictureList);
     }
 
-    @Override
-    public ShareFileVO getPreviewFile(String shareToken, Long pictureId) {
+public ShareFileVO getPreviewFile(String shareToken, Long pictureId) {
         return getPreviewFile(shareToken, pictureId, null);
     }
 
-    @Override
-    public ShareFileVO getPreviewFile(String shareToken, Long pictureId, Integer size) {
+public ShareFileVO getPreviewFile(String shareToken, Long pictureId, Integer size) {
         ShareResolved resolved = resolveShare(shareToken);
         Picture picture = resolveTargetPicture(resolved.share(), pictureId);
         countShareView(resolved, shareToken);
         return buildShareFile(resolved.share(), picture, size);
     }
 
-    @Override
-    public ShareFileVO getDownloadFile(String shareToken, Long pictureId) {
+public ShareFileVO getDownloadFile(String shareToken, Long pictureId) {
         ShareResolved resolved = resolveShare(shareToken);
         ExcUtils.throwIfTrue(!ExcUtils.eq(resolved.share().getAllowDownload(), 1),
                 ExceptionCode.FORBIDDEN, "当前分享不允许下载");
@@ -236,8 +235,7 @@ public class ShareServiceImpl implements ShareService {
         return redisAtomicOps.incrWithCheckAndRollback(viewCountKey, ttlSec, maxViewCount);
     }
 
-    @Override
-    @Transactional(rollbackFor = Exception.class)
+@Transactional(rollbackFor = Exception.class)
     public void cancelShare(Long shareId, Long userId) {
         PictureShare share = pictureShareMapper.selectById(shareId);
         ExcUtils.throwIfTrue(share == null, ExceptionCode.NOT_FOUND, "分享记录不存在");
@@ -248,19 +246,29 @@ public class ShareServiceImpl implements ShareService {
 
         share.setStatus(0);
         pictureShareMapper.updateById(share);
+        cacheManager.getShareCache().evict(share.getShareTokenHash());
         try {
             stringRedisTemplate.delete("SHARE:VIEW:COUNT:" + share.getShareTokenHash());
             stringRedisTemplate.delete("SHARE:VIEW:RATE:" + share.getShareTokenHash());
         } catch (Exception e) {
-            log.warn("cancelShare cleanup redis keys failed: shareId={}, error={}", shareId, e.getMessage());
+            log.warn("取消分享清理 Redis 键失败: shareId={}, error={}", shareId, e.getMessage());
         }
-        log.info("cancel share shareId={}, userId={}", shareId, userId);
+        log.info("取消分享 shareId={}, userId={}", shareId, userId);
     }
 
     private ShareResolved resolveShare(String shareToken) {
         ExcUtils.throwIfTrue(shareToken == null || !shareToken.matches(TOKEN_PATTERN),
                 ExceptionCode.PARAMETER_ERROR, "invalid share token");
         String tokenHash = hashShareToken(shareToken);
+
+        // 先查缓存
+        PictureShare cached = cacheManager.getShareCache().get(tokenHash, PictureShare.class);
+        if (cached != null) {
+            ExcUtils.throwIfTrue(cached.getExpireTime() == null || cached.getExpireTime().isBefore(LocalDateTime.now()),
+                    ExceptionCode.FORBIDDEN, "分享链接已过期");
+            return new ShareResolved(cached, tokenHash);
+        }
+
         PictureShare share = pictureShareMapper.selectOne(new LambdaQueryWrapper<PictureShare>()
                 .eq(PictureShare::getShareTokenHash, tokenHash)
                 .eq(PictureShare::getStatus, 1)
@@ -268,6 +276,8 @@ public class ShareServiceImpl implements ShareService {
         ExcUtils.throwIfTrue(share == null, ExceptionCode.NOT_FOUND, "分享链接不存在或已失效");
         ExcUtils.throwIfTrue(share.getExpireTime() == null || share.getExpireTime().isBefore(LocalDateTime.now()),
                 ExceptionCode.FORBIDDEN, "分享链接已过期");
+
+        cacheManager.getShareCache().put(tokenHash, share);
         return new ShareResolved(share, tokenHash);
     }
 
@@ -287,13 +297,13 @@ public class ShareServiceImpl implements ShareService {
             try {
                 pictureShareMapper.updateById(share);
             } catch (Exception dbEx) {
-                log.error("share auto-cancel DB update failed: shareId={}", share.getId(), dbEx);
+                log.error("分享自动取消数据库更新失败: shareId={}", share.getId(), dbEx);
             }
-            log.info("share auto-cancelled shareId={}, token={}****, max={}",
+            log.info("分享已自动取消 shareId={}, token={}****, max={}",
                     share.getId(), shareToken.substring(0, 8), maxView);
             throw new BaseException(ExceptionCode.FORBIDDEN, "分享链接已达最大访问次数");
         }
-        log.debug("share view+1: shareId={}, token={}****, views={}/{}",
+        log.debug("分享浏览量+1: shareId={}, token={}****, views={}/{}",
                 share.getId(), shareToken.substring(0, 8), newView, maxView);
     }
 
@@ -318,7 +328,7 @@ public class ShareServiceImpl implements ShareService {
             stringRedisTemplate.opsForList().trim(key, 0, 99);
             stringRedisTemplate.expire(key, Duration.ofDays(7));
         } catch (Exception e) {
-            log.warn("record share access failed: {}", e.getMessage());
+            log.warn("记录分享访问失败: {}", e.getMessage());
         }
     }
 

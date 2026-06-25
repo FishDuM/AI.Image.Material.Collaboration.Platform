@@ -28,7 +28,6 @@ import java.util.concurrent.*;
 @Component
 public class AiDrawTaskHandler implements TaskHandler {
 
-    /** AI 生图超时时间（秒） */
     private static final int AI_TIMEOUT_SECONDS = 180;
 
     @Resource
@@ -104,15 +103,17 @@ public class AiDrawTaskHandler implements TaskHandler {
             throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR,
                     "AI 生图失败: " + (cause != null ? cause.getMessage() : e.getMessage()), cause);
         }
-        // AI SDK 会在调用失败时自行抛异常，此处只需确认结果非空并提取图片 URL
         ExcUtils.throwIfTrue(result == null || result.getOutput() == null,
                 ExceptionCode.INTERNAL_SERVER_ERROR, "AI 生图返回结果为空");
-        var content = result.getOutput().getChoices().getFirst().getMessage().getContent();
+        var choices = result.getOutput().getChoices();
+        ExcUtils.throwIfTrue(choices == null || choices.isEmpty(),
+                ExceptionCode.INTERNAL_SERVER_ERROR, "AI 生图结果为空(无 choices)");
+        var content = choices.getFirst().getMessage().getContent();
         var imageEntry = content != null && !content.isEmpty() ? content.getFirst().get("image") : null;
         ExcUtils.throwIfTrue(imageEntry == null,
                 ExceptionCode.INTERNAL_SERVER_ERROR, "AI 生图结果格式异常");
         String url = imageEntry.toString();
-        log.info("ai draw success: {}", url);
+        log.info("AI 生图成功: {}", url);
 
         task.setResult(url);
     }

@@ -32,7 +32,6 @@ import hk.ljx.fishpicsbackend.picture.vo.PictureVO;
 import hk.ljx.fishpicsbackend.picture.vo.UploadChunkVO;
 import hk.ljx.fishpicsbackend.space.entity.Space;
 import hk.ljx.fishpicsbackend.space.service.SpaceService;
-import hk.ljx.fishpicsbackend.space.vo.SpaceVO;
 import hk.ljx.fishpicsbackend.user.entity.User;
 import hk.ljx.fishpicsbackend.user.service.UserService;
 import static hk.ljx.fishpicsbackend.common.constants.SpaceConstants.*;
@@ -76,8 +75,6 @@ public class PictureUploadService {
     private static final int MAX_CHUNK_COUNT = 6000;
     private static final String MD5_PATTERN = "^[a-fA-F0-9]{32}$";
 
-    // ========================= Picture Upload =========================
-
     public String uploadAvatar(MultipartFile file, Long id) {
         User userLogin = LoginContextHelper.requireUser();
         LoginContext ctx = UserHolder.getLoginContext();
@@ -112,8 +109,11 @@ public class PictureUploadService {
         ExcUtils.throwIfTrue(file.getSize() > DIRECT_UPLOAD_LIMIT, "文件超过大小限制，请使用分片上传");
         ExcUtils.throwIfTrue(FileTypeUtils.getValidFileType(file) == null, "上传文件格式不正确");
         String md5;
-        try (InputStream is = file.getInputStream()) { md5 = DigestUtil.md5Hex(is); }
-        catch (IOException e) { throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "计算文件MD5失败"); }
+        try (InputStream is = file.getInputStream()) {
+            md5 = DigestUtil.md5Hex(is);
+        } catch (IOException e) {
+            throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "计算文件MD5失败");
+        }
         return doProcessUpload(() -> cosService.uploadPicture(file), file.getSize(), md5, userId, targetSpaceId);
     }
 
@@ -135,8 +135,6 @@ public class PictureUploadService {
             }, fileSize, md5, userId, targetSpaceId);
         } finally { FileUtil.del(tempFile); }
     }
-
-    // ========================= Multipart Upload =========================
 
     @Transactional(rollbackFor = Exception.class)
     public CheckUploadVO checkUpload(CheckUploadRequest request) {
@@ -195,6 +193,7 @@ public class PictureUploadService {
         String cosKey = storeGetRequiredCosKey(user.getId(), request.getMd5());
         String mergeResultKey = storeMergeResultKey(request.getMd5(), user.getId());
         Picture picture = createMultipartPicture(request.getMd5(), size, cosKey, user.getId(), space);
+        evictSpaceDetailAfterCommit(space.getId());
         saveMergeResultQuietly(mergeResultKey, picture, cosKey, user.getId(), size);
         coordRegisterMultipartMergeAfterCommit(new MultipartMergeContext(
                 picture.getId(), picture.getResourceId(), cosKey, uploadId, partETags,
@@ -245,8 +244,6 @@ public class PictureUploadService {
         try { cosService.getObjectContentType(cosKey); return true; } catch (BaseException e) { return false; }
     }
 
-    // ========================= Validation & Helpers =========================
-
     private void validateMergeRequest(MergeChunksRequest request) {
         validateMd5(request.getMd5());
         ExcUtils.throwIfTrue(request.getSize() == null, "文件大小不能为空");
@@ -278,8 +275,6 @@ public class PictureUploadService {
         userService.refreshUserInfoCache(user);
         cacheManager.getUserPermCache().evict(String.valueOf(user.getId()));
     }
-
-    // ========================= Direct Upload Processing =========================
 
     private Picture doProcessUpload(Supplier<String> cosUploader, long fileSize, String md5, Long userId, Long targetSpaceId) {
         FileResource existingResource = fileResourceService.findByMd5AndSize(md5, fileSize);
@@ -320,8 +315,10 @@ public class PictureUploadService {
             throw new BaseException(ExceptionCode.PARAMETER_ERROR, "空间容量不足");
         }
         picture.setSpaceId(space.getId());
+        Long spaceId = space.getId();
         try {
             ExcUtils.throwIfTrue(pictureMapper.insert(picture) != 1, "上传失败，数据库错误");
+            evictSpaceDetailAfterCommit(spaceId);
         } catch (org.springframework.dao.DuplicateKeyException e) {
             cleanupUploadFailure(isNewUpload ? cosKey : null, resource, space, size);
             Picture existing = pictureMapper.selectOne(new LambdaQueryWrapper<Picture>()
@@ -345,8 +342,6 @@ public class PictureUploadService {
             try { fileResourceService.decrementRefCount(resource.getId()); } catch (Exception ex) { log.warn("ref_count 回滚失败: resourceId={}", resource.getId(), ex); }
         }
     }
-
-    // ========================= CheckUpload Helpers =========================
 
     private CheckUploadVO handleDuplicateUpload(CheckUploadRequest request, User user, FileResource resource) {
         Space space = resolveTargetSpace(request.getTargetSpaceId(), user.getId());
@@ -387,10 +382,8 @@ public class PictureUploadService {
     }
     private void saveMergeResultQuietly(String mergeResultKey, Picture picture, String cosKey, Long userId, long size) {
         try { storeSaveMergeResult(mergeResultKey, picture, cosKey, userId, size); }
-        catch (Exception e) { log.warn("mergeChunks write merge result failed: pictureId={}, err={}", picture.getId(), e.getMessage()); }
+        catch (Exception e) { log.warn("mergeChunks 写入合并结果失败: pictureId={}, err={}", picture.getId(), e.getMessage()); }
     }
-
-    // ========================= Upload Coordinator =========================
 
     private String coordGetOrCreateUploadId(Long userId, String md5, String cosKey) {
         String uploadId = storeGetUploadId(userId, md5);
@@ -398,7 +391,7 @@ public class PictureUploadService {
         String newUploadId = cosService.initiateMultipartUpload(cosKey);
         uploadId = redisAtomicOps.setIfAbsentOrGet(storeUploadIdKey(userId, md5), newUploadId, RedisConstants.FILE_UPLOAD_TTL * 3600);
         if (!newUploadId.equals(uploadId)) {
-            log.warn("[uploadChunk] uploadId race: cosKey={}, mine={}, actual={}", cosKey, newUploadId, uploadId);
+            log.warn("[uploadChunk] uploadId 冲突: cosKey={}, mine={}, actual={}", cosKey, newUploadId, uploadId);
             cosService.abortMultipartUpload(cosKey, newUploadId);
         }
         return uploadId;
@@ -433,18 +426,18 @@ public class PictureUploadService {
     private boolean coordTryCompleteMultipartUpload(String cosKey, String uploadId, List<PartETag> partETags, String md5, String mergeResultKey, Long userId) {
         try {
             cosService.completeMultipartUpload(cosKey, uploadId, partETags);
-            log.info("COS multipart merge completed: cosKey={}", cosKey);
+            log.info("COS 分片合并完成: cosKey={}", cosKey);
             storeCleanup(md5, true, userId);
             return true;
         } catch (Exception e) {
             if (isMergedObjectAvailable(cosKey)) {
-                log.warn("COS merge returned an error but object is already available: cosKey={}", cosKey, e);
+                log.warn("COS 合并返回错误但对象已可用: cosKey={}", cosKey, e);
                 storeCleanup(md5, true, userId);
                 return true;
             }
             cosService.abortMultipartUpload(cosKey, uploadId);
             storeKeepMergeResult(mergeResultKey);
-            log.error("COS multipart merge failed: cosKey={}, md5={}, error={}", cosKey, md5, e.getMessage());
+            log.error("COS 分片合并失败: cosKey={}, md5={}, error={}", cosKey, md5, e.getMessage());
             return false;
         }
     }
@@ -455,12 +448,12 @@ public class PictureUploadService {
         template.executeWithoutResult(status -> {
             try {
                 pictureMapper.deleteById(ctx.pictureId());
-                log.error("[mergeChunks] COS merge failed, DB picture deleted: pictureId={}, cosKey={}", ctx.pictureId(), ctx.cosKey());
+                log.error("[mergeChunks] COS 合并失败，数据库图片已删除: pictureId={}, cosKey={}", ctx.pictureId(), ctx.cosKey());
                 quotaManager.release(ctx.space(), ctx.size());
                 if (ctx.resourceId() != null) fileResourceService.decrementRefCount(ctx.resourceId());
                 storeCleanup(ctx.md5(), true, ctx.userId());
             } catch (Exception ex) {
-                log.error("[mergeChunks] cleanup after COS merge failure partially failed: pictureId={}, cosKey={}", ctx.pictureId(), ctx.cosKey(), ex);
+                log.error("[mergeChunks] COS 合并失败后的清理部分失败: pictureId={}, cosKey={}", ctx.pictureId(), ctx.cosKey(), ex);
             }
         });
     }
@@ -475,10 +468,8 @@ public class PictureUploadService {
                 update.setHeight(metadata.getHeight());
                 pictureMapper.updateById(update);
             }
-        } catch (Exception e) { log.warn("failed to read metadata after multipart merge: cosKey={}", cosKey, e); }
+        } catch (Exception e) { log.warn("分片合并后读取元数据失败: cosKey={}", cosKey, e); }
     }
-
-    // ========================= Session Store (Redis) =========================
 
     private void storeBindOwner(String md5, Long userId) {
         redis.opsForValue().set(RedisConstants.getUserFileUploadOwnerKey(userId, md5), String.valueOf(userId), RedisConstants.FILE_UPLOAD_TTL, TimeUnit.HOURS);
@@ -582,8 +573,6 @@ public class PictureUploadService {
         if (deleteMergeResult) redis.delete(RedisConstants.getFileMergeResultKey(uid, md5));
     }
 
-    // ========================= Picture Creation Helpers =========================
-
     private Picture createMultipartPicture(String md5, long size, String cosKey, Long userId, Space space) {
         FileResource resource = fileResourceService.addResource(md5, size, cosKey);
         Picture picture = new Picture();
@@ -610,13 +599,24 @@ public class PictureUploadService {
         picture.setResourceId(resource.getId());
         try {
             ExcUtils.throwIfTrue(pictureMapper.insert(picture) != 1, "save picture failed");
+            evictSpaceDetailAfterCommit(space.getId());
         } catch (Exception e) { rollbackDuplicateUpload(space, size, resource.getId()); throw e; }
         return picture;
     }
 
     private void rollbackDuplicateUpload(Space space, long size, Long resourceId) {
-        try { quotaManager.release(space, size); } catch (Exception ex) { log.warn("duplicate upload quota rollback failed: space={}, size={}", space.getId(), size, ex); }
-        try { fileResourceService.decrementRefCount(resourceId); } catch (Exception ex) { log.warn("duplicate upload ref_count rollback failed: resourceId={}", resourceId, ex); }
+        try { quotaManager.release(space, size); } catch (Exception ex) { log.warn("重复上传配额回滚失败: space={}, size={}", space.getId(), size, ex); }
+        try { fileResourceService.decrementRefCount(resourceId); } catch (Exception ex) { log.warn("重复上传引用计数回滚失败: resourceId={}", resourceId, ex); }
+    }
+
+    private void evictSpaceDetailAfterCommit(Long spaceId) {
+        if (spaceId == null) return;
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                cacheManager.getSpaceDetailCache().evict(String.valueOf(spaceId));
+            }
+        });
     }
 
     record MultipartMergeContext(Long pictureId, Long resourceId, String cosKey, String uploadId,

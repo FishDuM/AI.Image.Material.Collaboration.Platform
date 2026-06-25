@@ -4,7 +4,6 @@ import hk.ljx.fishpicsbackend.picture.service.PictureService;
 import hk.ljx.fishpicsbackend.ai.service.AiService;
 
 import hk.ljx.fishpicsbackend.common.response.Response;
-import cn.hutool.core.util.ObjUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import hk.ljx.fishpicsbackend.common.annotation.AuditLog;
 import hk.ljx.fishpicsbackend.common.annotation.RequireAdmin;
@@ -90,7 +89,6 @@ public class PictureController {
     public Response<IPage<PictureVO>> getRecommendPictures(@Valid @RequestBody PageRequest pageRequest) {
         User loginUser = LoginContextHelper.requireUser();
         if (!aiService.isFeatureEnabled("recommendationEnabled")) {
-            // 开关关闭：返回空分页
             return Response.ok(new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(
                     pageRequest.getCurrent() <= 0 ? 1 : pageRequest.getCurrent(),
                     pageRequest.getPageSize() <= 0 ? 10 : pageRequest.getPageSize()));
@@ -143,8 +141,6 @@ public class PictureController {
         pictureService.reviewPicture(dto.getPictureId(), dto.getSelected());
         return Response.ok(true);
     }
-
-    // ==================== 分片上传接口 ====================
 
     /**
      * 秒传校验

@@ -25,22 +25,18 @@ public class Space implements Serializable {
 
     private String introduction;
 
-    /** 0-私人空间，1-团队空间 */
     private Integer type;
 
     private Long userId;
 
-    /** 空间的存储大小(bytes) */
     private Long storageSize;
 
-    /** 空间级别：普通-VIP-SVIP */
     private Integer level;
 
     private String name;
 
     private Long size;
 
-    /** 0=禁用, 1=正常 */
     private Integer status;
 
     @Version

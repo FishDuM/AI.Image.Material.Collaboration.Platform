@@ -7,7 +7,6 @@ import org.apache.ibatis.annotations.Update;
 
 public interface UserMapper extends BaseMapper<User> {
 
-    // 最后一名 admin 保护，降级前检查系统里还有没有其他 admin
     @Update("UPDATE user SET role = 0 " +
             "WHERE id = #{userId} " +
             "AND role = 1 " +

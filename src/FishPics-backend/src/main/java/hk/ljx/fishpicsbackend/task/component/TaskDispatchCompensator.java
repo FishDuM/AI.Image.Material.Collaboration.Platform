@@ -1,5 +1,6 @@
 package hk.ljx.fishpicsbackend.task.component;
 
+import hk.ljx.fishpicsbackend.common.infra.DistributedLockService;
 import hk.ljx.fishpicsbackend.task.entity.Task;
 import hk.ljx.fishpicsbackend.task.service.TaskService;
 import jakarta.annotation.Resource;
@@ -18,6 +19,7 @@ public class TaskDispatchCompensator {
     private static final int BATCH_SIZE = 100;
     private static final long PENDING_DELAY_MS = 60_000L;
     private static final long PROCESSING_STUCK_MS = 5 * 60_000L;
+    private static final String DISPATCH_LOCK_KEY = "LOCK:TASK:DISPATCH:COMPENSATOR";
 
     @Resource
     private TaskService taskService;
@@ -25,10 +27,21 @@ public class TaskDispatchCompensator {
     @Resource
     private TaskProcessor taskProcessor;
 
+    @Resource
+    private DistributedLockService distributedLockService;
+
     @Scheduled(fixedDelayString = "${task.dispatch.retry-interval-ms:30000}")
     public void retryTasks() {
-        retryPendingTasks(selectPendingTasks());
-        retryStuckProcessingTasks(selectStuckProcessingTasks());
+        if (!distributedLockService.tryLock(DISPATCH_LOCK_KEY)) {
+            log.debug("任务调度补偿锁被其他实例持有，跳过本次执行");
+            return;
+        }
+        try {
+            retryPendingTasks(selectPendingTasks());
+            retryStuckProcessingTasks(selectStuckProcessingTasks());
+        } finally {
+            distributedLockService.unlock(DISPATCH_LOCK_KEY);
+        }
     }
 
     private List<Task> selectPendingTasks() {
@@ -61,11 +74,11 @@ public class TaskDispatchCompensator {
                 success++;
             } catch (Exception e) {
                 failure++;
-                log.warn("pending task re-dispatch failed: taskId={}, bizType={}",
+                log.warn("待处理任务重新调度失败: taskId={}, bizType={}",
                         task.getTaskId(), task.getBizType(), e);
             }
         }
-        log.info("pending task compensator done: success={}, failure={}, total={}",
+        log.info("待处理任务补偿完成: success={}, failure={}, total={}",
                 success, failure, pendingTasks.size());
     }
 
@@ -81,11 +94,11 @@ public class TaskDispatchCompensator {
                 success++;
             } catch (Exception e) {
                 failure++;
-                log.warn("stuck processing task re-dispatch failed: taskId={}, bizType={}",
+                log.warn("卡住处理中任务重新调度失败: taskId={}, bizType={}",
                         task.getTaskId(), task.getBizType(), e);
             }
         }
-        log.warn("stuck processing task compensator done: success={}, failure={}, total={}",
+        log.warn("卡住处理中任务补偿完成: success={}, failure={}, total={}",
                 success, failure, stuckTasks.size());
     }
 }

@@ -67,7 +67,6 @@ public class JwtUtils {
                 .compact();
     }
 
-    // 不检查黑名单，拦截器里用这个快速解析
     public Claims parse(String jwt) {
         try {
             return Jwts.parser()
@@ -104,7 +103,6 @@ public class JwtUtils {
         return claims != null ? claims.getId() : null;
     }
 
-    // 允许过期 JWT，登出时用
     public Long getUserIdAllowExpired(String jwt) {
         try {
             Claims claims = Jwts.parser()
@@ -122,7 +120,6 @@ public class JwtUtils {
         }
     }
 
-    // 允许过期 JWT，加入黑名单时用
     public String getJtiAllowExpired(String jwt) {
         try {
             Claims claims = Jwts.parser()
@@ -151,7 +148,6 @@ public class JwtUtils {
         return elapsed >= RENEW_THRESHOLD_MS;
     }
 
-    // 只有 ExpiredJwtException 才算过期，签名错误等返回 false
     public boolean isExpired(String jwt) {
         try {
             Jwts.parser()
@@ -166,7 +162,6 @@ public class JwtUtils {
         }
     }
 
-    // 登出时调用，过期的 token 也能加黑名单
     public void addToBlacklist(String jwt) {
         String jti;
         long ttl = 60_000L;
@@ -194,7 +189,6 @@ public class JwtUtils {
         log.debug("JWT 已加入黑名单: jti={}", jti);
     }
 
-    // 用 getJtiAllowExpired 提取 jti，过期 token 不会被误判
     public boolean isBlacklisted(String jwt) {
         String jti = getJtiAllowExpired(jwt);
         if (jti == null) {

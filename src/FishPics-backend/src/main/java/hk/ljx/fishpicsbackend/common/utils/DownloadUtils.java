@@ -134,14 +134,11 @@ public final class DownloadUtils {
         return contentType;
     }
 
-    // 空白返回 "image"，没扩展名时根据 Content-Type 追加
     public static String defaultFileName(String fileName, String contentType) {
         String name = StrUtil.blankToDefault(fileName, "image");
-        // 已有扩展名则直接返回
         if (name.contains(".")) {
             return name;
         }
-        // 根据 Content-Type 追加扩展名
         String ext = extensionFromContentType(contentType);
         return ext != null ? name + ext : name;
     }

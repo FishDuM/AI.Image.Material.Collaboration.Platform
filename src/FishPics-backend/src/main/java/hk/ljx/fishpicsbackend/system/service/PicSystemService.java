@@ -1,9 +1,9 @@
 package hk.ljx.fishpicsbackend.system.service;
-import hk.ljx.fishpicsbackend.system.entity.PicSystem;
 
+import com.baomidou.mybatisplus.extension.service.IService;
 import hk.ljx.fishpicsbackend.system.dto.AddSysMarqueeRequest;
 import hk.ljx.fishpicsbackend.system.dto.AddSysPicTypeRequest;
-import com.baomidou.mybatisplus.extension.service.IService;
+import hk.ljx.fishpicsbackend.system.entity.PicSystem;
 
 import java.util.List;
 

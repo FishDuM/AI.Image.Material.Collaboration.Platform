@@ -26,6 +26,7 @@ export function useShare({ selectedIds, message, onValidate }) {
         pictureIds: selectedIds,
         expireDays: values.expireDays || 1,
         allowDownload: values.allowDownload ? 1 : 0,
+        maxViewCount: values.maxViewCount ?? undefined,
       })
       const link = `${window.location.origin}/s/${token}`
       setShareLink(link)

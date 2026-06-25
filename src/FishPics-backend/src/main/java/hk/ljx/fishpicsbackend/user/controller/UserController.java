@@ -13,6 +13,7 @@ import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.response.Response;
 import hk.ljx.fishpicsbackend.common.infra.JwtUtils;
+import hk.ljx.fishpicsbackend.common.infra.RateLimiter;
 import hk.ljx.fishpicsbackend.common.utils.UserHolder;
 import hk.ljx.fishpicsbackend.user.dto.*;
 import hk.ljx.fishpicsbackend.user.service.UserService;
@@ -37,14 +38,18 @@ public class UserController {
     @Resource
     private RedisCacheManager cacheManager;
 
+    @Resource
+    private RateLimiter rateLimiter;
+
     @PostMapping("/login")
-    @AuditLog(module = "用户管理", operation = "用户登录")
     public Response<UserVO> userLogin(@Valid @RequestBody UserLoginRequest userLoginRequest) {
+        rateLimiter.acquire("login:" + userLoginRequest.getUsername(), 5, 60);
         return userService.userLogin(userLoginRequest);
     }
 
     @PostMapping("/register")
     public Response<Boolean> userRegister(@Valid @RequestBody UserRegisterRequest userRegisterRequest) {
+        rateLimiter.acquire("register:" + userRegisterRequest.getUsername(), 3, 300);
         return userService.userRegister(userRegisterRequest);
     }
 
@@ -92,7 +97,6 @@ public class UserController {
                                         HttpServletRequest request, HttpServletResponse response) {
         String currentJwt = JwtUtils.extractJwt(request);
         Boolean result = userService.editMyself(userEditRequest, currentJwt);
-        // 改完密码后下发新 token（X-New-Token header，前端 axios 拦截器自动保存）
         if (Boolean.TRUE.equals(result) && userEditRequest.getPassword() != null
                 && !userEditRequest.getPassword().isEmpty()) {
             UserVO me = userService.getMyselfMessage();

@@ -1,14 +1,14 @@
 package hk.ljx.fishpicsbackend.picture.service;
 
-import java.util.List;
-
 import hk.ljx.fishpicsbackend.picture.vo.ShareFileVO;
 import hk.ljx.fishpicsbackend.picture.vo.ShareInfoVO;
 
+import java.util.List;
+
 public interface ShareService {
 
-    // maxViewCount: null/0=默认200, 上限1000
-    String createShare(List<Long> pictureIds, Long userId, int expireDays, int allowDownload, Integer maxViewCount);
+    String createShare(List<Long> pictureIds, Long userId, int expireDays,
+                       int allowDownload, Integer maxViewCount);
 
     ShareInfoVO getShareInfo(String shareToken);
 

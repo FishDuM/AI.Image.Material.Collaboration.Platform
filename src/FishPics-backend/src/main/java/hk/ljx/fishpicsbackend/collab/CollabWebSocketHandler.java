@@ -26,7 +26,11 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 import org.springframework.web.util.UriComponentsBuilder;
 
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Component
@@ -72,7 +76,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         sessionRegistry.addSession(context.spaceId(), context.userId(), session, context.nickname(), context.avatar());
         handleJoin(context.spaceId(), context.userId(), context.nickname(), context.avatar());
 
-        log.info("[CollabWS] connected: space={}, user={}", context.spaceId(), context.userId());
+        log.info("[CollabWS] 已连接: space={}, user={}", context.spaceId(), context.userId());
     }
 
     @Override
@@ -82,7 +86,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         if (userId == null || spaceId == null) return;
 
         if (message.getPayloadLength() > MAX_WS_MESSAGE_SIZE) {
-            log.warn("[CollabWS] message too large: user={}, size={}", userId, message.getPayloadLength());
+            log.warn("[CollabWS] 消息过大: user={}, size={}", userId, message.getPayloadLength());
             return;
         }
 
@@ -95,13 +99,33 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
                 case "transform" -> handleTransform(session, data, spaceId, userId);
                 case "lock" -> handleLock(session, data, spaceId, userId);
                 case "unlock" -> handleUnlock(data, spaceId, userId);
-                case "file-replaced" -> log.warn("[CollabWS] rejected client file-replaced: user={}, pictureId={}",
+                case "file-replaced" -> log.warn("[CollabWS] 拒绝客户端文件替换: user={}, pictureId={}",
                         userId, data.get("pictureId"));
                 case "resync" -> handleResync(spaceId, userId);
-                default -> log.debug("[CollabWS] unknown message type: {}", type);
+                default -> log.debug("[CollabWS] 未知消息类型: {}", type);
             }
         } catch (Exception e) {
-            log.warn("[CollabWS] failed to handle message: user={}", userId, e);
+            log.warn("[CollabWS] 处理消息失败: user={}, type={}", userId,
+                    extractType(message.getPayload()), e);
+            sendErrorToClient(session, "操作失败: " + e.getMessage());
+        }
+    }
+
+    private String extractType(String payload) {
+        try {
+            return JSONUtil.parseObj(payload).getStr("type", "?");
+        } catch (Exception ignored) {
+            return "?";
+        }
+    }
+
+    private void sendErrorToClient(WebSocketSession session, String msg) {
+        try {
+            if (session.isOpen()) {
+                session.sendMessage(new TextMessage(
+                        JSONUtil.toJsonStr(Map.of("type", "error", "message", msg))));
+            }
+        } catch (Exception ignored) {
         }
     }
 
@@ -112,19 +136,30 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         if (userId != null && spaceId != null) {
             handleDisconnect(spaceId, userId, session.getId());
         } else {
-            log.info("[CollabWS] disconnected without attrs, status={}", status);
+            log.info("[CollabWS] 断开连接(无属性): status={}", status);
         }
     }
 
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) {
-        log.warn("[CollabWS] transport error: user={}", getAttr(session, ATTR_USER_ID), exception);
+        Long userId = getAttr(session, ATTR_USER_ID);
+        Long spaceId = getAttr(session, ATTR_SPACE_ID);
+        log.warn("[CollabWS] 传输错误: userId={}", userId, exception);
+        if (userId != null && spaceId != null) {
+            handleDisconnect(spaceId, userId, session.getId());
+        }
+        try {
+            if (session.isOpen()) {
+                session.close(CloseStatus.SERVER_ERROR.withReason("transport error"));
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private void handleTransform(WebSocketSession session, JSONObject data, Long spaceId, Long userId) {
         Long pictureId = getLong(data, "pictureId");
         if (!isEditLockHolder(pictureId, spaceId, userId)) {
-            log.warn("[CollabWS] rejected transform without edit lock: space={}, picture={}, user={}",
+            log.warn("[CollabWS] 无编辑锁拒绝变换: space={}, picture={}, user={}",
                     spaceId, pictureId, userId);
             return;
         }
@@ -142,7 +177,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         sessionRegistry.updatePictureState(spaceId, pictureId, outgoing);
         sessionRegistry.broadcastAll(spaceId, outgoing);
 
-        log.debug("[Collab] transform broadcast: space={}, picture={}, online={}",
+        log.debug("[Collab] 变换广播: space={}, picture={}, online={}",
                 spaceId, pictureId, sessionRegistry.getOnlineUserIds(spaceId).size());
     }
 
@@ -155,13 +190,13 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         if (acquired) {
             sessionRegistry.broadcastAll(spaceId,
                     CollabMessageFactory.lock(new PictureUserMessage(pictureId, userId, nickname)));
-            log.debug("[Collab] lock acquired: space={}, picture={}, user={}", spaceId, pictureId, userId);
+            log.debug("[Collab] 锁已获取: space={}, picture={}, user={}", spaceId, pictureId, userId);
             return;
         }
 
-        var lock = sessionRegistry.getSpaceLock(spaceId);
+        var lock = sessionRegistry.getSpaceLock(spaceId, pictureId);
         sessionRegistry.sendToUser(spaceId, userId, CollabMessageFactory.lockDenied(pictureId, lock));
-        log.debug("[Collab] lock denied: space={}, picture={}, user={}", spaceId, pictureId, userId);
+        log.debug("[Collab] 锁被拒绝: space={}, picture={}, user={}", spaceId, pictureId, userId);
     }
 
     private void handleUnlock(JSONObject data, Long spaceId, Long userId) {
@@ -170,7 +205,7 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
         boolean released = sessionRegistry.releaseEditLock(spaceId, pictureId, userId);
         if (released) {
             broadcastUnlockAndClearState(spaceId, pictureId, userId);
-            log.debug("[Collab] lock released: space={}, picture={}, user={}", spaceId, pictureId, userId);
+            log.debug("[Collab] 锁已释放: space={}, picture={}, user={}", spaceId, pictureId, userId);
         }
     }
 
@@ -185,24 +220,29 @@ public class CollabWebSocketHandler extends TextWebSocketHandler {
     private void handleDisconnect(Long spaceId, Long userId, String sessionId) {
         sessionRegistry.removeSession(spaceId, userId, sessionId);
 
-        Long pictureId = sessionRegistry.clearLockByUserInSpace(userId, spaceId);
-        if (pictureId != null) {
+        List<Long> pictureIds = sessionRegistry.clearLocksByUserInSpace(userId, spaceId);
+        for (Long pictureId : pictureIds) {
             broadcastUnlockAndClearState(spaceId, pictureId, userId);
-            log.debug("[Collab] disconnected user lock released: space={}, picture={}", spaceId, pictureId);
+            log.debug("[Collab] 断开连接用户锁已释放: space={}, picture={}", spaceId, pictureId);
         }
 
         sessionRegistry.broadcast(spaceId, userId, CollabMessageFactory.leave(userId));
-        log.debug("[Collab] user disconnect handled: space={}, user={}", spaceId, userId);
+        log.debug("[Collab] 用户断开已处理: space={}, user={}", spaceId, userId);
     }
 
     private void handleResync(Long spaceId, Long userId) {
         sendCurrentState(spaceId, userId);
-        log.info("[CollabWS] resync: space={}, user={}", spaceId, userId);
+        log.info("[CollabWS] 重新同步: space={}, user={}", spaceId, userId);
     }
 
     private void sendCurrentState(Long spaceId, Long userId) {
-        var lock = sessionRegistry.getSpaceLock(spaceId);
-        if (lock != null) {
+        for (var entry : sessionRegistry.getSpaceSessions(spaceId).entrySet()) {
+            var info = entry.getValue();
+            sessionRegistry.sendToUser(spaceId, userId,
+                    CollabMessageFactory.join(new UserMessage(
+                            entry.getKey(), info.getNickname(), info.getAvatar())));
+        }
+        for (var lock : sessionRegistry.getSpaceLocks(spaceId)) {
             sessionRegistry.sendToUser(spaceId, userId,
                     CollabMessageFactory.lock(new PictureUserMessage(
                             lock.getPictureId(), lock.getUserId(), lock.getNickname())));

@@ -19,7 +19,7 @@ public class AuditLogWriter {
         try {
             sysAuditLogMapper.insert(auditLog);
         } catch (Exception e) {
-            log.error("save audit log failed: module={}, operation={}",
+            log.error("保存审计日志失败: module={}, operation={}",
                     auditLog.getModule(), auditLog.getOperation(), e);
         }
     }

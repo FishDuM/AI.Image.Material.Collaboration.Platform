@@ -11,6 +11,5 @@ public class AiStatsVO {
     private Long successTasks;
     private Long failedTasks;
     private Long processingTasks;
-    // key=类型编号, value=任务数
     private Map<String, Long> typeCounts;
 }

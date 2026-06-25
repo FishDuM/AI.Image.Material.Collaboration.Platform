@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.common.exception.ExcUtils;
+import hk.ljx.fishpicsbackend.common.cache.RedisCacheManager;
 import hk.ljx.fishpicsbackend.common.infra.CosService;
 import hk.ljx.fishpicsbackend.common.utils.LoginContextHelper;
 import hk.ljx.fishpicsbackend.mapper.PictureMapper;
@@ -64,8 +65,11 @@ public class PictureDeleteManager {
     @Resource
     private SpaceQuotaManager quotaManager;
 
-    @Resource
+        @Resource
     private CosService cosService;
+
+    @Resource
+    private RedisCacheManager cacheManager;
 
     @Transactional(rollbackFor = Exception.class)
     public String delete(DeleteByIdListRequest request) {
@@ -92,40 +96,36 @@ public class PictureDeleteManager {
         deleteRelations(deletableIds);
         releaseSpaceQuota(pictures);
         releaseFileResourcesAfterDelete(pictures);
+
+        int skippedCount = ids.size() - deletableIds.size();
+        if (skippedCount > 0) {
+            log.warn("部分图片跳过删除: skippedCount={}, total={}", skippedCount, ids.size());
+            return "删除成功，其中 " + skippedCount + " 张图片无权限已跳过";
+        }
         return "删除成功";
     }
 
     private void deleteRelations(List<Long> pictureIds) {
-        // 先查出所有关联这些图片的分享ID（包括多图分享中非首图的情况）
         List<Long> relatedShareIds = pictureShareItemMapper.selectList(
                 new LambdaQueryWrapper<PictureShareItem>()
                         .in(PictureShareItem::getPictureId, pictureIds))
                 .stream().map(PictureShareItem::getShareId).distinct().collect(Collectors.toList());
 
-        // 删除 PictureShareItem 记录
-        int shareItemCount = pictureShareItemMapper.delete(
-                new LambdaQueryWrapper<PictureShareItem>()
-                        .in(PictureShareItem::getPictureId, pictureIds));
-        if (shareItemCount > 0) {
-            log.debug("deleted picture share items: count={}", shareItemCount);
-        }
-
         // 也删除以这些图片为首图的分享记录
         int shareCount = pictureShareMapper.delete(new LambdaQueryWrapper<PictureShare>()
                 .in(PictureShare::getPictureId, pictureIds));
-        // 额外删除通过 PictureShareItem 关联到的分享记录（多图分享中非首图的情况）
         if (!relatedShareIds.isEmpty()) {
             shareCount += pictureShareMapper.delete(new LambdaQueryWrapper<PictureShare>()
                     .in(PictureShare::getId, relatedShareIds));
         }
         if (shareCount > 0) {
-            log.debug("deleted picture shares: count={}", shareCount);
+            log.debug("已删除图片分享: count={}", shareCount);
         }
 
         int tagCount = pictureTagMapper.delete(new LambdaQueryWrapper<PictureTag>()
                 .in(PictureTag::getPictureId, pictureIds));
         if (tagCount > 0) {
-            log.debug("deleted picture tags: count={}", tagCount);
+            log.debug("已删除图片标签: count={}", tagCount);
         }
     }
 
@@ -135,7 +135,7 @@ public class PictureDeleteManager {
             if (picture.getSpaceId() != null && picture.getSize() != null) {
                 spaceSizeMap.merge(picture.getSpaceId(), picture.getSize(), Long::sum);
             } else {
-                log.warn("skip quota release: pictureId={}, spaceId={}, size={}",
+                log.warn("跳过配额释放: pictureId={}, spaceId={}, size={}",
                         picture.getId(), picture.getSpaceId(), picture.getSize());
             }
         });
@@ -146,6 +146,15 @@ public class PictureDeleteManager {
                 quotaManager.release(space, deletedSize);
             }
         });
+
+        // 事务提交后 evict 空间详情缓存
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                spaceSizeMap.keySet().forEach(id ->
+                    cacheManager.getSpaceDetailCache().evict(String.valueOf(id)));
+            }
+        });
     }
 
     private void releaseFileResourcesAfterDelete(List<Picture> pictures) {
@@ -154,7 +163,7 @@ public class PictureDeleteManager {
             if (picture.getResourceId() != null) {
                 int newCount = fileResourceService.decrementRefCount(picture.getResourceId());
                 if (newCount == 0) {
-                    log.info("picture resource ref_count reached zero: resourceId={}", picture.getResourceId());
+                    log.info("图片资源引用计数归零: resourceId={}", picture.getResourceId());
                 }
             } else {
                 legacyCosUrls.add(picture.getUrl());
@@ -174,7 +183,7 @@ public class PictureDeleteManager {
                     try {
                         cosService.deletePictureByUrl(url);
                     } catch (Exception e) {
-                        log.error("failed to delete legacy COS file: url={}", url, e);
+                        log.error("删除旧 COS 文件失败: url={}", url, e);
                     }
                 }
             }

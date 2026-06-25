@@ -22,10 +22,8 @@ public class FileResource implements Serializable {
 
     private String md5;
 
-    /** 文件大小(Byte) */
     private Long size;
 
-    /** COS存储路径 */
     private String cosKey;
 
     private Integer refCount;

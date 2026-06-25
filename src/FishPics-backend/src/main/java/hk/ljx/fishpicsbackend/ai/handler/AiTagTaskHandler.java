@@ -37,7 +37,6 @@ import java.util.stream.Collectors;
 @Component
 public class AiTagTaskHandler implements TaskHandler {
 
-    /** AI 标签识别超时时间（秒） */
     private static final int AI_TIMEOUT_SECONDS = 120;
     private static final int MAX_AI_NAME_LENGTH = 6;
     private static final int MAX_AI_INTRO_LENGTH = 100;
@@ -64,9 +63,6 @@ public class AiTagTaskHandler implements TaskHandler {
 
     private ReactAgent tagAgent;
 
-    /**
-     * 初始化标签识别 Agent
-     */
     @PostConstruct
     public void init() {
         BeanOutputConverter<AiPictureMessage> converter = new BeanOutputConverter<>(AiPictureMessage.class);
@@ -91,7 +87,6 @@ public class AiTagTaskHandler implements TaskHandler {
         ExcUtils.throwIfTrue(picture.getUrl() == null || picture.getUrl().isBlank(),
                 ExceptionCode.INTERNAL_SERVER_ERROR, "图片 URL 为空: " + picture.getId());
 
-        // 把图片 URL 作为多模态输入丢给 Agent
         UserMessage userMessage = UserMessage.builder()
                 .text("帮我识别这个图片")
                 .media(Media.builder()
@@ -100,7 +95,7 @@ public class AiTagTaskHandler implements TaskHandler {
                 .build();
         CompletableFuture<AssistantMessage> future = CompletableFuture.supplyAsync(() -> {
             try {
-                return tagAgent.call(userMessage);
+            return tagAgent.call(userMessage);
             } catch (Exception e) {
                 throw new BaseException(ExceptionCode.INTERNAL_SERVER_ERROR, "AI 标签识别执行失败", e);
             }
@@ -118,9 +113,8 @@ public class AiTagTaskHandler implements TaskHandler {
         }
         ExcUtils.throwIfTrue(response == null || response.getText() == null,
                 ExceptionCode.INTERNAL_SERVER_ERROR, "AI 标签识别返回结果为空");
-        log.info("AI tag result for picture {}: {}", picture.getId(), response.getText());
+        log.info("AI 标签识别结果 图片 {}: {}", picture.getId(), response.getText());
 
-        // AI 有时返回 markdown 代码块包裹的 JSON，需要剥掉
         String text = response.getText().strip();
         if (text.startsWith("```")) {
             int firstNewline = text.indexOf('\n');
@@ -143,7 +137,6 @@ public class AiTagTaskHandler implements TaskHandler {
         task.setResult(text);
     }
 
-    // 和 execute 分开，因为持久化要在事务里跑
     @Override
     public void persist(Task task) {
         Picture picture = resolvePictureFromTask(task);
@@ -186,7 +179,11 @@ public class AiTagTaskHandler implements TaskHandler {
             cleanIntro = truncate(cleanIntro, MAX_AI_INTRO_LENGTH);
             picture.setIntroduction(cleanIntro);
         }
-        pictureService.updateById(picture);
+        boolean updated = pictureService.updateById(picture);
+        if (!updated) {
+            log.warn("AI 标签持久化失败(乐观锁冲突): pictureId={}", pictureId);
+            throw new BaseException(ExceptionCode.CONFLICT, "图片已被修改，AI 标签写入失败，请重试");
+        }
     }
 
     private Picture resolvePictureFromTask(Task task) {

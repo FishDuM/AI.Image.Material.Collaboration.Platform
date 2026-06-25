@@ -30,7 +30,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
         var registration = registry.addHandler(collabWebSocketHandler, "/ws/collab");
         if (origins.length == 0) {
-            log.warn("[WebSocketConfig] collab.websocket.allowed-origins is empty, deny cross-origin WebSocket");
+            log.warn("[WebSocketConfig] collab.websocket.allowed-origins 为空，拒绝跨域 WebSocket");
             registration.setAllowedOrigins();
             return;
         }

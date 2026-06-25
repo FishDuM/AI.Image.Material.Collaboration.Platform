@@ -55,7 +55,6 @@ public class GlobalExceptionHandler {
         return fail(ExceptionCode.INTERNAL_SERVER_ERROR, "AI 服务调用失败");
     }
 
-    // 所有参数校验类异常统一处理
     @ExceptionHandler({
             MissingServletRequestParameterException.class,
             MethodArgumentTypeMismatchException.class,
@@ -71,9 +70,6 @@ public class GlobalExceptionHandler {
             message = "缺少参数: " + ex.getParameterName();
         } else if (e instanceof MethodArgumentTypeMismatchException ex) {
             message = "参数类型错误: " + ex.getName();
-        } else if (e instanceof MethodArgumentNotValidException ex) {
-            FieldError fieldError = ex.getBindingResult().getFieldError();
-            message = fieldError != null ? fieldError.getDefaultMessage() : "请求参数校验失败";
         } else if (e instanceof MaxUploadSizeExceededException) {
             message = "文件大小超出限制";
         } else if (e instanceof HttpRequestMethodNotSupportedException) {

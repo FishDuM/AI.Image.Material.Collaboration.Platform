@@ -2,16 +2,20 @@ package hk.ljx.fishpicsbackend.task.service.impl;
 
 import cn.hutool.core.util.IdUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import hk.ljx.fishpicsbackend.common.exception.BaseException;
 import hk.ljx.fishpicsbackend.common.exception.ExceptionCode;
 import hk.ljx.fishpicsbackend.mapper.TaskMapper;
 import hk.ljx.fishpicsbackend.task.entity.Task;
-import hk.ljx.fishpicsbackend.task.component.TaskProcessor;
 import hk.ljx.fishpicsbackend.task.service.TaskService;
+import hk.ljx.fishpicsbackend.task.component.TaskProcessor;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Map;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -26,8 +30,6 @@ public class TaskServiceImpl extends ServiceImpl<TaskMapper, Task> implements Ta
     @Resource
     private TaskProcessor taskProcessor;
 
-    @Override
-    @Transactional(rollbackFor = Exception.class)
     public String submitTask(String bizType, String bizId, String param, Long userId) {
         Task task = new Task();
         task.setTaskId(IdUtil.fastSimpleUUID());
@@ -49,16 +51,14 @@ public class TaskServiceImpl extends ServiceImpl<TaskMapper, Task> implements Ta
             dispatchTask(task.getTaskId());
         }
 
-        log.debug("task submitted: taskId={}, bizType={}, bizId={}", task.getTaskId(), bizType, bizId);
+        log.debug("任务已提交: taskId={}, bizType={}, bizId={}", task.getTaskId(), bizType, bizId);
         return task.getTaskId();
     }
 
-    @Override
     public Task getTaskByTaskId(String taskId) {
         return taskMapper.selectOne(new LambdaQueryWrapper<Task>().eq(Task::getTaskId, taskId));
     }
 
-    @Override
     public void dispatchTask(String taskId) {
         Task task = getTaskByTaskId(taskId);
         if (task == null) {
@@ -68,5 +68,10 @@ public class TaskServiceImpl extends ServiceImpl<TaskMapper, Task> implements Ta
             return;
         }
         taskProcessor.dispatch(taskId);
+    }
+
+    @Override
+    public List<Map<String, Object>> selectMaps(QueryWrapper<Task> queryWrapper) {
+        return baseMapper.selectMaps(queryWrapper);
     }
 }

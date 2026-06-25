@@ -86,7 +86,6 @@ public final class PicturePermissionUtil {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
         if (!spaceIds.isEmpty()) {
-            // 与 checkWrite 保持一致：可写成员（owner + member）均可删除
             Set<Long> writableSpaceIds = teamMemberMapper.selectList(
                             new LambdaQueryWrapper<SpaceTeamMember>()
                                     .in(SpaceTeamMember::getSpaceId, spaceIds)

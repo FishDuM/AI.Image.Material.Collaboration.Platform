@@ -35,22 +35,14 @@ public class AuditLogServiceImpl implements AuditLogService {
     @Resource
     private SpaceMapper spaceMapper;
 
-    @Override
     public IPage<SysAuditLog> pageQuery(AuditLogQueryRequest request) {
         long current = Math.max(request.getCurrent(), 1);
         long pageSize = Math.min(Math.max(request.getPageSize(), 1), 100);
         Page<SysAuditLog> page = new Page<>(current, pageSize);
         LambdaQueryWrapper<SysAuditLog> qw = new LambdaQueryWrapper<>();
-
-        if (request.getOperation() != null && !request.getOperation().isBlank()) {
-            qw.eq(SysAuditLog::getOperation, request.getOperation());
-        }
-        if (request.getModule() != null && !request.getModule().isBlank()) {
-            qw.eq(SysAuditLog::getModule, request.getModule());
-        }
-        if (request.getResult() != null) {
-            qw.eq(SysAuditLog::getResult, request.getResult());
-        }
+        qw.eq(request.getOperation() != null && !request.getOperation().isBlank(), SysAuditLog::getOperation, request.getOperation())
+                .eq(request.getModule() != null && !request.getModule().isBlank(), SysAuditLog::getModule, request.getModule())
+                .eq(request.getResult() != null, SysAuditLog::getResult, request.getResult());
         if (request.getUsername() != null && !request.getUsername().isBlank()) {
             // 转义 LIKE 通配符
             String escaped = request.getUsername().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
@@ -61,7 +53,6 @@ public class AuditLogServiceImpl implements AuditLogService {
         return sysAuditLogMapper.selectPage(page, qw);
     }
 
-    @Override
     public SystemStatsVO getStats() {
         long totalUsers = userMapper.selectCount(null);
         long totalPictures = pictureMapper.selectCount(null);

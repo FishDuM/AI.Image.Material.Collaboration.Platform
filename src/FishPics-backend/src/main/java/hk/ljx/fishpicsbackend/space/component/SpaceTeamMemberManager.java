@@ -118,6 +118,7 @@ public class SpaceTeamMemberManager {
             throw new BaseException(ExceptionCode.PARAMETER_ERROR, "该用户已经是团队成员");
         }
         evictUserPermCacheAfterCommit(userId);
+        evictTeamMemberCacheAfterCommit(spaceId, userId);
         return true;
     }
 
@@ -140,6 +141,7 @@ public class SpaceTeamMemberManager {
                         .eq(SpaceTeamMember::getSpaceId, spaceId)
                         .eq(SpaceTeamMember::getUserId, userId));
         evictUserPermCacheAfterCommit(userId);
+        evictTeamMemberCacheAfterCommit(spaceId, userId);
         disconnectUserAfterCommit(userId, spaceId);
         return true;
     }
@@ -170,6 +172,7 @@ public class SpaceTeamMemberManager {
         existing.setRoleId(roleId.intValue());
         spaceTeamMemberMapper.updateById(existing);
         evictUserPermCacheAfterCommit(userId);
+        evictTeamMemberCacheAfterCommit(spaceId, userId);
         return true;
     }
 
@@ -233,6 +236,24 @@ public class SpaceTeamMemberManager {
         cacheManager.evictUserPermCacheAfterCommit(userId);
     }
 
+    private void evictTeamMemberCacheAfterCommit(Long spaceId, Long userId) {
+        if (spaceId == null || userId == null) return;
+        Runnable evict = () -> {
+            cacheManager.getTeamMemberCache().evict(spaceId + ":" + userId + ":member");
+            cacheManager.getTeamMemberCache().evict(spaceId + ":" + userId + ":owner");
+        };
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            evict.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                evict.run();
+            }
+        });
+    }
+
     private void disconnectUserAfterCommit(Long userId, Long spaceId) {
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
@@ -240,10 +261,10 @@ public class SpaceTeamMemberManager {
                 try {
                     boolean disconnected = collabSessionRegistry.disconnectUserInSpace(
                             userId, spaceId, "您已被移出团队空间");
-                    log.info("[SpaceTeamMemberManager] team member removed, ws disconnected: user={}, spaceId={}, disconnected={}",
+                    log.info("[SpaceTeamMemberManager] 团队成员已移除, 断开 WebSocket: user={}, spaceId={}, disconnected={}",
                             userId, spaceId, disconnected);
                 } catch (Exception e) {
-                    log.warn("[SpaceTeamMemberManager] failed to disconnect removed member: user={}, spaceId={}",
+                    log.warn("[SpaceTeamMemberManager] 断开已移除成员连接失败: user={}, spaceId={}",
                             userId, spaceId, e);
                 }
             }

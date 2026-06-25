@@ -31,16 +31,12 @@ public class User implements Serializable {
 
     private String nickname;
 
-    /** 状态 1-正常 0-禁用 2-待审核 */
     private Integer status;
 
-    /** 用户等级 0=普通 1=VIP 2=SVIP */
     private Integer level;
 
-    /** 用户角色 0=普通 1=管理员 */
     private Integer role;
 
-    /** 0-逻辑未删除, 1-逻辑删除 */
     @TableLogic
     private Integer isDelete;
 

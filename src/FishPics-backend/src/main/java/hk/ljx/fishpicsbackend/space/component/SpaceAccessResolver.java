@@ -6,9 +6,6 @@ import hk.ljx.fishpicsbackend.space.entity.Space;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Component;
 
-/**
- * 空间访问校验：查空间 + 校验当前用户权限
- */
 @Component
 public class SpaceAccessResolver {
 

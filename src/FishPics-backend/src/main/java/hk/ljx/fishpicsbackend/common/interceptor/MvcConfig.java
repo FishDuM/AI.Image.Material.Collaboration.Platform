@@ -30,8 +30,6 @@ public class MvcConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        // Token 刷新拦截器：JWT 解析 + 黑名单检查 + 自动续签 + 简化版权限上下文加载
-        // 分享页和 ws 路径需要排除
         registry.addInterceptor(new TokenRefreshInterceptor(stringRedisTemplate, jwtUtils, userMapper, spaceTeamMemberMapper, cacheManager))
                 .excludePathPatterns("/share/info/*", "/share/preview/*", "/share/download/*", "/ws/**")
                 .order(0);

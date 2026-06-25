@@ -79,16 +79,12 @@ public class AiController {
         return Response.ok(aiService.getDrawResult(taskId));
     }
 
-    /**
-     * SSE 推送：AI 任务结果
-     */
     @RequireLogin
     @GetMapping("/result-sse/{taskId}")
     public SseEmitter subscribeResult(@PathVariable String taskId) {
         Task task = aiService.getTaskByTaskId(taskId);
         resolveTaskOwnership(task);
 
-        // 任务已完成，直接返回
         if ("DONE".equals(task.getStatus())) {
             return sendImmediateSse(taskId, Map.of("taskId", taskId, "status", "DONE",
                     "result", task.getResult() != null ? task.getResult() : ""));
@@ -98,7 +94,6 @@ public class AiController {
                     "errorMsg", task.getErrorMsg() != null ? task.getErrorMsg() : ""));
         }
 
-        // 还在处理，注册 SSE 等结果推送
         SseEmitter emitter = sseEmitterRegistry.register(taskId);
 
         // 注册后再检查一次，关闭状态查询与注册之间的 TOCTOU 窗口
@@ -163,9 +158,6 @@ public class AiController {
         return Response.ok(true);
     }
 
-    /**
-     * 任务已终结时直接发送 SSE 事件（消除 DONE/FAILED 分支重复）
-     */
     private SseEmitter sendImmediateSse(String taskId, Map<String, String> data) {
         SseEmitter emitter = new SseEmitter(5_000L);
         try {
@@ -177,9 +169,6 @@ public class AiController {
         return emitter;
     }
 
-    /**
-     * 校验任务存在性和所有权（subscribeResult 使用，因 getTaskByTaskId 未做权限校验）
-     */
     private void resolveTaskOwnership(Task task) {
         ExcUtils.throwIfTrue(task == null, ExceptionCode.NOT_FOUND, "任务不存在");
         User user = LoginContextHelper.requireUser();

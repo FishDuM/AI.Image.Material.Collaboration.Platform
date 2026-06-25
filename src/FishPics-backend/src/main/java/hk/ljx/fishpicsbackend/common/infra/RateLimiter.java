@@ -21,7 +21,7 @@ public class RateLimiter {
         String redisKey = "RL:" + key;
         long count = redisAtomicOps.incrWithExpire(redisKey, windowSec);
         if (count > limit) {
-            log.warn("rate limit exceeded: key={}, count={}, limit={}/{}s", key, count, limit, windowSec);
+            log.warn("请求频率超限: key={}, count={}, limit={}/{}s", key, count, limit, windowSec);
             throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "操作过于频繁,请稍后再试");
         }
     }
@@ -34,7 +34,7 @@ public class RateLimiter {
         String redisKey = "RL:" + key;
         long count = redisAtomicOps.incrWithExpire(redisKey, window.getSeconds());
         if (count > limit) {
-            log.warn("rate limit exceeded: key={}, count={}, limit={}/{}", key, count, limit, window);
+            log.warn("请求频率超限: key={}, count={}, limit={}/{}", key, count, limit, window);
             throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "操作过于频繁,请稍后再试");
         }
     }

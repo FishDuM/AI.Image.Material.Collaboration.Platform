@@ -1,5 +1,6 @@
 package hk.ljx.fishpicsbackend.system.service.impl;
 import hk.ljx.fishpicsbackend.system.entity.PicSystem;
+import hk.ljx.fishpicsbackend.system.service.PicSystemService;
 import hk.ljx.fishpicsbackend.common.utils.XssSanitizer;
 
 import cn.hutool.json.JSONUtil;
@@ -17,10 +18,10 @@ import hk.ljx.fishpicsbackend.mapper.PictureMapper;
 import hk.ljx.fishpicsbackend.picture.entity.Picture;
 import hk.ljx.fishpicsbackend.system.dto.AddSysMarqueeRequest;
 import hk.ljx.fishpicsbackend.system.dto.AddSysPicTypeRequest;
-import hk.ljx.fishpicsbackend.system.service.PicSystemService;
-import org.springframework.stereotype.Service;
 
 import jakarta.annotation.Resource;
+import org.springframework.stereotype.Service;
+
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -37,8 +38,7 @@ import static hk.ljx.fishpicsbackend.common.constants.SysConstants.TYPE_LIST_KEY
  */
 @Service
 @Slf4j
-public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem>
-    implements PicSystemService{
+public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem> implements PicSystemService {
 
     @Resource
     private PictureMapper pictureMapper;
@@ -49,27 +49,23 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
     @Resource
     private DistributedLockService distributedLockService;
 
-    // JSON 解析失败返回空 list
     private List<String> safeParseList(String json) {
         if (json == null || json.isBlank()) return List.of();
         try {
             List<String> parsed = JSONUtil.toList(json, String.class);
             return parsed != null ? parsed : List.of();
         } catch (Exception e) {
-            log.warn("[PicSystem] sysvalue JSON 解析失败,fallback empty list: {}", e.getMessage());
+            log.warn("[PicSystem] sysvalue JSON 解析失败, 返回空列表: {}", e.getMessage());
             return List.of();
         }
     }
 
-    @Override
     public List<String> getTypeList() {
         return getConfigList(TYPE_LIST_KEY);
     }
 
-    @Override
     public void addTypeList(AddSysPicTypeRequest addSysPicType) {
         ExcUtils.throwIfTrue(addSysPicType.getValue() == null || addSysPicType.getValue().isEmpty(), ExceptionCode.PARAMETER_ERROR, "标签不能为空");
-        // 管理员输入的标签值过 XSS 清理后再入库
         List<String> sanitized = addSysPicType.getValue().stream()
                 .map(XssSanitizer::clean)
                 .filter(s -> s != null && !s.isBlank())
@@ -79,18 +75,15 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         upsertConfigList("LOCK:SYS:TYPE_LIST", TYPE_LIST_KEY, sanitized, true);
     }
 
-    @Override
     public void deleteType(String type) {
         ExcUtils.throwIfTrue(type == null || type.trim().isEmpty(), ExceptionCode.PARAMETER_ERROR, "标签名不能为空");
         removeFromConfigList("LOCK:SYS:TYPE_LIST", TYPE_LIST_KEY, type);
     }
 
-    @Override
     public List<String> getMarquees() {
         return getConfigList(MARQUEES_KEY);
     }
 
-    @Override
     public void addMarquee(AddSysMarqueeRequest addSysMarquee) {
         ExcUtils.throwIfTrue(addSysMarquee.getPictureIds() == null || addSysMarquee.getPictureIds().isEmpty(), ExceptionCode.PARAMETER_ERROR, "图片id不能为空");
 
@@ -111,7 +104,6 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         upsertConfigList("LOCK:SYS:MARQUESS", MARQUEES_KEY, marqueeUrls, true);
     }
 
-    @Override
     public void deleteMarquee(String url) {
         ExcUtils.throwIfTrue(url == null || url.trim().isEmpty(), ExceptionCode.PARAMETER_ERROR, "图片url不能为空");
         removeFromConfigList("LOCK:SYS:MARQUESS", MARQUEES_KEY, url);
@@ -142,7 +134,6 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         return result;
     }
 
-    // 加锁、查现有、去重合并/新建、更新、清缓存
     private void upsertConfigList(String lockKey, String configKey, List<String> newItems, boolean dedup) {
         if (!distributedLockService.tryLock(lockKey)) {
             throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "其他节点正在修改,请稍后再试");
@@ -174,7 +165,6 @@ public class PicSystemServiceImpl extends ServiceImpl<PicSystemMapper, PicSystem
         }
     }
 
-    // 加锁、查现有、移除、更新、清缓存
     private void removeFromConfigList(String lockKey, String configKey, String itemToRemove) {
         if (!distributedLockService.tryLock(lockKey)) {
             throw new BaseException(ExceptionCode.TOO_MANY_REQUESTS, "其他节点正在修改,请稍后再试");

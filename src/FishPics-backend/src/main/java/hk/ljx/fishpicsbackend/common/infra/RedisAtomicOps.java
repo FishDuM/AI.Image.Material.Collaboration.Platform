@@ -8,14 +8,10 @@ import org.springframework.stereotype.Component;
 
 import java.util.Collections;
 
-/**
- * Redis 原子操作：Lua 脚本封装多步操作为单步原子操作
- */
 @Slf4j
 @Component
 public class RedisAtomicOps {
 
-    /** INCR + (NX 时设 EXPIRE) — 原子限流 */
     private static final String LUA_INCR_WITH_EXPIRE =
             "local v = redis.call('INCR', KEYS[1]) " +
             "if v == 1 then " +
@@ -23,7 +19,6 @@ public class RedisAtomicOps {
             "end " +
             "return v";
 
-    /** GET + DELETE — 原子消费(防重放/竞态) */
     private static final String LUA_GET_AND_DELETE =
             "local v = redis.call('GET', KEYS[1]) " +
             "if v then " +
@@ -60,7 +55,6 @@ public class RedisAtomicOps {
         return v == null ? 0L : v;
     }
 
-    // key 不存在写入并返回，已存在直接返回已有的值（防并发重复 initiateMultipartUpload）
     public String setIfAbsentOrGet(String key, String value, long ttlSeconds) {
         String v = stringRedisTemplate.execute(
                 SCRIPT_SET_IF_ABSENT_OR_GET,
@@ -70,14 +64,12 @@ public class RedisAtomicOps {
         return v;
     }
 
-    // 原子 GET + DEL，一次性消费 key
     public String getAndDelete(String key) {
         return stringRedisTemplate.execute(
                 SCRIPT_GET_AND_DELETE,
                 Collections.singletonList(key));
     }
 
-    // INCR + 超额回滚（首次设 EXPIRE，超 maxCount 则 DECR 回滚返回 -1）
     private static final String LUA_INCR_WITH_CHECK =
             "local v = redis.call('INCR', KEYS[1]) " +
             "if v == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end " +

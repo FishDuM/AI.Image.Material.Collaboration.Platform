@@ -17,6 +17,9 @@ public class RedisCacheManager {
     private RedisTtlCache userInfoCache;
     private RedisTtlCache userPermCache;
     private RedisTtlCache sysConfigCache;
+    private RedisTtlCache spaceDetailCache;
+    private RedisTtlCache teamMemberCache;
+    private RedisTtlCache shareCache;
 
     public RedisTtlCache getUserInfoCache() {
         return userInfoCache;
@@ -30,11 +33,26 @@ public class RedisCacheManager {
         return sysConfigCache;
     }
 
+    public RedisTtlCache getSpaceDetailCache() {
+        return spaceDetailCache;
+    }
+
+    public RedisTtlCache getTeamMemberCache() {
+        return teamMemberCache;
+    }
+
+    public RedisTtlCache getShareCache() {
+        return shareCache;
+    }
+
     @PostConstruct
     public void init() {
         userInfoCache = new RedisTtlCache(stringRedisTemplate, CacheConstants.USER_INFO, CacheConstants.USER_INFO_TTL_MINUTES);
         userPermCache = new RedisTtlCache(stringRedisTemplate, CacheConstants.USER_PERMISSIONS, CacheConstants.USER_PERMISSIONS_TTL_MINUTES);
         sysConfigCache = new RedisTtlCache(stringRedisTemplate, CacheConstants.SYSTEM_CONFIG, CacheConstants.SYSTEM_CONFIG_TTL_MINUTES);
+        spaceDetailCache = new RedisTtlCache(stringRedisTemplate, CacheConstants.SPACE_DETAIL, CacheConstants.SPACE_DETAIL_TTL_MINUTES);
+        teamMemberCache = new RedisTtlCache(stringRedisTemplate, CacheConstants.TEAM_MEMBER, CacheConstants.TEAM_MEMBER_TTL_MINUTES);
+        shareCache = new RedisTtlCache(stringRedisTemplate, CacheConstants.SHARE, CacheConstants.SHARE_TTL_MINUTES);
     }
 
     /**

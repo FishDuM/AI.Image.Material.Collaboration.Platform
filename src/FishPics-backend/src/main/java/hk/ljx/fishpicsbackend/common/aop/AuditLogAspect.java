@@ -56,12 +56,10 @@ public class AuditLogAspect {
                 auditLog.setMethod(request.getMethod());
                 auditLog.setUrl(request.getRequestURI());
                 auditLog.setIp(IpUtils.getClientIp(request));
-                // GET query params 也需要脱敏
                 String queryString = request.getQueryString();
                 if (queryString != null && !queryString.isEmpty()) {
                     String maskedQuery = queryString
                             .replaceAll("(?i)(password|token|apiKey|secretKey|accessToken|refreshToken|secret|originalPassword)=[^&]*", "$1=***");
-                    // 暂存到 request attribute,避免与 body args 冲突
                     request.setAttribute("__auditQuery", maskedQuery);
                 }
             }
@@ -116,7 +114,6 @@ public class AuditLogAspect {
         } catch (Throwable e) {
             auditLog.setResult(0);
             auditLog.setErrorMsg(e.getMessage());
-            // 业务异常（BaseException）用 WARN，系统异常用 ERROR
             if (e instanceof BaseException) {
                 log.warn("审计方法业务异常: method={}, msg={}", auditLog.getUrl(), e.getMessage());
             } else {

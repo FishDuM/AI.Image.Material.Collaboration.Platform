@@ -37,14 +37,12 @@ public class Picture implements Serializable {
 
     private Long spaceId;
 
-    /** 关联file_resource.id（文件去重） */
     private Long resourceId;
 
     private String introduction;
 
     private String type;
 
-    /** 是否精选: 0=普通 1=精选 2=申请中 */
     private Integer isSelected;
 
     @Version

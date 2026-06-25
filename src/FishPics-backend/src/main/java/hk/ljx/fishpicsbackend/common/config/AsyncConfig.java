@@ -11,7 +11,6 @@ import org.springframework.scheduling.annotation.AsyncConfigurer;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
-// 审计日志等 @Async 任务用这个线程池
 @Configuration
 @EnableAsync
 @Slf4j
@@ -24,7 +23,6 @@ public class AsyncConfig implements AsyncConfigurer {
         executor.setMaxPoolSize(8);
         executor.setQueueCapacity(200);
         executor.setThreadNamePrefix("app-task-");
-        // 队列满时调用方线程执行，不丢任务
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(30);
@@ -40,6 +38,6 @@ public class AsyncConfig implements AsyncConfigurer {
     @Override
     public AsyncUncaughtExceptionHandler getAsyncUncaughtExceptionHandler() {
         return (ex, method, params) ->
-            log.error("Async task failed in method: {}", method.getName(), ex);
+            log.error("异步任务执行失败: method={}", method.getName(), ex);
     }
 }
