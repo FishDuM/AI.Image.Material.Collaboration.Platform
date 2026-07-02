@@ -2,12 +2,7 @@
 
 <div align="center">
 
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3-6db33f?logo=spring-boot)](https://spring.io/projects/spring-boot)
-[![React](https://img.shields.io/badge/React-19-61dafb?logo=react)](https://react.dev/)
-[![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk)](https://openjdk.org/)
-[![Vite](https://img.shields.io/badge/Vite-8-646cff?logo=vite)](https://vitejs.dev/)
-[![MySQL](https://img.shields.io/badge/MySQL-8-4479a1?logo=mysql)](https://www.mysql.com/)
-[![Redis](https://img.shields.io/badge/Redis-7-dc382d?logo=redis)](https://redis.io/)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3-6db33f?logo=spring-boot)](https://spring.io/projects/spring-boot) [![React](https://img.shields.io/badge/React-19-61dafb?logo=react)](https://react.dev/) [![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk)](https://openjdk.org/) [![Vite](https://img.shields.io/badge/Vite-8-646cff?logo=vite)](https://vitejs.dev/) [![MySQL](https://img.shields.io/badge/MySQL-8-4479a1?logo=mysql)](https://www.mysql.com/) [![Redis](https://img.shields.io/badge/Redis-7-dc382d?logo=redis)](https://redis.io/)
 
 </div>
 
