@@ -257,21 +257,21 @@ public class SpaceServiceImpl extends ServiceImpl<SpaceMapper, Space>
         User user = LoginContextHelper.requireUser();
         Long userId = user.getId();
 
-        // 先查缓存
+        // 先查 DB 做权限校验，再读缓存——确保缓存命中也不会绕过权限检查
+        Space space = baseMapper.selectById(id);
+        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
+        Space.validateActive(space);
+        spacePermissionChecker.checkAccess(space, userId);
+
         SpaceVO cached = cacheManager.getSpaceDetailCache().get(String.valueOf(id), SpaceVO.class);
         if (cached != null) {
             return cached;
         }
 
-        Space space = baseMapper.selectById(id);
-        ExcUtils.throwIfTrue(ObjectUtil.isEmpty(space), ExceptionCode.PARAMETER_ERROR, "空间不存在");
-        Space.validateActive(space);
-
         List<SpaceTeamMember> teamMembers = Collections.emptyList();
         if (spacePermissionChecker.isTeamSpace(space)) {
             teamMembers = spaceTeamMemberMapper.selectList(new LambdaQueryWrapper<SpaceTeamMember>().eq(SpaceTeamMember::getSpaceId, space.getId()));
         }
-        spacePermissionChecker.checkAccess(space, userId);
 
         Set<Long> userIds = new HashSet<>();
         if (space.getUserId() != null)

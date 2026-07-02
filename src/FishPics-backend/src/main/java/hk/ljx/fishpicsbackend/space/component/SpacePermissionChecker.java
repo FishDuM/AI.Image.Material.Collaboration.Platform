@@ -36,8 +36,8 @@ public class SpacePermissionChecker {
         }
         String key = spaceId + ":" + userId + ":owner";
         Boolean cached = cacheManager.getTeamMemberCache().get(key, Boolean.class);
-        if (cached != null) {
-            return cached;
+        if (Boolean.TRUE.equals(cached)) {
+            return true;
         }
         SpaceTeamMember member = spaceTeamMemberMapper.selectOne(
                 new LambdaQueryWrapper<SpaceTeamMember>()
@@ -45,7 +45,9 @@ public class SpacePermissionChecker {
                         .eq(SpaceTeamMember::getUserId, userId)
                         .eq(SpaceTeamMember::getRoleId, TeamMemberRole.OWNER.code()));
         boolean isOwner = member != null;
-        cacheManager.getTeamMemberCache().put(key, isOwner);
+        if (isOwner) {
+            cacheManager.getTeamMemberCache().put(key, true);
+        }
         return isOwner;
     }
 
@@ -91,15 +93,17 @@ public class SpacePermissionChecker {
     private boolean isMember(Long spaceId, Long userId) {
         String key = spaceId + ":" + userId + ":member";
         Boolean cached = cacheManager.getTeamMemberCache().get(key, Boolean.class);
-        if (cached != null) {
-            return cached;
+        if (Boolean.TRUE.equals(cached)) {
+            return true;
         }
         Long memberCount = spaceTeamMemberMapper.selectCount(
                 new LambdaQueryWrapper<SpaceTeamMember>()
                         .eq(SpaceTeamMember::getSpaceId, spaceId)
                         .eq(SpaceTeamMember::getUserId, userId));
         boolean isMember = memberCount != null && memberCount > 0;
-        cacheManager.getTeamMemberCache().put(key, isMember);
+        if (isMember) {
+            cacheManager.getTeamMemberCache().put(key, true);
+        }
         return isMember;
     }
 }
