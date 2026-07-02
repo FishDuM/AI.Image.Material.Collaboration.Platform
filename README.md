@@ -1,11 +1,15 @@
 # FishPics — AI 图片素材协作平台
 
+<div align="center">
+
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3-6db33f?logo=spring-boot)](https://spring.io/projects/spring-boot)
 [![React](https://img.shields.io/badge/React-19-61dafb?logo=react)](https://react.dev/)
 [![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk)](https://openjdk.org/)
 [![Vite](https://img.shields.io/badge/Vite-8-646cff?logo=vite)](https://vitejs.dev/)
 [![MySQL](https://img.shields.io/badge/MySQL-8-4479a1?logo=mysql)](https://www.mysql.com/)
 [![Redis](https://img.shields.io/badge/Redis-7-dc382d?logo=redis)](https://redis.io/)
+
+</div>
 
 FishPics 是一个面向团队的图片素材管理与协作平台，集成 AI 智能标注与文生图能力。采用前后端分离架构，支持大文件分片上传、实时协同编辑、分享链接、后台审核管理等完整功能。
 
